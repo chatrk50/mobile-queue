@@ -1,0 +1,66 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Poster — YO-DEE Yogurt</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .toolbar{max-width:560px;margin:16px auto;text-align:center}
+  .poster{max-width:520px;margin:18px auto;background:#fff;border:1px solid var(--line);border-radius:24px;
+    padding:34px 30px;text-align:center;box-shadow:0 14px 40px rgba(30,58,95,.12)}
+  .poster .logo{height:96px;width:auto;margin-bottom:4px}
+  .poster .brandname{font-weight:800;color:var(--navy);font-size:26px;letter-spacing:.3px}
+  .poster .branch{color:var(--muted);font-weight:600;margin-top:2px}
+  .poster .zone{font-size:36px;font-weight:900;color:var(--navy);margin:16px 0 4px}
+  .poster .cta{font-size:21px;font-weight:700;color:var(--accent);margin-bottom:14px;line-height:1.3}
+  .poster #qr{display:flex;justify-content:center;margin:6px 0 16px}
+  .poster #qr canvas{border-radius:12px}
+  .poster .steps{text-align:left;max-width:300px;margin:0 auto;color:var(--ink);font-size:15px;line-height:1.8}
+  @media print{
+    body{background:#fff}
+    .toolbar{display:none!important}
+    .poster{box-shadow:none;border:none;margin:0 auto}
+    @page{size:A5;margin:10mm}
+  }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="toolbar">
+    <button onclick="window.print()">🖨️ พิมพ์ / Print</button>
+    <span id="zlinks" class="muted"></span>
+  </div>
+  <div class="poster" id="poster" style="display:none">
+    <img class="logo" src="/assets/logo.png" onerror="this.remove()" alt="">
+    <div class="brandname">YO-DEE Yogurt</div>
+    <div class="branch" id="branch">—</div>
+    <div class="zone" id="zone">—</div>
+    <div class="cta">สแกนเพื่อรับคิว<br><span style="font-size:14px;color:var(--muted);font-weight:600">Scan to get your queue number</span></div>
+    <div id="qr"></div>
+    <div class="steps">
+      1. สแกน QR ด้วยกล้องมือถือหรือ LINE<br>
+      2. เลือกจำนวนคน<br>
+      3. รับหมายเลขคิว — เราจะแจ้งทาง LINE เมื่อใกล้ถึงคิว
+    </div>
+  </div>
+  <div id="err" class="card" style="display:none"></div>
+</div>
+<script type="module">
+const $=(id)=>document.getElementById(id);
+const zoneId=new URLSearchParams(location.search).get('zone');
+(async()=>{
+  const cfg=await (await fetch('/api/config')).json();
+  const stores=await (await fetch('/api/stores')).json();
+  const links=[];
+  for(const s of stores){
+    const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
+    zs.forEach(z=>links.push(`<a class="btn ghost" style="margin:4px;padding:8px 12px" href="/print/?zone=${z.id}">${z.name}</a>`));
+  }
+  $('zlinks').innerHTML=' โปสเตอร์รายโซน: '+links.join('');
+  if(!zoneId){ $('err').style.display=''; $('err').innerHTML='<b>เลือกโซนด้านบนเพื่อสร้างโปสเตอร์ / Pick a zone above to make its poster.</b>'; return; }
+  const z=await (await fetch('/api/zones/'+zoneId)).json();
+  const store=stores.find(s=>s.id===z.store_id);
+  $('branch').textContent=store?store.name:'';
+  $('zone').textContent=z.name;
+  $('poster').style.display='';
+  $('qr').innerHTML=`<img alt="QR" style="width:300px;height:300px;border-radius:12px" src="/api/qr/${zoneId}">`;
+})().catch(e=>{ $('err').style.display=''; $('err').textContent='Error: '+e.message; });
+</script>
+</body></html>

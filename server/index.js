@@ -6,6 +6,7 @@ import { db, getSetting } from './db.js';
 import * as Q from './queue.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText } from './line.js';
+import QRCode from 'qrcode';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -58,6 +59,18 @@ app.get('/api/zones/:zoneId', (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).json({ error: 'zone_not_found' });
   res.json(z);
+});
+// QR PNG for a zone (points at the LIFF URL when configured) — used by the print poster.
+app.get('/api/qr/:zoneId', async (req, res) => {
+  const z = Q.getZone(req.params.zoneId);
+  if (!z) return res.status(404).end();
+  const url = LIFF_ID
+    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}`
+    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}`;
+  try {
+    const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.type('png').send(buf);
+  } catch (e) { res.status(500).end(); }
 });
 app.get('/api/zones/:zoneId/snapshot', (req, res) => {
   const snap = Q.zoneSnapshot(req.params.zoneId);
