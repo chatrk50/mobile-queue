@@ -33,6 +33,57 @@ export async function pushText(userId, text) {
   }
 }
 
+/** Build a LINE message: a Flex card (text + a tappable button that hides the URL
+ *  behind a label) when a link is given; otherwise a plain text message. */
+function buildQueueMessage(text, link, label) {
+  if (!link) return { type: 'text', text };
+  const lines = text.split('\n').filter((l) => l.trim() !== '');
+  return {
+    type: 'flex',
+    altText: lines[0] || 'อัปเดตคิว / Queue update',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm',
+        contents: lines.map((t, i) => ({
+          type: 'text', text: t, wrap: true,
+          size: i === 0 ? 'lg' : 'sm',
+          weight: i === 0 ? 'bold' : 'regular',
+          color: i === 0 ? '#1e3a5f' : '#555555',
+        })),
+      },
+      footer: {
+        type: 'box', layout: 'vertical',
+        contents: [{
+          type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm',
+          action: { type: 'uri', label: label, uri: link },
+        }],
+      },
+    },
+  };
+}
+
+/** Push a queue update with an optional "check queue" button (URL hidden behind it).
+ *  Falls back to a plain-text message (with the link) if the card can't be sent. */
+export async function pushQueue(userId, text, link = null, label = 'เช็คคิว / Check') {
+  if (!userId) return false;
+  if (!LINE_ENABLED) {
+    console.log(`\n[LINE-STUB] -> ${userId}\n${text}${link ? `\n[ปุ่ม / button: "${label}" -> ${link}]` : ''}\n`);
+    return false;
+  }
+  try {
+    await client.pushMessage({ to: userId, messages: [buildQueueMessage(text, link, label)] });
+    return true;
+  } catch (err) {
+    console.error('[LINE] flex push failed, falling back to text:', err?.statusMessage || err?.message || err);
+    try {
+      const fallback = link ? `${text}\n\n👉 ${link}` : text;
+      await client.pushMessage({ to: userId, messages: [{ type: 'text', text: fallback }] });
+      return true;
+    } catch (e) { return false; }
+  }
+}
+
 /** Reply to a webhook event (used for follow / message events). */
 export async function replyText(replyToken, text) {
   if (!LINE_ENABLED || !replyToken) return false;

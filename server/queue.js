@@ -1,14 +1,14 @@
 import { db } from './db.js';
-import { pushText } from './line.js';
+import { pushQueue } from './line.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
 
-// A tappable link (in the LINE chat) so the customer can re-open their queue
-// anytime — even after closing the browser / walking away from the store.
+// LIFF link so the customer can re-open their queue anytime (sent as a button
+// on the LINE card, so the raw URL stays hidden behind a label).
 const LIFF_ID = process.env.LIFF_ID || '';
-const statusLink = (zoneId) =>
-  LIFF_ID ? `\n\n👉 เช็คสถานะคิว / Check your queue:\nhttps://liff.line.me/${LIFF_ID}?zone=${zoneId}` : '';
+const queueLink = (zoneId) =>
+  LIFF_ID ? `https://liff.line.me/${LIFF_ID}?zone=${zoneId}` : null;
 
 export function getZone(zoneId) {
   return db.prepare('SELECT * FROM zones WHERE id = ?').get(zoneId);
@@ -53,12 +53,12 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   const ahead = aheadCount(ticket);
 
   // Confirmation push (fire and forget)
-  pushText(lineUserId,
+  pushQueue(lineUserId,
     `🎫 รับคิวสำเร็จ / Queue confirmed\n` +
     `หมายเลขของคุณ / Your number: ${ticket.code}\n` +
     `รออีก / Groups ahead: ${ahead}\n` +
-    `เราจะแจ้งเตือนเมื่อใกล้ถึงคิวของคุณ / We'll notify you when you're up soon.` +
-    statusLink(zoneId));
+    `เราจะแจ้งเตือนเมื่อใกล้ถึงคิวของคุณ / We'll notify you when you're up soon.`,
+    queueLink(zoneId));
 
   return { ticket, ahead };
 }
@@ -82,11 +82,11 @@ export function callNext(zoneId, threshold) {
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
-  pushText(next.line_user_id,
+  pushQueue(next.line_user_id,
     `🔔 ถึงคิวของคุณแล้ว! / It's your turn!\n` +
     `หมายเลข / Number: ${next.code}\n` +
-    `เชิญที่เคาน์เตอร์ / Please come to the counter.` +
-    statusLink(zoneId));
+    `เชิญที่เคาน์เตอร์ / Please come to the counter.`,
+    queueLink(zoneId));
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -117,12 +117,12 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     const ahead = idx; // position in the ordered waiting list
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
-      pushText(t.line_user_id,
+      pushQueue(t.line_user_id,
         `⏰ ใกล้ถึงคิวของคุณแล้ว / You're up soon!\n` +
         `หมายเลข / Number: ${t.code}\n` +
         `เหลืออีก / Groups ahead: ${ahead}\n` +
-        `กรุณากลับมาที่ร้าน / Please head back to the store.` +
-        statusLink(zoneId));
+        `กรุณากลับมาที่ร้าน / Please head back to the store.`,
+        queueLink(zoneId));
     }
   });
 }
