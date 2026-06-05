@@ -148,6 +148,12 @@ app.post('/api/zones/:zoneId/open', (req, res) => {
   emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
   res.json(z);
 });
+// Reset the whole queue to start from 0 (PIN-protected; also run by the daily scheduler).
+app.post('/api/reset', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  doDailyReset();
+  res.json({ ok: true });
+});
 
 // ---------- Live updates (SSE) for cashier & display ----------
 app.get('/api/zones/:zoneId/stream', (req, res) => {
@@ -160,6 +166,24 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
   res.write(`event: update\ndata: ${JSON.stringify(Q.zoneSnapshot(req.params.zoneId))}\n\n`);
   subscribe(req.params.zoneId, res);
 });
+
+// ---------- Daily queue reset at midnight (Asia/Bangkok, UTC+7) ----------
+function doDailyReset() {
+  const zoneIds = Q.resetAllZones();
+  for (const id of zoneIds) emit(id, 'update', Q.zoneSnapshot(id));
+  console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+}
+function msUntilBangkokMidnight() {
+  const now = Date.now();
+  const next = new Date();
+  next.setUTCHours(17, 0, 0, 0);            // 00:00 Asia/Bangkok = 17:00 UTC
+  if (next.getTime() <= now) next.setUTCDate(next.getUTCDate() + 1);
+  return next.getTime() - now;
+}
+function scheduleDailyReset() {
+  setTimeout(() => { doDailyReset(); scheduleDailyReset(); }, msUntilBangkokMidnight());
+}
+scheduleDailyReset();
 
 app.listen(PORT, () => {
   console.log(`Mobile Queue running on ${PUBLIC_BASE_URL}`);

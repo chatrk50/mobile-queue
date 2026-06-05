@@ -127,6 +127,16 @@ export function evaluateSoonNotifications(zoneId, threshold) {
   });
 }
 
+/** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
+export function resetAllZones() {
+  const tx = db.transaction(() => {
+    db.exec(`DELETE FROM tickets`);
+    db.exec(`UPDATE zones SET last_number = 0, last_called = 0`);
+  });
+  tx();
+  return db.prepare('SELECT id FROM zones').all().map((z) => z.id);
+}
+
 export function setZoneOpen(zoneId, isOpen) {
   db.prepare('UPDATE zones SET is_open = ? WHERE id = ?').run(isOpen ? 1 : 0, zoneId);
   return getZone(zoneId);
