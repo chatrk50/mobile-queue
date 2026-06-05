@@ -5,7 +5,7 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
-  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""><div style="font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
 
   <!-- STEP: get ticket -->
   <div id="getCard" class="card" style="display:none">
@@ -16,6 +16,10 @@
       <span class="muted">รอ <b id="waitingCount">–</b> คิว</span>
     </div>
     <button id="getBtn" style="width:100%;margin-top:18px" onclick="getTicket()">รับคิว / Get my number</button>
+    <div id="closedMsg" class="closed-note" style="display:none">
+      <b>🚫 ขณะนี้ปิดรับคิว</b><br>
+      <span class="muted">Closed — not accepting queue right now.<br>กรุณาลองใหม่ภายหลัง / Please try again later.</span>
+    </div>
     <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
   </div>
 
@@ -84,7 +88,8 @@ async function loadZone(){
   const open = z.is_open===1;
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'เปิดรับคิว / Open':'ปิดรับคิว / Closed';
-  $('getBtn').disabled = !open;
+  show('getBtn', open);
+  show('closedMsg', !open);
   show('getCard',true);
 }
 

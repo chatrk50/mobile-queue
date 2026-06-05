@@ -37,16 +37,16 @@
     <button id="printBtn" class="print-btn" onclick="window.print()">🖨️ พิมพ์โปสเตอร์ / Print poster</button>
   </div>
   <div class="poster" id="poster" style="display:none">
-    <img class="logo" src="/assets/logo.png" onerror="this.remove()" alt="">
-    <div class="brandname">YO-DEE Yogurt</div>
+    <img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('pbrand');if(f)f.style.display=''" alt="">
+    <div class="brandname" id="pbrand" style="display:none">YO-DEE Yogurt</div>
     <div class="branch" id="branch">—</div>
     <div class="zone" id="zone">—</div>
     <div class="cta">สแกนเพื่อรับคิว<br><span style="font-size:14px;color:var(--muted);font-weight:600">Scan to get your queue number</span></div>
     <div id="qr"></div>
     <div class="steps">
       1. สแกน QR ด้วยกล้องมือถือหรือ LINE<br>
-      2. เลือกจำนวนคน<br>
-      3. รับหมายเลขคิว — เราจะแจ้งทาง LINE เมื่อใกล้ถึงคิว
+      2. กดรับหมายเลขคิว 1 หมายเลข<br>
+      3. เราจะแจ้งทาง LINE เมื่อใกล้ถึงคิว
     </div>
   </div>
   <div id="err" class="card" style="display:none"></div>

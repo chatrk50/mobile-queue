@@ -78,7 +78,7 @@ function zonePanel(z){
         <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">ปิดโซน</button>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+    <div class="zone-cols">
       <div><h2>กำลังรอ / Waiting</h2><div id="zw-${z.id}" class="queue-list"></div></div>
       <div><h2>เรียกแล้ว / Called (recent)</h2><div id="zr-${z.id}" class="queue-list"></div></div>
     </div>
