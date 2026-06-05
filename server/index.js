@@ -15,8 +15,11 @@ const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
 const LIFF_ID = process.env.LIFF_ID || '';
 
-// ---- LINE webhook must be mounted with raw-ish body BEFORE express.json ----
-app.post('/line/webhook', lineMiddleware, express.json(), async (req, res) => {
+// ---- LINE webhook ----
+// line.middleware() reads the raw body, validates the x-line-signature, and
+// populates req.body.events itself. Do NOT add express.json() here: a second
+// body parser on the already-consumed stream throws -> 500 on LINE's Verify.
+app.post('/line/webhook', lineMiddleware, async (req, res) => {
   const events = req.body?.events || [];
   for (const ev of events) {
     if (ev.type === 'follow') {
