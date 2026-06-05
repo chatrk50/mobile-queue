@@ -21,5 +21,9 @@ services:
         value: https://mobile-queue.onrender.com
       - key: CASHIER_PIN
         sync: false           # you set this in the Render UI (don't use 1234 in public)
-      # Added later in Phase B (after the LINE channel / LIFF app are created):
-      # LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, LIFF_ID
+      - key: LIFF_ID
+        value: 2010308807-nrzjBCPa   # not secret (exposed client-side anyway)
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false           # secret — paste in Render dashboard, never in git
+      - key: LINE_CHANNEL_SECRET
+        sync: false           # secret — paste in Render dashboard, never in git
