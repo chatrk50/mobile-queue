@@ -87,7 +87,7 @@ export function callNext(zoneId, threshold) {
   if (!next) return { called: null };
 
   db.prepare(
-    `UPDATE tickets SET status='called', called_at=datetime('now') WHERE id=?`
+    `UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?`
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
@@ -103,7 +103,7 @@ export function callNext(zoneId, threshold) {
 
 /** Mark a called ticket served, or skip / cancel any ticket. */
 export function setStatus(ticketId, status, threshold) {
-  const allowed = ['served', 'skipped', 'cancelled'];
+  const allowed = ['served', 'skipped', 'cancelled', 'no_show'];
   if (!allowed.includes(status)) throw new Error('bad_status');
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
@@ -136,21 +136,55 @@ export function evaluateSoonNotifications(zoneId, threshold) {
   });
 }
 
-/** Daily report: cups sold (served tickets) + per-zone breakdown, since the last reset. */
+/** Customer rating (1..5) for a served ticket. */
+export function setRating(ticketId, stars) {
+  const s = Math.max(1, Math.min(5, Math.round(Number(stars) || 0)));
+  const t = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  db.prepare('UPDATE tickets SET rating = ? WHERE id = ?').run(s, ticketId);
+  return { ok: true, rating: s };
+}
+
+/** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport() {
   const perZone = db.prepare(
     `SELECT z.id, z.name, z.prefix, z.last_number AS issued,
-       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id = z.id AND t.status = 'served') AS served
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served')  AS served,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show') AS no_shows
      FROM zones z ORDER BY z.id`
   ).all();
   const cupsSold = perZone.reduce((s, z) => s + z.served, 0);
   const issued = perZone.reduce((s, z) => s + z.issued, 0);
-  return { cupsSold, issued, perZone };
+  const noShows = perZone.reduce((s, z) => s + z.no_shows, 0);
+  const wait = db.prepare(
+    `SELECT AVG((julianday(called_at)-julianday(created_at))*86400) AS s
+     FROM tickets WHERE called_at IS NOT NULL`
+  ).get();
+  const rating = db.prepare(
+    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL`
+  ).get();
+  return {
+    cupsSold, issued, noShows,
+    avgWaitMin: wait.s != null ? Math.round((wait.s / 60) * 10) / 10 : null,
+    avgRating: rating.avg != null ? Math.round(rating.avg * 10) / 10 : null,
+    ratingCount: rating.n,
+    perZone,
+  };
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
   const tx = db.transaction(() => {
+    // Archive a per-zone daily summary (history) before clearing the tickets.
+    db.prepare(
+      `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)
+       SELECT date('now','+7 hours'), z.id, z.last_number,
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'),
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show'),
+         (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL),
+         (SELECT AVG(rating) FROM tickets t WHERE t.zone_id=z.id AND t.rating IS NOT NULL)
+       FROM zones z`
+    ).run();
     db.exec(`DELETE FROM tickets`);
     db.exec(`UPDATE zones SET last_number = 0, last_called = 0`);
   });
@@ -183,7 +217,7 @@ export function ticketView(ticketId) {
   if (!t) return null;
   const zone = getZone(t.zone_id);
   return {
-    id: t.id, code: t.code, status: t.status, party_size: t.party_size,
+    id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
   };

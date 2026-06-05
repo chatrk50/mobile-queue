@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS tickets (
   party_size   INTEGER NOT NULL DEFAULT 1,
   line_user_id TEXT,
   customer_name TEXT,
+  called_count INTEGER NOT NULL DEFAULT 0,
+  rating       INTEGER,
   status       TEXT NOT NULL DEFAULT 'waiting',
   notified_soon INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -61,6 +63,16 @@ CREATE TABLE IF NOT EXISTS tickets (
   closed_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tickets_zone_status ON tickets(zone_id, status);
+CREATE TABLE IF NOT EXISTS daily_stats (
+  date         TEXT NOT NULL,
+  zone_id      INTEGER NOT NULL,
+  issued       INTEGER NOT NULL DEFAULT 0,
+  served       INTEGER NOT NULL DEFAULT 0,
+  no_shows     INTEGER NOT NULL DEFAULT 0,
+  avg_wait_sec INTEGER,
+  avg_rating   REAL,
+  PRIMARY KEY (date, zone_id)
+);
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
 `);
 

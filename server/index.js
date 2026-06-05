@@ -120,6 +120,11 @@ app.post('/api/tickets/:ticketId/cancel', (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Customer rating (no PIN) — defined before the generic /:action route so it isn't captured.
+app.post('/api/tickets/:ticketId/rate', (req, res) => {
+  try { res.json(Q.setRating(req.params.ticketId, req.body?.stars)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // ---------- Cashier (PIN protected) ----------
 app.post('/api/zones/:zoneId/call-next', (req, res) => {
@@ -134,7 +139,7 @@ app.post('/api/zones/:zoneId/call-next', (req, res) => {
 });
 app.post('/api/tickets/:ticketId/:action', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  const map = { serve: 'served', skip: 'skipped' };
+  const map = { serve: 'served', skip: 'skipped', noshow: 'no_show' };
   const status = map[req.params.action];
   if (!status) return res.status(404).json({ error: 'unknown_action' });
   try {

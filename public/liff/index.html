@@ -46,7 +46,12 @@
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
-    <button class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">Cancel my queue</button>
+    <div id="tRate" style="display:none;margin-top:14px">
+      <p class="muted" style="font-size:14px">How was your visit?</p>
+      <div id="tStars" style="font-size:34px;letter-spacing:6px"></div>
+      <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">Thanks for your feedback! 🙏</p>
+    </div>
+    <button id="cancelBtn" class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">Cancel my queue</button>
   </div>
 
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
@@ -129,6 +134,7 @@ function render(v){
   $('tCode').textContent = v.code;
   $('tStore').textContent = v.zone;
   $('tLastCalled').textContent = v.last_called ? ('Now serving: '+v.last_called) : '';
+  $('cancelBtn').style.display=''; $('tRate').style.display='none';
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
     $('tAhead').textContent = v.ahead;
@@ -141,10 +147,27 @@ function render(v){
     show('tAheadWrap',false); show('tCalled',true);
     $('tCalledPill').textContent="🔔 It's your turn!";
     $('tNotifyNote').textContent='Please come to the counter.';
+  } else if(v.status==='served'){
+    show('tAheadWrap',false); show('tCalled',false);
+    $('tNotifyNote').textContent='Enjoy! 🥰';
+    $('cancelBtn').style.display='none'; $('tRate').style.display='';
+    if(v.rating){ renderStars(v.rating); $('tRateThanks').style.display=''; } else renderStars(0);
   } else {
+    show('tAheadWrap',false); show('tCalled',false);
     $('tNotifyNote').textContent='Status: '+v.status;
+    $('cancelBtn').style.display='none';
   }
 }
+
+function renderStars(sel){
+  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
+}
+window.rate=async(n)=>{
+  renderStars(n);
+  try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n})});
+    $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
+  }catch(e){ toast('Could not save rating'); }
+};
 
 async function tick(){
   try{ const v = await api('/api/tickets/'+ticketId); render(v);

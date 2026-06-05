@@ -69,10 +69,16 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
 
 window.showReport=async()=>{
   try{ const r=await api('/api/report');
+    const stat=(label,val)=>`<div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:12px">${label}</div></div>`;
     $('reportBody').innerHTML =
       `<div style="font-size:48px;font-weight:900;color:var(--navy);text-align:center;line-height:1">${r.cupsSold}</div>`+
-      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} numbers issued</div>`+
-      r.perZone.map(z=>`<div class="qitem"><span class="code">${esc(z.name)}</span><span class="muted">${z.served} sold · ${z.issued} issued</span></div>`).join('');
+      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} issued</div>`+
+      `<div class="row" style="justify-content:space-around;margin-bottom:14px">`+
+        stat('no-shows', r.noShows)+
+        stat('avg wait', r.avgWaitMin!=null?r.avgWaitMin+'m':'—')+
+        stat('rating', r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
+      `</div>`+
+      r.perZone.map(z=>`<div class="qitem"><span class="code">${esc(z.name)}</span><span class="muted">${z.served} sold · ${z.no_shows} no-show · ${z.issued} issued</span></div>`).join('');
     $('reportCard').style.display=''; $('dash').style.display='none';
   }catch(e){ toast(err(e)); }
 };
@@ -131,7 +137,10 @@ function renderZone(snap){
     : '<p class="muted">empty</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div><span class="code">${t.code}</span>${nm(t)}</div>
-      <button class="ok" onclick="act(${t.id},'serve')">Served</button></div>`).join('')
+      <div class="row" style="gap:6px">
+        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">No-show</button>
+        <button class="ok" onclick="act(${t.id},'serve')">Served</button>
+      </div></div>`).join('')
     : '<p class="muted">—</p>';
 }
 

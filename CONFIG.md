@@ -43,7 +43,9 @@ Live: **https://mobile-queue.onrender.com** · Brand **YO-DEE Yogurt** · Branch
 - **Notifications** (auto, server-side): confirmation, "you're up soon" (≤2 ahead), "your turn" — each a LINE card with a **Check my queue** button (hidden URL). Resume by LINE ID after closing the app.
 - **One active number per customer** — re-scanning returns the same number (no duplicates).
 - **Estimated wait** shown to customers = `groups ahead × WAIT_PER_GROUP_MIN` (4 min).
-- **Daily report** — cashier "📊 Report" button / `GET /api/report` (PIN): cups sold (served) + per-zone, since the last reset.
+- **No-show** — cashier "No-show" button on called tickets (`POST /api/tickets/:id/noshow`, PIN); counted in the report.
+- **Rating** — after a ticket is **served**, the customer LIFF shows ⭐×5 → `POST /api/tickets/:id/rate {stars}`; average shown in the report.
+- **Daily report** — cashier "📊 Report" button / `GET /api/report` (PIN): cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. (Week/month history needs a persistent disk — see ROADMAP.md.)
 - **Daily reset** to A001 at **00:00 Asia/Bangkok** (in-process). Manual/cron: `POST /api/reset` with header `x-cashier-pin`.
 
 ## Customise
