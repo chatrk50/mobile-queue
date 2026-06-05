@@ -8,6 +8,16 @@ export function getZone(zoneId) {
   return db.prepare('SELECT * FROM zones WHERE id = ?').get(zoneId);
 }
 
+/** A customer's still-active ticket in a zone, so re-opening the LIFF resumes it
+ *  even if the browser/app was closed (looked up by their LINE user id). */
+export function findActiveTicket(zoneId, lineUserId) {
+  if (!lineUserId) return null;
+  return db.prepare(
+    `SELECT * FROM tickets WHERE zone_id = ? AND line_user_id = ? AND status IN ('waiting','called')
+     ORDER BY id DESC LIMIT 1`
+  ).get(zoneId, lineUserId);
+}
+
 /** How many waiting groups are ahead of this ticket in its zone. */
 export function aheadCount(ticket) {
   const row = db.prepare(

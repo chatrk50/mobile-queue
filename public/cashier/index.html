@@ -97,13 +97,13 @@ function renderZone(snap){
   const nm=(t)=> t.customer_name?` <span class="muted">· ${esc(t.customer_name)}</span>`:'';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><span class="code">${t.code}</span>
-      <span class="muted">· ${t.party_size} ที่นั่ง</span>${nm(t)}
+      ${nm(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>
       <button class="ghost danger" onclick="act(${t.id},'skip')">ข้าม</button></div>`).join('')
     : '<p class="muted">ไม่มีคิว / empty</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div><span class="code">${t.code}</span>
-      <span class="muted">· ${t.party_size} ที่นั่ง</span>${nm(t)}</div>
+      ${nm(t)}</div>
       <button class="ok" onclick="act(${t.id},'serve')">เสร็จ / Served</button></div>`).join('')
     : '<p class="muted">—</p>';
 }

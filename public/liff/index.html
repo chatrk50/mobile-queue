@@ -15,12 +15,6 @@
       <span id="zoneState" class="pill open">เปิดรับคิว</span>
       <span class="muted">รอ <b id="waitingCount">–</b> คิว</span>
     </div>
-    <p class="muted" style="margin:16px 0 6px">จำนวนคน / Party size</p>
-    <div class="stepper">
-      <button class="ghost" onclick="bumpParty(-1)">–</button>
-      <span class="val" id="party">2</span>
-      <button class="ghost" onclick="bumpParty(1)">+</button>
-    </div>
     <button id="getBtn" style="width:100%;margin-top:18px" onclick="getTicket()">รับคิว / Get my number</button>
     <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
   </div>
@@ -49,12 +43,11 @@
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
-let cfg = {}, lineUserId = null, displayName = null, party = 2, ticketId = null, poll = null;
+let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
-window.bumpParty = (d)=>{party=Math.max(1,Math.min(20,party+d));$('party').textContent=party;};
 
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
 
@@ -99,7 +92,7 @@ window.getTicket = async ()=>{
   $('getBtn').disabled=true;
   try{
     const r = await api('/api/zones/'+zoneId+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({partySize:party,lineUserId,customerName:displayName})});
+      body:JSON.stringify({partySize:1,lineUserId,customerName:displayName})});
     ticketId = r.ticketId;
     localStorage.setItem('ticket_'+zoneId, ticketId);
     show('getCard',false); show('ticketCard',true);
@@ -145,10 +138,17 @@ window.cancelTicket = async ()=>{
 (async ()=>{
   await initLiff();
   await loadZone();
-  // resume an existing ticket if present
-  const saved = localStorage.getItem('ticket_'+zoneId);
-  if(saved){ try{ const v=await api('/api/tickets/'+saved); if(['waiting','called'].includes(v.status)){
-    ticketId=saved; show('getCard',false); show('ticketCard',true); startPolling(); } else localStorage.removeItem('ticket_'+zoneId);}catch(e){localStorage.removeItem('ticket_'+zoneId);} }
+  // resume an existing ticket — prefer a server lookup by LINE id (survives the
+  // app/browser being closed), then fall back to localStorage.
+  let resumeId = null;
+  if(lineUserId){ try{ const r=await api('/api/zones/'+zoneId+'/my-ticket',
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
+    if(r.ticket) resumeId=r.ticket.id; }catch(e){} }
+  if(!resumeId) resumeId = localStorage.getItem('ticket_'+zoneId);
+  if(resumeId){ try{ const v=await api('/api/tickets/'+resumeId);
+    if(['waiting','called'].includes(v.status)){ ticketId=resumeId; localStorage.setItem('ticket_'+zoneId,resumeId);
+      show('getCard',false); show('ticketCard',true); startPolling(); }
+    else localStorage.removeItem('ticket_'+zoneId); }catch(e){ localStorage.removeItem('ticket_'+zoneId); } }
 })().catch(e=>err(e.message));
 </script>
 </body></html>

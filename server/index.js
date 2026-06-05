@@ -98,6 +98,13 @@ app.post('/api/zones/:zoneId/tickets', (req, res) => {
   }
 });
 
+// Resume: find the caller's active ticket in a zone by their LINE id (survives
+// closing the browser/app — the LIFF re-identifies them and gets their number back).
+app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
+  const t = Q.findActiveTicket(req.params.zoneId, req.body?.lineUserId);
+  res.json({ ticket: t ? Q.ticketView(t.id) : null });
+});
+
 // ---------- Customer: poll own ticket ----------
 app.get('/api/tickets/:ticketId', (req, res) => {
   const v = Q.ticketView(req.params.ticketId);
