@@ -18,7 +18,7 @@ export function aheadCount(ticket) {
 }
 
 /** Issue a new ticket in a zone. Returns the created ticket row (or throws). */
-export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null }) {
+export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null, customerName = null }) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
@@ -27,9 +27,9 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null 
     const next = zone.last_number + 1;
     db.prepare('UPDATE zones SET last_number = ? WHERE id = ?').run(next, zoneId);
     const info = db.prepare(
-      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id)
-       VALUES (?,?,?,?,?,?)`
-    ).run(storeId, zoneId, next, code(zone.prefix, next), partySize, lineUserId);
+      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
+       VALUES (?,?,?,?,?,?,?)`
+    ).run(storeId, zoneId, next, code(zone.prefix, next), partySize, lineUserId, customerName);
     return db.prepare('SELECT * FROM tickets WHERE id = ?').get(info.lastInsertRowid);
   });
 
@@ -118,11 +118,11 @@ export function zoneSnapshot(zoneId) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, notified_soon FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   const recentCalled = db.prepare(
-    `SELECT id, code, number, party_size, called_at FROM tickets
+    `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 5`
   ).all(zoneId);
   return { zone, waiting, recentCalled, waitingCount: waiting.length };

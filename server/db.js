@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   code         TEXT NOT NULL,
   party_size   INTEGER NOT NULL DEFAULT 1,
   line_user_id TEXT,
+  customer_name TEXT,
   status       TEXT NOT NULL DEFAULT 'waiting',
   notified_soon INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),

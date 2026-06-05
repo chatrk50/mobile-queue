@@ -5,7 +5,7 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
-  <div class="brand"><span class="dot"></span> Mobile Queue</div>
+  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""><div style="font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
 
   <!-- STEP: get ticket -->
   <div id="getCard" class="card" style="display:none">
@@ -49,7 +49,7 @@
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
-let cfg = {}, lineUserId = null, party = 2, ticketId = null, poll = null;
+let cfg = {}, lineUserId = null, displayName = null, party = 2, ticketId = null, poll = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
@@ -68,6 +68,7 @@ async function initLiff(){
       if(!liff.isLoggedIn()){ liff.login(); return; }
       const p = await liff.getProfile();
       lineUserId = p.userId;
+      displayName = p.displayName;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE แล้ว: ${p.displayName}`;
     }catch(e){ $('liffNote').textContent = 'LIFF init ล้มเหลว — โหมดทดสอบ (no LINE id).'; }
   } else {
@@ -98,7 +99,7 @@ window.getTicket = async ()=>{
   $('getBtn').disabled=true;
   try{
     const r = await api('/api/zones/'+zoneId+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({partySize:party,lineUserId})});
+      body:JSON.stringify({partySize:party,lineUserId,customerName:displayName})});
     ticketId = r.ticketId;
     localStorage.setItem('ticket_'+zoneId, ticketId);
     show('getCard',false); show('ticketCard',true);

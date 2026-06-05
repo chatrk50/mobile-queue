@@ -41,6 +41,11 @@ app.get('/api/config', (req, res) => {
   res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL });
 });
 
+// ---------- Cashier login check (validates the PIN, no side effects) ----------
+app.post('/api/auth', (req, res) => {
+  res.json({ ok: pinOK(req) });
+});
+
 // ---------- Stores & zones ----------
 app.get('/api/stores', (req, res) => {
   res.json(db.prepare('SELECT * FROM stores ORDER BY id').all());
@@ -70,6 +75,7 @@ app.post('/api/zones/:zoneId/tickets', (req, res) => {
       zoneId: zone.id,
       partySize: Math.max(1, Number(req.body?.partySize || 1)),
       lineUserId: req.body?.lineUserId || null,
+      customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
     });
     emit(zone.id, 'update', Q.zoneSnapshot(zone.id));
     res.json({ ticketId: ticket.id, code: ticket.code, ahead });
