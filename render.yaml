@@ -17,7 +17,9 @@ services:
         value: "22.17.0"      # node:sqlite + --experimental-sqlite need >= 22.5
       - key: NOTIFY_THRESHOLD
         value: "2"
+      - key: PUBLIC_BASE_URL
+        value: https://mobile-queue.onrender.com
       - key: CASHIER_PIN
         sync: false           # you set this in the Render UI (don't use 1234 in public)
-      # Added later in Phase B (after the URL exists / LINE channel is created):
-      # PUBLIC_BASE_URL, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, LIFF_ID
+      # Added later in Phase B (after the LINE channel / LIFF app are created):
+      # LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, LIFF_ID
