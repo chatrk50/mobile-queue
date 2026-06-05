@@ -3,7 +3,15 @@
 <title>QR Poster — YO-DEE Yogurt</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  .toolbar{max-width:560px;margin:16px auto;text-align:center}
+  .toolbar{max-width:560px;margin:18px auto;background:#fff;border:1px solid var(--line);border-radius:16px;
+    padding:16px;box-shadow:0 8px 24px rgba(30,58,95,.08);text-align:center}
+  .toolbar .t-label{color:var(--muted);font-weight:600;font-size:14px;margin-bottom:10px}
+  .toolbar .zonepick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:14px}
+  .toolbar .zonepick a{padding:8px 16px;border-radius:999px;font-weight:700;font-size:14px;
+    border:1px solid var(--line);color:var(--navy);background:#fff}
+  .toolbar .zonepick a.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .toolbar .print-btn{font-size:16px;padding:13px 28px}
+  .toolbar .print-btn:disabled{opacity:.5;cursor:not-allowed}
   .poster{max-width:520px;margin:18px auto;background:#fff;border:1px solid var(--line);border-radius:24px;
     padding:34px 30px;text-align:center;box-shadow:0 14px 40px rgba(30,58,95,.12)}
   .poster .logo{height:96px;width:auto;margin-bottom:4px}
@@ -24,8 +32,9 @@
 </head><body>
 <div class="wrap">
   <div class="toolbar">
-    <button onclick="window.print()">🖨️ พิมพ์ / Print</button>
-    <span id="zlinks" class="muted"></span>
+    <div class="t-label">เลือกโซนเพื่อพิมพ์โปสเตอร์ / Choose a zone to print</div>
+    <div id="zlinks" class="zonepick"></div>
+    <button id="printBtn" class="print-btn" onclick="window.print()">🖨️ พิมพ์โปสเตอร์ / Print poster</button>
   </div>
   <div class="poster" id="poster" style="display:none">
     <img class="logo" src="/assets/logo.png" onerror="this.remove()" alt="">
@@ -51,9 +60,10 @@ const zoneId=new URLSearchParams(location.search).get('zone');
   const links=[];
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
-    zs.forEach(z=>links.push(`<a class="btn ghost" style="margin:4px;padding:8px 12px" href="/print/?zone=${z.id}">${z.name}</a>`));
+    zs.forEach(z=>links.push(`<a class="${String(z.id)===String(zoneId)?'active':''}" href="/print/?zone=${z.id}">${z.name}</a>`));
   }
-  $('zlinks').innerHTML=' โปสเตอร์รายโซน: '+links.join('');
+  $('zlinks').innerHTML=links.join('');
+  $('printBtn').disabled=!zoneId;
   if(!zoneId){ $('err').style.display=''; $('err').innerHTML='<b>เลือกโซนด้านบนเพื่อสร้างโปสเตอร์ / Pick a zone above to make its poster.</b>'; return; }
   const z=await (await fetch('/api/zones/'+zoneId)).json();
   const store=stores.find(s=>s.id===z.store_id);
