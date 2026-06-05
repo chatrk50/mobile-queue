@@ -1,0 +1,81 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Queue Display</title>
+<link rel="stylesheet" href="/assets/styles.css">
+</head><body>
+<div class="wrap wide">
+  <div class="row between">
+    <div class="brand"><span class="dot"></span> <span id="title">Queue Display</span></div>
+    <div class="row">
+      <select id="zoneSel" style="width:auto" onchange="switchZone()"></select>
+      <button class="ghost" id="soundBtn" onclick="enableSound()">🔊 เปิดเสียง</button>
+    </div>
+  </div>
+
+  <div class="display-grid">
+    <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:340px">
+      <h2>NOW SERVING / กำลังเรียก</h2>
+      <div class="now-serving" id="now">—</div>
+    </div>
+    <div class="card">
+      <h2>NEXT UP / คิวถัดไป</h2>
+      <div id="next" class="queue-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>เรียกล่าสุด / Recently called</h2>
+    <div class="called-strip" id="strip"></div>
+  </div>
+</div>
+
+<script type="module">
+const $=(id)=>document.getElementById(id);
+let zones=[], zoneId=null, es=null, soundOn=false, lastNow=null;
+
+async function boot(){
+  const stores=await (await fetch('/api/stores')).json();
+  for(const s of stores){ const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
+    zs.forEach(z=>zones.push({...z,store:s.name})); }
+  $('zoneSel').innerHTML=zones.map(z=>`<option value="${z.id}">${z.store} · ${z.name}</option>`).join('');
+  if(zones.length){ zoneId=zones[0].id; connect(); }
+}
+window.switchZone=()=>{ zoneId=Number($('zoneSel').value); connect(); };
+window.enableSound=()=>{ soundOn=true; speak('เปิดเสียงเรียกคิวแล้ว'); $('soundBtn').textContent='🔊 เสียงเปิดอยู่'; };
+
+function connect(){
+  if(es) es.close();
+  lastNow=null;
+  es=new EventSource('/api/zones/'+zoneId+'/stream');
+  es.addEventListener('update',e=>render(JSON.parse(e.data)));
+  es.addEventListener('call',e=>announce(JSON.parse(e.data).code));
+}
+
+function speak(text){
+  if(!soundOn||!window.speechSynthesis) return;
+  const u=new SpeechSynthesisUtterance(text);
+  const th=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('th'));
+  if(th) u.lang='th-TH'; u.rate=.95;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function announce(code){
+  const spell=code.split('').join(' ');
+  speak(`ขอเชิญหมายเลข ${spell} ค่ะ`);
+}
+
+function render(snap){
+  if(!snap||!snap.zone) return;
+  $('title').textContent=snap.zone.name+' — Queue';
+  const now = snap.zone.last_called ? `${snap.zone.prefix}${String(snap.zone.last_called).padStart(3,'0')}` : '—';
+  $('now').textContent=now;
+  if(now!=='—' && now!==lastNow && lastNow!==null){ announce(now); }
+  lastNow=now;
+  $('next').innerHTML = snap.waiting.slice(0,5).map(t=>`
+    <div class="qitem"><span class="code">${t.code}</span><span class="muted">${t.party_size} ที่</span></div>`).join('')
+    || '<p class="muted">—</p>';
+  $('strip').innerHTML = snap.recentCalled.map(t=>`<div class="c">${t.code}</div>`).join('') || '<span class="muted">—</span>';
+}
+if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{};
+boot();
+</script>
+</body></html>

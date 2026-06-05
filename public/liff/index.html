@@ -1,0 +1,153 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>รับคิว / Get a Queue</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head><body>
+<div class="wrap">
+  <div class="brand"><span class="dot"></span> Mobile Queue</div>
+
+  <!-- STEP: get ticket -->
+  <div id="getCard" class="card" style="display:none">
+    <h2 id="storeName">—</h2>
+    <h1 id="zoneName">—</h1>
+    <div class="row between">
+      <span id="zoneState" class="pill open">เปิดรับคิว</span>
+      <span class="muted">รอ <b id="waitingCount">–</b> คิว</span>
+    </div>
+    <p class="muted" style="margin:16px 0 6px">จำนวนคน / Party size</p>
+    <div class="stepper">
+      <button class="ghost" onclick="bumpParty(-1)">–</button>
+      <span class="val" id="party">2</span>
+      <button class="ghost" onclick="bumpParty(1)">+</button>
+    </div>
+    <button id="getBtn" style="width:100%;margin-top:18px" onclick="getTicket()">รับคิว / Get my number</button>
+    <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
+  </div>
+
+  <!-- STEP: my ticket -->
+  <div id="ticketCard" class="card" style="display:none;text-align:center">
+    <h2 id="tStore" class="muted">—</h2>
+    <p class="muted" style="margin:6px 0">หมายเลขคิวของคุณ / Your number</p>
+    <div class="big-number" id="tCode">—</div>
+    <div id="tStatusWrap" style="margin:18px 0">
+      <div id="tAheadWrap"><span class="muted">รออีก / Groups ahead</span>
+        <div style="font-size:40px;font-weight:800" id="tAhead">–</div></div>
+      <div id="tCalled" style="display:none">
+        <span class="pill soon" id="tCalledPill">⏰ ใกล้ถึงคิวแล้ว</span>
+      </div>
+    </div>
+    <p class="muted" id="tLastCalled" style="font-size:13px"></p>
+    <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
+    <button class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">ยกเลิกคิว / Cancel</button>
+  </div>
+
+  <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+const qs = new URLSearchParams(location.search);
+const zoneId = qs.get('zone');
+let cfg = {}, lineUserId = null, party = 2, ticketId = null, poll = null;
+
+const $ = (id) => document.getElementById(id);
+const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+window.bumpParty = (d)=>{party=Math.max(1,Math.min(20,party+d));$('party').textContent=party;};
+
+async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
+
+function err(msg){show('getCard',false);show('ticketCard',false);show('errCard',true);$('errMsg').textContent=msg;}
+
+async function initLiff(){
+  cfg = await api('/api/config');
+  if (cfg.liffId && window.liff){
+    try{
+      await liff.init({ liffId: cfg.liffId });
+      if(!liff.isLoggedIn()){ liff.login(); return; }
+      const p = await liff.getProfile();
+      lineUserId = p.userId;
+      $('liffNote').textContent = `เข้าสู่ระบบ LINE แล้ว: ${p.displayName}`;
+    }catch(e){ $('liffNote').textContent = 'LIFF init ล้มเหลว — โหมดทดสอบ (no LINE id).'; }
+  } else {
+    // Local/demo mode: stable fake id per browser so the flow is fully testable.
+    lineUserId = localStorage.getItem('demoUid') || ('demo-'+Math.random().toString(36).slice(2,9));
+    localStorage.setItem('demoUid', lineUserId);
+    $('liffNote').textContent = 'โหมดทดสอบ (LINE ไม่ได้เปิดใช้งาน) — demo user '+lineUserId;
+  }
+}
+
+async function loadZone(){
+  if(!zoneId) return err('ไม่พบรหัสโซน (no zone in QR).');
+  const z = await api('/api/zones/'+zoneId);
+  const snap = await api('/api/zones/'+zoneId+'/snapshot');
+  const stores = await api('/api/stores');
+  const store = stores.find(s=>s.id===z.store_id);
+  $('storeName').textContent = store ? store.name : '';
+  $('zoneName').textContent = z.name;
+  $('waitingCount').textContent = snap.waitingCount;
+  const open = z.is_open===1;
+  $('zoneState').className = 'pill '+(open?'open':'closed');
+  $('zoneState').textContent = open?'เปิดรับคิว / Open':'ปิดรับคิว / Closed';
+  $('getBtn').disabled = !open;
+  show('getCard',true);
+}
+
+window.getTicket = async ()=>{
+  $('getBtn').disabled=true;
+  try{
+    const r = await api('/api/zones/'+zoneId+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({partySize:party,lineUserId})});
+    ticketId = r.ticketId;
+    localStorage.setItem('ticket_'+zoneId, ticketId);
+    show('getCard',false); show('ticketCard',true);
+    startPolling();
+  }catch(e){ $('getBtn').disabled=false; toast('รับคิวไม่สำเร็จ: '+e.message); }
+};
+
+function render(v){
+  $('tCode').textContent = v.code;
+  $('tStore').textContent = v.zone;
+  $('tLastCalled').textContent = v.last_called ? ('เรียกล่าสุด / Now serving: '+v.last_called) : '';
+  if(v.status==='waiting'){
+    show('tAheadWrap',true); show('tCalled',false);
+    $('tAhead').textContent = v.ahead;
+    $('tNotifyNote').textContent = cfg.lineEnabled
+      ? `เราจะส่ง LINE เมื่อเหลือ ${cfg.threshold} คิว`
+      : `(โหมดทดสอบ) แจ้งเตือนเมื่อเหลือ ${cfg.threshold} คิว — ดู log ฝั่งเซิร์ฟเวอร์`;
+    if(v.ahead<=cfg.threshold){ $('tAheadWrap').insertAdjacentHTML('beforeend',''); }
+  } else if(v.status==='called'){
+    show('tAheadWrap',false); show('tCalled',true);
+    $('tCalledPill').textContent='🔔 ถึงคิวของคุณแล้ว / Your turn!';
+    $('tNotifyNote').textContent='เชิญที่เคาน์เตอร์ / Please come to the counter.';
+  } else {
+    $('tNotifyNote').textContent='สถานะ / Status: '+v.status;
+  }
+}
+
+async function tick(){
+  try{ const v = await api('/api/tickets/'+ticketId); render(v);
+    if(['served','cancelled','skipped'].includes(v.status)){ clearInterval(poll); }
+  }catch(e){}
+}
+function startPolling(){ tick(); poll=setInterval(tick,3000); }
+
+window.cancelTicket = async ()=>{
+  if(!confirm('ยกเลิกคิว? / Cancel your queue?')) return;
+  try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST'}); clearInterval(poll);
+    localStorage.removeItem('ticket_'+zoneId);
+    show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; loadZone();
+  }catch(e){ toast(e.message); }
+};
+
+(async ()=>{
+  await initLiff();
+  await loadZone();
+  // resume an existing ticket if present
+  const saved = localStorage.getItem('ticket_'+zoneId);
+  if(saved){ try{ const v=await api('/api/tickets/'+saved); if(['waiting','called'].includes(v.status)){
+    ticketId=saved; show('getCard',false); show('ticketCard',true); startPolling(); } else localStorage.removeItem('ticket_'+zoneId);}catch(e){localStorage.removeItem('ticket_'+zoneId);} }
+})().catch(e=>err(e.message));
+</script>
+</body></html>

@@ -1,0 +1,96 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cashier — Mobile Queue</title>
+<link rel="stylesheet" href="/assets/styles.css">
+</head><body>
+<div class="wrap wide">
+  <div class="row between">
+    <div class="brand"><span class="dot"></span> Cashier</div>
+    <div class="row">
+      <select id="zoneSel" style="width:auto" onchange="switchZone()"></select>
+      <input id="pin" type="password" placeholder="PIN" style="width:90px" value="">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row between">
+      <div><h1 id="zTitle">—</h1>
+        <span id="zState" class="pill open">—</span>
+        <span class="muted" style="margin-left:8px">รอ <b id="zCount">0</b> คิว · เรียกล่าสุด <b id="zLast">—</b></span>
+      </div>
+      <div class="row">
+        <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext()">📢 เรียกคิวถัดไป / Call next</button>
+        <button class="ghost" id="toggleBtn" onclick="toggleZone()">ปิดโซน</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>กำลังรอ / Waiting</h2>
+    <div id="waiting" class="queue-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>เรียกแล้ว / Called (recent)</h2>
+    <div id="called" class="queue-list"></div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+const $=(id)=>document.getElementById(id);
+let zones=[], zoneId=null, es=null, zoneOpen=true;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+const pin=()=>$('pin').value;
+async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':pin()};
+  const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
+
+async function boot(){
+  const stores=await (await fetch('/api/stores')).json();
+  for(const s of stores){
+    const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
+    zs.forEach(z=>zones.push({...z,store:s.name}));
+  }
+  $('zoneSel').innerHTML=zones.map(z=>`<option value="${z.id}">${z.store} · ${z.name}</option>`).join('');
+  if(zones.length){ zoneId=zones[0].id; connect(); }
+}
+window.switchZone=()=>{ zoneId=Number($('zoneSel').value); connect(); };
+
+function connect(){
+  if(es) es.close();
+  es=new EventSource('/api/zones/'+zoneId+'/stream');
+  es.addEventListener('update',e=>render(JSON.parse(e.data)));
+}
+
+function render(snap){
+  if(!snap||!snap.zone) return;
+  zoneOpen = snap.zone.is_open===1;
+  $('zTitle').textContent=snap.zone.name;
+  $('zState').className='pill '+(zoneOpen?'open':'closed');
+  $('zState').textContent=zoneOpen?'เปิด / Open':'ปิด / Closed';
+  $('toggleBtn').textContent=zoneOpen?'ปิดโซน / Close':'เปิดโซน / Open';
+  $('zCount').textContent=snap.waitingCount;
+  $('zLast').textContent=snap.zone.last_called?`${snap.zone.prefix}${String(snap.zone.last_called).padStart(3,'0')}`:'—';
+  $('waiting').innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
+    <div class="qitem"><div><span class="code">${t.code}</span>
+      <span class="muted">· ${t.party_size} ที่นั่ง</span>
+      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>
+      <button class="ghost danger" onclick="act(${t.id},'skip')">ข้าม</button></div>`).join('')
+    : '<p class="muted">ไม่มีคิว / empty</p>';
+  $('called').innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
+    <div class="qitem"><div><span class="code">${t.code}</span>
+      <span class="muted">· ${t.party_size} ที่นั่ง</span></div>
+      <button class="ok" onclick="act(${t.id},'serve')">เสร็จ / Served</button></div>`).join('')
+    : '<p class="muted">—</p>';
+}
+
+window.callNext=async()=>{ try{ const r=await api('/api/zones/'+zoneId+'/call-next',{method:'POST'});
+  toast(r.called?('เรียก '+r.called.code):'ไม่มีคิวให้เรียก'); }catch(e){ toast(err(e)); } };
+window.act=async(id,action)=>{ try{ await api('/api/tickets/'+id+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
+window.toggleZone=async()=>{ try{ await api('/api/zones/'+zoneId+'/open',{method:'POST',
+  headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpen})}); }catch(e){ toast(err(e)); } };
+function err(e){ return e.message==='bad_pin'?'PIN ไม่ถูกต้อง / wrong PIN':e.message; }
+
+boot();
+</script>
+</body></html>
