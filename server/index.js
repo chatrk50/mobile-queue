@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
+const WAIT_PER_GROUP = Number(process.env.WAIT_PER_GROUP_MIN || 4); // est. minutes per group ahead
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 
@@ -40,7 +41,7 @@ const pinOK = (req) =>
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -153,6 +154,11 @@ app.post('/api/reset', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   doDailyReset();
   res.json({ ok: true });
+});
+// Daily report for the cashier (PIN-protected): cups sold + per-zone breakdown.
+app.get('/api/report', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.dailyReport());
 });
 
 // ---------- Live updates (SSE) for cashier & display ----------

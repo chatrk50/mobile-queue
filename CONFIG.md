@@ -23,6 +23,7 @@ Live: **https://mobile-queue.onrender.com** · Brand **YO-DEE Yogurt** · Branch
 | `NODE_VERSION` | `22.17.0` (render.yaml) | needs ≥22.5 for `node:sqlite` |
 | `PUBLIC_BASE_URL` | `https://mobile-queue.onrender.com` (render.yaml) | base URL for links/QRs |
 | `NOTIFY_THRESHOLD` | `2` (render.yaml) | LINE "soon" alert when ≤N groups ahead |
+| `WAIT_PER_GROUP_MIN` | `4` (render.yaml) | est. minutes per group (customer ETA) |
 | `LIFF_ID` | `2010308807-nrzjBCPa` (render.yaml) | customer LIFF |
 | `LINE_ADD_FRIEND_URL` | `https://line.me/R/ti/p/@138dccus` (render.yaml) | "Add friend" button target |
 | `CASHIER_PIN` | **Render dashboard** (secret) | staff login PIN — change here anytime |
@@ -40,6 +41,9 @@ Live: **https://mobile-queue.onrender.com** · Brand **YO-DEE Yogurt** · Branch
 - **One number per scan** (no party size).
 - **Add-friend required**: LIFF checks `liff.getFriendship()`; non-friends see an "Add LINE friend" screen.
 - **Notifications** (auto, server-side): confirmation, "you're up soon" (≤2 ahead), "your turn" — each a LINE card with a **Check my queue** button (hidden URL). Resume by LINE ID after closing the app.
+- **One active number per customer** — re-scanning returns the same number (no duplicates).
+- **Estimated wait** shown to customers = `groups ahead × WAIT_PER_GROUP_MIN` (4 min).
+- **Daily report** — cashier "📊 Report" button / `GET /api/report` (PIN): cups sold (served) + per-zone, since the last reset.
 - **Daily reset** to A001 at **00:00 Asia/Bangkok** (in-process). Manual/cron: `POST /api/reset` with header `x-cashier-pin`.
 
 ## Customise

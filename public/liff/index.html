@@ -38,7 +38,8 @@
     <div class="big-number" id="tCode">—</div>
     <div id="tStatusWrap" style="margin:18px 0">
       <div id="tAheadWrap"><span class="muted">Groups ahead</span>
-        <div style="font-size:40px;font-weight:800" id="tAhead">–</div></div>
+        <div style="font-size:40px;font-weight:800" id="tAhead">–</div>
+        <div class="pill soon" id="tEta" style="display:inline-block;margin-top:8px"></div></div>
       <div id="tCalled" style="display:none">
         <span class="pill soon" id="tCalledPill">⏰ Almost your turn</span>
       </div>
@@ -131,6 +132,8 @@ function render(v){
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
     $('tAhead').textContent = v.ahead;
+    const mpg = cfg.minutesPerGroup || 4;
+    $('tEta').textContent = v.ahead>0 ? `Est. wait ~${v.ahead*mpg} min` : "You're next!";
     $('tNotifyNote').textContent = cfg.lineEnabled
       ? `We'll message you on LINE when ${cfg.threshold} groups are left`
       : `(test mode) notify at ${cfg.threshold} groups left — see server log`;

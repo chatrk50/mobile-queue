@@ -14,6 +14,7 @@
     </div>
     <div class="row" style="gap:8px">
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← Back</a>
+      <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()">📊 Report</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">Logout</button>
     </div>
   </div>
@@ -26,6 +27,13 @@
       onkeydown="if(event.key==='Enter')login()">
     <button style="width:100%" onclick="login()">Log in</button>
     <p id="loginErr" style="color:var(--danger);min-height:18px;margin-top:10px"></p>
+  </div>
+
+  <!-- DAILY REPORT -->
+  <div id="reportCard" class="card" style="display:none;max-width:440px;margin:14px auto">
+    <div class="row between"><h1>Daily Report</h1><button class="ghost" style="padding:6px 12px" onclick="hideReport()">Close</button></div>
+    <p class="muted">Cups sold so far today · resets daily at 00:00 (Bangkok)</p>
+    <div id="reportBody" style="margin-top:12px"></div>
   </div>
 
   <!-- DASHBOARD (all zones) -->
@@ -50,13 +58,25 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='Wrong PIN'; return; }
     PIN=pin; $('loginErr').textContent='';
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display='';
     await boot();
   }catch(e){ $('loginErr').textContent='Connection error'; }
 };
 window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
+  $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
+
+window.showReport=async()=>{
+  try{ const r=await api('/api/report');
+    $('reportBody').innerHTML =
+      `<div style="font-size:48px;font-weight:900;color:var(--navy);text-align:center;line-height:1">${r.cupsSold}</div>`+
+      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} numbers issued</div>`+
+      r.perZone.map(z=>`<div class="qitem"><span class="code">${esc(z.name)}</span><span class="muted">${z.served} sold · ${z.issued} issued</span></div>`).join('');
+    $('reportCard').style.display=''; $('dash').style.display='none';
+  }catch(e){ toast(err(e)); }
+};
+window.hideReport=()=>{ $('reportCard').style.display='none'; $('dash').style.display=''; };
 
 async function boot(){
   const stores=await (await fetch('/api/stores')).json();

@@ -17,6 +17,8 @@ services:
         value: "22.17.0"      # node:sqlite + --experimental-sqlite need >= 22.5
       - key: NOTIFY_THRESHOLD
         value: "2"
+      - key: WAIT_PER_GROUP_MIN
+        value: "4"     # estimated minutes per group ahead (customer ETA)
       - key: PUBLIC_BASE_URL
         value: https://mobile-queue.onrender.com
       - key: CASHIER_PIN

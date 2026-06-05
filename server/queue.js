@@ -39,13 +39,22 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
 
+  // No duplicate numbers per customer: if they already hold an active ticket in
+  // this zone, return it instead of issuing a new one (and skip the extra push).
+  if (lineUserId) {
+    const existing = findActiveTicket(zoneId, lineUserId);
+    if (existing) return { ticket: existing, ahead: aheadCount(existing) };
+  }
+
   const tx = db.transaction(() => {
-    const next = zone.last_number + 1;
+    // Re-read the counter inside the transaction so numbers are never reused.
+    const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id = ?').get(zoneId);
+    const next = cur.last_number + 1;
     db.prepare('UPDATE zones SET last_number = ? WHERE id = ?').run(next, zoneId);
     const info = db.prepare(
       `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
        VALUES (?,?,?,?,?,?,?)`
-    ).run(storeId, zoneId, next, code(zone.prefix, next), partySize, lineUserId, customerName);
+    ).run(storeId, zoneId, next, code(cur.prefix, next), partySize, lineUserId, customerName);
     return db.prepare('SELECT * FROM tickets WHERE id = ?').get(info.lastInsertRowid);
   });
 
@@ -125,6 +134,18 @@ export function evaluateSoonNotifications(zoneId, threshold) {
         queueLink(zoneId));
     }
   });
+}
+
+/** Daily report: cups sold (served tickets) + per-zone breakdown, since the last reset. */
+export function dailyReport() {
+  const perZone = db.prepare(
+    `SELECT z.id, z.name, z.prefix, z.last_number AS issued,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id = z.id AND t.status = 'served') AS served
+     FROM zones z ORDER BY z.id`
+  ).all();
+  const cupsSold = perZone.reduce((s, z) => s + z.served, 0);
+  const issued = perZone.reduce((s, z) => s + z.issued, 0);
+  return { cupsSold, issued, perZone };
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
