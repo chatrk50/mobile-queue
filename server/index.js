@@ -15,6 +15,7 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
 const LIFF_ID = process.env.LIFF_ID || '';
+const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -25,7 +26,7 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   for (const ev of events) {
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
-        'ขอบคุณที่เพิ่มเพื่อน! สแกน QR ที่ร้านเพื่อรับคิว\nThanks! Scan the QR at the store to get a queue number.');
+        'Thanks for adding us! Scan the QR at the store to get your queue number.');
     }
   }
   res.sendStatus(200);
@@ -39,7 +40,7 @@ const pinOK = (req) =>
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------

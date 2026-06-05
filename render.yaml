@@ -23,6 +23,8 @@ services:
         sync: false           # you set this in the Render UI (don't use 1234 in public)
       - key: LIFF_ID
         value: 2010308807-nrzjBCPa   # not secret (exposed client-side anyway)
+      - key: LINE_ADD_FRIEND_URL
+        value: https://line.me/R/ti/p/@138dccus   # OA add-friend deep link (not secret)
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false           # secret — paste in Render dashboard, never in git
       - key: LINE_CHANNEL_SECRET

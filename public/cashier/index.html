@@ -1,21 +1,27 @@
-<!doctype html><html lang="th"><head>
+<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cashier — YO-DEE Yogurt</title>
 <link rel="stylesheet" href="/assets/styles.css">
 </head><body>
 <div class="wrap wide">
-  <div class="row between">
-    <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> YO-DEE Yogurt <span class="muted" style="font-weight:500">· Cashier</span></div>
-    <button id="logoutBtn" class="ghost" style="display:none" onclick="logout()">ออกจากระบบ / Logout</button>
+  <div class="row between" style="align-items:flex-start">
+    <div class="brand">
+      <img class="logo" src="/assets/logo.png" onerror="this.remove()" alt="">
+      <div style="display:flex;flex-direction:column;line-height:1.15">
+        <span>YO-DEE Yogurt</span>
+        <span class="muted" style="font-size:13px;font-weight:500">Cashier</span>
+      </div>
+    </div>
+    <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">Logout</button>
   </div>
 
   <!-- LOGIN -->
   <div id="loginCard" class="card" style="max-width:360px;margin:48px auto;text-align:center">
-    <h1>เข้าสู่ระบบพนักงาน</h1>
-    <p class="muted">Staff login</p>
+    <h1>Staff login</h1>
+    <p class="muted">Enter your PIN to manage the queue</p>
     <input id="pin" type="password" inputmode="numeric" placeholder="PIN" style="margin:14px 0"
       onkeydown="if(event.key==='Enter')login()">
-    <button style="width:100%" onclick="login()">เข้าสู่ระบบ / Login</button>
+    <button style="width:100%" onclick="login()">Log in</button>
     <p id="loginErr" style="color:var(--danger);min-height:18px;margin-top:10px"></p>
   </div>
 
@@ -32,18 +38,18 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ return e.message==='bad_pin'?'PIN ไม่ถูกต้อง / wrong PIN':e.message; }
+function err(e){ return e.message==='bad_pin'?'Wrong PIN':e.message; }
 
 window.login=async()=>{
   const pin=$('pin').value.trim(); if(!pin) return;
   try{
     const r=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
     const j=await r.json();
-    if(!j.ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง / Wrong PIN'; return; }
+    if(!j.ok){ $('loginErr').textContent='Wrong PIN'; return; }
     PIN=pin; $('loginErr').textContent='';
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     await boot();
-  }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่ได้ / Connection error'; }
+  }catch(e){ $('loginErr').textContent='Connection error'; }
 };
 window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
@@ -71,16 +77,16 @@ function zonePanel(z){
     <div class="row between">
       <div><h1 id="zt-${z.id}">${esc(z.name)}</h1>
         <span id="zs-${z.id}" class="pill open">—</span>
-        <span class="muted" style="margin-left:8px">รอ <b id="zc-${z.id}">0</b> คิว · เรียกล่าสุด <b id="zl-${z.id}">—</b></span>
+        <span class="muted" style="margin-left:8px">Waiting <b id="zc-${z.id}">0</b> · last called <b id="zl-${z.id}">—</b></span>
       </div>
       <div class="row">
-        <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext(${z.id})">📢 เรียกคิวถัดไป / Call next</button>
-        <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">ปิดโซน</button>
+        <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext(${z.id})">📢 Call next</button>
+        <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">Close zone</button>
       </div>
     </div>
     <div class="zone-cols">
-      <div><h2>กำลังรอ / Waiting</h2><div id="zw-${z.id}" class="queue-list"></div></div>
-      <div><h2>เรียกแล้ว / Called (recent)</h2><div id="zr-${z.id}" class="queue-list"></div></div>
+      <div><h2>Waiting</h2><div id="zw-${z.id}" class="queue-list"></div></div>
+      <div><h2>Called (recent)</h2><div id="zr-${z.id}" class="queue-list"></div></div>
     </div>
   </div>`;
 }
@@ -92,24 +98,22 @@ function renderZone(snap){
   const set=(eid,v)=>{const el=$(eid); if(el) el.textContent=v;};
   set('zt-'+id,z.name); set('zc-'+id,snap.waitingCount);
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
-  const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'เปิด / Open':'ปิด / Closed'; }
-  const tog=$('ztog-'+id); if(tog) tog.textContent=open?'ปิดโซน / Close':'เปิดโซน / Open';
+  const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'Open':'Closed'; }
+  const tog=$('ztog-'+id); if(tog) tog.textContent=open?'Close zone':'Open zone';
   const nm=(t)=> t.customer_name?` <span class="muted">· ${esc(t.customer_name)}</span>`:'';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
-    <div class="qitem"><div><span class="code">${t.code}</span>
-      ${nm(t)}
-      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>
-      <button class="ghost danger" onclick="act(${t.id},'skip')">ข้าม</button></div>`).join('')
-    : '<p class="muted">ไม่มีคิว / empty</p>';
+    <div class="qitem"><div><span class="code">${t.code}</span>${nm(t)}
+      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">notified</span>':''}</div>
+      <button class="ghost danger" onclick="act(${t.id},'skip')">Skip</button></div>`).join('')
+    : '<p class="muted">empty</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem"><div><span class="code">${t.code}</span>
-      ${nm(t)}</div>
-      <button class="ok" onclick="act(${t.id},'serve')">เสร็จ / Served</button></div>`).join('')
+    <div class="qitem"><div><span class="code">${t.code}</span>${nm(t)}</div>
+      <button class="ok" onclick="act(${t.id},'serve')">Served</button></div>`).join('')
     : '<p class="muted">—</p>';
 }
 
 window.callNext=async(id)=>{ try{ const r=await api('/api/zones/'+id+'/call-next',{method:'POST'});
-  toast(r.called?('เรียก '+r.called.code):'ไม่มีคิวให้เรียก'); }catch(e){ toast(err(e)); } };
+  toast(r.called?('Called '+r.called.code):'No one waiting'); }catch(e){ toast(err(e)); } };
 window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };

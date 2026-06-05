@@ -1,4 +1,4 @@
-<!doctype html><html lang="th"><head>
+<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QR Poster — YO-DEE Yogurt</title>
 <link rel="stylesheet" href="/assets/styles.css">
@@ -32,21 +32,21 @@
 </head><body>
 <div class="wrap">
   <div class="toolbar">
-    <div class="t-label">เลือกโซนเพื่อพิมพ์โปสเตอร์ / Choose a zone to print</div>
+    <div class="t-label">Choose a zone to print</div>
     <div id="zlinks" class="zonepick"></div>
-    <button id="printBtn" class="print-btn" onclick="window.print()">🖨️ พิมพ์โปสเตอร์ / Print poster</button>
+    <button id="printBtn" class="print-btn" onclick="window.print()">🖨️ Print poster</button>
   </div>
   <div class="poster" id="poster" style="display:none">
     <img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('pbrand');if(f)f.style.display=''" alt="">
     <div class="brandname" id="pbrand" style="display:none">YO-DEE Yogurt</div>
     <div class="branch" id="branch">—</div>
     <div class="zone" id="zone">—</div>
-    <div class="cta">สแกนเพื่อรับคิว<br><span style="font-size:14px;color:var(--muted);font-weight:600">Scan to get your queue number</span></div>
+    <div class="cta">Scan to get your queue number</div>
     <div id="qr"></div>
     <div class="steps">
-      1. สแกน QR ด้วยกล้องมือถือหรือ LINE<br>
-      2. กดรับหมายเลขคิว 1 หมายเลข<br>
-      3. เราจะแจ้งทาง LINE เมื่อใกล้ถึงคิว
+      1. Scan the QR with your phone camera or LINE<br>
+      2. Add us on LINE &amp; tap to get 1 queue number<br>
+      3. We'll notify you on LINE when you're up soon
     </div>
   </div>
   <div id="err" class="card" style="display:none"></div>
@@ -64,7 +64,7 @@ const zoneId=new URLSearchParams(location.search).get('zone');
   }
   $('zlinks').innerHTML=links.join('');
   $('printBtn').disabled=!zoneId;
-  if(!zoneId){ $('err').style.display=''; $('err').innerHTML='<b>เลือกโซนด้านบนเพื่อสร้างโปสเตอร์ / Pick a zone above to make its poster.</b>'; return; }
+  if(!zoneId){ $('err').style.display=''; $('err').innerHTML='<b>Pick a zone above to make its poster.</b>'; return; }
   const z=await (await fetch('/api/zones/'+zoneId)).json();
   const store=stores.find(s=>s.id===z.store_id);
   $('branch').textContent=store?store.name:'';

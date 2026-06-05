@@ -54,10 +54,10 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
 
   // Confirmation push (fire and forget)
   pushQueue(lineUserId,
-    `🎫 รับคิวสำเร็จ / Queue confirmed\n` +
-    `หมายเลขของคุณ / Your number: ${ticket.code}\n` +
-    `รออีก / Groups ahead: ${ahead}\n` +
-    `เราจะแจ้งเตือนเมื่อใกล้ถึงคิวของคุณ / We'll notify you when you're up soon.`,
+    `🎫 Queue confirmed\n` +
+    `Your number: ${ticket.code}\n` +
+    `Groups ahead: ${ahead}\n` +
+    `We'll notify you here on LINE when you're up soon.`,
     queueLink(zoneId));
 
   return { ticket, ahead };
@@ -83,9 +83,9 @@ export function callNext(zoneId, threshold) {
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
   pushQueue(next.line_user_id,
-    `🔔 ถึงคิวของคุณแล้ว! / It's your turn!\n` +
-    `หมายเลข / Number: ${next.code}\n` +
-    `เชิญที่เคาน์เตอร์ / Please come to the counter.`,
+    `🔔 It's your turn!\n` +
+    `Number: ${next.code}\n` +
+    `Please come to the counter.`,
     queueLink(zoneId));
 
   evaluateSoonNotifications(zoneId, threshold);
@@ -118,10 +118,10 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
       pushQueue(t.line_user_id,
-        `⏰ ใกล้ถึงคิวของคุณแล้ว / You're up soon!\n` +
-        `หมายเลข / Number: ${t.code}\n` +
-        `เหลืออีก / Groups ahead: ${ahead}\n` +
-        `กรุณากลับมาที่ร้าน / Please head back to the store.`,
+        `⏰ You're up soon!\n` +
+        `Number: ${t.code}\n` +
+        `Groups ahead: ${ahead}\n` +
+        `Please head back to the store.`,
         queueLink(zoneId));
     }
   });
