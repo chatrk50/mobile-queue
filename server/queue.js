@@ -205,23 +205,28 @@ export function setZoneOpen(zoneId, isOpen) {
 
 // ---------- Menu (Quick-Service) ----------
 export function listMenu() {
-  return db.prepare('SELECT id, name, price, active, sort FROM menu_items ORDER BY sort, id').all();
+  return db.prepare('SELECT id, name, name_en, price, image, category, active, sort FROM menu_items ORDER BY sort, id').all();
 }
-export function addMenuItem({ name, price }) {
-  const n = (name || '').toString().trim().slice(0, 60);
+export function addMenuItem({ name, name_en, price, image, category }) {
+  const n = (name || '').toString().trim().slice(0, 80);
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
+  const cat = category === 'topping' ? 'topping' : 'drink';
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
-  const info = db.prepare('INSERT INTO menu_items (name, price, sort) VALUES (?,?,?)').run(n, p, s);
+  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)')
+    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, 300) || null, cat, s);
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateMenuItem(id, { name, price, active }) {
+export function updateMenuItem(id, { name, name_en, price, image, active, category }) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
-  const n = name != null ? ((name.toString().trim().slice(0, 60)) || cur.name) : cur.name;
+  const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
+  const en = name_en != null ? (name_en.toString().slice(0, 80) || null) : cur.name_en;
   const p = price != null ? Math.max(0, Number(price) || 0) : cur.price;
+  const img = image != null ? (image.toString().slice(0, 300) || null) : cur.image;
+  const cat = category != null ? (category === 'topping' ? 'topping' : 'drink') : cur.category;
   const a = active != null ? (active ? 1 : 0) : cur.active;
-  db.prepare('UPDATE menu_items SET name=?, price=?, active=? WHERE id=?').run(n, p, a, id);
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=? WHERE id=?').run(n, en, p, img, cat, a, id);
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {

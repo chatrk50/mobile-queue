@@ -41,7 +41,7 @@
   <div id="orderCard" class="card" style="display:none;max-width:520px;margin:14px auto">
     <div class="row between"><h1>New order — <span id="orderZone">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="hideOrder()">Close</button></div>
     <p class="muted">Tap items to add. The order gets its own queue number.</p>
-    <div id="menuButtons" class="grid" style="margin:12px 0"></div>
+    <div id="menuButtons" style="margin:12px 0"></div>
     <h2>Order</h2>
     <div id="cartList" class="queue-list"></div>
     <div class="row between" style="margin-top:14px;align-items:center">
@@ -54,10 +54,15 @@
   <div id="menuCard" class="card" style="display:none;max-width:480px;margin:14px auto">
     <div class="row between"><h1>Menu</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">Close</button></div>
     <div id="menuMgr" style="margin:10px 0"></div>
-    <div class="row" style="gap:8px;margin-top:10px">
-      <input id="newName" placeholder="Item name" style="flex:1">
-      <input id="newPrice" type="number" inputmode="decimal" placeholder="฿" style="width:90px">
-      <button class="ok" onclick="addMenu()">Add</button>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <input id="newName" placeholder="ชื่อเมนู (Thai name)">
+      <input id="newNameEn" placeholder="English name (optional)">
+      <input id="newImg" placeholder="Image URL (optional)">
+      <div class="row" style="gap:8px">
+        <input id="newPrice" type="number" inputmode="decimal" placeholder="฿ price" style="width:110px">
+        <select id="newCat" style="width:auto"><option value="drink">Drink</option><option value="topping">Topping</option></select>
+        <button class="ok" style="flex:1" onclick="addMenu()">+ Add item</button>
+      </div>
     </div>
   </div>
 
@@ -119,20 +124,26 @@ window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
-    <div class="qitem"><div><b ${m.active?'':'style="opacity:.5"'}>${esc(m.name)}</b> <span class="muted">฿${m.price}</span></div>
+    <div class="qitem"><div ${m.active?'':'style="opacity:.5"'}>
+      <b>${esc(m.name)}</b> <span class="muted" style="font-size:12px">${esc(m.name_en||'')}</span>
+      <span class="muted"> · ฿${m.price}${m.category==='topping'?' · topping':''}</span></div>
       <div class="row" style="gap:6px">
         <button class="ghost" style="padding:6px 10px" onclick="editPrice(${m.id})">฿</button>
+        <button class="ghost" style="padding:6px 10px" onclick="editImg(${m.id})">img</button>
         <button class="ghost" style="padding:6px 10px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'Hide':'Show'}</button>
         <button class="ghost danger" style="padding:6px 10px" onclick="delItem(${m.id})">✕</button>
       </div></div>`).join('') : '<p class="muted">No items yet — add one below.</p>';
 }
-window.addMenu=async()=>{ const name=$('newName').value.trim(); const price=$('newPrice').value;
-  if(!name){ toast('Enter a name'); return; }
-  try{ await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,price:Number(price)||0})});
-    $('newName').value=''; $('newPrice').value=''; await loadMenu(); renderMenuMgr();
+window.addMenu=async()=>{ const name=$('newName').value.trim();
+  if(!name){ toast('Enter a Thai name'); return; }
+  const body={ name, name_en:$('newNameEn').value.trim(), image:$('newImg').value.trim(), price:Number($('newPrice').value)||0, category:$('newCat').value };
+  try{ await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    ['newName','newNameEn','newImg','newPrice'].forEach(id=>$(id).value=''); await loadMenu(); renderMenuMgr();
   }catch(e){ toast(err(e)); } };
 window.editPrice=async(id)=>{ const m=MENU.find(x=>x.id===id); const p=prompt('Price for '+m.name, m.price); if(p===null) return;
   try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({price:Number(p)||0})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+window.editImg=async(id)=>{ const m=MENU.find(x=>x.id===id); const url=prompt('Image URL for '+m.name+' (blank = remove)', m.image||''); if(url===null) return;
+  try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:url})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
 window.toggleItem=async(id,active)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
 window.delItem=async(id)=>{ if(!confirm('Delete this item?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
 
@@ -140,9 +151,17 @@ window.delItem=async(id)=>{ if(!confirm('Delete this item?')) return; try{ await
 let cart={}, orderZoneId=null;
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart={}; await loadMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
-  $('menuButtons').innerHTML = MENU.filter(m=>m.active).length
-    ? MENU.filter(m=>m.active).map(m=>`<button class="btn ghost" style="height:auto;padding:12px;text-align:left" onclick="addToCart(${m.id})"><b>${esc(m.name)}</b><br><span class="muted">฿${m.price}</span></button>`).join('')
-    : '<p class="muted">No active items — add some via the Menu button.</p>';
+  const active=MENU.filter(m=>m.active);
+  const cup='<svg viewBox="0 0 24 24"><path d="M6 8h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 8z"/><path d="M8 8a4 4 0 0 1 8 0"/></svg>';
+  const btn=(m)=>`<button class="menu-btn" onclick="addToCart(${m.id})">
+    <div class="mimg">${m.image?`<img src="${esc(m.image)}" alt="">`:cup}</div>
+    <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
+    <div class="mpr">฿${m.price}</div></button>`;
+  const drinks=active.filter(m=>m.category!=='topping'), tops=active.filter(m=>m.category==='topping');
+  $('menuButtons').innerHTML = active.length ? (
+    (drinks.length?`<div class="menu-section">เมนู / Drinks</div><div class="menu-grid">${drinks.map(btn).join('')}</div>`:'')+
+    (tops.length?`<div class="menu-section">เพิ่ม Topping +฿10 / Toppings</div><div class="menu-grid">${tops.map(btn).join('')}</div>`:'')
+  ) : '<p class="muted">No active items — add some via the Menu button.</p>';
   renderCart(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
 window.hideOrder=()=>{ $('orderCard').style.display='none'; $('dash').style.display=''; };
 window.addToCart=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return; if(!cart[id]) cart[id]={name:m.name,price:m.price,qty:0}; cart[id].qty++; renderCart(); };

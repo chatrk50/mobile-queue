@@ -172,7 +172,7 @@ app.get('/api/report', (req, res) => {
 // ---------- Menu management + quick-service ordering (PIN) ----------
 app.post('/api/menu', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  try { res.json(Q.addMenuItem({ name: req.body?.name, price: req.body?.price })); }
+  try { res.json(Q.addMenuItem(req.body || {})); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/menu/:id', (req, res) => {

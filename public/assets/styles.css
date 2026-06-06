@@ -61,6 +61,17 @@ select,input{background:var(--surface);border:1px solid var(--line);color:var(--
 .closed-note{background:rgba(229,91,107,.08);border:1px solid var(--danger);border-radius:14px;
   padding:18px;text-align:center;margin-top:16px}
 .closed-note b{color:var(--danger);font-size:17px}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}
+.menu-section{font-size:14px;color:var(--accent);font-weight:700;margin:12px 2px 4px}
+.menu-btn{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px 8px;
+  background:#fff;border:1px solid var(--line);border-radius:14px;cursor:pointer;color:var(--navy)}
+.menu-btn:active{transform:translateY(1px)}
+.menu-btn .mimg{width:62px;height:62px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.menu-btn .mimg img{width:100%;height:100%;object-fit:cover}
+.menu-btn .mimg svg{width:32px;height:32px;stroke:var(--accent);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.menu-btn .mth{font-weight:700;font-size:12.5px;line-height:1.2}
+.menu-btn .men{font-size:10.5px;color:var(--muted);line-height:1.15}
+.menu-btn .mpr{font-weight:800;color:var(--accent);font-size:14px}
 @media(max-width:720px){
   .zone-cols{grid-template-columns:1fr}
   .wrap.wide{padding:14px}

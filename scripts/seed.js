@@ -17,17 +17,34 @@ const zones = [
 const ins = db.prepare('INSERT INTO zones (store_id, name, prefix) VALUES (?,?,?)');
 for (const z of zones) ins.run(storeId, z.name, z.prefix);
 
-// Default Quick-Service menu (editable in the cashier)
-const menu = [
-  { name: 'Original Yogurt', price: 35 },
-  { name: 'Mango Yogurt', price: 45 },
-  { name: 'Strawberry Yogurt', price: 45 },
-  { name: 'Mixed Berry Yogurt', price: 50 },
-  { name: 'Extra Topping', price: 15 },
+// YO-DEE Yogurt Smoothie menu (Thai name, English name, price) — editable in the cashier.
+const drinks = [
+  ['โยเกิร์ตปั่น Original', 'Yogurt Original', 40],
+  ['โยเกิร์ตปั่นข้าวเหนียวมูล', 'Yogurt with Midnight Sticky Rice', 49],
+  ['โยเกิร์ตปั่นข้าวโอ๊ต', 'Yogurt with Oats', 49],
+  ['โยเกิร์ตปั่นมะม่วง', 'Yogurt with Mango', 49],
+  ['โยเกิร์ตปั่นสตรอวเบอร์รี่', 'Yogurt with Strawberry', 49],
+  ['โยเกิร์ตปั่นบัวลอย', 'Yogurt with Rice Balls', 49],
+  ['โยเกิร์ตปั่นบุกน้ำผึ้ง', 'Yogurt with Honey Konjac', 49],
+  ['โยเกิร์ตปั่นโอริโอ้', 'Yogurt with Oreo', 49],
+  ['โยเกิร์ตปั่นคิทแคท', 'Yogurt with KitKat', 49],
+  ['โยเกิร์ตปั่นอโวคาโด', 'Yogurt with Avocado', 59],
+  ['โยเกิร์ตปั่นน้ำผึ้ง', 'Yogurt with Honey', 49],
+  ['โยเกิร์ตปั่นเฉาก๊วย', 'Yogurt with Grass Jelly', 49],
+  ['โยเกิร์ตปั่นปีโป้', 'Yogurt with Pipo Jelly', 49],
+  ['โยเกิร์ตปั่นกล้วย', 'Yogurt with Banana', 49],
+  ['โยเกิร์ตปั่นอโวคาโดสาหร่ายสไปรูลิน่า', 'Yogurt with Avocado Blue Spirulina', 65],
+  ['โยเกิร์ตปั่นข้าวเหนียวมะม่วง', 'Yogurt with Mango & Midnight Sticky Rice', 59],
 ];
-const minsert = db.prepare('INSERT INTO menu_items (name, price, sort) VALUES (?,?,?)');
-menu.forEach((m, i) => minsert.run(m.name, m.price, i + 1));
-console.log(`Seeded ${menu.length} menu items.`);
+const toppings = [
+  ['ปีโป้', 'Pipo Jelly'], ['คิทแคท', 'KitKat'], ['โอริโอ้', 'Oreo'], ['เฉาก๊วย', 'Grass Jelly'],
+  ['บุกน้ำผึ้ง', 'Honey Konjac'], ['บัวลอย', 'Rice Balls'], ['ข้าวเหนียวมูล', 'Midnight Sticky Rice'], ['ข้าวโอ๊ต', 'Oats'],
+];
+const minsert = db.prepare('INSERT INTO menu_items (name, name_en, price, category, sort) VALUES (?,?,?,?,?)');
+let s = 0;
+for (const [name, en, price] of drinks) minsert.run(name, en, price, 'drink', ++s);
+for (const [name, en] of toppings) minsert.run(name, en, 10, 'topping', ++s);
+console.log(`Seeded ${drinks.length} drinks + ${toppings.length} toppings.`);
 
 console.log(`Seeded store #${storeId} "SAT Market" with ${zones.length} zones.`);
 console.log('Zones:', db.prepare('SELECT id, name, prefix FROM zones WHERE store_id=?').all(storeId));
