@@ -7,7 +7,10 @@ name: keep-alive
 
 on:
   schedule:
-    - cron: '*/14 * * * *'   # every 14 minutes (UTC)
+    # GitHub crons are best-effort and often delayed, so we ask for every 10 min
+    # to leave margin under Render's ~15-min idle timeout. For RELIABLE warmth,
+    # also add an external monitor (UptimeRobot / cron-job.org) — see README.
+    - cron: '*/10 * * * *'
   workflow_dispatch:          # allow manual run from the Actions tab
 
 # Avoid overlapping runs if one is slow
