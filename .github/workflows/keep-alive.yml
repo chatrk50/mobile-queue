@@ -1,0 +1,36 @@
+name: keep-alive
+
+# Keeps the Render free service warm so it doesn't spin down (~15 min idle ->
+# ~50s cold start). Pings a lightweight endpoint every 14 minutes.
+# NOTE: GitHub scheduled crons run in UTC and are best-effort (can be delayed a
+# few minutes under load), so an occasional cold start is still possible.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'   # every 14 minutes (UTC)
+  workflow_dispatch:          # allow manual run from the Actions tab
+
+# Avoid overlapping runs if one is slow
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the service
+        env:
+          URL: https://mobile-queue.onrender.com/api/config
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -fsS --max-time 90 -o /dev/null -w '%{http_code}' "$URL" || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "OK ($code) at $(date -u)"
+              exit 0
+            fi
+            echo "attempt $i: HTTP $code — retrying in 15s..."
+            sleep 15
+          done
+          echo "service did not respond after 3 attempts"
+          exit 1
