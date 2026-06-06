@@ -49,6 +49,9 @@ app.post('/api/auth', (req, res) => {
   res.json({ ok: pinOK(req) });
 });
 
+// ---------- Menu (public read; management is PIN-protected below) ----------
+app.get('/api/menu', (req, res) => res.json(Q.listMenu()));
+
 // ---------- Stores & zones ----------
 app.get('/api/stores', (req, res) => {
   res.json(db.prepare('SELECT * FROM stores ORDER BY id').all());
@@ -164,6 +167,33 @@ app.post('/api/reset', (req, res) => {
 app.get('/api/report', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.dailyReport());
+});
+
+// ---------- Menu management + quick-service ordering (PIN) ----------
+app.post('/api/menu', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.addMenuItem({ name: req.body?.name, price: req.body?.price })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/menu/:id', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.updateMenuItem(req.params.id, req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.delete('/api/menu/:id', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.deleteMenuItem(req.params.id));
+});
+app.post('/api/zones/:zoneId/orders', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.createOrder(req.params.zoneId, req.body?.items);
+    emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
+    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
+  } catch (e) {
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    res.status(map[e.message] || 400).json({ error: e.message });
+  }
 });
 
 // ---------- Live updates (SSE) for cashier & display ----------

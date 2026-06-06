@@ -163,12 +163,18 @@ export function dailyReport() {
   const rating = db.prepare(
     `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL`
   ).get();
+  const itemSales = db.prepare(
+    `SELECT oi.name, SUM(oi.qty) AS qty, SUM(oi.qty*oi.price) AS revenue
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     GROUP BY oi.name ORDER BY qty DESC`
+  ).all();
+  const revenue = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
   return {
-    cupsSold, issued, noShows,
+    cupsSold, issued, noShows, revenue,
     avgWaitMin: wait.s != null ? Math.round((wait.s / 60) * 10) / 10 : null,
     avgRating: rating.avg != null ? Math.round(rating.avg * 10) / 10 : null,
     ratingCount: rating.n,
-    perZone,
+    itemSales, perZone,
   };
 }
 
@@ -197,7 +203,69 @@ export function setZoneOpen(zoneId, isOpen) {
   return getZone(zoneId);
 }
 
-/** Snapshot of a zone for cashier/display: waiting list + recently called. */
+// ---------- Menu (Quick-Service) ----------
+export function listMenu() {
+  return db.prepare('SELECT id, name, price, active, sort FROM menu_items ORDER BY sort, id').all();
+}
+export function addMenuItem({ name, price }) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (!n) throw new Error('name_required');
+  const p = Math.max(0, Number(price) || 0);
+  const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
+  const info = db.prepare('INSERT INTO menu_items (name, price, sort) VALUES (?,?,?)').run(n, p, s);
+  return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
+}
+export function updateMenuItem(id, { name, price, active }) {
+  const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
+  if (!cur) throw new Error('item_not_found');
+  const n = name != null ? ((name.toString().trim().slice(0, 60)) || cur.name) : cur.name;
+  const p = price != null ? Math.max(0, Number(price) || 0) : cur.price;
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  db.prepare('UPDATE menu_items SET name=?, price=?, active=? WHERE id=?').run(n, p, a, id);
+  return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
+}
+export function deleteMenuItem(id) {
+  db.prepare('DELETE FROM menu_items WHERE id=?').run(id);
+  return { ok: true };
+}
+
+// ---------- Orders: tie a quick-service order to a fresh queue number ----------
+export function createOrder(zoneId, items) {
+  const lines = (Array.isArray(items) ? items : [])
+    .map((it) => ({
+      name: (it.name || '').toString().slice(0, 60),
+      price: Math.max(0, Number(it.price) || 0),
+      qty: Math.max(1, Math.min(99, Math.round(Number(it.qty) || 1))),
+    }))
+    .filter((it) => it.name);
+  if (!lines.length) throw new Error('empty_order');
+  const zone = getZone(zoneId);
+  if (!zone) throw new Error('zone_not_found');
+  if (!zone.is_open) throw new Error('zone_closed');
+  const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
+  const tx = db.transaction(() => {
+    const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
+    const next = cur.last_number + 1;
+    db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
+    const tinfo = db.prepare(
+      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, customer_name)
+       VALUES (?,?,?,?,?,?)`
+    ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, 'Order');
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total) VALUES (?,?)').run(tinfo.lastInsertRowid, total);
+    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty) VALUES (?,?,?,?)');
+    for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty);
+    return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
+  });
+  return tx();
+}
+export function orderForTicket(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return null;
+  const items = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+  return { total: order.total, items };
+}
+
+/** Snapshot of a zone for cashier/display: waiting list + recently called (+ orders). */
 export function zoneSnapshot(zoneId) {
   const zone = getZone(zoneId);
   if (!zone) return null;
@@ -209,6 +277,12 @@ export function zoneSnapshot(zoneId) {
     `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 5`
   ).all(zoneId);
+  const attach = (t) => {
+    const o = orderForTicket(t.id);
+    if (o) { t.order_total = o.total; t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', '); }
+    return t;
+  };
+  waiting.forEach(attach); recentCalled.forEach(attach);
   return { zone, waiting, recentCalled, waitingCount: waiting.length };
 }
 

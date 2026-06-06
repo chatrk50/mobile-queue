@@ -14,6 +14,7 @@
     </div>
     <div class="row" style="gap:8px">
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← Back</a>
+      <button id="menuBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menu</button>
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Report</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">Logout</button>
     </div>
@@ -34,6 +35,30 @@
     <div class="row between"><h1>Daily Report</h1><button class="ghost" style="padding:6px 12px" onclick="hideReport()">Close</button></div>
     <p class="muted">Cups sold so far today · resets daily at 00:00 (Bangkok)</p>
     <div id="reportBody" style="margin-top:12px"></div>
+  </div>
+
+  <!-- ORDER BUILDER -->
+  <div id="orderCard" class="card" style="display:none;max-width:520px;margin:14px auto">
+    <div class="row between"><h1>New order — <span id="orderZone">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="hideOrder()">Close</button></div>
+    <p class="muted">Tap items to add. The order gets its own queue number.</p>
+    <div id="menuButtons" class="grid" style="margin:12px 0"></div>
+    <h2>Order</h2>
+    <div id="cartList" class="queue-list"></div>
+    <div class="row between" style="margin-top:14px;align-items:center">
+      <div style="font-size:22px;font-weight:800;color:var(--navy)">Total ฿<span id="cartTotal">0</span></div>
+      <button class="ok" id="placeBtn" style="font-size:16px;padding:12px 22px" onclick="placeOrder()">Place order</button>
+    </div>
+  </div>
+
+  <!-- MENU MANAGEMENT -->
+  <div id="menuCard" class="card" style="display:none;max-width:480px;margin:14px auto">
+    <div class="row between"><h1>Menu</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">Close</button></div>
+    <div id="menuMgr" style="margin:10px 0"></div>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <input id="newName" placeholder="Item name" style="flex:1">
+      <input id="newPrice" type="number" inputmode="decimal" placeholder="฿" style="width:90px">
+      <button class="ok" onclick="addMenu()">Add</button>
+    </div>
   </div>
 
   <!-- DASHBOARD (all zones) -->
@@ -58,13 +83,14 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='Wrong PIN'; return; }
     PIN=pin; $('loginErr').textContent='';
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display='';
-    await boot();
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display='';
+    await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='Connection error'; }
 };
 window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
+  $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 
 window.showReport=async()=>{
@@ -72,17 +98,72 @@ window.showReport=async()=>{
     const stat=(label,val)=>`<div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:12px">${label}</div></div>`;
     $('reportBody').innerHTML =
       `<div style="font-size:48px;font-weight:900;color:var(--navy);text-align:center;line-height:1">${r.cupsSold}</div>`+
-      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} issued</div>`+
+      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} issued · revenue ฿${r.revenue||0}</div>`+
       `<div class="row" style="justify-content:space-around;margin-bottom:14px">`+
         stat('no-shows', r.noShows)+
         stat('avg wait', r.avgWaitMin!=null?r.avgWaitMin+'m':'—')+
         stat('rating', r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
       `</div>`+
+      (r.itemSales&&r.itemSales.length?`<h2>Items sold</h2>`+r.itemSales.map(i=>`<div class="qitem"><span>${esc(i.name)}</span><span class="muted">${i.qty} × · ฿${i.revenue}</span></div>`).join('')+`<div style="height:12px"></div>`:'')+
       r.perZone.map(z=>`<div class="qitem"><span class="code">${esc(z.name)}</span><span class="muted">${z.served} sold · ${z.no_shows} no-show · ${z.issued} issued</span></div>`).join('');
     $('reportCard').style.display=''; $('dash').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('dash').style.display=''; };
+
+// ---------- Menu management ----------
+let MENU=[];
+async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
+window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; };
+window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
+function renderMenuMgr(){
+  $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
+    <div class="qitem"><div><b ${m.active?'':'style="opacity:.5"'}>${esc(m.name)}</b> <span class="muted">฿${m.price}</span></div>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 10px" onclick="editPrice(${m.id})">฿</button>
+        <button class="ghost" style="padding:6px 10px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'Hide':'Show'}</button>
+        <button class="ghost danger" style="padding:6px 10px" onclick="delItem(${m.id})">✕</button>
+      </div></div>`).join('') : '<p class="muted">No items yet — add one below.</p>';
+}
+window.addMenu=async()=>{ const name=$('newName').value.trim(); const price=$('newPrice').value;
+  if(!name){ toast('Enter a name'); return; }
+  try{ await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,price:Number(price)||0})});
+    $('newName').value=''; $('newPrice').value=''; await loadMenu(); renderMenuMgr();
+  }catch(e){ toast(err(e)); } };
+window.editPrice=async(id)=>{ const m=MENU.find(x=>x.id===id); const p=prompt('Price for '+m.name, m.price); if(p===null) return;
+  try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({price:Number(p)||0})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+window.toggleItem=async(id,active)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+window.delItem=async(id)=>{ if(!confirm('Delete this item?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+
+// ---------- Order builder (Quick Service) ----------
+let cart={}, orderZoneId=null;
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart={}; await loadMenu();
+  const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
+  $('menuButtons').innerHTML = MENU.filter(m=>m.active).length
+    ? MENU.filter(m=>m.active).map(m=>`<button class="btn ghost" style="height:auto;padding:12px;text-align:left" onclick="addToCart(${m.id})"><b>${esc(m.name)}</b><br><span class="muted">฿${m.price}</span></button>`).join('')
+    : '<p class="muted">No active items — add some via the Menu button.</p>';
+  renderCart(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
+window.hideOrder=()=>{ $('orderCard').style.display='none'; $('dash').style.display=''; };
+window.addToCart=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return; if(!cart[id]) cart[id]={name:m.name,price:m.price,qty:0}; cart[id].qty++; renderCart(); };
+window.cartQty=(id,d)=>{ if(!cart[id]) return; cart[id].qty+=d; if(cart[id].qty<=0) delete cart[id]; renderCart(); };
+function renderCart(){
+  const ids=Object.keys(cart);
+  $('cartList').innerHTML = ids.length ? ids.map(id=>`
+    <div class="qitem"><div><b>${esc(cart[id].name)}</b> <span class="muted">฿${cart[id].price}</span></div>
+      <div class="row" style="gap:8px;align-items:center">
+        <button class="ghost" style="padding:6px 12px" onclick="cartQty(${id},-1)">–</button><b>${cart[id].qty}</b>
+        <button class="ghost" style="padding:6px 12px" onclick="cartQty(${id},1)">+</button>
+      </div></div>`).join('') : '<p class="muted">Tap items above to add.</p>';
+  const total=ids.reduce((s,id)=>s+cart[id].price*cart[id].qty,0);
+  $('cartTotal').textContent=total; $('placeBtn').disabled=!ids.length;
+}
+window.placeOrder=async()=>{
+  const items=Object.values(cart);
+  if(!items.length){ toast('Cart is empty'); return; }
+  try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    toast('Order '+r.code+' — ฿'+r.total+' — tell the customer'); cart={}; hideOrder();
+  }catch(e){ toast(err(e)); } };
 
 async function boot(){
   const stores=await (await fetch('/api/stores')).json();
@@ -109,6 +190,7 @@ function zonePanel(z){
         <span class="muted" style="margin-left:8px">Waiting <b id="zc-${z.id}">0</b> · last called <b id="zl-${z.id}">—</b></span>
       </div>
       <div class="row">
+        <button class="btn" onclick="showOrder(${z.id})"><svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>New order</button>
         <button class="ghost" onclick="addWalkin(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Walk-in</button>
         <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Call next</button>
         <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">Close zone</button>
@@ -130,14 +212,15 @@ function renderZone(snap){
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
   const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'Open':'Closed'; }
   const tog=$('ztog-'+id); if(tog) tog.textContent=open?'Close zone':'Open zone';
-  const nm=(t)=> t.customer_name?` <span class="muted">· ${esc(t.customer_name)}</span>`:'';
+  const nm=(t)=> t.customer_name && t.customer_name!=='Order'?` <span class="muted">· ${esc(t.customer_name)}</span>`:'';
+  const ord=(t)=> t.order_summary?`<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ฿${t.order_total}</div>`:'';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
-    <div class="qitem"><div><span class="code">${t.code}</span>${nm(t)}
-      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">notified</span>':''}</div>
+    <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}
+      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">notified</span>':''}</div>${ord(t)}</div>
       <button class="ghost danger" onclick="act(${t.id},'skip')">Skip</button></div>`).join('')
     : '<p class="muted">empty</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem"><div><span class="code">${t.code}</span>${nm(t)}</div>
+    <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}</div>${ord(t)}</div>
       <div class="row" style="gap:6px">
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">No-show</button>
         <button class="ok" onclick="act(${t.id},'serve')">Served</button>

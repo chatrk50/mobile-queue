@@ -43,6 +43,7 @@ Live: **https://mobile-queue.onrender.com** · Brand **YO-DEE Yogurt** · Branch
 - **Notifications** (auto, server-side): confirmation, "you're up soon" (≤2 ahead), "your turn" — each a LINE card with a **Check my queue** button (hidden URL). Resume by LINE ID after closing the app.
 - **One active number per customer** — re-scanning returns the same number (no duplicates).
 - **Estimated wait** shown to customers = `groups ahead × WAIT_PER_GROUP_MIN` (4 min).
+- **Quick-Service ordering** — cashier **Menu** button manages items (add / edit price / hide / delete); per-zone **New order** builds a cart and issues a queue number tied to the order (`POST /api/zones/:id/orders`, PIN). Each ticket shows its order; report adds **revenue + items sold**. Menu read is public (`GET /api/menu`); management is PIN. Default menu seeded in `scripts/seed.js`. Payment = collect via a static PromptPay QR at the counter (no integration).
 - **No-show** — cashier "No-show" button on called tickets (`POST /api/tickets/:id/noshow`, PIN); counted in the report.
 - **Rating** — after a ticket is **served**, the customer LIFF shows ⭐×5 → `POST /api/tickets/:id/rate {stars}`; average shown in the report.
 - **Daily report** — cashier "📊 Report" button / `GET /api/report` (PIN): cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. (Week/month history needs a persistent disk — see ROADMAP.md.)

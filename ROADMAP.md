@@ -40,4 +40,5 @@ bookings (NEW, Phase 3 — advance booking)
 - **Phase 1 — cheap wins (NOW, no persistence needed):** no-show button + count · one-tap rating after served · today-analytics in the report (issued/served/no-show/avg wait/avg rating). ← *building now*
 - **Phase 2 — history:** `daily_stats` archiving at reset + week/month report. *Needs a persistent disk (Fly.io volume via `QUEUE_DATA_DIR`).*
 - **Phase 3 — differentiator:** advance booking (LIFF time-slots + cashier bookings view).
-- **Phase 4 — optional:** PromptPay deposit, multi-language LIFF, POS/menu.
+- **Quick-Service ordering (POS-lite) — ✅ BUILT:** `menu_items` / `orders` / `order_items` tables; cashier Menu manager + per-zone order builder; order tied to the queue number; revenue + items-sold in the report. (Build-vs-buy: stay self-built unless you need real inventory/card payments/multi-branch → then Loyverse/mobi-pos.)
+- **Phase 4 — optional next:** customer self-ordering in the LIFF; PromptPay deposit; advance booking; multi-language LIFF.
