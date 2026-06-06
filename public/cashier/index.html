@@ -109,6 +109,7 @@ function zonePanel(z){
         <span class="muted" style="margin-left:8px">Waiting <b id="zc-${z.id}">0</b> · last called <b id="zl-${z.id}">—</b></span>
       </div>
       <div class="row">
+        <button class="ghost" onclick="addWalkin(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Walk-in</button>
         <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Call next</button>
         <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">Close zone</button>
       </div>
@@ -146,6 +147,11 @@ function renderZone(snap){
 
 window.callNext=async(id)=>{ try{ const r=await api('/api/zones/'+id+'/call-next',{method:'POST'});
   toast(r.called?('Called '+r.called.code):'No one waiting'); }catch(e){ toast(err(e)); } };
+window.addWalkin=async(id)=>{ try{
+  const r=await fetch('/api/zones/'+id+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({partySize:1,customerName:'Walk-in'})});
+  if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.error||r.status); }
+  const j=await r.json(); toast('Issued '+j.code+' — tell the customer');
+}catch(e){ toast(err(e)); } };
 window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };
