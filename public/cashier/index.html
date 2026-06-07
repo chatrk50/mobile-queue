@@ -45,15 +45,18 @@
 
   <!-- ORDER BUILDER -->
   <div id="orderCard" class="card" style="display:none;max-width:520px;margin:14px auto">
-    <div class="row between"><h1>New order — <span id="orderZone">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="hideOrder()">Close</button></div>
-    <p class="muted">Tap items to add. The order gets its own queue number.</p>
-    <div id="menuButtons" style="margin:12px 0"></div>
-    <h2>Order</h2>
-    <div id="cartList" class="queue-list"></div>
-    <div class="row between" style="margin-top:14px;align-items:center">
-      <div style="font-size:22px;font-weight:800;color:var(--navy)">Total ฿<span id="cartTotal">0</span></div>
-      <button class="ok" id="placeBtn" style="font-size:16px;padding:12px 22px" onclick="placeOrder()">Place order</button>
+    <div class="row between" style="align-items:center">
+      <h1 style="margin:0">New order — <span id="orderZone">—</span></h1>
+      <div class="row" style="gap:8px">
+        <button class="ok" id="basketBtn" style="padding:8px 12px;position:relative" onclick="openBasket()">
+          <svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
+          <span id="basketCount" style="position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border-radius:999px;font-size:11px;font-weight:800;min-width:18px;height:18px;line-height:18px;text-align:center;display:none">0</span>
+        </button>
+        <button class="ghost" style="padding:6px 12px" onclick="hideOrder()">Close</button>
+      </div>
     </div>
+    <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน. Then review in the basket 🧺.</p>
+    <div id="menuButtons" style="margin:12px 0"></div>
   </div>
 
   <!-- MENU MANAGEMENT -->
@@ -87,7 +90,29 @@
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ไม่เอา / Skip</button>
-      <button class="ok" style="flex:1" onclick="confirmDrink()">เพิ่มลงออเดอร์ / Add</button>
+      <button class="ok" style="flex:1" onclick="confirmDrink()">ถัดไป / Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- SWEETNESS PICKER (step 3) -->
+<div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:420px;width:100%;margin:0">
+    <h1 id="sweetTitle">ความหวาน / Sweetness</h1>
+    <p class="muted">เลือกระดับความหวาน / Pick a sweetness level</p>
+    <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
+  </div>
+</div>
+
+<!-- BASKET REVIEW (step 4) -->
+<div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
+    <div class="row between"><h1 style="margin:0">Review order</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div id="basketList" class="queue-list" style="margin:12px 0"></div>
+    <div class="row between" style="align-items:center;margin-bottom:12px"><div style="font-size:22px;font-weight:800;color:var(--navy)">Total ฿<span id="basketTotal">0</span></div></div>
+    <div class="row" style="gap:8px">
+      <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก / Cancel order</button>
+      <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยัน / Confirm</button>
     </div>
   </div>
 </div>
@@ -298,8 +323,8 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">SOLD OUT</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนู / Drinks</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No active drinks — add some via Menu.</p>';
-  renderCart(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
-window.hideOrder=()=>{ $('orderCard').style.display='none'; $('topPop').style.display='none'; $('dash').style.display=''; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
+window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
   $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
@@ -313,24 +338,40 @@ function renderTopPop(){
   }).join('')+`</div>` : '<p class="muted">No toppings available.</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
-window.skipToppings=()=>{ addEntry([]); };
-window.confirmDrink=()=>{ addEntry(Object.values(pendingTops)); };
-function addEntry(tops){ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:tops }); $('topPop').style.display='none'; renderCart(); }
-window.removeEntry=(i)=>{ cart.splice(i,1); renderCart(); };
+// Step 3: sweetness. Skip/Next from toppings opens the sweet picker (default 100%).
+const SWEETS=[0,25,50,100];
+window.skipToppings=()=>{ pendingTops={}; openSweet(); };
+window.confirmDrink=()=>{ openSweet(); };
+function openSweet(){ $('topPop').style.display='none';
+  $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
+  $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
+    <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ / Default':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
+  $('sweetPop').style.display='flex'; }
+window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops), sweet:s });
+  $('sweetPop').style.display='none'; renderBasketCount(); toast('Added '+pendingDrink.name); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
-function renderCart(){
-  $('cartList').innerHTML = cart.length ? cart.map((e,i)=>`
+const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
+function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; }
+// Step 4: review basket -> confirm or cancel.
+window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
+window.closeBasket=()=>{ $('basketPop').style.display='none'; };
+window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount(); };
+function renderBasket(){
+  $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
     <div class="qitem"><div style="flex:1">
       <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+      ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
       ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start an order.</p>';
-  const total=cart.reduce((s,e)=>s+entryTotal(e),0);
-  $('cartTotal').textContent=total; $('placeBtn').disabled=!cart.length;
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Basket is empty — add a drink.</p>';
+  $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
+  $('basketConfirm').disabled = !cart.length;
 }
-window.placeOrder=async()=>{
-  if(!cart.length){ toast('Cart is empty'); return; }
+window.cancelBasket=()=>{ if(!cart.length){ hideOrder(); return; }
+  if(!confirm('Cancel this order and clear the basket?')) return; cart=[]; renderBasketCount(); hideOrder(); };
+window.confirmBasket=async()=>{
+  if(!cart.length){ toast('Basket is empty'); return; }
   const items=[];
-  cart.forEach(e=>{ items.push({name:e.name,price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
+  cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
   try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
     toast('Order '+r.code+' — ฿'+r.total+' — tell the customer'); cart=[]; hideOrder();
   }catch(e){ toast(err(e)); } };
