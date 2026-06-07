@@ -244,7 +244,7 @@ export function dailyReport() {
     opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
-    breakEvenCups, contribPerCup,
+    breakEvenCups, contribPerCup, refAvgPrice: refAvg,
     targetDaily, revenueVariance: targetDaily != null ? revenue - targetDaily : null,
   };
   return {

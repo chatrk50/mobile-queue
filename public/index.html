@@ -8,9 +8,23 @@
     <div class="grid" style="margin-top:14px">
       <a class="btn" href="/cashier/"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Cashier</a>
       <a class="btn ok" href="/display/"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Display</a>
-      <a class="btn ghost" href="/liff/?zone=1"><svg class="ic" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>Customer (zone 1)</a>
-      <a class="btn ghost" href="/print/"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>Print posters</a>
+      <a class="btn ghost" id="printBtn" href="/print/"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>Print posters</a>
     </div>
     <p class="muted" style="margin-top:16px;font-size:13px">Customers normally arrive here by scanning the printed QR (see <code>public/assets/qr/</code>). Run <code>npm run qr</code> to generate them.</p>
   </div>
-</div></body></html>
+</div>
+<script>
+// One "Customer · <zone>" button per zone (inserted before Print), so every zone is reachable.
+(async()=>{
+  const ic='<svg class="ic" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>';
+  try{
+    const stores=await (await fetch('/api/stores')).json();
+    const sid=(stores[0]&&stores[0].id)||1;
+    const zones=await (await fetch('/api/stores/'+sid+'/zones')).json();
+    const html=zones.map(z=>`<a class="btn ghost" href="/liff/?zone=${z.id}">${ic}Customer · ${z.name}</a>`).join('');
+    document.getElementById('printBtn').insertAdjacentHTML('beforebegin', html);
+  }catch(e){
+    document.getElementById('printBtn').insertAdjacentHTML('beforebegin',`<a class="btn ghost" href="/liff/?zone=1">${ic}Customer (zone 1)</a>`);
+  }
+})();
+</script></body></html>

@@ -37,11 +37,9 @@
       <div><h1>Daily Report</h1><p class="muted" style="margin:2px 0 0">Today · resets 00:00 (Bangkok)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Costs</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">Close</button>
       </div>
     </div>
-    <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="reportBody" style="margin-top:14px"></div>
   </div>
 
@@ -73,6 +71,7 @@
         <button class="ok" style="flex:1" onclick="addMenu()">+ Add item</button>
       </div>
     </div>
+    <div id="financeBox" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:16px"></div>
   </div>
 
   <!-- DASHBOARD (all zones) -->
@@ -165,18 +164,25 @@ window.showReport=async()=>{
         <span class="muted">Break-even ~<b style="color:var(--navy)">${p.breakEvenCups}</b> cups/day to cover costs</span>
         <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">sold ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· '+(p.breakEvenCups-(p.cups||0))+' to go'}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">Target today ${money(p.targetDaily)} · variance <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
+      `<div style="margin-top:10px;background:#eef7fb;border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="row between" style="align-items:center"><b>🎯 Profit goal</b>
+          <span style="font-size:13px">Net margin <input id="goalMargin" type="number" value="50" min="0" max="95" step="5" style="width:64px;padding:6px;display:inline-block" oninput="calcGoal()">%</span></div>
+        <div id="goalOut" style="margin-top:8px;font-size:13px"></div></div>`+
       `<h2 style="margin-top:16px">Sales mix</h2>${bars||'<p class="muted">No sales yet today.</p>'}`+
       `<div class="row" style="justify-content:space-around;margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+
         kpi('issued',r.issued)+kpi('no-shows',r.noShows)+kpi('avg wait',r.avgWaitMin!=null?r.avgWaitMin+'m':'—')+kpi('rating',r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
       `</div>`;
+    const s=r.settings||{};
+    GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
+    calcGoal();
     $('reportCard').style.display=''; $('dash').style.display='none';
   }catch(e){ toast(err(e)); }
 };
-window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.hideReport=()=>{ $('reportCard').style.display='none'; $('dash').style.display=''; };
 window.exportReport=()=>{ window.open('/api/report.xlsx?pin='+encodeURIComponent(PIN),'_blank'); };
+// Cost assumptions now live on the Menu page (loaded when that page opens).
 let FIN=null;
-window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
+async function loadFinanceEditor(){ try{ FIN=await api('/api/finance'); renderFinance(); }catch(e){ $('financeBox').innerHTML='<span class="muted">Could not load costs.</span>'; } }
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" step="${step||'1'}" value="${FIN[id]}" style="padding:8px"></div>`;
   $('financeBox').innerHTML=`<div class="row between"><b>Cost assumptions</b><span class="muted" style="font-size:11px">drives the P&amp;L</span></div>
@@ -195,12 +201,22 @@ function renderFinance(){
 }
 window.saveFinance=async()=>{ const keys=['ingredientPct','packagingPerCup','daysPerMonth','targetRevenue','rent','wages','utilities','supplies','marketing'];
   const body={}; keys.forEach(k=>body[k]=Number($('fin_'+k).value)||0);
-  try{ await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('Saved'); $('financeBox').style.display='none'; showReport(); }catch(e){ toast(err(e)); } };
+  try{ FIN=await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); renderFinance(); toast('Costs saved — the report now uses these'); }catch(e){ toast(err(e)); } };
+// Profit goal: how many cups/day & /month to hit a target net margin (from the last report).
+let GOAL=null;
+window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
+  const m=Math.max(0,Math.min(0.95,(Number($('goalMargin').value)||0)/100));
+  const denom=GOAL.refAvg*(1-GOAL.ing-m)-GOAL.pack;
+  if(!(GOAL.refAvg>0)){ out.innerHTML='<span class="muted">Add menu prices to calculate.</span>'; return; }
+  if(denom<=0){ out.innerHTML=`<span style="color:#c43a4b">Not reachable at ฿${GOAL.refAvg.toFixed(0)}/cup avg — raise prices or cut costs.</span>`; return; }
+  const perDay=Math.ceil(GOAL.opexDaily/denom), perMonth=Math.ceil(perDay*GOAL.days);
+  out.innerHTML=`Sell about <b style="color:var(--navy);font-size:16px">${perDay}</b> cups/day (~<b>${perMonth.toLocaleString()}</b>/month) at ฿${GOAL.refAvg.toFixed(0)} avg to net <b>${(m*100).toFixed(0)}%</b>.`;
+};
 
 // ---------- Menu management ----------
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
-window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
+window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadFinanceEditor();
   $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
