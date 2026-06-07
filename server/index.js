@@ -36,7 +36,7 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   res.sendStatus(200);
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
 
 // ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
 const PIN_MAX_FAILS = 8, PIN_LOCK_MS = 10 * 60 * 1000;
@@ -223,15 +223,22 @@ app.post('/api/tickets/:ticketId/:action', (req, res) => {
   if (!status) return res.status(404).json({ error: 'unknown_action' });
   try {
     const t = Q.setStatus(req.params.ticketId, status, THRESHOLD);
-    emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/zones/:zoneId/open', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   const z = Q.setZoneOpen(req.params.zoneId, req.body?.isOpen ? 1 : 0);
-  emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
+  emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
   res.json(z);
+});
+// Store master open/closed (PIN) — flips every zone so the store is open/closed as a whole.
+app.post('/api/store/:storeId/open', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const zoneIds = Q.setStoreOpen(req.params.storeId, req.body?.isOpen ? 1 : 0);
+  for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+  res.json({ ok: true, isOpen: req.body?.isOpen ? 1 : 0, zones: zoneIds.length });
 });
 // Reset the whole queue to start from 0 (PIN-protected; also run by the daily scheduler).
 app.post('/api/reset', (req, res) => {

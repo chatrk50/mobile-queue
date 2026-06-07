@@ -34,6 +34,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS stores (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT NOT NULL,
+  is_open     INTEGER NOT NULL DEFAULT 1,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS zones (
@@ -80,7 +81,8 @@ CREATE TABLE IF NOT EXISTS menu_items (
   price    REAL NOT NULL DEFAULT 0,
   image    TEXT,                       -- product photo URL (optional)
   category TEXT NOT NULL DEFAULT 'drink',  -- 'drink' | 'topping'
-  active   INTEGER NOT NULL DEFAULT 1,
+  active   INTEGER NOT NULL DEFAULT 1,     -- 0 = hidden from menus
+  soldout  INTEGER NOT NULL DEFAULT 0,     -- 1 = visible but not orderable (SOLD OUT badge)
   sort     INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS orders (
@@ -109,6 +111,8 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN source TEXT NOT NULL DEFAULT 'cashier'`,
   `ALTER TABLE orders ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'unpaid'`,
   `ALTER TABLE orders ADD COLUMN paid_at TEXT`,
+  `ALTER TABLE menu_items ADD COLUMN soldout INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE stores ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

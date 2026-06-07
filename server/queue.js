@@ -148,15 +148,21 @@ export function setRating(ticketId, stars) {
 // ---------- Financial settings (for the P&L in the report + Excel export) ----------
 // Defaults come from env (durable on Render) then fall back to sensible stall figures;
 // runtime edits are stored in the settings table (reset on redeploy like the rest of the DB).
+// Defaults reflect YO-DEE's real costs (THB). Editable in the cashier Costs panel.
+//   Packaging/cup = Cup 1.65 + Bear-dome lid 0.362 + Straw 0.3185 + Carry bag 0.285 = 2.6155
+//   Rent/mo  = spot 8000/10mo (800) + 1800/wk (×4.333 ≈ 7800) + cart 2500 = 11,100
+//   Wages/mo = labor1 420/wk (×4.333 ≈ 1820) + labor2 450/day ×26 = 11,700 -> 13,520
+//   Utilities/mo = (electricity 80 + ice 120)/day ×26 = 5,200
+//   Ingredients: deferred (set to 0% until the recipe costing is ready).
 const FIN_KEYS = {
-  ingredientPct: ['FIN_INGREDIENT_PCT', 0.32],   // ingredient cost as a share of revenue
-  packagingPerCup: ['FIN_PACKAGING_PER_CUP', 4.5],// cup+lid+spoon+bag per drink
-  daysPerMonth: ['FIN_DAYS_PER_MONTH', 30],       // selling days/month (to prorate fixed costs)
-  rent: ['FIN_RENT', 8000],
-  wages: ['FIN_WAGES', 18000],
-  utilities: ['FIN_UTILITIES', 3500],
-  supplies: ['FIN_SUPPLIES', 2500],
-  marketing: ['FIN_MARKETING', 800],
+  ingredientPct: ['FIN_INGREDIENT_PCT', 0],       // ingredient cost as a share of revenue (TBD)
+  packagingPerCup: ['FIN_PACKAGING_PER_CUP', 2.6155], // cup+lid+straw+bag per drink
+  daysPerMonth: ['FIN_DAYS_PER_MONTH', 26],       // selling days/month (to prorate fixed costs)
+  rent: ['FIN_RENT', 11100],
+  wages: ['FIN_WAGES', 13520],
+  utilities: ['FIN_UTILITIES', 5200],
+  supplies: ['FIN_SUPPLIES', 0],
+  marketing: ['FIN_MARKETING', 0],
   targetRevenue: ['FIN_TARGET_REVENUE', 0],       // monthly target; 0 = no target/variance
 };
 export function getFinanceSettings() {
@@ -275,9 +281,24 @@ export function setZoneOpen(zoneId, isOpen) {
   return getZone(zoneId);
 }
 
+// ---------- Store open/closed (master switch for operating hours) ----------
+export function firstStore() {
+  return db.prepare('SELECT * FROM stores ORDER BY id LIMIT 1').get();
+}
+/** Open/close the whole store: flips the store flag AND every one of its zones,
+ *  so the customer LIFF shows "closed" everywhere. Returns affected zone ids. */
+export function setStoreOpen(storeId, isOpen) {
+  const v = isOpen ? 1 : 0;
+  db.prepare('UPDATE stores SET is_open=? WHERE id=?').run(v, storeId);
+  db.prepare('UPDATE zones SET is_open=? WHERE store_id=?').run(v, storeId);
+  return db.prepare('SELECT id FROM zones WHERE store_id=?').all(storeId).map((z) => z.id);
+}
+
 // ---------- Menu (Quick-Service) ----------
+// image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
+const IMG_CAP = 300000;
 export function listMenu() {
-  return db.prepare('SELECT id, name, name_en, price, image, category, active, sort FROM menu_items ORDER BY sort, id').all();
+  return db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
 }
 export function addMenuItem({ name, name_en, price, image, category }) {
   const n = (name || '').toString().trim().slice(0, 80);
@@ -286,19 +307,20 @@ export function addMenuItem({ name, name_en, price, image, category }) {
   const cat = category === 'topping' ? 'topping' : 'drink';
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
   const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)')
-    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, 300) || null, cat, s);
+    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s);
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, category }) {
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category }) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
   const en = name_en != null ? (name_en.toString().slice(0, 80) || null) : cur.name_en;
   const p = price != null ? Math.max(0, Number(price) || 0) : cur.price;
-  const img = image != null ? (image.toString().slice(0, 300) || null) : cur.image;
+  const img = image != null ? (image.toString().slice(0, IMG_CAP) || null) : cur.image;
   const cat = category != null ? (category === 'topping' ? 'topping' : 'drink') : cur.category;
   const a = active != null ? (active ? 1 : 0) : cur.active;
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=? WHERE id=?').run(n, en, p, img, cat, a, id);
+  const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=? WHERE id=?').run(n, en, p, img, cat, a, so, id);
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {
@@ -396,8 +418,17 @@ export function cancelOrderTicket(ticketId, threshold) {
 export function orderForTicket(ticketId) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) return null;
-  const items = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
-  return { total: order.total, items, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
+  const rows = db.prepare(
+    `SELECT oi.name, oi.price, oi.qty, COALESCE(mi.category,'drink') AS category
+     FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name WHERE oi.order_id=?`
+  ).all(order.id);
+  // Group toppings under the drink above them (orders insert drink-then-its-toppings).
+  const lines = [];
+  for (const r of rows) {
+    if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
+    else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
+  }
+  return { total: order.total, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -431,6 +462,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     if (o) {
       t.order_total = o.total;
       t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', ');
+      t.order_lines = o.lines;               // grouped: drink + its toppings (dash sub-lines)
       t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'
       t.order_source = o.source;             // 'cashier' | 'customer'
     }
@@ -449,6 +481,6 @@ export function ticketView(ticketId) {
     id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, items: o.items, paid: o.payment_status === 'paid' } : null,
+    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid' } : null,
   };
 }

@@ -20,7 +20,7 @@ for (const z of zones) ins.run(storeId, z.name, z.prefix);
 // YO-DEE Yogurt Smoothie menu (Thai name, English name, price) — editable in the cashier.
 const drinks = [
   ['โยเกิร์ตปั่น Original', 'Yogurt Original', 40],
-  ['โยเกิร์ตปั่นข้าวเหนียวมูล', 'Yogurt with Midnight Sticky Rice', 49],
+  ['โยเกิร์ตปั่นข้าวเหนียวนิล', 'Yogurt with Midnight Sticky Rice', 49],
   ['โยเกิร์ตปั่นข้าวโอ๊ต', 'Yogurt with Oats', 49],
   ['โยเกิร์ตปั่นมะม่วง', 'Yogurt with Mango', 49],
   ['โยเกิร์ตปั่นสตรอวเบอร์รี่', 'Yogurt with Strawberry', 49],
@@ -38,14 +38,13 @@ const drinks = [
 ];
 const toppings = [
   ['ปีโป้', 'Pipo Jelly'], ['คิทแคท', 'KitKat'], ['โอริโอ้', 'Oreo'], ['เฉาก๊วย', 'Grass Jelly'],
-  ['บุกน้ำผึ้ง', 'Honey Konjac'], ['บัวลอย', 'Rice Balls'], ['ข้าวเหนียวมูล', 'Midnight Sticky Rice'], ['ข้าวโอ๊ต', 'Oats'],
+  ['บุกน้ำผึ้ง', 'Honey Konjac'], ['บัวลอย', 'Rice Balls'], ['ข้าวเหนียวนิล', 'Midnight Sticky Rice'], ['ข้าวโอ๊ต', 'Oats'],
 ];
 const minsert = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)');
 let s = 0;
-// Each drink points at its cell in the composite menu photo (public/assets/menu-grid.png),
-// a 4x4 sprite sheet: `grid:N` where N is the 0-based item index (row-major). The front-end
-// renders the cell via CSS and falls back to a flavor emoji if the image is missing.
-drinks.forEach(([name, en, price], i) => minsert.run(name, en, price, `grid:${i}`, 'drink', ++s));
+// No image by default -> the menu shows a flavor emoji. The cashier can upload a real
+// photo per item (Menu -> 📷), stored as a data URL; that survives until the next reseed.
+for (const [name, en, price] of drinks) minsert.run(name, en, price, null, 'drink', ++s);
 for (const [name, en] of toppings) minsert.run(name, en, 10, null, 'topping', ++s);
 console.log(`Seeded ${drinks.length} drinks + ${toppings.length} toppings.`);
 

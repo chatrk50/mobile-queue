@@ -14,6 +14,7 @@
     </div>
     <div class="row" style="gap:8px">
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← Back</a>
+      <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="menuBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menu</button>
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Report</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">Logout</button>
@@ -60,6 +61,7 @@
   <!-- MENU MANAGEMENT -->
   <div id="menuCard" class="card" style="display:none;max-width:480px;margin:14px auto">
     <div class="row between"><h1>Menu</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">Close</button></div>
+    <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="menuMgr" style="margin:10px 0"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
       <input id="newName" placeholder="ชื่อเมนู (Thai name)">
@@ -108,7 +110,7 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='Wrong PIN'; return; }
     PIN=pin; $('loginErr').textContent='';
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display='';
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display='';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='Connection error'; }
 };
@@ -116,7 +118,20 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
+  $('storeBtn').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
+
+// ---------- Store master open/closed ----------
+let STORE=null;
+function renderStoreBtn(){ if(!STORE) return; const open=STORE.is_open!==0;
+  const b=$('storeBtn'); b.className=open?'ok':'danger';
+  b.innerHTML=(open?'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>Store open'
+                  :'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>Store closed'); }
+window.toggleStore=async()=>{ if(!STORE) return; const next=STORE.is_open!==0?0:1;
+  if(!confirm(next?'Open the store (all zones)?':'Close the store? Customers will see "closed" everywhere.')) return;
+  try{ await api('/api/store/'+STORE.id+'/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:next})});
+    STORE.is_open=next; renderStoreBtn(); toast(next?'Store opened':'Store closed');
+  }catch(e){ toast(err(e)); } };
 
 const money=(n)=>'฿'+Math.round(n||0).toLocaleString();
 const pctf=(n)=>((n||0)*100).toFixed(1)+'%';
@@ -190,16 +205,40 @@ window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
-    <div class="qitem"><div ${m.active?'':'style="opacity:.5"'}>
-      <b>${esc(m.name)}</b> <span class="muted" style="font-size:12px">${esc(m.name_en||'')}</span>
-      <span class="muted"> · ฿${m.price}${m.category==='topping'?' · topping':''}</span></div>
-      <div class="row" style="gap:6px">
-        <button class="ghost" style="padding:6px 10px" onclick="editPrice(${m.id})">฿</button>
-        <button class="ghost" style="padding:6px 10px" onclick="editImg(${m.id})">img</button>
-        <button class="ghost" style="padding:6px 10px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'Hide':'Show'}</button>
-        <button class="ghost danger" style="padding:6px 10px" onclick="delItem(${m.id})">✕</button>
+    <div class="qitem" style="flex-wrap:wrap;gap:8px">
+      <div class="row" style="gap:8px;align-items:center;${m.active?'':'opacity:.5'}">
+        <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
+        <div><b>${esc(m.name)}</b> <span class="muted" style="font-size:12px">${esc(m.name_en||'')}</span>
+          <span class="muted"> · ฿${m.price}${m.category==='topping'?' · topping':''}</span>
+          ${m.soldout?'<span class="pill closed" style="margin-left:6px">SOLD OUT</span>':''}</div>
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <button class="ghost" style="padding:6px 9px" onclick="editName(${m.id})">✎</button>
+        <button class="ghost" style="padding:6px 9px" onclick="editPrice(${m.id})">฿</button>
+        <button class="ghost" style="padding:6px 9px" onclick="uploadImg(${m.id})">📷</button>
+        <button class="ghost" style="padding:6px 9px" onclick="toggleSoldout(${m.id},${m.soldout?0:1})">${m.soldout?'Restock':'Sold out'}</button>
+        <button class="ghost" style="padding:6px 9px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'Hide':'Show'}</button>
+        <button class="ghost danger" style="padding:6px 9px" onclick="delItem(${m.id})">✕</button>
       </div></div>`).join('') : '<p class="muted">No items yet — add one below.</p>';
 }
+window.editName=async(id)=>{ const m=MENU.find(x=>x.id===id);
+  const name=prompt('Thai name', m.name); if(name===null) return;
+  const name_en=prompt('English name (optional)', m.name_en||''); if(name_en===null) return;
+  try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,name_en})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+window.toggleSoldout=async(id,soldout)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({soldout})}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
+let uploadTargetId=null;
+window.uploadImg=(id)=>{ uploadTargetId=id; const f=$('imgFile'); f.value=''; f.click(); };
+async function onImgFile(e){ const f=e.target.files&&e.target.files[0]; if(!f||uploadTargetId==null) return;
+  try{ const dataUrl=await resizeImage(f,320);
+    await api('/api/menu/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})});
+    toast('Picture updated'); await loadMenu(); renderMenuMgr();
+  }catch(err2){ toast('Upload failed: '+(err2.message||err2)); } }
+function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file);
+  img.onload=()=>{ URL.revokeObjectURL(url); const scale=Math.min(1,max/Math.max(img.width,img.height));
+    const w=Math.max(1,Math.round(img.width*scale)), h=Math.max(1,Math.round(img.height*scale));
+    const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+    resolve(c.toDataURL('image/jpeg',0.82)); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('bad image')); }; img.src=url; }); }
 window.addMenu=async()=>{ const name=$('newName').value.trim();
   if(!name){ toast('Enter a Thai name'); return; }
   const body={ name, name_en:$('newNameEn').value.trim(), image:$('newImg').value.trim(), price:Number($('newPrice').value)||0, category:$('newCat').value };
@@ -238,10 +277,10 @@ function itemImg(m){
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  const btn=(m)=>`<button class="menu-btn" onclick="pickDrink(${m.id})">
+  const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">฿${m.price}</div></button>`;
+    <div class="mpr">${m.soldout?'<span class="pill closed">SOLD OUT</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนู / Drinks</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No active drinks — add some via Menu.</p>';
   renderCart(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
 window.hideOrder=()=>{ $('orderCard').style.display='none'; $('topPop').style.display='none'; $('dash').style.display=''; };
@@ -252,9 +291,9 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})">
+    return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>
       <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
-      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${esc(m.name_en||'')} +฿${m.price}</div></button>`;
+      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'SOLD OUT':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">No toppings available.</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
@@ -265,9 +304,10 @@ window.removeEntry=(i)=>{ cart.splice(i,1); renderCart(); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 function renderCart(){
   $('cartList').innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div><b>${esc(e.name)}</b> <span class="muted">฿${e.price}</span>
-      ${e.toppings.length?`<div class="muted" style="font-size:12px">+ ${e.toppings.map(t=>esc(t.name)).join(', ')} (฿${e.toppings.reduce((s,t)=>s+t.price*t.qty,0)})</div>`:''}</div>
-      <button class="ghost danger" style="padding:6px 10px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start an order.</p>';
+    <div class="qitem"><div style="flex:1">
+      <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start an order.</p>';
   const total=cart.reduce((s,e)=>s+entryTotal(e),0);
   $('cartTotal').textContent=total; $('placeBtn').disabled=!cart.length;
 }
@@ -281,6 +321,7 @@ window.placeOrder=async()=>{
 
 async function boot(){
   const stores=await (await fetch('/api/stores')).json();
+  STORE=stores[0]||null; renderStoreBtn();
   zones=[]; let html='';
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
@@ -337,7 +378,15 @@ function renderZone(snap){
       ? ' <span class="pill open" style="margin-left:6px">PAID ✓</span>'
       : ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">UNPAID ฿'+t.order_total+'</span>';
   };
-  const ord=(t)=> t.order_summary?`<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ฿${t.order_total}</div>`:'';
+  const ord=(t)=>{
+    if(t.order_lines&&t.order_lines.length){
+      return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>
+        `<div><b>${l.qty}× ${esc(l.name)}</b> <span class="muted">฿${l.price*l.qty}</span>`+
+        l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`
+      ).join('')+`<div style="font-weight:700;color:var(--navy)">Total ฿${t.order_total}</div></div>`;
+    }
+    return t.order_summary?`<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ฿${t.order_total}</div>`:'';
+  };
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id})">฿ Paid</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
@@ -371,5 +420,6 @@ window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };
 
 $('pin').focus();
+$('imgFile').addEventListener('change',onImgFile);
 </script>
 </body></html>

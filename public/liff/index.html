@@ -190,10 +190,10 @@ function itemImg(m){
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{ await loadMenu(); cart=[];
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  const btn=(m)=>`<button class="menu-btn" onclick="pickDrink(${m.id})">
+  const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">฿${m.price}</div></button>`;
+    <div class="mpr">${m.soldout?'<span class="pill closed">SOLD OUT</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No drinks available right now.</p>';
   renderCart(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ show('orderCard',false); $('topPop').style.display='none'; show('getCard',true); };
@@ -203,9 +203,9 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})">
+    return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>
       <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
-      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${esc(m.name_en||'')} +฿${m.price}</div></button>`;
+      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'SOLD OUT':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">No toppings available.</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
@@ -216,9 +216,10 @@ window.removeEntry=(i)=>{ cart.splice(i,1); renderCart(); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 function renderCart(){
   $('cartList').innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div><b>${esc(e.name)}</b> <span class="muted">฿${e.price}</span>
-      ${e.toppings.length?`<div class="muted" style="font-size:12px">+ ${e.toppings.map(t=>esc(t.name)).join(', ')} (฿${e.toppings.reduce((s,t)=>s+t.price*t.qty,0)})</div>`:''}</div>
-      <button class="ghost danger" style="padding:6px 10px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start.</p>';
+    <div class="qitem"><div style="flex:1">
+      <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start.</p>';
   $('cartTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('placeBtn').disabled = !cart.length;
 }
@@ -245,7 +246,11 @@ window.placeSelfOrder=async()=>{
 function renderOrderBlock(v){
   if(!v.order){ show('tOrder',false); return; }
   show('tOrder',true);
-  $('tOrderItems').innerHTML = v.order.items.map(i=>`<div class="row between"><span>${i.qty}× ${esc(i.name)}</span><span class="muted">฿${i.price*i.qty}</span></div>`).join('');
+  const lines = v.order.lines || (v.order.items||[]).map(i=>({...i,toppings:[]}));
+  $('tOrderItems').innerHTML = lines.map(l=>
+    `<div class="row between"><span>${l.qty}× ${esc(l.name)}</span><span class="muted">฿${l.price*l.qty}</span></div>`+
+    (l.toppings||[]).map(t=>`<div class="row between" style="margin-left:12px;color:var(--muted)"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')
+  ).join('');
   $('tOrderTotal').textContent = '฿'+v.order.total;
   const pill=$('tPayPill');
   if(v.order.paid){ pill.className='pill open'; pill.textContent='PAID ✓'; }
