@@ -23,12 +23,28 @@
       <span id="zoneState" class="pill open">Open</span>
       <span class="muted">Waiting <b id="waitingCount">–</b></span>
     </div>
-    <button id="getBtn" style="width:100%;margin-top:18px" onclick="getTicket()">Get my number</button>
+    <button id="orderNowBtn" style="width:100%;margin-top:18px;display:none" onclick="showOrderUI()">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>Order now</button>
+    <button id="getBtn" style="width:100%;margin-top:10px" onclick="getTicket()">Just get a queue number</button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 Closed</b><br>
       <span class="muted">This zone is not accepting queue right now. Please try again later.</span>
     </div>
     <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
+  </div>
+
+  <!-- STEP: build an order (self-order) -->
+  <div id="orderCard" class="card" style="display:none">
+    <div class="row between"><h1>Order</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderUI()">← Back</button></div>
+    <p class="muted">แตะเพื่อเลือกเครื่องดื่ม / Tap a drink, then add toppings.</p>
+    <div id="menuButtons" style="margin:10px 0"></div>
+    <h2>ตะกร้า / Your order</h2>
+    <div id="cartList" class="queue-list"></div>
+    <div class="row between" style="margin-top:14px;align-items:center">
+      <div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="cartTotal">0</span></div>
+      <button class="ok" id="placeBtn" style="font-size:16px;padding:12px 22px" onclick="placeSelfOrder()">Place order</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:8px">💵 You'll get a queue number — pay at the counter.</p>
   </div>
 
   <!-- STEP: my ticket -->
@@ -44,6 +60,11 @@
         <span class="pill soon" id="tCalledPill">⏰ Almost your turn</span>
       </div>
     </div>
+    <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
+      <div class="row between" style="align-items:center"><b>Your order</b><span id="tPayPill" class="pill"></span></div>
+      <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
+      <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>Total</span><span id="tOrderTotal">฿0</span></div>
+    </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
     <div id="tRate" style="display:none;margin-top:14px">
@@ -58,6 +79,19 @@
 </div>
 <div id="toast" class="toast"></div>
 
+<!-- TOPPING PICKER (per drink) -->
+<div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
+    <h1 id="topPopTitle">Toppings</h1>
+    <p class="muted">เลือกท็อปปิ้ง +฿10 หรือข้าม / Add toppings (+฿10) or skip</p>
+    <div id="topPopBtns" style="margin:12px 0"></div>
+    <div class="row" style="gap:8px">
+      <button class="ghost" style="flex:1" onclick="skipToppings()">ไม่เอา / Skip</button>
+      <button class="ok" style="flex:1" onclick="confirmDrink()">เพิ่มลงออเดอร์ / Add</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
@@ -66,7 +100,8 @@ let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = nul
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
-async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
 function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=msg;}
 
 async function initLiff(){
@@ -114,6 +149,7 @@ async function loadZone(){
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'Open':'Closed';
   show('getBtn', open);
+  show('orderNowBtn', open && cfg.selfOrder);
   show('closedMsg', !open);
   show('getCard',true);
 }
@@ -130,9 +166,86 @@ window.getTicket = async ()=>{
   }catch(e){ $('getBtn').disabled=false; toast('Could not get a number: '+e.message); }
 };
 
+// ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
+let MENU=[], cart=[], pendingDrink=null, pendingTops={};
+function itemIcon(m){
+  const t=((m.name||'')+' '+(m.name_en||'')).toLowerCase();
+  const map=[[['มะม่วง','mango'],'🥭'],[['สตรอ','strawberry'],'🍓'],[['กล้วย','banana'],'🍌'],[['อโวคาโด','avocado'],'🥑'],
+    [['โอริโอ','oreo'],'🍪'],[['คิทแคท','kitkat'],'🍫'],[['บุก','konjac'],'🍮'],[['น้ำผึ้ง','honey'],'🍯'],
+    [['ข้าวเหนียว','sticky'],'🍚'],[['ข้าวโอ๊ต','oat'],'🌾'],[['บัวลอย','rice ball'],'🍡'],[['เฉาก๊วย','grass jelly'],'🧋'],
+    [['ปีโป้','pipo'],'🧊'],[['สาหร่าย','spirulina'],'🌀'],[['original'],'🥛']];
+  for(const [keys,emo] of map){ if(keys.some(k=>t.includes(k))) return emo; }
+  return '🍦';
+}
+async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
+window.showOrderUI=async()=>{ await loadMenu(); cart=[];
+  const drinks=MENU.filter(m=>m.active && m.category!=='topping');
+  const btn=(m)=>`<button class="menu-btn" onclick="pickDrink(${m.id})">
+    <div class="mimg" style="font-size:34px">${m.image?`<img src="${esc(m.image)}" alt="">`:itemIcon(m)}</div>
+    <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
+    <div class="mpr">฿${m.price}</div></button>`;
+  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No drinks available right now.</p>';
+  renderCart(); show('getCard',false); show('orderCard',true); };
+window.closeOrderUI=()=>{ show('orderCard',false); $('topPop').style.display='none'; show('getCard',true); };
+window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
+  $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
+function renderTopPop(){
+  const tops=MENU.filter(m=>m.active && m.category==='topping');
+  $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
+    const on=!!pendingTops[m.id];
+    return `<button class="menu-btn" style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})">
+      <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
+      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${esc(m.name_en||'')} +฿${m.price}</div></button>`;
+  }).join('')+`</div>` : '<p class="muted">No toppings available.</p>';
+}
+window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
+window.skipToppings=()=>{ addEntry([]); };
+window.confirmDrink=()=>{ addEntry(Object.values(pendingTops)); };
+function addEntry(tops){ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:tops }); $('topPop').style.display='none'; renderCart(); }
+window.removeEntry=(i)=>{ cart.splice(i,1); renderCart(); };
+function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
+function renderCart(){
+  $('cartList').innerHTML = cart.length ? cart.map((e,i)=>`
+    <div class="qitem"><div><b>${esc(e.name)}</b> <span class="muted">฿${e.price}</span>
+      ${e.toppings.length?`<div class="muted" style="font-size:12px">+ ${e.toppings.map(t=>esc(t.name)).join(', ')} (฿${e.toppings.reduce((s,t)=>s+t.price*t.qty,0)})</div>`:''}</div>
+      <button class="ghost danger" style="padding:6px 10px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">Tap a drink above to start.</p>';
+  $('cartTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
+  $('placeBtn').disabled = !cart.length;
+}
+window.placeSelfOrder=async()=>{
+  if(!cart.length){ toast('Please add a drink first'); return; }
+  $('placeBtn').disabled=true;
+  const items=[];
+  cart.forEach(e=>{ items.push({name:e.name,price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
+  try{
+    const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items,lineUserId,customerName:displayName})});
+    ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
+    cart=[]; show('orderCard',false); show('ticketCard',true); startPolling();
+  }catch(e){
+    if(e.data && e.data.error==='already_in_queue'){
+      toast('You already have queue '+e.data.code);
+      ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
+      show('orderCard',false); show('ticketCard',true); startPolling(); return;
+    }
+    $('placeBtn').disabled=false; toast('Could not place order: '+e.message);
+  }
+};
+
+function renderOrderBlock(v){
+  if(!v.order){ show('tOrder',false); return; }
+  show('tOrder',true);
+  $('tOrderItems').innerHTML = v.order.items.map(i=>`<div class="row between"><span>${i.qty}× ${esc(i.name)}</span><span class="muted">฿${i.price*i.qty}</span></div>`).join('');
+  $('tOrderTotal').textContent = '฿'+v.order.total;
+  const pill=$('tPayPill');
+  if(v.order.paid){ pill.className='pill open'; pill.textContent='PAID ✓'; }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 Pay ฿'+v.order.total+' at counter'; }
+}
+
 function render(v){
   $('tCode').textContent = v.code;
   $('tStore').textContent = v.zone;
+  renderOrderBlock(v);
   $('tLastCalled').textContent = v.last_called ? ('Now serving: '+v.last_called) : '';
   $('cancelBtn').style.display=''; $('tRate').style.display='none';
   if(v.status==='waiting'){

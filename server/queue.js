@@ -235,7 +235,14 @@ export function deleteMenuItem(id) {
 }
 
 // ---------- Orders: tie a quick-service order to a fresh queue number ----------
-export function createOrder(zoneId, items) {
+/**
+ * Create an order + a fresh queue number in one transaction.
+ * opts.source: 'cashier' (default) or 'customer' (self-ordered via the LINE app).
+ * opts.lineUserId / opts.customerName: tie the ticket to a LINE customer so they can
+ * resume it and receive pushes. Customer self-orders are deduped (one open order each).
+ */
+export function createOrder(zoneId, items, opts = {}) {
+  const { source = 'cashier', lineUserId = null, customerName = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -247,27 +254,78 @@ export function createOrder(zoneId, items) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+
+  // A LINE customer may only hold one open order at a time (prevents accidental
+  // double-submits creating duplicate queue numbers). Return the existing one.
+  if (source === 'customer' && lineUserId) {
+    const existing = findActiveTicket(zoneId, lineUserId);
+    if (existing) {
+      const e = new Error('already_in_queue');
+      e.ticketId = existing.id; e.code = existing.code;
+      throw e;
+    }
+  }
+
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
+  const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
   const tx = db.transaction(() => {
     const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
     const next = cur.last_number + 1;
     db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
     const tinfo = db.prepare(
-      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, customer_name)
-       VALUES (?,?,?,?,?,?)`
-    ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, 'Order');
-    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total) VALUES (?,?)').run(tinfo.lastInsertRowid, total);
+      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
+       VALUES (?,?,?,?,?,?,?)`
+    ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, lineUserId, label);
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source) VALUES (?,?,?)')
+      .run(tinfo.lastInsertRowid, total, source);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty) VALUES (?,?,?,?)');
     for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty);
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
-  return tx();
+  const r = tx();
+
+  // Confirmation push for customer self-orders (queue number + amount to pay at counter).
+  if (source === 'customer' && lineUserId) {
+    const ahead = aheadCount(r.ticket);
+    pushQueue(lineUserId,
+      `🎫 Order received\n` +
+      `Your number: ${r.ticket.code}\n` +
+      `Groups ahead: ${ahead}\n` +
+      `💵 Please pay ฿${r.total} at the counter.\n` +
+      `We'll notify you here when it's ready.`,
+      queueLink(zoneId));
+  }
+  return r;
 }
+
+/** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter). */
+export function setOrderPaid(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now') WHERE id=?`).run(order.id);
+  return { ok: true, ticketId: Number(ticketId), total: order.total };
+}
+
+/** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.). */
+export function cancelOrderTicket(ticketId, threshold) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  db.prepare(`UPDATE orders SET payment_status='void' WHERE ticket_id=? AND payment_status!='paid'`).run(ticketId);
+  db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
+  if (t.line_user_id) {
+    pushQueue(t.line_user_id,
+      `❌ Order ${t.code} was cancelled by the store.\n` +
+      `If this is a mistake, please ask our staff. Thank you!`, null);
+  }
+  if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
+  return { ok: true };
+}
+
 export function orderForTicket(ticketId) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) return null;
   const items = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
-  return { total: order.total, items };
+  return { total: order.total, items, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
 }
 
 /** Snapshot of a zone for cashier/display: waiting list + recently called (+ orders). */
@@ -284,7 +342,12 @@ export function zoneSnapshot(zoneId) {
   ).all(zoneId);
   const attach = (t) => {
     const o = orderForTicket(t.id);
-    if (o) { t.order_total = o.total; t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', '); }
+    if (o) {
+      t.order_total = o.total;
+      t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', ');
+      t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'
+      t.order_source = o.source;             // 'cashier' | 'customer'
+    }
     return t;
   };
   waiting.forEach(attach); recentCalled.forEach(attach);
@@ -295,9 +358,11 @@ export function ticketView(ticketId) {
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) return null;
   const zone = getZone(t.zone_id);
+  const o = orderForTicket(t.id);
   return {
     id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
+    order: o ? { total: o.total, items: o.items, paid: o.payment_status === 'paid' } : null,
   };
 }

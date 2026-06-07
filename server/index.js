@@ -17,6 +17,8 @@ const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
 const WAIT_PER_GROUP = Number(process.env.WAIT_PER_GROUP_MIN || 4); // est. minutes per group ahead
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
+// Let customers build an order themselves in the LINE app (pay at counter). On by default.
+const SELF_ORDER = String(process.env.SELF_ORDER ?? '1') !== '0';
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -41,7 +43,7 @@ const pinOK = (req) =>
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -110,6 +112,26 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
   res.json({ ticket: t ? Q.ticketView(t.id) : null });
 });
 
+// Customer self-order (no PIN) — from the LINE app: build a cart, get a queue
+// number, then pay at the counter. Order is tagged source='customer', unpaid.
+app.post('/api/zones/:zoneId/order', (req, res) => {
+  try {
+    const r = Q.createOrder(req.params.zoneId, req.body?.items, {
+      source: 'customer',
+      lineUserId: req.body?.lineUserId || null,
+      customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
+    });
+    emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
+    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
+  } catch (e) {
+    if (e.message === 'already_in_queue') {
+      return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
+    }
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    res.status(map[e.message] || 400).json({ error: e.message });
+  }
+});
+
 // ---------- Customer: poll own ticket ----------
 app.get('/api/tickets/:ticketId', (req, res) => {
   const v = Q.ticketView(req.params.ticketId);
@@ -127,6 +149,26 @@ app.post('/api/tickets/:ticketId/cancel', (req, res) => {
 app.post('/api/tickets/:ticketId/rate', (req, res) => {
   try { res.json(Q.setRating(req.params.ticketId, req.body?.stars)); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier marks an order paid (PIN). Defined before the generic /:action route.
+app.post('/api/tickets/:ticketId/paid', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.setOrderPaid(req.params.ticketId);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier cancels/voids a ticket + its order (PIN). Before the generic /:action route.
+app.post('/api/tickets/:ticketId/void', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD);
+    if (t) emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ---------- Cashier (PIN protected) ----------

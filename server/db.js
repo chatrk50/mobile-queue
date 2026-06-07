@@ -87,6 +87,9 @@ CREATE TABLE IF NOT EXISTS orders (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   ticket_id  INTEGER NOT NULL REFERENCES tickets(id),
   total      REAL NOT NULL DEFAULT 0,
+  source     TEXT NOT NULL DEFAULT 'cashier',   -- 'cashier' | 'customer' (self-order via LINE)
+  payment_status TEXT NOT NULL DEFAULT 'unpaid', -- 'unpaid' | 'paid' | 'void'
+  paid_at    TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS order_items (
@@ -99,6 +102,16 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE INDEX IF NOT EXISTS idx_orders_ticket ON orders(ticket_id);
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
 `);
+
+// ---- Lightweight migrations for DBs created before these columns existed ----
+// node:sqlite throws "duplicate column name" if the column is already there; ignore.
+for (const stmt of [
+  `ALTER TABLE orders ADD COLUMN source TEXT NOT NULL DEFAULT 'cashier'`,
+  `ALTER TABLE orders ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'unpaid'`,
+  `ALTER TABLE orders ADD COLUMN paid_at TEXT`,
+]) {
+  try { db.exec(stmt); } catch { /* column already exists */ }
+}
 
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
