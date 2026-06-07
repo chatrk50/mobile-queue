@@ -146,6 +146,9 @@ window.showReport=async()=>{
         pl("− Operating exp (today's share)",p.opexDaily,{neg:true})+
         pl('NET PROFIT',p.netProfit,{bold:true,navy:true,pct:p.netMargin})+
       `</div>`+
+      (p.breakEvenCups!=null?`<div class="row between" style="font-size:12px;margin-top:8px;background:var(--surface);border-radius:10px;padding:8px 12px">
+        <span class="muted">Break-even ~<b style="color:var(--navy)">${p.breakEvenCups}</b> cups/day to cover costs</span>
+        <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">sold ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· '+(p.breakEvenCups-(p.cups||0))+' to go'}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">Target today ${money(p.targetDaily)} · variance <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
       `<h2 style="margin-top:16px">Sales mix</h2>${bars||'<p class="muted">No sales yet today.</p>'}`+
       `<div class="row" style="justify-content:space-around;margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+

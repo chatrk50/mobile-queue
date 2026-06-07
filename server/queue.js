@@ -224,6 +224,11 @@ export function dailyReport() {
   const monthlyOpex = f.rent + f.wages + f.utilities + f.supplies + f.marketing;
   const dailyOpex = f.daysPerMonth > 0 ? monthlyOpex / f.daysPerMonth : monthlyOpex;
   const netProfit = grossProfit - dailyOpex;
+  // Break-even: how many cups/day cover the prorated fixed costs, using the menu's
+  // average drink price (so it's meaningful even before the first sale of the day).
+  const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1").get().a || 0;
+  const contribPerCup = refAvg * (1 - f.ingredientPct) - f.packagingPerCup;
+  const breakEvenCups = contribPerCup > 0 ? Math.ceil(dailyOpex / contribPerCup) : null;
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
@@ -233,6 +238,7 @@ export function dailyReport() {
     opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
+    breakEvenCups, contribPerCup,
     targetDaily, revenueVariance: targetDaily != null ? revenue - targetDaily : null,
   };
   return {
