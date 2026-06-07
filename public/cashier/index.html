@@ -37,9 +37,11 @@
       <div><h1>Daily Report</h1><p class="muted" style="margin:2px 0 0">Today · resets 00:00 (Bangkok)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Costs</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">Close</button>
       </div>
     </div>
+    <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="reportBody" style="margin-top:14px"></div>
   </div>
 
@@ -74,7 +76,6 @@
         <button class="ok" style="flex:1" onclick="addMenu()">+ Add item</button>
       </div>
     </div>
-    <div id="financeBox" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:16px"></div>
   </div>
 
   <!-- DASHBOARD (all zones) -->
@@ -200,14 +201,15 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
-window.hideReport=()=>{ $('reportCard').style.display='none'; $('dash').style.display=''; };
+window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
 window.exportReport=()=>{ window.open('/api/report.xlsx?pin='+encodeURIComponent(PIN),'_blank'); };
-// Cost assumptions now live on the Menu page (loaded when that page opens).
+// Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
-async function loadFinanceEditor(){ try{ FIN=await api('/api/finance'); renderFinance(); }catch(e){ $('financeBox').innerHTML='<span class="muted">Could not load costs.</span>'; } }
+window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" step="${step||'1'}" value="${FIN[id]}" style="padding:8px"></div>`;
   $('financeBox').innerHTML=`<div class="row between"><b>Cost assumptions</b><span class="muted" style="font-size:11px">drives the P&amp;L</span></div>
@@ -226,7 +228,7 @@ function renderFinance(){
 }
 window.saveFinance=async()=>{ const keys=['ingredientPct','packagingPerCup','daysPerMonth','targetRevenue','rent','wages','utilities','supplies','marketing'];
   const body={}; keys.forEach(k=>body[k]=Number($('fin_'+k).value)||0);
-  try{ FIN=await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); renderFinance(); toast('Costs saved — the report now uses these'); }catch(e){ toast(err(e)); } };
+  try{ FIN=await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('Costs saved'); $('financeBox').style.display='none'; showReport(); }catch(e){ toast(err(e)); } };
 // Profit goal: how many cups/day & /month to hit a target net margin (from the last report).
 let GOAL=null;
 window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
@@ -241,7 +243,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 // ---------- Menu management ----------
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
-window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadFinanceEditor();
+window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
   $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){

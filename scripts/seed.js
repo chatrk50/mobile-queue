@@ -42,9 +42,11 @@ const toppings = [
 ];
 const minsert = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)');
 let s = 0;
-// No image by default -> the menu shows a flavor emoji. The cashier can upload a real
-// photo per item (Menu -> 📷), stored as a data URL; that survives until the next reseed.
-for (const [name, en, price] of drinks) minsert.run(name, en, price, null, 'drink', ++s);
+// Each drink points at public/assets/menu/N.png (N = menu number, 1..16). Drop those
+// files in and they appear permanently; until a file exists the UI shows a flavor emoji
+// (the <img onerror> fallback). The cashier 📷 button can also upload a photo per item,
+// but that's stored in the DB and is wiped on the next reseed — committed files persist.
+drinks.forEach(([name, en, price], i) => minsert.run(name, en, price, `/assets/menu/${i + 1}.png`, 'drink', ++s));
 for (const [name, en] of toppings) minsert.run(name, en, 10, null, 'topping', ++s);
 console.log(`Seeded ${drinks.length} drinks + ${toppings.length} toppings.`);
 
