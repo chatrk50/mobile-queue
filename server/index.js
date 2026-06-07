@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
@@ -36,10 +37,34 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
 });
 
 app.use(express.json());
+
+// ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
+const PIN_MAX_FAILS = 8, PIN_LOCK_MS = 10 * 60 * 1000;
+const pinFails = new Map(); // ip -> { count, until }
+const ipOf = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
+function pinLocked(ip) { const a = pinFails.get(ip); return !!(a && a.until > Date.now()); }
+const pinPresent = (req) => req.get('x-cashier-pin') || req.query.pin || req.body?.pin || null;
+// Silent check (no fail-counting) — used to decide whether to reveal names.
+const pinValueOK = (req) => pinPresent(req) === CASHIER_PIN;
+// Block PIN-bearing requests from a locked IP before they hit any handler.
+app.use((req, res, next) => {
+  if (pinPresent(req) && pinLocked(ipOf(req))) return res.status(429).json({ error: 'too_many_attempts' });
+  next();
+});
 app.use(express.static(join(__dirname, '..', 'public')));
 
-const pinOK = (req) =>
-  (req.get('x-cashier-pin') || req.query.pin || req.body?.pin) === CASHIER_PIN;
+// Authoritative check for protected actions — counts wrong PINs toward a lockout.
+const pinOK = (req) => {
+  const present = pinPresent(req), ok = present === CASHIER_PIN, ip = ipOf(req);
+  if (ok) { pinFails.delete(ip); }
+  else if (present) {
+    const a = pinFails.get(ip) || { count: 0, until: 0 };
+    a.count++;
+    if (a.count >= PIN_MAX_FAILS) { a.until = Date.now() + PIN_LOCK_MS; a.count = 0; }
+    pinFails.set(ip, a);
+  }
+  return ok;
+};
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
@@ -80,7 +105,7 @@ app.get('/api/qr/:zoneId', async (req, res) => {
   } catch (e) { res.status(500).end(); }
 });
 app.get('/api/zones/:zoneId/snapshot', (req, res) => {
-  const snap = Q.zoneSnapshot(req.params.zoneId);
+  const snap = Q.zoneSnapshot(req.params.zoneId, { reveal: pinValueOK(req) });
   if (!snap) return res.status(404).json({ error: 'zone_not_found' });
   res.json(snap);
 });
@@ -97,7 +122,7 @@ app.post('/api/zones/:zoneId/tickets', (req, res) => {
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
     });
-    emit(zone.id, 'update', Q.zoneSnapshot(zone.id));
+    emit(zone.id, 'update', (reveal) => Q.zoneSnapshot(zone.id, { reveal }));
     res.json({ ticketId: ticket.id, code: ticket.code, ahead });
   } catch (e) {
     const map = { zone_closed: 423, zone_not_found: 404 };
@@ -121,7 +146,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
     });
-    emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
+    emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
   } catch (e) {
     if (e.message === 'already_in_queue') {
@@ -138,15 +163,25 @@ app.get('/api/tickets/:ticketId', (req, res) => {
   if (!v) return res.status(404).json({ error: 'ticket_not_found' });
   res.json(v);
 });
+// Ownership: a customer may only act on their OWN ticket (matched by LINE user id),
+// unless the request carries the cashier PIN. Stops cancel/rate on a guessed ticket id.
+const ownsTicket = (req) => {
+  if (pinValueOK(req)) return true;
+  const t = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(req.params.ticketId);
+  if (!t) return false;
+  return !!t.line_user_id && t.line_user_id === (req.body?.lineUserId || null);
+};
 app.post('/api/tickets/:ticketId/cancel', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
     const t = Q.setStatus(req.params.ticketId, 'cancelled', THRESHOLD);
-    emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer rating (no PIN) — defined before the generic /:action route so it isn't captured.
 app.post('/api/tickets/:ticketId/rate', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try { res.json(Q.setRating(req.params.ticketId, req.body?.stars)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -156,7 +191,7 @@ app.post('/api/tickets/:ticketId/paid', (req, res) => {
   try {
     const r = Q.setOrderPaid(req.params.ticketId);
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
-    if (t) emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -166,7 +201,7 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
   try {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     Q.cancelOrderTicket(req.params.ticketId, THRESHOLD);
-    if (t) emit(t.zone_id, 'update', Q.zoneSnapshot(t.zone_id));
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -176,8 +211,7 @@ app.post('/api/zones/:zoneId/call-next', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const { called } = Q.callNext(req.params.zoneId, THRESHOLD);
-    const snap = Q.zoneSnapshot(req.params.zoneId);
-    emit(req.params.zoneId, 'update', snap);
+    emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     if (called) emit(req.params.zoneId, 'call', { code: called.code });
     res.json({ called: called ? { id: called.id, code: called.code } : null });
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -205,10 +239,31 @@ app.post('/api/reset', (req, res) => {
   doDailyReset();
   res.json({ ok: true });
 });
-// Daily report for the cashier (PIN-protected): cups sold + per-zone breakdown.
+// Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.dailyReport());
+});
+// Financial settings used by the P&L (PIN): read + update COGS %, opex, target.
+app.get('/api/finance', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.getFinanceSettings());
+});
+app.post('/api/finance', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.setFinanceSettings(req.body || {}));
+});
+// Export the current report as an Excel workbook (PIN). Opened directly by the browser.
+app.get('/api/report.xlsx', async (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const { buildReportWorkbook } = await import('./report-excel.js');
+    const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || 'YO-DEE Yogurt' });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
 
 // ---------- Menu management + quick-service ordering (PIN) ----------
@@ -230,7 +285,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items);
-    emit(req.params.zoneId, 'update', Q.zoneSnapshot(req.params.zoneId));
+    emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
   } catch (e) {
     const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
@@ -239,6 +294,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
 });
 
 // ---------- Live updates (SSE) for cashier & display ----------
+// Pass ?pin=XXXX (cashier) to receive real customer names; public/display screens omit it.
 app.get('/api/zones/:zoneId/stream', (req, res) => {
   res.set({
     'Content-Type': 'text/event-stream',
@@ -246,14 +302,15 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
     Connection: 'keep-alive',
   });
   res.flushHeaders?.();
-  res.write(`event: update\ndata: ${JSON.stringify(Q.zoneSnapshot(req.params.zoneId))}\n\n`);
-  subscribe(req.params.zoneId, res);
+  const reveal = pinValueOK(req);
+  res.write(`event: update\ndata: ${JSON.stringify(Q.zoneSnapshot(req.params.zoneId, { reveal }))}\n\n`);
+  subscribe(req.params.zoneId, res, { reveal });
 });
 
 // ---------- Daily queue reset at midnight (Asia/Bangkok, UTC+7) ----------
 function doDailyReset() {
   const zoneIds = Q.resetAllZones();
-  for (const id of zoneIds) emit(id, 'update', Q.zoneSnapshot(id));
+  for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
   console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
 }
 function msUntilBangkokMidnight() {

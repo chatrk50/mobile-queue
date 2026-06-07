@@ -177,11 +177,21 @@ function itemIcon(m){
   for(const [keys,emo] of map){ if(keys.some(k=>t.includes(k))) return emo; }
   return '🍦';
 }
+// Picture for a menu item: a cell of the composite photo (grid:N), a real URL, or emoji.
+function itemImg(m){
+  const fb=itemIcon(m);
+  if(m.image && m.image.slice(0,5)==='grid:'){
+    const n=+m.image.slice(5)||0, col=n%4, row=(n/4)|0;
+    return `<img class="sprite" src="/assets/menu-grid.png" style="left:-${col*100}%;top:-${row*100}%" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+  }
+  if(m.image) return `<img src="${esc(m.image)}" alt="" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+  return fb;
+}
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{ await loadMenu(); cart=[];
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" onclick="pickDrink(${m.id})">
-    <div class="mimg" style="font-size:34px">${m.image?`<img src="${esc(m.image)}" alt="">`:itemIcon(m)}</div>
+    <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">฿${m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No drinks available right now.</p>';
@@ -277,7 +287,7 @@ function renderStars(sel){
 }
 window.rate=async(n)=>{
   renderStars(n);
-  try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n})});
+  try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
     $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
   }catch(e){ toast('Could not save rating'); }
 };
@@ -291,7 +301,7 @@ function startPolling(){ tick(); poll=setInterval(tick,3000); }
 
 window.cancelTicket = async ()=>{
   if(!confirm('Cancel your queue?')) return;
-  try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST'}); clearInterval(poll);
+  try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}); clearInterval(poll);
     localStorage.removeItem('ticket_'+zoneId);
     show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; loadZone();
   }catch(e){ toast(e.message); }

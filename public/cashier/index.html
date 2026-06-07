@@ -31,10 +31,17 @@
   </div>
 
   <!-- DAILY REPORT -->
-  <div id="reportCard" class="card" style="display:none;max-width:440px;margin:14px auto">
-    <div class="row between"><h1>Daily Report</h1><button class="ghost" style="padding:6px 12px" onclick="hideReport()">Close</button></div>
-    <p class="muted">Cups sold so far today · resets daily at 00:00 (Bangkok)</p>
-    <div id="reportBody" style="margin-top:12px"></div>
+  <div id="reportCard" class="card" style="display:none;max-width:640px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>Daily Report</h1><p class="muted" style="margin:2px 0 0">Today · resets 00:00 (Bangkok)</p></div>
+      <div class="row" style="gap:6px">
+        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Costs</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">Close</button>
+      </div>
+    </div>
+    <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
+    <div id="reportBody" style="margin-top:14px"></div>
   </div>
 
   <!-- ORDER BUILDER -->
@@ -111,23 +118,66 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 
+const money=(n)=>'฿'+Math.round(n||0).toLocaleString();
+const pctf=(n)=>((n||0)*100).toFixed(1)+'%';
 window.showReport=async()=>{
-  try{ const r=await api('/api/report');
-    const stat=(label,val)=>`<div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:12px">${label}</div></div>`;
+  try{ const r=await api('/api/report'); const p=r.pnl||{};
+    const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
+    const pl=(label,val,o={})=>`<div class="qitem" style="${o.navy?'background:var(--navy);':o.accent?'background:#e9f8fb;':''}padding:8px 12px">
+      <span style="${o.bold?'font-weight:800;':''}${o.navy?'color:#fff':''}">${label}</span>
+      <span style="${o.bold?'font-weight:800;':''}${o.navy?'color:#fff':''}">${o.neg?'−':''}${money(val)}${o.pct!=null?` <span style="font-size:11px;color:${o.navy?'#bfe3ec':'var(--muted)'}">${pctf(o.pct)}</span>`:''}</span></div>`;
+    const maxRev=Math.max(1,...(r.itemSales||[]).map(i=>i.revenue||0));
+    const bars=(r.itemSales||[]).slice(0,12).map(i=>`
+      <div style="margin:6px 0">
+        <div class="row between" style="font-size:12px"><span>${esc(i.name)}${i.category==='topping'?' <span class="muted">·top</span>':''}</span><span class="muted">${i.qty}× · ${money(i.revenue)} · ${pctf(i.pct)}</span></div>
+        <div style="height:8px;background:var(--surface);border-radius:6px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${(i.revenue/maxRev*100).toFixed(1)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+      </div>`).join('');
     $('reportBody').innerHTML =
-      `<div style="font-size:48px;font-weight:900;color:var(--navy);text-align:center;line-height:1">${r.cupsSold}</div>`+
-      `<div class="muted" style="text-align:center;margin:4px 0 14px">cups sold (served) · ${r.issued} issued · revenue ฿${r.revenue||0}</div>`+
-      `<div class="row" style="justify-content:space-around;margin-bottom:14px">`+
-        stat('no-shows', r.noShows)+
-        stat('avg wait', r.avgWaitMin!=null?r.avgWaitMin+'m':'—')+
-        stat('rating', r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
+      `<div class="row" style="gap:8px;background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
+        kpi('Revenue',money(r.revenue),true)+kpi('Gross profit',money(p.grossProfit))+kpi('Net profit',money(p.netProfit))+kpi('Net margin',pctf(p.netMargin))+kpi('Cups',(p.cups||0))+
       `</div>`+
-      (r.itemSales&&r.itemSales.length?`<h2>Items sold</h2>`+r.itemSales.map(i=>`<div class="qitem"><span>${esc(i.name)}</span><span class="muted">${i.qty} × · ฿${i.revenue}</span></div>`).join('')+`<div style="height:12px"></div>`:'')+
-      r.perZone.map(z=>`<div class="qitem"><span class="code">${esc(z.name)}</span><span class="muted">${z.served} sold · ${z.no_shows} no-show · ${z.issued} issued</span></div>`).join('');
+      `<h2>Profit &amp; Loss (today)</h2><div class="queue-list" style="gap:4px">`+
+        pl('Drink sales',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
+        pl('Topping add-ons',p.toppingSales,{pct:r.revenue?p.toppingSales/r.revenue:0})+
+        pl('Total Revenue',r.revenue,{bold:true})+
+        pl('− Ingredients',p.ingredient,{neg:true})+
+        pl('− Packaging',p.packaging,{neg:true})+
+        pl('Gross Profit',p.grossProfit,{bold:true,accent:true,pct:p.grossMargin})+
+        pl("− Operating exp (today's share)",p.opexDaily,{neg:true})+
+        pl('NET PROFIT',p.netProfit,{bold:true,navy:true,pct:p.netMargin})+
+      `</div>`+
+      (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">Target today ${money(p.targetDaily)} · variance <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
+      `<h2 style="margin-top:16px">Sales mix</h2>${bars||'<p class="muted">No sales yet today.</p>'}`+
+      `<div class="row" style="justify-content:space-around;margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+
+        kpi('issued',r.issued)+kpi('no-shows',r.noShows)+kpi('avg wait',r.avgWaitMin!=null?r.avgWaitMin+'m':'—')+kpi('rating',r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
+      `</div>`;
     $('reportCard').style.display=''; $('dash').style.display='none';
   }catch(e){ toast(err(e)); }
 };
-window.hideReport=()=>{ $('reportCard').style.display='none'; $('dash').style.display=''; };
+window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.exportReport=()=>{ window.open('/api/report.xlsx?pin='+encodeURIComponent(PIN),'_blank'); };
+let FIN=null;
+window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
+function renderFinance(){
+  const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" step="${step||'1'}" value="${FIN[id]}" style="padding:8px"></div>`;
+  $('financeBox').innerHTML=`<div class="row between"><b>Cost assumptions</b><span class="muted" style="font-size:11px">drives the P&amp;L</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+      ${f('ingredientPct','Ingredient % (0.32 = 32%)','0.01')}
+      ${f('packagingPerCup','Packaging ฿/cup','0.5')}
+      ${f('daysPerMonth','Selling days / month','1')}
+      ${f('targetRevenue','Monthly target ฿ (0=off)','1000')}
+      ${f('rent','Rent / month ฿')}
+      ${f('wages','Wages / month ฿')}
+      ${f('utilities','Utilities / month ฿')}
+      ${f('supplies','Supplies / month ฿')}
+      ${f('marketing','Marketing / month ฿')}
+    </div>
+    <button class="ok" style="width:100%;margin-top:12px" onclick="saveFinance()">Save &amp; refresh</button>`;
+}
+window.saveFinance=async()=>{ const keys=['ingredientPct','packagingPerCup','daysPerMonth','targetRevenue','rent','wages','utilities','supplies','marketing'];
+  const body={}; keys.forEach(k=>body[k]=Number($('fin_'+k).value)||0);
+  try{ await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('Saved'); $('financeBox').style.display='none'; showReport(); }catch(e){ toast(err(e)); } };
 
 // ---------- Menu management ----------
 let MENU=[];
@@ -171,11 +221,22 @@ function itemIcon(m){
   for(const [keys,emo] of map){ if(keys.some(k=>t.includes(k))) return emo; }
   return '🍦';
 }
+// Render an item's picture: a cell of the composite photo (grid:N), a real image URL,
+// or a flavor emoji. onerror falls back to the emoji so a missing file never breaks the UI.
+function itemImg(m){
+  const fb=itemIcon(m);
+  if(m.image && m.image.slice(0,5)==='grid:'){
+    const n=+m.image.slice(5)||0, col=n%4, row=(n/4)|0;
+    return `<img class="sprite" src="/assets/menu-grid.png" style="left:-${col*100}%;top:-${row*100}%" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+  }
+  if(m.image) return `<img src="${esc(m.image)}" alt="" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+  return fb;
+}
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" onclick="pickDrink(${m.id})">
-    <div class="mimg" style="font-size:34px">${m.image?`<img src="${esc(m.image)}" alt="">`:itemIcon(m)}</div>
+    <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">฿${m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนู / Drinks</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No active drinks — add some via Menu.</p>';
@@ -226,7 +287,7 @@ async function boot(){
   $('dash').innerHTML = html;
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
-    const es=new EventSource('/api/zones/'+z.id+'/stream');
+    const es=new EventSource('/api/zones/'+z.id+'/stream?pin='+encodeURIComponent(PIN));
     es.addEventListener('update',e=>renderZone(JSON.parse(e.data)));
     streams.push(es);
   }

@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { db, getSetting, setSetting } from './db.js';
 import { pushQueue } from './line.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -145,6 +145,41 @@ export function setRating(ticketId, stars) {
   return { ok: true, rating: s };
 }
 
+// ---------- Financial settings (for the P&L in the report + Excel export) ----------
+// Defaults come from env (durable on Render) then fall back to sensible stall figures;
+// runtime edits are stored in the settings table (reset on redeploy like the rest of the DB).
+const FIN_KEYS = {
+  ingredientPct: ['FIN_INGREDIENT_PCT', 0.32],   // ingredient cost as a share of revenue
+  packagingPerCup: ['FIN_PACKAGING_PER_CUP', 4.5],// cup+lid+spoon+bag per drink
+  daysPerMonth: ['FIN_DAYS_PER_MONTH', 30],       // selling days/month (to prorate fixed costs)
+  rent: ['FIN_RENT', 8000],
+  wages: ['FIN_WAGES', 18000],
+  utilities: ['FIN_UTILITIES', 3500],
+  supplies: ['FIN_SUPPLIES', 2500],
+  marketing: ['FIN_MARKETING', 800],
+  targetRevenue: ['FIN_TARGET_REVENUE', 0],       // monthly target; 0 = no target/variance
+};
+export function getFinanceSettings() {
+  const out = {};
+  for (const [key, [envKey, def]] of Object.entries(FIN_KEYS)) {
+    const stored = getSetting('fin_' + key, null);
+    const envVal = process.env[envKey];
+    const val = stored != null ? stored : (envVal != null ? envVal : def);
+    out[key] = Number(val);
+    if (!Number.isFinite(out[key])) out[key] = Number(def);
+  }
+  return out;
+}
+export function setFinanceSettings(patch = {}) {
+  for (const key of Object.keys(FIN_KEYS)) {
+    if (patch[key] != null && patch[key] !== '') {
+      const n = Math.max(0, Number(patch[key]));
+      if (Number.isFinite(n)) setSetting('fin_' + key, n);
+    }
+  }
+  return getFinanceSettings();
+}
+
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport() {
   const perZone = db.prepare(
@@ -163,18 +198,49 @@ export function dailyReport() {
   const rating = db.prepare(
     `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL`
   ).get();
+  // Item sales tagged drink/topping via the menu (so we can split the P&L and count cups).
   const itemSales = db.prepare(
-    `SELECT oi.name, SUM(oi.qty) AS qty, SUM(oi.qty*oi.price) AS revenue
-     FROM order_items oi JOIN orders o ON o.id = oi.order_id
-     GROUP BY oi.name ORDER BY qty DESC`
+    `SELECT oi.name,
+            COALESCE(mi.category,'drink') AS category,
+            SUM(oi.qty) AS qty,
+            SUM(oi.qty*oi.price) AS revenue
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     LEFT JOIN menu_items mi ON mi.name = oi.name
+     GROUP BY oi.name ORDER BY revenue DESC`
   ).all();
   const revenue = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
+  itemSales.forEach((i) => { i.pct = revenue ? i.revenue / revenue : 0; });
+  const drinkSales = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.revenue, 0);
+  const toppingSales = revenue - drinkSales;
+  const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
+
+  // P&L from the financial settings (today's sales vs prorated daily fixed costs).
+  const f = getFinanceSettings();
+  const ingredient = f.ingredientPct * revenue;
+  const packaging = f.packagingPerCup * cups;
+  const cogs = ingredient + packaging;
+  const grossProfit = revenue - cogs;
+  const monthlyOpex = f.rent + f.wages + f.utilities + f.supplies + f.marketing;
+  const dailyOpex = f.daysPerMonth > 0 ? monthlyOpex / f.daysPerMonth : monthlyOpex;
+  const netProfit = grossProfit - dailyOpex;
+  const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
+  const pnl = {
+    drinkSales, toppingSales, cups,
+    ingredient, packaging, cogs,
+    grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
+    opexDaily: dailyOpex, opexMonthly: monthlyOpex,
+    opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
+    netProfit, netMargin: revenue ? netProfit / revenue : 0,
+    avgPerCup: cups ? drinkSales / cups : 0,
+    targetDaily, revenueVariance: targetDaily != null ? revenue - targetDaily : null,
+  };
   return {
     cupsSold, issued, noShows, revenue,
     avgWaitMin: wait.s != null ? Math.round((wait.s / 60) * 10) / 10 : null,
     avgRating: rating.avg != null ? Math.round(rating.avg * 10) / 10 : null,
     ratingCount: rating.n,
-    itemSales, perZone,
+    itemSales, perZone, pnl, settings: f,
   };
 }
 
@@ -328,8 +394,20 @@ export function orderForTicket(ticketId) {
   return { total: order.total, items, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
 }
 
-/** Snapshot of a zone for cashier/display: waiting list + recently called (+ orders). */
-export function zoneSnapshot(zoneId) {
+// Generic, non-personal labels we never need to mask.
+const PUBLIC_LABELS = new Set(['Order', 'LINE order', 'Walk-in']);
+/** PDPA: hide customer names from the public snapshot/stream; cashier (PIN) sees them. */
+function maskName(n) {
+  if (!n || PUBLIC_LABELS.has(n)) return n || null;
+  const first = Array.from(n.trim())[0] || '';
+  return first ? first + '…' : null;
+}
+
+/**
+ * Snapshot of a zone for cashier/display: waiting list + recently called (+ orders).
+ * `reveal` (cashier only, PIN-checked) returns real customer names; otherwise masked.
+ */
+export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
@@ -340,6 +418,8 @@ export function zoneSnapshot(zoneId) {
     `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 5`
   ).all(zoneId);
+  if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
+                 recentCalled.forEach((t) => { t.customer_name = maskName(t.customer_name); }); }
   const attach = (t) => {
     const o = orderForTicket(t.id);
     if (o) {
