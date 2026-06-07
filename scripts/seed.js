@@ -46,7 +46,15 @@ let s = 0;
 // files in and they appear permanently; until a file exists the UI shows a flavor emoji
 // (the <img onerror> fallback). The cashier 📷 button can also upload a photo per item,
 // but that's stored in the DB and is wiped on the next reseed — committed files persist.
-drinks.forEach(([name, en, price], i) => minsert.run(name, en, price, `/assets/menu/${i + 1}.png`, 'drink', ++s));
+// Exact (case-sensitive) committed filenames in public/assets/menu/, in `drinks` order.
+const drinkImages = [
+  '1-Original.png', '2-Midnight-Sticky-Rice.png', '3-Oats.png', '4-Mango.png',
+  '5-Stawberry.png', '6-Rice-Balls.png', '7-Honey-Konjac.png', '8-Oreo.png',
+  '9-Kitkat.png', '10-Avocado.png', '11-Honey.png', '12-Grass-Jelly.png',
+  '13-Pipo-Jelly.png', '14-Banana.png', '15-Avocado-Blue-Spirulina.png',
+  '16-Mango-and-Midnight-Sticky-rice.png',
+];
+drinks.forEach(([name, en, price], i) => minsert.run(name, en, price, `/assets/menu/${drinkImages[i]}`, 'drink', ++s));
 for (const [name, en] of toppings) minsert.run(name, en, 10, null, 'topping', ++s);
 console.log(`Seeded ${drinks.length} drinks + ${toppings.length} toppings.`);
 
