@@ -40,10 +40,13 @@ const toppings = [
   ['ปีโป้', 'Pipo Jelly'], ['คิทแคท', 'KitKat'], ['โอริโอ้', 'Oreo'], ['เฉาก๊วย', 'Grass Jelly'],
   ['บุกน้ำผึ้ง', 'Honey Konjac'], ['บัวลอย', 'Rice Balls'], ['ข้าวเหนียวมูล', 'Midnight Sticky Rice'], ['ข้าวโอ๊ต', 'Oats'],
 ];
-const minsert = db.prepare('INSERT INTO menu_items (name, name_en, price, category, sort) VALUES (?,?,?,?,?)');
+const minsert = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)');
 let s = 0;
-for (const [name, en, price] of drinks) minsert.run(name, en, price, 'drink', ++s);
-for (const [name, en] of toppings) minsert.run(name, en, 10, 'topping', ++s);
+// Each drink points at its cell in the composite menu photo (public/assets/menu-grid.png),
+// a 4x4 sprite sheet: `grid:N` where N is the 0-based item index (row-major). The front-end
+// renders the cell via CSS and falls back to a flavor emoji if the image is missing.
+drinks.forEach(([name, en, price], i) => minsert.run(name, en, price, `grid:${i}`, 'drink', ++s));
+for (const [name, en] of toppings) minsert.run(name, en, 10, null, 'topping', ++s);
 console.log(`Seeded ${drinks.length} drinks + ${toppings.length} toppings.`);
 
 console.log(`Seeded store #${storeId} "SAT Market" with ${zones.length} zones.`);
