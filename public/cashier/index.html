@@ -19,6 +19,7 @@
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงาน</button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
       <button id="salesBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
+      <button id="staffBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
     </div>
   </div>
@@ -70,6 +71,29 @@
       <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
     </div>
     <div id="salesBody" style="margin-top:14px"></div>
+  </div>
+
+  <!-- STAFF MANAGEMENT (owner) -->
+  <div id="staffCard" class="card" style="display:none;max-width:640px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
+    </div>
+    <div id="staffBody" style="margin-top:14px"></div>
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <h2 style="margin:0 0 8px;font-size:15px">เพิ่มพนักงานใหม่</h2>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="stName" placeholder="ชื่อ" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="stPin" placeholder="PIN (4-8 หลัก)" inputmode="numeric" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <select id="stRole" style="padding:8px;border:1px solid var(--line);border-radius:8px">
+          <option value="cashier">แคชเชียร์</option>
+          <option value="manager">ผู้จัดการ</option>
+          <option value="owner">เจ้าของร้าน</option>
+        </select>
+        <button class="ok" style="padding:8px 16px" onclick="addStaff()">เพิ่ม</button>
+      </div>
+      <p id="stErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
+    </div>
   </div>
 
   <!-- ORDER BUILDER -->
@@ -157,7 +181,7 @@
 
 <script type="module">
 const $=(id)=>document.getElementById(id);
-let PIN=null, zones=[], streams=[], CFG={};
+let PIN=null, zones=[], streams=[], CFG={}, ME=null;
 const zoneOpenState={};
 window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPopImg').src = CFG.promptPayStatic ? CFG.promptPayStatic : ('/api/promptpay-qr?amount='+amount);
@@ -176,11 +200,16 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
     PIN=pin; $('loginErr').textContent='';
+    // Also establish a staff session cookie (best-effort) so actions are attributed
+    // to the logged-in staff (actor stamping). Legacy PIN auth still drives requests.
+    try{ const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); ME=(await sr.json().catch(()=>null))?.staff||null; }catch{ ME=null; }
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display=''; $('salesBtn').style.display='';
+    $('staffBtn').style.display=(ME&&ME.role==='owner')?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
-window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
+window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
+  $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
@@ -189,7 +218,7 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
-  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none';
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list){
   if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
@@ -252,6 +281,36 @@ function renderSales(){
   }
 }
 
+// ---------- Staff management (owner) ----------
+const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
+window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
+window.showStaff=async()=>{ try{ const list=await api('/api/staff');
+  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none';
+  renderStaff(list);
+}catch(e){ toast(err(e)); } };
+function renderStaff(list){
+  if(!list||!list.length){ $('staffBody').innerHTML='<p class="muted">ยังไม่มีพนักงาน</p>'; return; }
+  $('staffBody').innerHTML=list.map(s=>`<div class="qitem" style="${s.active?'':'opacity:.5'}"><div style="flex:1">
+    <div><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิดใช้งาน</span>'}</div></div>
+    <div class="row" style="gap:6px">
+      <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="resetStaffPin(${s.id})">เปลี่ยน PIN</button>
+      ${s.active?`<button class="danger" style="padding:5px 10px;font-size:12px" onclick="removeStaff(${s.id},'${esc(s.name)}')">ปิดใช้งาน</button>`:`<button class="ok" style="padding:5px 10px;font-size:12px" onclick="reactivateStaff(${s.id})">เปิดใช้งาน</button>`}
+    </div></div>`).join('');
+}
+window.addStaff=async()=>{ $('stErr').textContent='';
+  const name=$('stName').value.trim(), pin=$('stPin').value.trim(), role=$('stRole').value;
+  if(!name||!pin){ $('stErr').textContent='กรอกชื่อและ PIN'; return; }
+  try{ await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[1]})});
+    $('stName').value='';$('stPin').value=''; toast('เพิ่มพนักงานแล้ว'); renderStaff(await api('/api/staff'));
+  }catch(e){ const m=err(e); $('stErr').textContent=m==='pin_taken'?'PIN นี้ถูกใช้แล้ว':(m==='pin_must_be_4_8_digits'?'PIN ต้องเป็นตัวเลข 4-8 หลัก':m); } };
+window.removeStaff=async(id,name)=>{ if(!confirm('ปิดใช้งานพนักงาน '+name+'?')) return;
+  try{ await api('/api/staff/'+id,{method:'DELETE'}); renderStaff(await api('/api/staff')); }
+  catch(e){ toast(err(e)==='cannot_remove_last_owner'?'ลบเจ้าของร้านคนสุดท้ายไม่ได้':err(e)); } };
+window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:1})}); renderStaff(await api('/api/staff')); }catch(e){ toast(err(e)); } };
+window.resetStaffPin=async(id)=>{ const pin=prompt('PIN ใหม่ (4-8 หลัก)'); if(!pin) return;
+  try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); toast('เปลี่ยน PIN แล้ว'); }
+  catch(e){ toast(err(e)==='pin_taken'?'PIN นี้ถูกใช้แล้ว':err(e)); } };
+
 // ---------- Store master open/closed ----------
 let STORE=null;
 function renderStoreBtn(){ if(!STORE) return; const open=STORE.is_open!==0;
@@ -311,7 +370,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -354,7 +413,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; };
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
@@ -435,7 +494,7 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};

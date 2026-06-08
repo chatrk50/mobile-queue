@@ -1,8 +1,18 @@
 import { db, getSetting, setSetting } from './db.js';
 import { pushQueue } from './line.js';
+import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
+
+/** Append a row to the immutable sale_events audit/transaction trail. Best-effort:
+ *  a logging failure must never block the actual sale. */
+function logSaleEvent({ branchId = null, ticketId = null, orderId = null, type, amount = 0, actor = null, meta = null }) {
+  try {
+    db.prepare('INSERT INTO sale_events (branch_id, ticket_id, order_id, type, amount, actor, meta) VALUES (?,?,?,?,?,?,?)')
+      .run(branchId, ticketId, orderId, type, amount, actor, meta ? JSON.stringify(meta) : null);
+  } catch { /* audit is best-effort */ }
+}
 
 // LIFF link so the customer can re-open their queue anytime (sent as a button
 // on the LINE card, so the raw URL stays hidden behind a label).
@@ -377,6 +387,70 @@ export function listMenu() {
   return db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
 }
 
+// ---------- Staff & roles (Phase 1) ----------
+const ROLES = new Set(['owner', 'manager', 'cashier']);
+const branchIdsOf = (staffId) =>
+  db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staffId).map((r) => r.branch_id);
+
+export function listStaff() {
+  const rows = db.prepare('SELECT id, name, role, active FROM staff ORDER BY role, name').all();
+  return rows.map((s) => ({ ...s, branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id) }));
+}
+// True if `pin` already belongs to another active staffer (PINs identify the user at login).
+function pinTaken(pin, exceptId = null) {
+  return db.prepare('SELECT id, pin_hash FROM staff WHERE active=1').all()
+    .some((s) => s.id !== Number(exceptId) && verifyPin(pin, s.pin_hash));
+}
+export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenantId = 1 }) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (!n) throw new Error('name_required');
+  const p = (pin || '').toString().trim();
+  if (!/^\d{4,8}$/.test(p)) throw new Error('pin_must_be_4_8_digits');
+  if (!ROLES.has(role)) throw new Error('bad_role');
+  if (pinTaken(p)) throw new Error('pin_taken');
+  const info = db.prepare('INSERT INTO staff (name, pin_hash, role, tenant_id) VALUES (?,?,?,?)')
+    .run(n, hashPin(p), role, tenantId);
+  const id = info.lastInsertRowid;
+  if (role !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
+  return { id: Number(id), name: n, role, branchIds: role === 'owner' ? [] : branchIds };
+}
+export function updateStaff(id, { name, role, active, pin, branchIds }) {
+  const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
+  if (!cur) throw new Error('staff_not_found');
+  const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  const r = role != null ? role : cur.role;
+  if (!ROLES.has(r)) throw new Error('bad_role');
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  // Never deactivate or demote the last active owner (lock-out guard).
+  if ((cur.role === 'owner') && (r !== 'owner' || !a)) {
+    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1").get().c;
+    if (owners <= 1) throw new Error('cannot_remove_last_owner');
+  }
+  let pinHash = cur.pin_hash;
+  if (pin != null && pin !== '') {
+    const p = pin.toString().trim();
+    if (!/^\d{4,8}$/.test(p)) throw new Error('pin_must_be_4_8_digits');
+    if (pinTaken(p, id)) throw new Error('pin_taken');
+    pinHash = hashPin(p);
+  }
+  db.prepare('UPDATE staff SET name=?, role=?, active=?, pin_hash=? WHERE id=?').run(n, r, a, pinHash, id);
+  if (Array.isArray(branchIds)) {
+    db.prepare('DELETE FROM staff_branches WHERE staff_id=?').run(id);
+    if (r !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
+  }
+  return { id: Number(id), name: n, role: r, active: a, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
+}
+export function deactivateStaff(id) {
+  const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
+  if (!cur) throw new Error('staff_not_found');
+  if (cur.role === 'owner') {
+    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1").get().c;
+    if (owners <= 1) throw new Error('cannot_remove_last_owner');
+  }
+  db.prepare('UPDATE staff SET active=0 WHERE id=?').run(id);
+  return { ok: true };
+}
+
 // ---------- Price tiers & sales channels (multi-price per product) ----------
 export function listPriceTiers() {
   return db.prepare('SELECT * FROM price_tiers ORDER BY sort, id').all();
@@ -461,7 +535,7 @@ export function deleteMenuItem(id) {
  * resume it and receive pushes. Customer self-orders are deduped (one open order each).
  */
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -499,10 +573,11 @@ export function createOrder(zoneId, items, opts = {}) {
       `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
        VALUES (?,?,?,?,?,?,?)`
     ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, lineUserId, label);
-    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id) VALUES (?,?,?,?)')
-      .run(tinfo.lastInsertRowid, total, source, zone.store_id);
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by) VALUES (?,?,?,?,?)')
+      .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
+    logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
   const r = tx();
@@ -521,11 +596,15 @@ export function createOrder(zoneId, items, opts = {}) {
   return r;
 }
 
-/** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter). */
-export function setOrderPaid(ticketId) {
+/** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter).
+ *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other. */
+export function setOrderPaid(ticketId, opts = {}) {
+  const { actorId = null, method = null } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
-  db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now') WHERE id=?`).run(order.id);
+  db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
+    .run(actorId, method, order.id);
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
   return { ok: true, ticketId: Number(ticketId), total: order.total };
 }
 
@@ -539,13 +618,20 @@ export function claimOrderPaid(ticketId) {
   return { ok: true };
 }
 
-/** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.). */
-export function cancelOrderTicket(ticketId, threshold) {
+/** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
+ *  opts.actorId = staff; opts.reason = free text. void_kind auto: 'refund' if the order
+ *  was already paid, else 'void'. */
+export function cancelOrderTicket(ticketId, threshold, opts = {}) {
+  const { actorId = null, reason = null } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const kind = order && order.payment_status === 'paid' ? 'refund' : 'void';
   // Void/refund: mark the order void (even if it was already paid -> a refund) so it
   // drops out of the report and its revenue is deducted from sales.
-  db.prepare(`UPDATE orders SET payment_status='void' WHERE ticket_id=?`).run(ticketId);
+  db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE ticket_id=?`)
+    .run(kind, reason, actorId, ticketId);
+  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     pushQueue(t.line_user_id,

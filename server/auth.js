@@ -40,6 +40,20 @@ export function signSession(payload) {
   return `${body}.${sig}`;
 }
 
+/** Parse the Cookie header into a {name: value} map (no dependency). */
+export function parseCookies(req) {
+  const raw = req.headers?.cookie;
+  if (!raw) return {};
+  const out = {};
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim();
+    if (k) out[k] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
 /** Verify + decode a session token; returns the payload or null. */
 export function verifySession(token) {
   if (typeof token !== 'string' || !token.includes('.')) return null;

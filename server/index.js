@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting } from './db.js';
 import * as Q from './queue.js';
+import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText } from './line.js';
 import QRCode from 'qrcode';
@@ -54,12 +55,34 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
 
 app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
 
+// ---- Staff session: a valid signed 'sess' cookie attaches req.staff (Phase 1). This
+// runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
+app.use((req, res, next) => {
+  try {
+    const tok = parseCookies(req).sess;
+    const p = tok ? verifySession(tok) : null;
+    if (p && p.staffId) {
+      const s = db.prepare('SELECT id, name, role, tenant_id, active FROM staff WHERE id=?').get(p.staffId);
+      if (s && s.active) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
+    }
+  } catch { /* ignore bad cookie */ }
+  next();
+});
+
 // ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
 const PIN_MAX_FAILS = 8, PIN_LOCK_MS = 10 * 60 * 1000;
 const pinFails = new Map(); // ip -> { count, until }
 const ipOf = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
 function pinLocked(ip) { const a = pinFails.get(ip); return !!(a && a.until > Date.now()); }
-const pinPresent = (req) => req.get('x-cashier-pin') || req.query.pin || req.body?.pin || null;
+function countPinFail(ip) {
+  const a = pinFails.get(ip) || { count: 0, until: 0 };
+  a.count++;
+  if (a.count >= PIN_MAX_FAILS) { a.until = Date.now() + PIN_LOCK_MS; a.count = 0; }
+  pinFails.set(ip, a);
+}
+// A logged-in staff session counts as having the cashier PIN, so every existing
+// PIN-gated route accepts session auth without changing each call site.
+const pinPresent = (req) => req.get('x-cashier-pin') || req.query.pin || req.body?.pin || (req.staff ? CASHIER_PIN : null);
 // Silent check (no fail-counting) — used to decide whether to reveal names.
 const pinValueOK = (req) => pinPresent(req) === CASHIER_PIN;
 // Block PIN-bearing requests from a locked IP before they hit any handler.
@@ -90,6 +113,58 @@ app.get('/api/config', (req, res) => {
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {
   res.json({ ok: pinOK(req) });
+});
+
+// ---------- Staff auth & roles (Phase 1) ----------
+// The legacy admin PIN supplied DIRECTLY (header/query/body) — NOT via a session.
+// (pinValueOK is true for any logged-in staff, so it must not gate owner actions.)
+const legacyAdminPin = (req) => (req.get('x-cashier-pin') || req.query.pin || req.body?.pin) === CASHIER_PIN;
+// Owner-level access = a logged-in OWNER session OR the legacy admin CASHIER_PIN.
+const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
+const SESSION_HOURS = 12;
+
+// Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
+app.post('/api/staff/login', (req, res) => {
+  const ip = ipOf(req);
+  if (pinLocked(ip)) return res.status(429).json({ error: 'too_many_attempts' });
+  const pin = (req.body?.pin || '').toString();
+  if (!pin) return res.status(400).json({ error: 'pin_required' });
+  const staff = db.prepare('SELECT * FROM staff WHERE active=1').all().find((s) => verifyPin(pin, s.pin_hash));
+  if (!staff) { countPinFail(ip); return res.status(401).json({ error: 'bad_pin' }); }
+  pinFails.delete(ip);
+  const branchIds = staff.role === 'owner' ? []
+    : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
+  const token = signSession({ staffId: staff.id, role: staff.role, tenantId: staff.tenant_id, branchIds, exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  res.json({ ok: true, staff: { id: staff.id, name: staff.name, role: staff.role } });
+});
+app.post('/api/staff/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  res.json({ ok: true });
+});
+// Who am I (frontend reads this to show the logged-in staff + role).
+app.get('/api/staff/me', (req, res) => {
+  res.json({ staff: req.staff || null, legacyAdmin: pinValueOK(req) });
+});
+// Owner-only staff management.
+app.get('/api/staff', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.listStaff());
+});
+app.post('/api/staff', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.createStaff(req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/staff/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.updateStaff(req.params.id, req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.delete('/api/staff/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deactivateStaff(req.params.id)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ---------- Menu (public read; management is PIN-protected below) ----------
@@ -172,6 +247,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
       source: 'customer',
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
+      actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
@@ -244,7 +320,7 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.success && j.data && j.data.success) {
-      Q.setOrderPaid(ticketId);
+      Q.setOrderPaid(ticketId, { method: 'slip' });
       const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
       if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
       return res.json({ ok: true, paid: true, amount: j.data.amount });
@@ -256,7 +332,7 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
 app.post('/api/tickets/:ticketId/paid', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.setOrderPaid(req.params.ticketId);
+    const r = Q.setOrderPaid(req.params.ticketId, { actorId: req.staff?.id || null, method: req.body?.method || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
@@ -267,7 +343,7 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
-    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD);
+    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null });
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -374,7 +450,7 @@ app.delete('/api/menu/:id', (req, res) => {
 app.post('/api/zones/:zoneId/orders', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.createOrder(req.params.zoneId, req.body?.items);
+    const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId: req.staff?.id || null });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
   } catch (e) {
