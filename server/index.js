@@ -440,6 +440,22 @@ app.get('/api/reports/detailed', (req, res) => {
   const branchId = req.query.branchId ? Number(req.query.branchId) : null;
   res.json(Q.detailedReports({ date, branchId }));
 });
+// ---------- Cash drawer / Z-report (manager/owner) ----------
+const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+app.get('/api/cash/session', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.currentCashSession(cashBranch(req)));
+});
+app.post('/api/cash/open', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.openCashSession(cashBranch(req), { actorId: req.staff?.id || null, openFloat: req.body?.openFloat })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/cash/close', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.closeCashSession(cashBranch(req), { actorId: req.staff?.id || null, countedCash: req.body?.countedCash, note: req.body?.note || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Order history (PIN): completed/cancelled orders today, to re-check after the fact.
 app.get('/api/history', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

@@ -287,6 +287,21 @@ CREATE TABLE IF NOT EXISTS item_prices (
   price     REAL NOT NULL,
   PRIMARY KEY (item_id, tier_id, branch_id)
 );
+-- Cash drawer sessions for end-of-day cash-up (Z-report): open float -> expected
+-- vs counted -> over/short.
+CREATE TABLE IF NOT EXISTS cash_sessions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id     INTEGER NOT NULL DEFAULT 1,
+  opened_by     INTEGER,
+  opened_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  open_float    REAL NOT NULL DEFAULT 0,
+  closed_by     INTEGER,
+  closed_at     TEXT,
+  counted_cash  REAL,
+  expected_cash REAL,
+  over_short    REAL,
+  note          TEXT
+);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----

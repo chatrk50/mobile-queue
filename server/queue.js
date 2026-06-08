@@ -424,6 +424,44 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly };
 }
 
+// ---------- Cash drawer / Z-report (end-of-day cash-up) ----------
+const r2 = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+function cashComponents(branchId, sinceAt) {
+  // Cash physically collected = every order paid by cash in the window — INCLUDING any
+  // later refunded (paid_at persists after a void), so the refund isn't double-removed.
+  const cashIn = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
+    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND o.paid_at >= ?`).get(branchId, sinceAt).v || 0;
+  // Cash paid back out = refunds (paid-then-voided) that had been paid by cash.
+  const cashRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
+    FROM orders o WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?`).get(branchId, sinceAt).v || 0;
+  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund) };
+}
+/** Current open cash session for a branch (+ live expected cash so far). */
+export function currentCashSession(branchId = 1) {
+  const s = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
+  if (!s) return { open: false };
+  const c = cashComponents(branchId, s.opened_at);
+  return { open: true, session: s, ...c, expectedCash: r2(s.open_float + c.cashIn - c.cashRefund) };
+}
+/** Open a drawer with a starting float (one open session per branch at a time). */
+export function openCashSession(branchId = 1, { actorId = null, openFloat = 0 } = {}) {
+  if (db.prepare('SELECT id FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL').get(branchId)) throw new Error('session_already_open');
+  db.prepare('INSERT INTO cash_sessions (branch_id, opened_by, open_float) VALUES (?,?,?)').run(branchId, actorId, Math.max(0, Number(openFloat) || 0));
+  return currentCashSession(branchId);
+}
+/** Close the drawer: counted vs expected -> over/short, with a Z-report summary. */
+export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0, note = null } = {}) {
+  const cur = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
+  if (!cur) throw new Error('no_open_session');
+  const c = cashComponents(branchId, cur.opened_at);
+  const expected = r2(cur.open_float + c.cashIn - c.cashRefund);
+  const counted = r2(countedCash);
+  const over = r2(counted - expected);
+  db.prepare(`UPDATE cash_sessions SET closed_by=?, closed_at=datetime('now'), counted_cash=?, expected_cash=?, over_short=?, note=? WHERE id=?`)
+    .run(actorId, counted, expected, over, note ? note.toString().slice(0, 200) : null, cur.id);
+  return { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
+}
+
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
   archiveTodaySales(); // save today's sales record before clearing
