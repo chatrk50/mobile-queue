@@ -199,6 +199,20 @@
   </div>
 </div>
 
+<!-- PAYMENT METHOD PICKER (on Pay) -->
+<div id="payMethodPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center">
+    <h1 style="margin:0 0 4px">รับชำระเงิน</h1>
+    <div style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:14px">ยอด ฿<span id="payMethodAmt">0</span></div>
+    <div style="display:grid;gap:8px">
+      <button class="ok" style="padding:12px" onclick="choosePayMethod('cash')">💵 เงินสด</button>
+      <button class="ok" style="padding:12px" onclick="choosePayMethod('promptpay')">📱 พร้อมเพย์ / โอน</button>
+      <button class="ghost" style="padding:12px" onclick="choosePayMethod('other')">อื่น ๆ</button>
+      <button class="ghost" style="padding:8px;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null;
@@ -710,12 +724,26 @@ window.addWalkin=async(id)=>{ try{
   const j=await r.json(); toast('ออกคิว '+j.code+' — แจ้งลูกค้า');
 }catch(e){ toast(err(e)); } };
 window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
+// Promise-based payment-method picker (resolves to 'cash'|'promptpay'|'other'|null).
+let _payRes=null;
+function pickPayMethod(amount){ $('payMethodAmt').textContent=amount; $('payMethodPop').style.display='flex';
+  return new Promise(res=>{ _payRes=res; }); }
+window.choosePayMethod=(m)=>{ $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
 window.markPaid=async(tid,status,amount)=>{
   // For a customer-declared PromptPay payment, force the staff to verify the money
   // actually arrived in the bank app before confirming — a tap is not proof of payment.
-  if(status==='claimed' && !confirm('⚠️ ตรวจสอบในแอปธนาคาร (K PLUS/KShop) ว่าเงิน ฿'+amount+' เข้าบัญชีร้านแล้วจริง?\n\nกด OK เฉพาะเมื่อเห็นเงินเข้าจริงเท่านั้น — สลิปในมือถือลูกค้าปลอมได้')) return;
-  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST'}); toast('ชำระแล้ว · ฿'+r.total); }catch(e){ toast(err(e)); } };
-window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return; try{ await api('/api/tickets/'+tid+'/void',{method:'POST'}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
+  let method;
+  if(status==='claimed'){
+    if(!confirm('⚠️ ตรวจสอบในแอปธนาคาร (K PLUS/KShop) ว่าเงิน ฿'+amount+' เข้าบัญชีร้านแล้วจริง?\n\nกด OK เฉพาะเมื่อเห็นเงินเข้าจริงเท่านั้น — สลิปในมือถือลูกค้าปลอมได้')) return;
+    method='promptpay';
+  } else {
+    method=await pickPayMethod(amount);
+    if(method===null) return;   // cashier cancelled
+  }
+  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('ชำระแล้ว ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total); }catch(e){ toast(err(e)); } };
+window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return;
+  const reason=(prompt('เหตุผลในการยกเลิก/คืนเงิน (ไม่บังคับ)')||'').trim();
+  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };
 
