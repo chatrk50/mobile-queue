@@ -171,6 +171,8 @@ app.delete('/api/staff/:id', (req, res) => {
 
 // ---------- Menu (public read; management is PIN-protected below) ----------
 app.get('/api/menu', (req, res) => res.json(Q.listMenu()));
+// Active sales channels (for the cashier order-channel picker).
+app.get('/api/channels', (req, res) => res.json(Q.listChannels().filter((c) => c.active !== 0)));
 
 // ---------- Customer reorder suggestions (LIFF: "order the same as last time?") ----------
 app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
@@ -478,7 +480,7 @@ app.delete('/api/menu/:id', (req, res) => {
 app.post('/api/zones/:zoneId/orders', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId: req.staff?.id || null });
+    const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId: req.staff?.id || null, channelId: req.body?.channelId ? Number(req.body.channelId) : null });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
   } catch (e) {

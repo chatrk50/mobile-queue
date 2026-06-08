@@ -403,11 +403,25 @@ export function detailedReports({ date = null, branchId = null } = {}) {
       GROUP BY hr ORDER BY hr`
   ).all(D, ...b);
 
+  // By-channel sales (net of discount) + platform commission → profit after commission.
+  const chanRows = db.prepare(
+    `SELECT COALESCE(c.name, 'หน้าร้าน') AS channel, COALESCE(c.commission_pct, 0) AS commission_pct,
+            COUNT(*) AS orders, SUM(o.total - COALESCE(o.discount,0)) AS gross
+       FROM orders o LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY o.channel_id ORDER BY gross DESC`
+  ).all(D, ...b);
+  const channelsReport = chanRows.map((r) => {
+    const commission = Math.round((r.gross * (r.commission_pct || 0) / 100) * 100) / 100;
+    return { channel: r.channel, commission_pct: r.commission_pct || 0, orders: r.orders, gross: r.gross || 0, commission, net: Math.round(((r.gross || 0) - commission) * 100) / 100 };
+  });
+  const channelTotals = channelsReport.reduce((a, r) => ({ gross: a.gross + r.gross, commission: a.commission + r.commission, net: a.net + r.net }), { gross: 0, commission: 0, net: 0 });
+
   const voidTotals = {};
   for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
   const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
-  return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, voids, voidTotals, addons, hourly };
+  return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly };
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
@@ -656,7 +670,7 @@ export function customerSuggestions(lineUserId) {
  * resume it and receive pushes. Customer self-orders are deduped (one open order each).
  */
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -694,8 +708,8 @@ export function createOrder(zoneId, items, opts = {}) {
       `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
        VALUES (?,?,?,?,?,?,?)`
     ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, lineUserId, label);
-    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by) VALUES (?,?,?,?,?)')
-      .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId);
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id) VALUES (?,?,?,?,?,?)')
+      .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
     logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });

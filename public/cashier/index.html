@@ -111,6 +111,7 @@
       <button class="detTab ghost" data-t="pay" style="padding:6px 12px;font-size:13px" onclick="detailTab('pay')">ชำระเงิน</button>
       <button class="detTab ghost" data-t="void" style="padding:6px 12px;font-size:13px" onclick="detailTab('void')">ยกเลิก/คืน</button>
       <button class="detTab ghost" data-t="disc" style="padding:6px 12px;font-size:13px" onclick="detailTab('disc')">ส่วนลด</button>
+      <button class="detTab ghost" data-t="chan" style="padding:6px 12px;font-size:13px" onclick="detailTab('chan')">ช่องทาง</button>
       <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
       <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
@@ -128,6 +129,10 @@
         </button>
         <button class="ghost" style="padding:6px 12px" onclick="hideOrder()">ปิด</button>
       </div>
+    </div>
+    <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+      <span class="muted" style="font-size:13px">ช่องทาง:</span>
+      <select id="orderChannelSel" onchange="orderChannel=Number(this.value)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px"></select>
     </div>
     <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วตรวจที่ตะกร้า 🧺</p>
     <div id="menuButtons" style="margin:12px 0"></div>
@@ -378,6 +383,10 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)})</div>`+
       (rows.length?detTable([{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(v=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':'soon'}" style="font-size:11px">${v.void_kind==='refund'?'คืนเงิน':'ยกเลิก'}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+  } else if(t==='chan'){
+    const rows=(DET.channels||[]); const ct=DET.channelTotals||{gross:0,commission:0,net:0};
+    box.innerHTML=`<div style="margin-bottom:10px">ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
+      (rows.length?detTable([{t:'ช่องทาง'},{t:'ออเดอร์',r:1},{t:'ยอดขาย',r:1},{t:'ค่าคอม',r:1},{t:'สุทธิ',r:1}], rows.map(c=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(c.channel)}${c.commission_pct?` <span class="muted" style="font-size:11px">${c.commission_pct}%</span>`:''}</td><td style="text-align:right">${c.orders}</td><td style="text-align:right">${baht2(c.gross)}</td><td style="text-align:right;color:var(--danger)">${c.commission?('−'+baht2(c.commission)):'—'}</td><td style="text-align:right"><b>${baht2(c.net)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มียอดขาย</p>');
   } else if(t==='disc'){
     const rows=(DET.discounts||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>ส่วนลดรวม ${baht2(DET.discountTotal)}</b> · ${rows.length} ออเดอร์</div>`+
       (rows.length?detTable([{t:'คิว'},{t:'ส่วนลด',r:1},{t:'จากยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(d=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px"><b>${d.code}</b></td><td style="text-align:right;color:var(--danger)">−${baht2(d.amount)}</td><td style="text-align:right">${baht2(d.total)}</td><td style="color:var(--muted);font-size:12px">${esc(d.reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(d.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีส่วนลด</p>');
@@ -544,7 +553,13 @@ window.toggleItem=async(id,active)=>{ try{ await api('/api/menu/'+id,{method:'PO
 window.delItem=async(id)=>{ if(!confirm('ลบเมนูนี้?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); await loadMenu(); renderMenuMgr(); }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
-let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={};
+let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null;
+async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
+function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
+  if(!CHANNELS.length){ sel.style.display='none'; return; } sel.style.display='';
+  sel.innerHTML=CHANNELS.map(c=>`<option value="${c.id}">${esc(c.name)}${c.commission_pct?(' (คอม '+c.commission_pct+'%)'):''}</option>`).join('');
+  if(orderChannel==null){ const sf=CHANNELS.find(c=>!c.commission_pct)||CHANNELS[0]; orderChannel=sf?sf.id:null; }
+  if(orderChannel!=null) sel.value=String(orderChannel); }
 function itemIcon(m){
   const t=((m.name||'')+' '+(m.name_en||'')).toLowerCase();
   const map=[[['มะม่วง','mango'],'🥭'],[['สตรอ','strawberry'],'🍓'],[['กล้วย','banana'],'🍌'],[['อโวคาโด','avocado'],'🥑'],
@@ -565,7 +580,7 @@ function itemImg(m){
   if(m.image) return `<img src="${esc(m.image)}" alt="" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   return fb;
 }
-window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadMenu(); await loadChannels(); renderChannelSel();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
@@ -622,7 +637,7 @@ window.confirmBasket=async()=>{
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
-  try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+  try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,channelId:orderChannel})});
     toast('ออเดอร์ '+r.code+' — ฿'+r.total+' — แจ้งลูกค้า'); cart=[]; hideOrder();
   }catch(e){ toast(err(e)); } };
 
