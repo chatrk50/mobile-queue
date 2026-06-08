@@ -17,6 +17,7 @@
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="menuBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>เมนู</button>
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงาน</button>
+      <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
     </div>
   </div>
@@ -43,6 +44,15 @@
     </div>
     <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="reportBody" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ORDER HISTORY -->
+  <div id="historyCard" class="card" style="display:none;max-width:560px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
+    </div>
+    <div id="historyBody" style="margin-top:14px"></div>
   </div>
 
   <!-- ORDER BUILDER -->
@@ -149,7 +159,7 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
     PIN=pin; $('loginErr').textContent='';
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display='';
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display='';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
@@ -157,8 +167,26 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
-  $('storeBtn').style.display='none';
+  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
+window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
+window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none';
+}catch(e){ toast(err(e)); } };
+function renderHistory(list){
+  if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
+  const stMap={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon']};
+  const payMap={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
+  $('historyBody').innerHTML=list.map(t=>{
+    const st=stMap[t.status]||[t.status,''];
+    const pay=t.payment_status?(payMap[t.payment_status]||[t.payment_status,'']):null;
+    const time=t.closed_at?t.closed_at.slice(11,16):'';
+    const items=(t.lines||[]).map(l=>`${l.qty}× ${esc(l.name)}${(l.toppings||[]).map(tp=>' -'+esc(tp.name)).join('')}`).join(', ');
+    return `<div class="qitem"><div style="flex:1">
+      <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
+      ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}</div></div>`;
+  }).join('');
+}
 
 // ---------- Store master open/closed ----------
 let STORE=null;
@@ -190,6 +218,10 @@ window.showReport=async()=>{
       `<div class="row" style="gap:8px;background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
         kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi('แก้ว',(p.cups||0))+
       `</div>`+
+      `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
+        <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> แก้ว · รวม <b>${money(r.revenue)}</b></span>
+        <span>ยกเลิก/คืน <b style="color:#c43a4b">${r.voided?r.voided.cups:0}</b> แก้ว <span class="muted">(${r.voided?r.voided.orders:0} ออเดอร์ · ${money(r.voided?r.voided.amount:0)})</span></span>
+      </div>`+
       `<h2>กำไร–ขาดทุน (วันนี้)</h2><div class="queue-list" style="gap:4px">`+
         pl('ยอดเครื่องดื่ม',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
         pl('ยอดท็อปปิ้ง',p.toppingSales,{pct:r.revenue?p.toppingSales/r.revenue:0})+
@@ -215,7 +247,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -258,7 +290,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; };
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
@@ -339,7 +371,7 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};

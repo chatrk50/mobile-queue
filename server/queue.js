@@ -228,6 +228,19 @@ export function dailyReport() {
   const toppingSales = revenue - drinkSales;
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
 
+  // Cancelled / refunded (voided) orders — counted separately, NOT in sales above.
+  const vAgg = db.prepare(
+    `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount
+     FROM orders o WHERE o.payment_status='void'`
+  ).get();
+  const vCups = db.prepare(
+    `SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0) AS cups
+     FROM order_items oi JOIN orders o ON o.id=oi.order_id
+     LEFT JOIN menu_items mi ON mi.name=oi.name
+     WHERE o.payment_status='void'`
+  ).get();
+  const voided = { orders: vAgg.orders, amount: vAgg.amount, cups: vCups.cups };
+
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings();
   const ingredient = f.ingredientPct * revenue;
@@ -259,8 +272,28 @@ export function dailyReport() {
     avgWaitMin: wait.s != null ? Math.round((wait.s / 60) * 10) / 10 : null,
     avgRating: rating.avg != null ? Math.round(rating.avg * 10) / 10 : null,
     ratingCount: rating.n,
-    itemSales, perZone, pnl, settings: f,
+    itemSales, perZone, pnl, settings: f, voided,
   };
+}
+
+/** Order history (since the last daily reset): completed/cancelled tickets with their
+ *  order detail, so the cashier can re-check after a customer leaves or a mistake. */
+export function orderHistory(limit = 100) {
+  const rows = db.prepare(
+    `SELECT id, code, status, customer_name, closed_at
+     FROM tickets WHERE status IN ('served','no_show','cancelled','skipped')
+     ORDER BY COALESCE(closed_at, created_at) DESC, id DESC LIMIT ?`
+  ).all(Math.max(1, Math.min(500, Number(limit) || 100)));
+  return rows.map((t) => {
+    const o = orderForTicket(t.id);
+    return {
+      id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
+      closed_at: t.closed_at,
+      order_total: o ? o.total : null,
+      payment_status: o ? o.payment_status : null,
+      lines: o ? o.lines : [],
+    };
+  });
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */

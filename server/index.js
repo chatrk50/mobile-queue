@@ -318,6 +318,11 @@ app.get('/api/report', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.dailyReport());
 });
+// Order history (PIN): completed/cancelled orders today, to re-check after the fact.
+app.get('/api/history', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.orderHistory(Number(req.query.limit) || 100));
+});
 // Financial settings used by the P&L (PIN): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
