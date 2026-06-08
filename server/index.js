@@ -493,6 +493,21 @@ app.get('/api/report.xlsx', async (req, res) => {
     res.send(buf);
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
+// Detailed reports / Z-report as a multi-sheet Excel workbook (manager/owner).
+app.get('/api/reports/detailed.xlsx', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+    const { buildDetailedWorkbook } = await import('./report-excel.js');
+    const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+    const data = Q.detailedReports({ date, branchId });
+    const buf = await buildDetailedWorkbook(data, { store: stores?.name || 'YO-DEE Yogurt', date: date || new Date().toISOString().slice(0, 10) });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="YO-DEE_Detailed_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
+});
 
 // ---------- Menu management + quick-service ordering (PIN) ----------
 app.post('/api/menu', (req, res) => {

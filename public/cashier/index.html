@@ -113,6 +113,7 @@
       <div><h1>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
         <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
+        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()">ปิด</button>
       </div>
     </div>
@@ -525,6 +526,7 @@ window.showReport=async()=>{
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
 window.exportReport=()=>{ window.open('/api/report.xlsx?pin='+encodeURIComponent(PIN),'_blank'); };
+window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?pin='+encodeURIComponent(PIN)+'&date='+encodeURIComponent($('detailDate').value||''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
 window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
