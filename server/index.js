@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { db, getSetting } from './db.js';
 import * as Q from './queue.js';
 import { subscribe, emit } from './events.js';
@@ -21,8 +22,13 @@ const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
 const SELF_ORDER = String(process.env.SELF_ORDER ?? '1') !== '0';
-// Merchant PromptPay id (phone / national id / e-wallet). Set to enable PromptPay QR; off if empty.
+// Merchant PromptPay id (phone / national id / e-wallet) for a dynamic amount QR; off if empty.
 const PROMPTPAY_ID = (process.env.PROMPTPAY_ID || '').trim();
+// Static merchant QR (e.g. a KShop / Thai-QR poster) — no amount, customer types it.
+// Auto-on if you commit public/assets/promptpay.png; or set PROMPTPAY_STATIC to a custom URL.
+const ppStaticEnv = (process.env.PROMPTPAY_STATIC || '').trim();
+const PROMPTPAY_STATIC_URL = ppStaticEnv.startsWith('/') ? ppStaticEnv
+  : ((ppStaticEnv || existsSync(join(__dirname, '..', 'public', 'assets', 'promptpay.png'))) ? '/assets/promptpay.png' : '');
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -71,7 +77,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID) });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PROMPTPAY_STATIC_URL || null });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------

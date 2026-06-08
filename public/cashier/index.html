@@ -122,9 +122,9 @@
 <div id="ppPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
     <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="$('ppPop').style.display='none'">✕</button></div>
-    <img id="ppPopImg" alt="PromptPay QR" style="width:240px;height:240px;border-radius:12px;border:1px solid var(--line);margin:12px auto 4px">
-    <div style="font-size:20px;font-weight:800;color:var(--navy)">฿<span id="ppPopAmt">0</span></div>
-    <p class="muted" style="font-size:12px">ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารของคุณแล้วกด <b>ชำระแล้ว</b></p>
+    <img id="ppPopImg" alt="PromptPay QR" style="width:240px;max-height:300px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px auto 4px">
+    <div style="font-size:22px;font-weight:800;color:var(--navy)">ยอด ฿<span id="ppPopAmt">0</span></div>
+    <p id="ppPopNote" class="muted" style="font-size:12px">ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด <b>ชำระแล้ว</b></p>
   </div>
 </div>
 
@@ -132,7 +132,10 @@
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={};
 const zoneOpenState={};
-window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount; $('ppPopImg').src='/api/promptpay-qr?amount='+amount; $('ppPop').style.display='flex'; };
+window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
+  $('ppPopImg').src = CFG.promptPayStatic ? CFG.promptPayStatic : ('/api/promptpay-qr?amount='+amount);
+  $('ppPopNote').textContent = CFG.promptPayStatic ? 'ลูกค้าสแกนแล้วกรอกยอดข้างบนเอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว' : 'ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว';
+  $('ppPop').style.display='flex'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
