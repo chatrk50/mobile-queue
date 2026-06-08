@@ -19,6 +19,7 @@
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงาน</button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
       <button id="salesBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
+      <button id="detailBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
       <button id="staffBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
     </div>
@@ -94,6 +95,25 @@
       </div>
       <p id="stErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
     </div>
+  </div>
+
+  <!-- DETAILED REPORTS (owner/manager) -->
+  <div id="detailCard" class="card" style="display:none;max-width:760px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
+      <div class="row" style="gap:6px;align-items:center">
+        <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()">ปิด</button>
+      </div>
+    </div>
+    <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
+      <button class="detTab ok" data-t="tx" style="padding:6px 12px;font-size:13px" onclick="detailTab('tx')">ธุรกรรม</button>
+      <button class="detTab ghost" data-t="pay" style="padding:6px 12px;font-size:13px" onclick="detailTab('pay')">ชำระเงิน</button>
+      <button class="detTab ghost" data-t="void" style="padding:6px 12px;font-size:13px" onclick="detailTab('void')">ยกเลิก/คืน</button>
+      <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
+      <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
+    </div>
+    <div id="detailBody" style="margin-top:14px"></div>
   </div>
 
   <!-- ORDER BUILDER -->
@@ -205,11 +225,13 @@ window.login=async()=>{
     try{ const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); ME=(await sr.json().catch(()=>null))?.staff||null; }catch{ ME=null; }
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display=''; $('salesBtn').style.display='';
     $('staffBtn').style.display=(ME&&ME.role==='owner')?'':'none';
+    $('detailBtn').style.display=(!ME||['owner','manager'].includes(ME.role))?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
+  $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
@@ -218,7 +240,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
-  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none';
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list){
   if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
@@ -239,7 +261,7 @@ function renderHistory(list){
 let SALES=null, salesView='daily';
 window.hideSales=()=>{ $('salesCard').style.display='none'; $('dash').style.display=''; };
 window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
-  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none';
+  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none';
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
 window.salesTab=(v)=>{ salesView=v;
@@ -285,7 +307,7 @@ function renderSales(){
 const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
 window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
 window.showStaff=async()=>{ try{ const list=await api('/api/staff');
-  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none';
+  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none';
   renderStaff(list);
 }catch(e){ toast(err(e)); } };
 function renderStaff(list){
@@ -310,6 +332,45 @@ window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POS
 window.resetStaffPin=async(id)=>{ const pin=prompt('PIN ใหม่ (4-8 หลัก)'); if(!pin) return;
   try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); toast('เปลี่ยน PIN แล้ว'); }
   catch(e){ toast(err(e)==='pin_taken'?'PIN นี้ถูกใช้แล้ว':err(e)); } };
+
+// ---------- Detailed reports (owner/manager) ----------
+let DET=null, detView='tx';
+window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
+window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
+  $('detailCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none';
+  await loadDetail(); };
+window.loadDetail=async()=>{ try{ DET=await api('/api/reports/detailed?date='+($('detailDate').value||'')); renderDetail(); }catch(e){ toast(err(e)); } };
+window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab '+(b.dataset.t===v?'ok':'ghost')); renderDetail(); };
+function baht2(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
+function detTable(head,rows){ return `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">${head.map(h=>`<th style="padding:6px 4px;${h.r?'text-align:right':''}">${h.t}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`; }
+function renderDetail(){
+  if(!DET){ return; }
+  const box=$('detailBody'); const t=detView;
+  if(t==='tx'){
+    const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
+    const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
+    box.innerHTML=detTable([{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
+      rows.map(r=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=(r.paid_at||r.created_at||'').slice(11,16);
+        return `<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
+        <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
+        <td style="text-align:right">${baht2(r.total)}</td>
+        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}</td>
+        <td style="color:var(--muted);font-size:12px">${esc(r.paid_by||r.created_by||'')}</td></tr>`; }).join(''));
+  } else if(t==='pay'){
+    const rows=(DET.payments||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>รวมรับชำระ ${baht2(DET.paidTotal)}</b> · ${DET.paidOrders||0} ออเดอร์</div>`+
+      (rows.length?detTable([{t:'วิธีชำระ'},{t:'ออเดอร์',r:1},{t:'ยอดรวม',r:1}], rows.map(p=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(p.method)}</td><td style="text-align:right">${p.orders}</td><td style="text-align:right"><b>${baht2(p.amount)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มีการชำระเงิน</p>');
+  } else if(t==='void'){
+    const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
+    box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)})</div>`+
+      (rows.length?detTable([{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(v=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':'soon'}" style="font-size:11px">${v.void_kind==='refund'?'คืนเงิน':'ยกเลิก'}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+  } else if(t==='addon'){
+    const rows=(DET.addons||[]); box.innerHTML=rows.length?detTable([{t:'ท็อปปิ้ง'},{t:'จำนวน',r:1},{t:'ยอดขาย',r:1}], rows.map(a=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(a.name)}</td><td style="text-align:right">${a.qty}</td><td style="text-align:right">${baht2(a.revenue)}</td></tr>`).join('')):'<p class="muted">ไม่มีการขายท็อปปิ้ง</p>';
+  } else if(t==='hour'){
+    const rows=(DET.hourly||[]); if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มียอดขาย</p>'; return; }
+    const max=Math.max(...rows.map(h=>h.revenue||0),1);
+    box.innerHTML=rows.map(h=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:48px;font-size:13px">${h.hr}:00</div><div style="flex:1;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:20px;width:${Math.round((h.revenue/max)*100)}%;background:var(--navy,#1e3a5f);min-width:2px"></div></div><div style="width:90px;text-align:right;font-size:13px"><b>${baht2(h.revenue)}</b> <span class="muted">(${h.orders})</span></div></div>`).join('');
+  }
+}
 
 // ---------- Store master open/closed ----------
 let STORE=null;
@@ -370,7 +431,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -413,7 +474,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; };
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
@@ -494,7 +555,7 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};

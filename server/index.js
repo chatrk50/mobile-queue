@@ -121,6 +121,8 @@ app.post('/api/auth', (req, res) => {
 const legacyAdminPin = (req) => (req.get('x-cashier-pin') || req.query.pin || req.body?.pin) === CASHIER_PIN;
 // Owner-level access = a logged-in OWNER session OR the legacy admin CASHIER_PIN.
 const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
+// Manager-level = owner/manager session OR legacy admin PIN (reports, finance).
+const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || legacyAdminPin(req);
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
@@ -399,6 +401,14 @@ app.post('/api/reset', (req, res) => {
 app.get('/api/report', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.dailyReport());
+});
+// Detailed read-only reports for a date (manager/owner): transaction log, payment,
+// void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
+app.get('/api/reports/detailed', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  res.json(Q.detailedReports({ date, branchId }));
 });
 // Order history (PIN): completed/cancelled orders today, to re-check after the fact.
 app.get('/api/history', (req, res) => {

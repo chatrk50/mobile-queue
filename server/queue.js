@@ -341,6 +341,62 @@ export function salesHistory() {
   return { daily, monthly };
 }
 
+// ---------- Detailed read-only reports (transaction log / payment / void-refund /
+// addon / hourly). All scoped to a BKK date (default today) + optional branch. ----------
+export function detailedReports({ date = null, branchId = null } = {}) {
+  const D = date;                  // null => today (BKK)
+  const b = [branchId, branchId];  // for the "(? IS NULL OR o.branch_id = ?)" guard
+  const DAY = "COALESCE(?, date('now','+7 hours'))";
+  const BR = "(? IS NULL OR o.branch_id = ?)";
+
+  const transactions = db.prepare(
+    `SELECT t.code, o.id AS order_id, o.created_at, o.paid_at, o.total,
+            o.payment_status, o.payment_method, o.void_kind,
+            ps.name AS paid_by, cs.name AS created_by,
+            (SELECT GROUP_CONCAT(oi.qty || 'x ' || oi.name, ', ') FROM order_items oi WHERE oi.order_id = o.id) AS items
+       FROM orders o
+       JOIN tickets t ON t.id = o.ticket_id
+       LEFT JOIN staff ps ON ps.id = o.paid_by
+       LEFT JOIN staff cs ON cs.id = o.created_by
+      WHERE date(COALESCE(o.paid_at, o.created_at), '+7 hours') = ${DAY} AND ${BR}
+      ORDER BY o.id`
+  ).all(D, ...b);
+
+  const payments = db.prepare(
+    `SELECT COALESCE(o.payment_method, 'unspecified') AS method, COUNT(*) AS orders, SUM(o.total) AS amount
+       FROM orders o
+      WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY method ORDER BY amount DESC`
+  ).all(D, ...b);
+
+  const voids = db.prepare(
+    `SELECT t.code, o.total, o.void_kind, o.void_reason, o.voided_at, s.name AS by_name
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id LEFT JOIN staff s ON s.id = o.voided_by
+      WHERE o.payment_status = 'void' AND date(COALESCE(o.voided_at, o.created_at), '+7 hours') = ${DAY} AND ${BR}
+      ORDER BY o.voided_at DESC`
+  ).all(D, ...b);
+
+  const addons = db.prepare(
+    `SELECT oi.name, SUM(oi.qty) AS qty, SUM(oi.qty * oi.price) AS revenue
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+      WHERE oi.kind = 'addon' AND o.payment_status != 'void' AND date(o.created_at, '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY oi.name ORDER BY qty DESC`
+  ).all(D, ...b);
+
+  const hourly = db.prepare(
+    `SELECT strftime('%H', o.paid_at, '+7 hours') AS hr, COUNT(*) AS orders, SUM(o.total) AS revenue
+       FROM orders o
+      WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY hr ORDER BY hr`
+  ).all(D, ...b);
+
+  const voidTotals = {};
+  for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
+  const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
+  return { date: D, transactions, payments, paidTotal, paidOrders, voids, voidTotals, addons, hourly };
+}
+
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
   archiveTodaySales(); // save today's sales record before clearing
