@@ -464,7 +464,7 @@ function renderZone(snap){
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${t.order_total})">📱 QR</button>` : '';
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id})">฿ ชำระแล้ว</button>` : '';
+    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${t.order_total})">฿ ชำระแล้ว</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
@@ -494,7 +494,11 @@ window.addWalkin=async(id)=>{ try{
   const j=await r.json(); toast('ออกคิว '+j.code+' — แจ้งลูกค้า');
 }catch(e){ toast(err(e)); } };
 window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
-window.markPaid=async(tid)=>{ try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST'}); toast('ชำระแล้ว · ฿'+r.total); }catch(e){ toast(err(e)); } };
+window.markPaid=async(tid,status,amount)=>{
+  // For a customer-declared PromptPay payment, force the staff to verify the money
+  // actually arrived in the bank app before confirming — a tap is not proof of payment.
+  if(status==='claimed' && !confirm('⚠️ ตรวจสอบในแอปธนาคาร (K PLUS/KShop) ว่าเงิน ฿'+amount+' เข้าบัญชีร้านแล้วจริง?\n\nกด OK เฉพาะเมื่อเห็นเงินเข้าจริงเท่านั้น — สลิปในมือถือลูกค้าปลอมได้')) return;
+  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST'}); toast('ชำระแล้ว · ฿'+r.total); }catch(e){ toast(err(e)); } };
 window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return; try{ await api('/api/tickets/'+tid+'/void',{method:'POST'}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };
