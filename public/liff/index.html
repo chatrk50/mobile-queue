@@ -27,6 +27,14 @@
       <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– นาที</div>
       <div class="muted" style="font-size:11px;margin-top:8px">สั่งเลยแล้วชำระที่เคาน์เตอร์ — หรือกลับมาใหม่ภายหลังก็ได้</div>
     </div>
+    <!-- Returning-customer one-tap reorder of their usual favourite (filled in by loadReorder) -->
+    <div id="reorderCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;margin:0 0 14px;text-align:left">
+      <div id="reorderHi" style="font-weight:800;color:var(--navy);margin-bottom:10px;text-align:center"></div>
+      <button id="reorderBtn" style="width:100%;display:flex;align-items:center;gap:10px;justify-content:center" onclick="reorderFav()">
+        <img id="reorderImg" src="" onerror="this.style.display='none'" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:none">
+        <span id="reorderLbl">สั่งเหมือนเดิม</span>
+      </button>
+    </div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
     <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">รับแค่หมายเลขคิว</button>
@@ -214,7 +222,31 @@ async function loadZone(){
   show('queueStatus', open);
   show('closedMsg', !open);
   show('getCard',true);
+  if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
 }
+
+// Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
+let FAV=null;
+async function loadReorder(){
+  FAV=null; show('reorderCard',false);
+  if(!lineUserId || !cfg.selfOrder) return;
+  try{
+    const s = await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
+    if(!s || !s.known) return;
+    const fav = (s.favourites||[]).find(f=>!f.soldout && f.itemId);
+    if(!fav) return;
+    FAV=fav;
+    $('reorderHi').textContent = s.name ? ('👋 ยินดีต้อนรับกลับคุณ '+s.name+'!') : '👋 ยินดีต้อนรับกลับ!';
+    $('reorderLbl').textContent = 'สั่ง '+fav.name+' เหมือนเดิม';
+    if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
+    show('reorderCard', true);
+  }catch(e){ /* never block the normal flow */ }
+}
+window.reorderFav = ()=>{
+  if(!FAV) return;
+  cart.push({ name:FAV.name, price:FAV.price, toppings:[], sweet:100 });
+  try{ showOrderUI(); openBasket(); }catch(e){ toast&&toast('เปิดตะกร้าไม่สำเร็จ'); }
+};
 
 window.getTicket = async ()=>{
   $('getBtn').disabled=true;

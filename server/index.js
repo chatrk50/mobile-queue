@@ -170,6 +170,12 @@ app.delete('/api/staff/:id', (req, res) => {
 // ---------- Menu (public read; management is PIN-protected below) ----------
 app.get('/api/menu', (req, res) => res.json(Q.listMenu()));
 
+// ---------- Customer reorder suggestions (LIFF: "order the same as last time?") ----------
+app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
+  try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
+  catch (e) { res.status(200).json({ known: false, error: e.message }); }
+});
+
 // ---------- Stores & zones ----------
 app.get('/api/stores', (req, res) => {
   res.json(db.prepare('SELECT * FROM stores ORDER BY id').all());

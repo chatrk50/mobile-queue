@@ -527,6 +527,58 @@ export function deleteMenuItem(id) {
   return { ok: true };
 }
 
+// ---------- Customers: remember LINE customers for reorder suggestions ----------
+/** Upsert a LINE customer's profile + counters after they place an order. Best-effort:
+ *  never block the order on a customer-record failure. */
+function recordCustomerOrder(lineUserId, name) {
+  if (!lineUserId) return;
+  try {
+    db.prepare(
+      `INSERT INTO customers (line_user_id, name, last_order_at, order_count)
+       VALUES (?,?,datetime('now'),1)
+       ON CONFLICT(line_user_id) DO UPDATE SET
+         name = COALESCE(excluded.name, customers.name),
+         last_order_at = datetime('now'),
+         order_count = customers.order_count + 1`
+    ).run(lineUserId, name && !['LINE order', 'Order', 'Walk-in'].includes(name) ? name : null);
+  } catch { /* best-effort */ }
+}
+
+/** Reorder suggestions for a returning LINE customer: their most-ordered drinks
+ *  (with current price/image) + their last order's lines for a one-tap repeat. */
+export function customerSuggestions(lineUserId) {
+  if (!lineUserId) return { known: false };
+  const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=?').get(lineUserId);
+  const favourites = db.prepare(
+    `SELECT oi.name,
+            SUM(oi.qty) AS qty,
+            COUNT(DISTINCT o.id) AS times,
+            mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active
+     FROM order_items oi
+     JOIN orders o  ON o.id = oi.order_id
+     JOIN tickets t ON t.id = o.ticket_id
+     LEFT JOIN menu_items mi ON mi.name = oi.name
+     WHERE t.line_user_id = ? AND oi.kind = 'base' AND o.payment_status != 'void'
+     GROUP BY oi.name
+     ORDER BY qty DESC, times DESC
+     LIMIT 5`
+  ).all(lineUserId).filter((f) => f.active == null || f.active === 1);
+  // Last order (most recent ticket) grouped into drink + nested toppings, for "reorder the same".
+  const lastTicket = db.prepare(
+    `SELECT t.id FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE t.line_user_id=? AND o.payment_status!='void' ORDER BY t.id DESC LIMIT 1`
+  ).get(lineUserId);
+  const lastOrder = lastTicket ? orderForTicket(lastTicket.id) : null;
+  const known = !!cust || favourites.length > 0;
+  return {
+    known,
+    name: cust?.name || null,
+    orderCount: cust?.order_count || 0,
+    favourites: favourites.map((f) => ({ name: f.name, qty: f.qty, times: f.times, itemId: f.item_id, price: f.price, image: f.image, soldout: f.soldout === 1 })),
+    lastOrder: lastOrder ? { lines: lastOrder.lines, total: lastOrder.total } : null,
+  };
+}
+
 // ---------- Orders: tie a quick-service order to a fresh queue number ----------
 /**
  * Create an order + a fresh queue number in one transaction.
@@ -581,6 +633,9 @@ export function createOrder(zoneId, items, opts = {}) {
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
   const r = tx();
+
+  // Remember this LINE customer for next-visit reorder suggestions (best-effort).
+  if (source === 'customer' && lineUserId) recordCustomerOrder(lineUserId, customerName);
 
   // Confirmation push for customer self-orders (queue number + amount to pay at counter).
   if (source === 'customer' && lineUserId) {
