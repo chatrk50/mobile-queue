@@ -200,6 +200,16 @@ CREATE TABLE IF NOT EXISTS sales_history (
   PRIMARY KEY (date, branch_id)
 );
 -- ============ Multi-branch POS foundation (Phase 0) ============
+-- A tenant = one restaurant business (the SaaS account). Every tenant-owned row
+-- carries tenant_id (default 1). YO-Dee = tenant 1. Enforcement arrives with the
+-- tenant-scoped session in Phase 1; this is additive insurance so we never repaint.
+CREATE TABLE IF NOT EXISTS tenants (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  plan_name  TEXT NOT NULL DEFAULT 'free',   -- subscription plan (billing wired later)
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Staff identity + roles. PIN is scrypt-hashed (server/auth.js). role ∈ owner|manager|cashier.
 CREATE TABLE IF NOT EXISTS staff (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -301,6 +311,16 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN voided_by INTEGER`,
   `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
+  // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
+  `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE menu_items ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE price_tiers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE channels ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE customers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  // 'plan' is a libSQL reserved token (returns key as 'PLAN'); rename any already-created
+  // column. Throws (and is ignored) on fresh DBs where the column is already plan_name.
+  `ALTER TABLE tenants RENAME COLUMN plan TO plan_name`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -338,6 +358,14 @@ try {
   db.exec(`UPDATE order_items SET kind = 'addon'
            WHERE kind = 'base' AND name IN (SELECT name FROM menu_items WHERE category = 'topping')`);
 } catch (e) { console.error('[db] backfill skipped:', e.message); }
+
+// ---- Seed tenant 1 (the current business) so tenant-scoped data has a home. ----
+try {
+  if (!db.prepare('SELECT COUNT(*) c FROM tenants').get().c) {
+    db.prepare(`INSERT INTO tenants (name, plan_name) VALUES (?, 'free')`).run('YO-DEE Yogurt');
+    console.log('[db] Seeded tenant 1.');
+  }
+} catch (e) { console.error('[db] tenant seed skipped:', e.message); }
 
 // ---- Seed a bootstrap OWNER staff so the new login works and you can't get locked out.
 // PIN comes from OWNER_PIN (fallback CASHIER_PIN, fallback 1234). Idempotent: only when
