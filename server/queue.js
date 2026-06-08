@@ -119,7 +119,7 @@ export function setStatus(ticketId, status, threshold) {
     pushQueue(t.line_user_id,
       `✅ รับเครื่องดื่มเรียบร้อย\n` +
       `หมายเลข: ${t.code}\n` +
-      `ขอบคุณที่ใช้บริการ YO-DEE Yogurt ค่ะ 🙏`,
+      `We look forward to welcoming you back 😊`,
       queueLink(t.zone_id), 'ให้คะแนนร้าน');
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);

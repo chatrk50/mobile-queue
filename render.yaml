@@ -31,3 +31,11 @@ services:
         sync: false           # secret — paste in Render dashboard, never in git
       - key: LINE_CHANNEL_SECRET
         sync: false           # secret — paste in Render dashboard, never in git
+      # --- DURABLE STORAGE (optional) ---------------------------------------
+      # Leave BOTH blank → app uses local node:sqlite (ephemeral on free tier).
+      # Set BOTH (from a free Turso DB — see docs/durable-db-turso.md) → sales
+      # history + all data survive restarts via a libSQL embedded replica.
+      - key: TURSO_DATABASE_URL
+        sync: false           # e.g. libsql://mobile-queue-<you>.turso.io
+      - key: TURSO_AUTH_TOKEN
+        sync: false           # secret token from `turso db tokens create`

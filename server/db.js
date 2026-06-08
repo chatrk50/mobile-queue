@@ -1,7 +1,18 @@
-// Storage layer on Node's BUILT-IN SQLite (node:sqlite, Node 22+).
-// No native compilation, no extra dependency — runs anywhere Node 22+ runs.
-// A tiny shim gives us the same prepare/run/get/all/transaction ergonomics.
-import { DatabaseSync } from 'node:sqlite';
+// Storage layer with TWO interchangeable backends, chosen at boot:
+//
+//  • DEFAULT — Node's BUILT-IN SQLite (node:sqlite, Node 22+). No native build,
+//    no extra dependency. Data lives in a local file, which on Render's free
+//    tier is EPHEMERAL (wiped on every restart/redeploy/spin-down).
+//
+//  • DURABLE — Turso / libSQL "embedded replica" (the `libsql` driver), enabled
+//    only when TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) are set. Reads are served
+//    from a fast local replica; writes are forwarded to the Turso cloud primary
+//    and we sync() so nothing is lost when the local disk is wiped. On boot we
+//    pull the cloud copy back, so daily/monthly sales history (and all data)
+//    survives restarts. SQLite-compatible, so the schema/queries are unchanged.
+//
+// Both expose the same prepare/run/get/all/transaction shim, so the rest of the
+// app is identical regardless of which backend is active.
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
@@ -9,22 +20,82 @@ import { mkdirSync } from 'fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.QUEUE_DATA_DIR || join(__dirname, '..', 'data');
 mkdirSync(dataDir, { recursive: true });
+const dbPath = join(dataDir, 'queue.db');
 
-const raw = new DatabaseSync(join(dataDir, 'queue.db'));
+const TURSO_URL = (process.env.TURSO_DATABASE_URL || '').trim();
+const TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
+const USE_TURSO = /^(libsql|https?):\/\//.test(TURSO_URL);
+
+let raw;
+let scheduleSync = () => {};   // debounced background push/pull (durable mode only)
+
+if (USE_TURSO) {
+  const { default: Database } = await import('libsql');
+  raw = new Database(dbPath, { syncUrl: TURSO_URL, authToken: TURSO_TOKEN });
+  // Pull the durable copy into the local replica before the app reads anything.
+  try { raw.sync(); } catch (e) { console.error('[db] initial Turso sync failed:', e.message); }
+
+  // Debounce writes into a single sync (batches bursts of orders) and never let
+  // two syncs overlap. sync() may be sync or return a promise depending on build.
+  let timer = null, dirty = false, syncing = false;
+  const doSync = () => {
+    if (syncing) { dirty = true; return; }
+    syncing = true;
+    try {
+      const r = raw.sync();
+      if (r && typeof r.then === 'function') r.then(() => { syncing = false; if (dirty) { dirty = false; doSync(); } }, (e) => { syncing = false; console.error('[db] Turso sync failed:', e.message); });
+      else { syncing = false; if (dirty) { dirty = false; doSync(); } }
+    } catch (e) { syncing = false; console.error('[db] Turso sync failed:', e.message); }
+  };
+  scheduleSync = () => {
+    dirty = true;
+    if (timer) return;
+    timer = setTimeout(() => { timer = null; if (dirty) { dirty = false; doSync(); } }, 800);
+    if (timer.unref) timer.unref();
+  };
+  // Safety net: periodic sync even if writes are quiet, + flush on shutdown.
+  const iv = setInterval(doSync, 60_000); if (iv.unref) iv.unref();
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => { try { raw.sync(); } catch { /* best effort */ } process.exit(0); });
+  }
+  // Short-lived processes (e.g. `npm run seed`) finish before the debounced sync
+  // fires — flush synchronously on exit so their writes reach the Turso primary.
+  process.on('exit', () => { try { raw.sync(); } catch { /* best effort */ } });
+  console.log('[db] Durable mode ON — Turso/libSQL embedded replica');
+} else {
+  const { DatabaseSync } = await import('node:sqlite');
+  raw = new DatabaseSync(dbPath);
+  console.log('[db] Local mode — node:sqlite (ephemeral on Render free; set TURSO_DATABASE_URL for durable storage)');
+}
+
 // WAL improves concurrency but isn't supported on some mounted/networked FS;
 // fall back to the default rollback journal if it can't be enabled.
 try { raw.exec('PRAGMA journal_mode = WAL'); } catch { /* default journal */ }
-raw.exec('PRAGMA foreign_keys = ON');
+try { raw.exec('PRAGMA foreign_keys = ON'); } catch { /* ignore */ }
+
+// libSQL's .get() attaches a non-column `_metadata` field — strip it so it never
+// leaks into API responses (node:sqlite rows don't have it; the check is cheap).
+const stripMeta = (row) => { if (row && typeof row === 'object' && '_metadata' in row) delete row._metadata; return row; };
+const MUTATING = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+const SCHEMA_OR_WRITE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/i;
 
 // Compatibility wrapper: prepare(...).run/get/all, exec, transaction()
 export const db = {
-  prepare(sql) { return raw.prepare(sql); },
-  exec(sql) { return raw.exec(sql); },
+  prepare(sql) {
+    const st = raw.prepare(sql);
+    const mutating = MUTATING.test(sql);
+    return {
+      run: (...a) => { const r = st.run(...a); if (mutating) scheduleSync(); return r; },
+      get: (...a) => stripMeta(st.get(...a)),
+      all: (...a) => st.all(...a).map(stripMeta),
+    };
+  },
+  exec(sql) { const r = raw.exec(sql); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
   // Mimics better-sqlite3 transaction(fn) -> function returning fn's result.
   transaction(fn) {
     return (...args) => {
       raw.exec('BEGIN');
-      try { const r = fn(...args); raw.exec('COMMIT'); return r; }
+      try { const r = fn(...args); raw.exec('COMMIT'); scheduleSync(); return r; }
       catch (e) { raw.exec('ROLLBACK'); throw e; }
     };
   },
