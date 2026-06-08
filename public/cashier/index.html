@@ -18,6 +18,7 @@
       <button id="menuBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>เมนู</button>
       <button id="reportBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงาน</button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
+      <button id="salesBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
     </div>
   </div>
@@ -53,6 +54,22 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
     </div>
     <div id="historyBody" style="margin-top:14px"></div>
+  </div>
+
+  <!-- SELL HISTORY (daily / monthly) -->
+  <div id="salesCard" class="card" style="display:none;max-width:640px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>ยอดขายย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
+      <div class="row" style="gap:6px">
+        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()">ปิด</button>
+      </div>
+    </div>
+    <div class="row" style="gap:6px;margin-top:12px">
+      <button id="salesTabDaily" class="ok" style="padding:6px 14px;font-size:13px" onclick="salesTab('daily')">รายวัน</button>
+      <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
+    </div>
+    <div id="salesBody" style="margin-top:14px"></div>
   </div>
 
   <!-- ORDER BUILDER -->
@@ -159,7 +176,7 @@ window.login=async()=>{
     const j=await r.json();
     if(!j.ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
     PIN=pin; $('loginErr').textContent='';
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display='';
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display=''; $('salesBtn').style.display='';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
@@ -168,10 +185,11 @@ window.logout=()=>{ PIN=null; streams.forEach(s=>s.close()); streams=[];
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
+  $('salesBtn').style.display='none'; $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
-  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none';
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list){
   if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
@@ -186,6 +204,52 @@ function renderHistory(list){
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}</div></div>`;
   }).join('');
+}
+
+// ---------- Sell history (daily / monthly) ----------
+let SALES=null, salesView='daily';
+window.hideSales=()=>{ $('salesCard').style.display='none'; $('dash').style.display=''; };
+window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
+  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none';
+  salesTab(salesView);
+}catch(e){ toast(err(e)); } };
+window.salesTab=(v)=>{ salesView=v;
+  $('salesTabDaily').className=v==='daily'?'ok':'ghost';
+  $('salesTabMonthly').className=v==='monthly'?'ok':'ghost';
+  renderSales(); };
+window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'POST'});
+  toast(r.saved?'บันทึกยอดวันนี้แล้ว':'วันนี้ยังไม่มียอดขาย');
+  SALES=await api('/api/sales-history'); renderSales();
+}catch(e){ toast(err(e)); } };
+function baht(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
+function renderSales(){
+  if(!SALES){ return; }
+  const box=$('salesBody');
+  if(salesView==='daily'){
+    const rows=SALES.daily||[];
+    if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีประวัติยอดขาย — กด “บันทึกวันนี้” เพื่อบันทึกยอดของวันนี้ หรือระบบจะบันทึกอัตโนมัติตอนรีเซ็ตเที่ยงคืน</p>'; return; }
+    box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
+        <th style="padding:6px 4px">วันที่</th><th style="text-align:right">แก้ว</th><th style="text-align:right">ยอดขาย</th><th style="text-align:right">กำไรสุทธิ</th><th style="text-align:right">ยกเลิก</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
+        <td style="padding:6px 4px">${r.date}</td>
+        <td style="text-align:right">${r.cups}</td>
+        <td style="text-align:right"><b>${baht(r.revenue)}</b></td>
+        <td style="text-align:right;color:${r.net>=0?'var(--ok,#16a34a)':'var(--danger)'}">${baht(r.net)}</td>
+        <td style="text-align:right;color:var(--muted)">${r.void_cups||0} (${baht(r.void_amount)})</td></tr>`).join('')}</tbody></table>`;
+  } else {
+    const rows=SALES.monthly||[];
+    if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีข้อมูลรายเดือน</p>'; return; }
+    box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
+        <th style="padding:6px 4px">เดือน</th><th style="text-align:right">วัน</th><th style="text-align:right">แก้ว</th><th style="text-align:right">ยอดขาย</th><th style="text-align:right">กำไรสุทธิ</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
+        <td style="padding:6px 4px">${r.month}</td>
+        <td style="text-align:right">${r.days}</td>
+        <td style="text-align:right">${r.cups}</td>
+        <td style="text-align:right"><b>${baht(r.revenue)}</b></td>
+        <td style="text-align:right;color:${r.net>=0?'var(--ok,#16a34a)':'var(--danger)'}">${baht(r.net)}</td></tr>`).join('')}</tbody></table>`;
+  }
 }
 
 // ---------- Store master open/closed ----------
@@ -247,7 +311,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -290,7 +354,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; };
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
@@ -371,7 +435,7 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; await loadMenu();
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};

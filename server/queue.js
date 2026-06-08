@@ -114,6 +114,14 @@ export function setStatus(ticketId, status, threshold) {
     if (o && o.payment_status !== 'paid') throw new Error('order_unpaid');
   }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
+  // Notify the customer on LINE when their order is handed over (served).
+  if (status === 'served' && t.line_user_id) {
+    pushQueue(t.line_user_id,
+      `✅ รับเครื่องดื่มเรียบร้อย\n` +
+      `หมายเลข: ${t.code}\n` +
+      `ขอบคุณที่ใช้บริการ YO-DEE Yogurt ค่ะ 🙏`,
+      queueLink(t.zone_id), 'ให้คะแนนร้าน');
+  }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
 }
@@ -296,8 +304,36 @@ export function orderHistory(limit = 100) {
   });
 }
 
+/** Archive today's sales totals into sales_history (idempotent per date). Run at the
+ *  daily reset (and callable on demand) so daily/monthly sell history accrues. */
+export function archiveTodaySales() {
+  const rep = dailyReport();
+  if ((rep.issued || 0) === 0 && (rep.revenue || 0) === 0) return null; // nothing to save
+  db.prepare(
+    `INSERT OR REPLACE INTO sales_history
+       (date, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows)
+     VALUES (date('now','+7 hours'), ?,?,?,?,?,?,?,?,?,?)`
+  ).run(rep.pnl.cups || 0, rep.revenue || 0, rep.pnl.grossProfit || 0, rep.pnl.netProfit || 0,
+        rep.voided.orders || 0, rep.voided.cups || 0, rep.voided.amount || 0,
+        rep.issued || 0, rep.cupsSold || 0, rep.noShows || 0);
+  return rep;
+}
+
+/** Daily/monthly sell report from the archive. */
+export function salesHistory() {
+  const daily = db.prepare('SELECT * FROM sales_history ORDER BY date DESC LIMIT 90').all();
+  const monthly = db.prepare(
+    `SELECT substr(date,1,7) AS month,
+            SUM(cups) AS cups, SUM(revenue) AS revenue, SUM(net) AS net,
+            SUM(void_cups) AS void_cups, SUM(void_amount) AS void_amount, COUNT(*) AS days
+     FROM sales_history GROUP BY month ORDER BY month DESC LIMIT 12`
+  ).all();
+  return { daily, monthly };
+}
+
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
+  archiveTodaySales(); // save today's sales record before clearing
   const tx = db.transaction(() => {
     // Archive a per-zone daily summary (history) before clearing the tickets.
     db.prepare(

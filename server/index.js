@@ -323,6 +323,17 @@ app.get('/api/history', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.orderHistory(Number(req.query.limit) || 100));
 });
+// Daily/monthly sell report from the archive (PIN).
+app.get('/api/sales-history', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.salesHistory());
+});
+// Manually save today's sales into the archive now (PIN) — also runs automatically at the daily reset.
+app.post('/api/archive-now', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const r = Q.archiveTodaySales();
+  res.json({ ok: true, saved: !!r });
+});
 // Financial settings used by the P&L (PIN): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

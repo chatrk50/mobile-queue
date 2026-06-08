@@ -103,6 +103,19 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_ticket ON orders(ticket_id);
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
+CREATE TABLE IF NOT EXISTS sales_history (
+  date        TEXT PRIMARY KEY,           -- 'YYYY-MM-DD' (Asia/Bangkok)
+  cups        INTEGER NOT NULL DEFAULT 0, -- drinks sold (excl. voided)
+  revenue     REAL NOT NULL DEFAULT 0,
+  gross       REAL NOT NULL DEFAULT 0,
+  net         REAL NOT NULL DEFAULT 0,
+  void_orders INTEGER NOT NULL DEFAULT 0,
+  void_cups   INTEGER NOT NULL DEFAULT 0,
+  void_amount REAL NOT NULL DEFAULT 0,
+  issued      INTEGER NOT NULL DEFAULT 0,
+  served      INTEGER NOT NULL DEFAULT 0,
+  no_shows    INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----
