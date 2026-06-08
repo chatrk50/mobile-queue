@@ -33,6 +33,9 @@ const PROMPTPAY_STATIC_URL = ppStaticEnv.startsWith('/') ? ppStaticEnv
 const SLIPOK_API_KEY = (process.env.SLIPOK_API_KEY || '').trim();
 const SLIPOK_BRANCH_ID = (process.env.SLIPOK_BRANCH_ID || '').trim();
 const SLIPOK_ON = Boolean(SLIPOK_API_KEY && SLIPOK_BRANCH_ID);
+// Master switch for ONLINE payment (PromptPay QR + slip verify). OFF by default ->
+// customers see "pay at counter" only. Flip PAY_ONLINE=1 in Render to re-enable later.
+const PAY_ONLINE = String(process.env.PAY_ONLINE ?? '0') === '1';
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -81,7 +84,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PROMPTPAY_STATIC_URL || null, slipVerify: SLIPOK_ON });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -120,7 +123,7 @@ app.get('/api/qr/:zoneId', async (req, res) => {
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
 app.get('/api/promptpay-qr', async (req, res) => {
-  if (!PROMPTPAY_ID) return res.status(404).json({ error: 'promptpay_off' });
+  if (!PAY_ONLINE || !PROMPTPAY_ID) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);
   try {
     const payload = generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
@@ -223,7 +226,7 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
 // Customer uploads a payment slip -> server verifies it with SlipOK (real transfer,
 // exact amount, to OUR account, not a duplicate) and auto-marks the order PAID.
 app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
-  if (!SLIPOK_ON) return res.status(404).json({ error: 'slip_off' });
+  if (!PAY_ONLINE || !SLIPOK_ON) return res.status(404).json({ error: 'slip_off' });
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   const ticketId = req.params.ticketId;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
