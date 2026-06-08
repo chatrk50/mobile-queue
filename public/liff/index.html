@@ -72,10 +72,15 @@
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
       <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
       <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
-      <div id="ppPay" style="display:none;margin-top:12px;text-align:center">
-        <button class="ok" id="ppBtn" style="width:100%" onclick="togglePromptPay()">
-          <svg class="ic" viewBox="0 0 24 24" style="margin-right:6px"><rect width="5" height="5" x="3" y="3"/><rect width="5" height="5" x="16" y="3"/><rect width="5" height="5" x="3" y="16"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>ชำระด้วยพร้อมเพย์</button>
-        <div id="ppQrWrap" style="display:none;margin-top:10px">
+      <!-- เลือกวิธีชำระเงิน -->
+      <div id="payChoice" style="display:none;margin-top:12px">
+        <div class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
+        <div class="row" style="gap:8px">
+          <button class="ghost" id="payCounterBtn" style="flex:1" onclick="choosePay('counter')">💵 จ่ายที่เคาน์เตอร์</button>
+          <button class="ok" id="payPromptBtn" style="flex:1;display:none" onclick="choosePay('promptpay')">📱 พร้อมเพย์</button>
+        </div>
+        <div id="counterNote" class="muted" style="display:none;margin-top:10px;font-size:13px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px"></div>
+        <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line);object-fit:contain;background:#fff">
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
           <button class="ok" id="claimBtn" style="width:100%;background:var(--accent2);color:#06281f" onclick="claimPaid()">✓ ฉันชำระแล้ว</button>
@@ -317,20 +322,27 @@ function renderOrderBlock(v){
     (l.toppings||[]).map(t=>`<div class="row between" style="margin-left:12px;color:var(--muted)"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')
   ).join('');
   $('tOrderTotal').textContent = '฿'+v.order.total;
-  const pill=$('tPayPill'), st=v.order.status;
-  if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('ppPay',false); }
-  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('ppPay',false); }
-  else {
-    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+v.order.total+' ที่เคาน์เตอร์';
-    if(cfg.promptPay){ show('ppPay',true);
-      if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+v.order.total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
-      else { $('ppQrImg').src='/api/promptpay-qr?amount='+v.order.total; $('ppQrNote').textContent='สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง'; }
-    }
-    else show('ppPay',false);
+  const pill=$('tPayPill'), st=v.order.status, total=v.order.total;
+  if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); payMethod=null; }
+  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); }
+  else if(cfg.promptPay){
+    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
+    show('payChoice',true); show('payPromptBtn',true);
+    if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
+    else { $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').textContent='สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง'; }
+    $('counterNote').innerHTML='นำหมายเลขคิว <b>'+v.code+'</b> ไปชำระเงิน <b>฿'+total+'</b> ที่เคาน์เตอร์ได้เลยค่ะ';
+    applyPayChoice();
   }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); }
 }
-window.togglePromptPay=()=>{ const w=$('ppQrWrap'); const on=w.style.display==='none'; w.style.display=on?'':'none';
-  $('ppBtn').textContent=''; $('ppBtn').append(on?'ซ่อน QR พร้อมเพย์':'ชำระด้วยพร้อมเพย์'); };
+let payMethod=null;
+window.choosePay=(m)=>{ payMethod=m; applyPayChoice(); };
+function applyPayChoice(){
+  const c=payMethod==='counter', p=payMethod==='promptpay';
+  show('counterNote', c); show('ppQrWrap', p);
+  $('payCounterBtn').className = c?'ok':'ghost';
+  $('payPromptBtn').className = p?'ok':'ghost';
+}
 window.claimPaid=async()=>{ $('claimBtn').disabled=true;
   try{ await api('/api/tickets/'+ticketId+'/claim-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
     toast('แจ้งชำระแล้ว · รอแคชเชียร์ยืนยัน'); const v=await api('/api/tickets/'+ticketId); render(v);
