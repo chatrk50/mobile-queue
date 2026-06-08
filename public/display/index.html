@@ -1,31 +1,31 @@
-<!doctype html><html lang="en"><head>
+<!doctype html><html lang="th"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Queue Display — YO-DEE Yogurt</title>
+<title>จอแสดงคิว — YO-DEE Yogurt</title>
 <link rel="stylesheet" href="/assets/styles.css">
 </head><body>
 <div class="wrap wide">
   <div class="row between">
-    <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> YO-DEE Yogurt <span class="muted" style="font-weight:500">· <span id="title">Display</span></span></div>
+    <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> YO-DEE Yogurt <span class="muted" style="font-weight:500">· <span id="title">จอแสดงคิว</span></span></div>
     <div class="row">
-      <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← Back</a>
+      <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <select id="zoneSel" style="width:auto" onchange="switchZone()"></select>
-      <button class="ghost" id="soundBtn" onclick="enableSound()"><svg class="ic" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Enable sound</button>
+      <button class="ghost" id="soundBtn" onclick="enableSound()"><svg class="ic" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>เปิดเสียง</button>
     </div>
   </div>
 
   <div class="display-grid">
     <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:340px">
-      <h2>NOW SERVING</h2>
+      <h2>กำลังเรียกคิว</h2>
       <div class="now-serving" id="now">—</div>
     </div>
     <div class="card">
-      <h2>NEXT UP</h2>
+      <h2>คิวถัดไป</h2>
       <div id="next" class="queue-list"></div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Recently called</h2>
+    <h2>เรียกล่าสุด</h2>
     <div class="called-strip" id="strip"></div>
   </div>
 </div>
@@ -42,7 +42,7 @@ async function boot(){
   if(zones.length){ zoneId=zones[0].id; connect(); }
 }
 window.switchZone=()=>{ zoneId=Number($('zoneSel').value); connect(); };
-window.enableSound=()=>{ soundOn=true; speak('Sound on'); $('soundBtn').innerHTML='<svg class="ic" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Sound on'; };
+window.enableSound=()=>{ soundOn=true; speak('เปิดเสียงแล้ว'); $('soundBtn').innerHTML='<svg class="ic" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>เปิดเสียงแล้ว'; };
 
 function connect(){
   if(es) es.close();
@@ -55,18 +55,18 @@ function connect(){
 function speak(text){
   if(!soundOn||!window.speechSynthesis) return;
   const u=new SpeechSynthesisUtterance(text);
-  const en=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('en'));
-  if(en) u.voice=en; u.lang='en-US'; u.rate=.95;
+  const th=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('th'));
+  if(th) u.voice=th; u.lang='th-TH'; u.rate=.95;
   speechSynthesis.cancel(); speechSynthesis.speak(u);
 }
 function announce(code){
   const spell=code.split('').join(' ');
-  speak(`Now serving number ${spell}`);
+  speak(`เชิญคิวหมายเลข ${spell}`);
 }
 
 function render(snap){
   if(!snap||!snap.zone) return;
-  $('title').textContent=snap.zone.name+' — Queue';
+  $('title').textContent=snap.zone.name+' — คิว';
   const now = snap.zone.last_called ? `${snap.zone.prefix}${String(snap.zone.last_called).padStart(3,'0')}` : '—';
   $('now').textContent=now;
   if(now!=='—' && now!==lastNow && lastNow!==null){ announce(now); }

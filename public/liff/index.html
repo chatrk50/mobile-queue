@@ -1,6 +1,6 @@
-<!doctype html><html lang="en"><head>
+<!doctype html><html lang="th"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Get a Queue — YO-DEE Yogurt</title>
+<title>รับคิว — YO-DEE Yogurt</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -9,31 +9,31 @@
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
-    <h1>Add us on LINE 💬</h1>
-    <p class="muted" style="margin-top:8px">Please add <b>YO-DEE Yogurt</b> as a LINE friend so we can send your queue number and notify you when it's your turn.</p>
-    <button style="width:100%;margin-top:16px" onclick="addFriend()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Add LINE friend</button>
-    <button class="ghost" style="width:100%;margin-top:10px" onclick="recheckFriend()">I've added — continue</button>
+    <h1>เพิ่มเพื่อนใน LINE 💬</h1>
+    <p class="muted" style="margin-top:8px">กรุณาเพิ่ม <b>YO-DEE Yogurt</b> เป็นเพื่อนใน LINE เพื่อรับหมายเลขคิวและรับแจ้งเตือนเมื่อถึงคิวของคุณ</p>
+    <button style="width:100%;margin-top:16px" onclick="addFriend()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>เพิ่มเพื่อน LINE</button>
+    <button class="ghost" style="width:100%;margin-top:10px" onclick="recheckFriend()">เพิ่มแล้ว — ดำเนินการต่อ</button>
   </div>
 
   <!-- STEP: get ticket -->
   <div id="getCard" class="card" style="display:none;text-align:center">
     <h2 id="storeName">—</h2>
     <h1 id="zoneName" style="margin-bottom:4px">—</h1>
-    <span id="zoneState" class="pill open">Open</span>
+    <span id="zoneState" class="pill open">เปิด</span>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
-      <div class="muted" style="font-size:13px">Groups ahead of you now</div>
+      <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
       <div id="aheadNow" style="font-size:48px;font-weight:900;color:var(--navy);line-height:1">–</div>
-      <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– min</div>
-      <div class="muted" style="font-size:11px;margin-top:8px">Order now and pay at the counter — or come back later.</div>
+      <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– นาที</div>
+      <div class="muted" style="font-size:11px;margin-top:8px">สั่งเลยแล้วชำระที่เคาน์เตอร์ — หรือกลับมาใหม่ภายหลังก็ได้</div>
     </div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
-      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>Order now</button>
-    <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">Just get a queue number</button>
-    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">Not now — close</button>
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
+    <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">รับแค่หมายเลขคิว</button>
+    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ไว้ก่อน — ปิด</button>
     <div id="closedMsg" class="closed-note" style="display:none">
-      <b>🚫 Closed</b><br>
-      <span class="muted">This zone is not accepting queue right now. Please try again later.</span>
+      <b>🚫 ปิดรับคิว</b><br>
+      <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
     </div>
     <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
   </div>
@@ -41,54 +41,54 @@
   <!-- STEP: build an order (self-order) -->
   <div id="orderCard" class="card" style="display:none">
     <div class="row between" style="align-items:center">
-      <h1 style="margin:0">Order</h1>
+      <h1 style="margin:0">สั่งเครื่องดื่ม</h1>
       <div class="row" style="gap:8px">
         <button class="ok" id="basketBtn" style="padding:8px 12px;position:relative" onclick="openBasket()">
           <svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
           <span id="basketCount" style="position:absolute;top:-8px;right:-8px;background:var(--danger);color:#fff;border:2px solid #fff;border-radius:999px;font-size:12px;font-weight:800;min-width:22px;height:22px;line-height:18px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.3);display:none">0</span>
         </button>
-        <button class="ghost" style="padding:6px 12px" onclick="closeOrderUI()">← Back</button>
+        <button class="ghost" style="padding:6px 12px" onclick="closeOrderUI()">← กลับ</button>
       </div>
     </div>
-    <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน. แล้วดูตะกร้า 🧺</p>
+    <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วดูตะกร้า 🧺</p>
     <div id="menuButtons" style="margin:10px 0"></div>
-    <p class="muted" style="font-size:12px;margin-top:8px">💵 You'll get a queue number — pay at the counter.</p>
+    <p class="muted" style="font-size:12px;margin-top:8px">💵 คุณจะได้รับหมายเลขคิว — ชำระเงินที่เคาน์เตอร์</p>
   </div>
 
   <!-- STEP: my ticket -->
   <div id="ticketCard" class="card" style="display:none;text-align:center">
     <h2 id="tStore" class="muted">—</h2>
-    <p class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">Your number</p>
+    <p class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
     <div id="tStatusWrap" style="margin:18px 0">
-      <div id="tAheadWrap"><span class="muted">Groups ahead</span>
+      <div id="tAheadWrap"><span class="muted">คิวรอก่อนหน้า</span>
         <div style="font-size:40px;font-weight:800" id="tAhead">–</div>
         <div class="pill soon" id="tEta" style="display:inline-block;margin-top:8px"></div></div>
       <div id="tCalled" style="display:none">
-        <span class="pill soon" id="tCalledPill">⏰ Almost your turn</span>
+        <span class="pill soon" id="tCalledPill">⏰ ใกล้ถึงคิวคุณแล้ว</span>
       </div>
     </div>
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
-      <div class="row between" style="align-items:center"><b>Your order</b><span id="tPayPill" class="pill"></span></div>
+      <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
       <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
-      <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>Total</span><span id="tOrderTotal">฿0</span></div>
+      <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
       <div id="ppPay" style="display:none;margin-top:12px;text-align:center">
         <button class="ok" id="ppBtn" style="width:100%" onclick="togglePromptPay()">
-          <svg class="ic" viewBox="0 0 24 24" style="margin-right:6px"><rect width="5" height="5" x="3" y="3"/><rect width="5" height="5" x="16" y="3"/><rect width="5" height="5" x="3" y="16"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>Pay by PromptPay</button>
+          <svg class="ic" viewBox="0 0 24 24" style="margin-right:6px"><rect width="5" height="5" x="3" y="3"/><rect width="5" height="5" x="16" y="3"/><rect width="5" height="5" x="3" y="16"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>ชำระด้วยพร้อมเพย์</button>
         <div id="ppQrWrap" style="display:none;margin-top:10px">
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line)">
-          <div class="muted" style="font-size:12px;margin-top:4px">สแกนด้วยแอปธนาคาร · Scan with any Thai bank app, then show staff.</div>
+          <div class="muted" style="font-size:12px;margin-top:4px">สแกนด้วยแอปธนาคาร แล้วแสดงให้พนักงานดู</div>
         </div>
       </div>
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
     <div id="tRate" style="display:none;margin-top:14px">
-      <p class="muted" style="font-size:14px">How was your visit?</p>
+      <p class="muted" style="font-size:14px">การบริการเป็นอย่างไรบ้าง?</p>
       <div id="tStars" style="font-size:34px;letter-spacing:6px"></div>
-      <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">Thanks for your feedback! 🙏</p>
+      <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">ขอบคุณสำหรับความคิดเห็นค่ะ 🙏</p>
     </div>
-    <button id="cancelBtn" class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">Cancel my queue</button>
+    <button id="cancelBtn" class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">ยกเลิกคิวของฉัน</button>
   </div>
 
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
@@ -98,12 +98,12 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <h1 id="topPopTitle">Toppings</h1>
-    <p class="muted">เลือกท็อปปิ้ง +฿10 หรือข้าม / Add toppings (+฿10) or skip</p>
+    <h1 id="topPopTitle">ท็อปปิ้ง</h1>
+    <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
-      <button class="ghost" style="flex:1" onclick="skipToppings()">ไม่เอา / Skip</button>
-      <button class="ok" style="flex:1" onclick="confirmDrink()">ถัดไป / Next</button>
+      <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
+      <button class="ok" style="flex:1" onclick="confirmDrink()">ถัดไป</button>
     </div>
   </div>
 </div>
@@ -111,8 +111,8 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <h1 id="sweetTitle">ความหวาน / Sweetness</h1>
-    <p class="muted">เลือกระดับความหวาน / Pick a sweetness level</p>
+    <h1 id="sweetTitle">ความหวาน</h1>
+    <p class="muted">เลือกระดับความหวาน</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
 </div>
@@ -120,12 +120,12 @@
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">ตะกร้า / Review</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="basketList" class="queue-list" style="margin:12px 0"></div>
     <div class="row between" style="align-items:center;margin-bottom:12px"><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     <div class="row" style="gap:8px">
-      <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก / Cancel</button>
-      <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยันสั่ง / Confirm</button>
+      <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก</button>
+      <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยันสั่ง</button>
     </div>
   </div>
 </div>
@@ -151,7 +151,7 @@ async function initLiff(){
       inLine = true;
       const p = await liff.getProfile();
       lineUserId = p.userId; displayName = p.displayName;
-      $('liffNote').textContent = `Signed in to LINE as ${p.displayName}`;
+      $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
     }catch(e){ $('liffNote').textContent = 'LIFF init failed — test mode (no LINE id).'; }
   } else {
     lineUserId = localStorage.getItem('demoUid') || ('demo-'+Math.random().toString(36).slice(2,9));
@@ -166,23 +166,23 @@ async function isFriend(){
   catch(e){ return true; }                               // fail open if channel not linked
 }
 window.addFriend = ()=>{
-  const url = cfg.addFriendUrl; if(!url){ toast('Add-friend link not configured'); return; }
+  const url = cfg.addFriendUrl; if(!url){ toast('ยังไม่ได้ตั้งค่าลิงก์เพิ่มเพื่อน'); return; }
   if(inLine && liff.openWindow){ liff.openWindow({ url, external: true }); } else { location.href = url; }
 };
 window.recheckFriend = async ()=>{
   if(await isFriend()){ show('addCard',false); await proceed(); }
-  else { toast("You're not a friend yet — tap “Add LINE friend”"); }
+  else { toast("ยังไม่ได้เพิ่มเพื่อน — แตะ “เพิ่มเพื่อน LINE”"); }
 };
 // Customer decided not to order now — close the LINE in-app browser (or show a goodbye in test mode).
 window.closeApp = ()=>{
   if(inLine && liff.closeWindow){ try{ liff.closeWindow(); return; }catch(e){} }
   document.querySelector('.wrap').innerHTML =
-    '<div class="card" style="text-align:center"><h1>See you next time! 👋</h1>'+
-    '<p class="muted">You can close this tab whenever you like.</p></div>';
+    '<div class="card" style="text-align:center"><h1>แล้วพบกันใหม่ค่ะ 👋</h1>'+
+    '<p class="muted">ปิดหน้านี้ได้เลยค่ะ</p></div>';
 };
 
 async function loadZone(){
-  if(!zoneId) return err('No zone in the QR code.');
+  if(!zoneId) return err('ไม่พบโซนใน QR code');
   const z = await api('/api/zones/'+zoneId);
   const snap = await api('/api/zones/'+zoneId+'/snapshot');
   const stores = await api('/api/stores');
@@ -191,10 +191,10 @@ async function loadZone(){
   $('zoneName').textContent = z.name;
   const ahead = snap.waitingCount, mpg = cfg.minutesPerGroup || 4;
   $('aheadNow').textContent = ahead;
-  $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' min wait') : "No wait — you're next!";
+  $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
   const open = z.is_open===1;
   $('zoneState').className = 'pill '+(open?'open':'closed');
-  $('zoneState').textContent = open?'Open':'Closed';
+  $('zoneState').textContent = open?'เปิด':'ปิด';
   show('getBtn', open);
   show('orderNowBtn', open && cfg.selfOrder);
   show('queueStatus', open);
@@ -211,7 +211,7 @@ window.getTicket = async ()=>{
     localStorage.setItem('ticket_'+zoneId, ticketId);
     show('getCard',false); show('ticketCard',true);
     startPolling();
-  }catch(e){ $('getBtn').disabled=false; toast('Could not get a number: '+e.message); }
+  }catch(e){ $('getBtn').disabled=false; toast('รับคิวไม่สำเร็จ: '+e.message); }
 };
 
 // ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
@@ -241,8 +241,8 @@ window.showOrderUI=async()=>{ await loadMenu(); cart=[];
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">${m.soldout?'<span class="pill closed">SOLD OUT</span>':'฿'+m.price}</div></button>`;
-  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">No drinks available right now.</p>';
+    <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
+  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
@@ -253,8 +253,8 @@ function renderTopPop(){
     const on=!!pendingTops[m.id];
     return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>
       <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
-      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'SOLD OUT':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
-  }).join('')+`</div>` : '<p class="muted">No toppings available.</p>';
+      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
+  }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
 // Step 3: sweetness (default 100%).
@@ -264,10 +264,10 @@ window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
   $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
-    <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ / Default':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
+    <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
 window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops), sweet:s });
-  $('sweetPop').style.display='none'; renderBasketCount(); toast('เพิ่มแล้ว / Added'); };
+  $('sweetPop').style.display='none'; renderBasketCount(); toast('เพิ่มลงตะกร้าแล้ว'); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
 function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; }
@@ -281,14 +281,14 @@ function renderBasket(){
       <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
       ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง / Basket is empty.</p>';
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
 }
 window.cancelBasket=()=>{ if(!cart.length){ closeOrderUI(); return; }
-  if(!confirm('ยกเลิกออเดอร์? / Cancel this order?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
+  if(!confirm('ยกเลิกออเดอร์ทั้งหมด?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 window.confirmBasket=async()=>{
-  if(!cart.length){ toast('Please add a drink first'); return; }
+  if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
   $('basketConfirm').disabled=true;
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
@@ -299,11 +299,11 @@ window.confirmBasket=async()=>{
     cart=[]; ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){
-      toast('You already have queue '+e.data.code);
+      toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
       ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); return;
     }
-    $('basketConfirm').disabled=false; toast('Could not place order: '+e.message);
+    $('basketConfirm').disabled=false; toast('สั่งไม่สำเร็จ: '+e.message);
   }
 };
 
@@ -317,42 +317,42 @@ function renderOrderBlock(v){
   ).join('');
   $('tOrderTotal').textContent = '฿'+v.order.total;
   const pill=$('tPayPill');
-  if(v.order.paid){ pill.className='pill open'; pill.textContent='PAID ✓'; show('ppPay',false); }
+  if(v.order.paid){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('ppPay',false); }
   else {
-    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 Pay ฿'+v.order.total+' at counter';
+    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+v.order.total+' ที่เคาน์เตอร์';
     if(cfg.promptPay){ show('ppPay',true); $('ppQrImg').src='/api/promptpay-qr?amount='+v.order.total; }
     else show('ppPay',false);
   }
 }
 window.togglePromptPay=()=>{ const w=$('ppQrWrap'); const on=w.style.display==='none'; w.style.display=on?'':'none';
-  $('ppBtn').textContent=''; $('ppBtn').append(on?'Hide PromptPay QR':'Pay by PromptPay'); };
+  $('ppBtn').textContent=''; $('ppBtn').append(on?'ซ่อน QR พร้อมเพย์':'ชำระด้วยพร้อมเพย์'); };
 
 function render(v){
   $('tCode').textContent = v.code;
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
-  $('tLastCalled').textContent = v.last_called ? ('Now serving: '+v.last_called) : '';
+  $('tLastCalled').textContent = v.last_called ? ('กำลังเรียกคิว: '+v.last_called) : '';
   $('cancelBtn').style.display=''; $('tRate').style.display='none';
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
     $('tAhead').textContent = v.ahead;
     const mpg = cfg.minutesPerGroup || 4;
-    $('tEta').textContent = v.ahead>0 ? `Est. wait ~${v.ahead*mpg} min` : "You're next!";
+    $('tEta').textContent = v.ahead>0 ? `รอประมาณ ~${v.ahead*mpg} นาที` : "คุณเป็นคิวถัดไป!";
     $('tNotifyNote').textContent = cfg.lineEnabled
-      ? `We'll message you on LINE when ${cfg.threshold} groups are left`
-      : `(test mode) notify at ${cfg.threshold} groups left — see server log`;
+      ? `เราจะแจ้งทาง LINE เมื่อเหลืออีก ${cfg.threshold} คิว`
+      : `(โหมดทดสอบ) แจ้งเตือนเมื่อเหลือ ${cfg.threshold} คิว — ดูที่ server log`;
   } else if(v.status==='called'){
     show('tAheadWrap',false); show('tCalled',true);
-    $('tCalledPill').textContent="🔔 It's your turn!";
-    $('tNotifyNote').textContent='Please come to the counter.';
+    $('tCalledPill').textContent="🔔 ถึงคิวของคุณแล้ว!";
+    $('tNotifyNote').textContent='กรุณามาที่เคาน์เตอร์ค่ะ';
   } else if(v.status==='served'){
     show('tAheadWrap',false); show('tCalled',false);
-    $('tNotifyNote').textContent='Enjoy! 🥰';
+    $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
     $('cancelBtn').style.display='none'; $('tRate').style.display='';
     if(v.rating){ renderStars(v.rating); $('tRateThanks').style.display=''; } else renderStars(0);
   } else {
     show('tAheadWrap',false); show('tCalled',false);
-    $('tNotifyNote').textContent='Status: '+v.status;
+    $('tNotifyNote').textContent='สถานะ: '+v.status;
     $('cancelBtn').style.display='none';
   }
 }
@@ -364,7 +364,7 @@ window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
     $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
-  }catch(e){ toast('Could not save rating'); }
+  }catch(e){ toast('บันทึกคะแนนไม่สำเร็จ'); }
 };
 
 async function tick(){
@@ -375,7 +375,7 @@ async function tick(){
 function startPolling(){ tick(); poll=setInterval(tick,3000); }
 
 window.cancelTicket = async ()=>{
-  if(!confirm('Cancel your queue?')) return;
+  if(!confirm('ยกเลิกคิว?')) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}); clearInterval(poll);
     localStorage.removeItem('ticket_'+zoneId);
     show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; loadZone();

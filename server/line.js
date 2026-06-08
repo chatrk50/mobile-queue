@@ -40,7 +40,7 @@ function buildQueueMessage(text, link, label) {
   const lines = text.split('\n').filter((l) => l.trim() !== '');
   return {
     type: 'flex',
-    altText: lines[0] || 'Queue update',
+    altText: lines[0] || 'อัปเดตคิว',
     contents: {
       type: 'bubble',
       body: {
@@ -65,7 +65,7 @@ function buildQueueMessage(text, link, label) {
 
 /** Push a queue update with an optional "check queue" button (URL hidden behind it).
  *  Falls back to a plain-text message (with the link) if the card can't be sent. */
-export async function pushQueue(userId, text, link = null, label = 'Check my queue') {
+export async function pushQueue(userId, text, link = null, label = 'ดูคิวของฉัน') {
   if (!userId) return false;
   if (!LINE_ENABLED) {
     console.log(`\n[LINE-STUB] -> ${userId}\n${text}${link ? `\n[button: "${label}" -> ${link}]` : ''}\n`);

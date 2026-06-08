@@ -33,7 +33,7 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   for (const ev of events) {
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
-        'Thanks for adding us! Scan the QR at the store to get your queue number.');
+        'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
     }
   }
   res.sendStatus(200);

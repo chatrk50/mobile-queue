@@ -63,11 +63,11 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
 
   // Confirmation push (fire and forget)
   pushQueue(lineUserId,
-    `🎫 Queue confirmed\n` +
-    `Your number: ${ticket.code}\n` +
-    `Groups ahead: ${ahead}\n` +
-    `We'll notify you here on LINE when you're up soon.`,
-    queueLink(zoneId));
+    `🎫 รับคิวเรียบร้อย\n` +
+    `หมายเลขคิวของคุณ: ${ticket.code}\n` +
+    `คิวรอก่อนหน้า: ${ahead}\n` +
+    `เราจะแจ้งเตือนทาง LINE เมื่อใกล้ถึงคิวของคุณค่ะ`,
+    queueLink(zoneId), 'ดูคิวของฉัน');
 
   return { ticket, ahead };
 }
@@ -92,10 +92,10 @@ export function callNext(zoneId, threshold) {
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
   pushQueue(next.line_user_id,
-    `🔔 It's your turn!\n` +
-    `Number: ${next.code}\n` +
-    `Please come to the counter.`,
-    queueLink(zoneId));
+    `🔔 ถึงคิวของคุณแล้ว!\n` +
+    `หมายเลข: ${next.code}\n` +
+    `กรุณามาที่เคาน์เตอร์ค่ะ`,
+    queueLink(zoneId), 'ดูคิวของฉัน');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -132,11 +132,11 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
       pushQueue(t.line_user_id,
-        `⏰ You're up soon!\n` +
-        `Number: ${t.code}\n` +
-        `Groups ahead: ${ahead}\n` +
-        `Please head back to the store.`,
-        queueLink(zoneId));
+        `⏰ ใกล้ถึงคิวของคุณแล้ว!\n` +
+        `หมายเลข: ${t.code}\n` +
+        `คิวรอก่อนหน้า: ${ahead}\n` +
+        `กรุณากลับมาที่ร้านค่ะ`,
+        queueLink(zoneId), 'ดูคิวของฉัน');
     }
   });
 }
@@ -388,12 +388,12 @@ export function createOrder(zoneId, items, opts = {}) {
   if (source === 'customer' && lineUserId) {
     const ahead = aheadCount(r.ticket);
     pushQueue(lineUserId,
-      `🎫 Order received\n` +
-      `Your number: ${r.ticket.code}\n` +
-      `Groups ahead: ${ahead}\n` +
-      `💵 Please pay ฿${r.total} at the counter.\n` +
-      `We'll notify you here when it's ready.`,
-      queueLink(zoneId));
+      `🎫 รับออเดอร์แล้ว\n` +
+      `หมายเลขคิวของคุณ: ${r.ticket.code}\n` +
+      `คิวรอก่อนหน้า: ${ahead}\n` +
+      `💵 กรุณาชำระเงิน ฿${r.total} ที่เคาน์เตอร์\n` +
+      `เราจะแจ้งเตือนเมื่อเครื่องดื่มพร้อมค่ะ`,
+      queueLink(zoneId), 'ดูคิวของฉัน');
   }
   return r;
 }
@@ -416,8 +416,8 @@ export function cancelOrderTicket(ticketId, threshold) {
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     pushQueue(t.line_user_id,
-      `❌ Order ${t.code} was cancelled by the store.\n` +
-      `If this is a mistake, please ask our staff. Thank you!`, null);
+      `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n` +
+      `หากมีข้อสงสัย กรุณาสอบถามพนักงาน ขอบคุณค่ะ`, null);
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
