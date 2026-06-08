@@ -171,7 +171,7 @@ app.delete('/api/staff/:id', (req, res) => {
 
 // ---------- Menu (public read; management is PIN-protected below) ----------
 // ?channelId=N resolves channel pricing (e.g. delivery markup) for each item.
-app.get('/api/menu', (req, res) => res.json(Q.listMenu(req.query.channelId ? Number(req.query.channelId) : null)));
+app.get('/api/menu', (req, res) => res.json(Q.listMenu(req.query.channelId ? Number(req.query.channelId) : null, req.query.branchId ? Number(req.query.branchId) : null)));
 // Active sales channels (for the cashier order-channel picker).
 app.get('/api/channels', (req, res) => res.json(Q.listChannels().filter((c) => c.active !== 0)));
 // ---------- Pricing management (owner): tier markup, channel commission, item prices ----------
@@ -430,7 +430,7 @@ app.post('/api/reset', (req, res) => {
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  res.json(Q.dailyReport());
+  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
@@ -475,11 +475,26 @@ app.post('/api/archive-now', (req, res) => {
 // Financial settings used by the P&L (PIN): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  res.json(Q.getFinanceSettings());
+  res.json(Q.getFinanceSettings(req.query.branchId ? Number(req.query.branchId) : null));
 });
 app.post('/api/finance', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  res.json(Q.setFinanceSettings(req.body || {}));
+  res.json(Q.setFinanceSettings(req.body || {}, req.body?.branchId ? Number(req.body.branchId) : null));
+});
+// ---------- Branch management (owner) ----------
+app.get('/api/branches', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranches()); });
+app.post('/api/branches', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.createBranch(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/branches/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.renameBranch(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/branches/:id/menu', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranchMenu(Number(req.params.id))); });
+app.post('/api/branches/:id/menu', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setBranchMenuOverride(Number(req.params.id), Number(req.body?.itemId), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Export the current report as an Excel workbook (PIN). Opened directly by the browser.
 app.get('/api/report.xlsx', async (req, res) => {

@@ -189,10 +189,13 @@ const FIN_KEYS = {
   marketing: ['FIN_MARKETING', 0],
   targetRevenue: ['FIN_TARGET_REVENUE', 0],       // monthly target; 0 = no target/variance
 };
-export function getFinanceSettings() {
+// Per-branch costs are namespaced fin_<branchId>_<key>; a branch value falls back to
+// the global fin_<key>, then env, then the default. branchId null = global settings.
+export function getFinanceSettings(branchId = null) {
   const out = {};
   for (const [key, [envKey, def]] of Object.entries(FIN_KEYS)) {
-    const stored = getSetting('fin_' + key, null);
+    const branchVal = branchId ? getSetting('fin_' + branchId + '_' + key, null) : null;
+    const stored = branchVal != null ? branchVal : getSetting('fin_' + key, null);
     const envVal = process.env[envKey];
     const val = stored != null ? stored : (envVal != null ? envVal : def);
     out[key] = Number(val);
@@ -200,34 +203,36 @@ export function getFinanceSettings() {
   }
   return out;
 }
-export function setFinanceSettings(patch = {}) {
+export function setFinanceSettings(patch = {}, branchId = null) {
+  const prefix = branchId ? 'fin_' + branchId + '_' : 'fin_';
   for (const key of Object.keys(FIN_KEYS)) {
     if (patch[key] != null && patch[key] !== '') {
       const n = Math.max(0, Number(patch[key]));
-      if (Number.isFinite(n)) setSetting('fin_' + key, n);
+      if (Number.isFinite(n)) setSetting(prefix + key, n);
     }
   }
-  return getFinanceSettings();
+  return getFinanceSettings(branchId);
 }
 
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
-export function dailyReport() {
+export function dailyReport(branchId = null) {
+  const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards
   const perZone = db.prepare(
     `SELECT z.id, z.name, z.prefix, z.last_number AS issued,
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served')  AS served,
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show') AS no_shows
-     FROM zones z ORDER BY z.id`
-  ).all();
+     FROM zones z WHERE (? IS NULL OR z.store_id=?) ORDER BY z.id`
+  ).all(...B);
   const cupsSold = perZone.reduce((s, z) => s + z.served, 0);
   const issued = perZone.reduce((s, z) => s + z.issued, 0);
   const noShows = perZone.reduce((s, z) => s + z.no_shows, 0);
   const wait = db.prepare(
     `SELECT AVG((julianday(called_at)-julianday(created_at))*86400) AS s
-     FROM tickets WHERE called_at IS NOT NULL`
-  ).get();
+     FROM tickets WHERE called_at IS NOT NULL AND (? IS NULL OR store_id=?)`
+  ).get(...B);
   const rating = db.prepare(
-    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL`
-  ).get();
+    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL AND (? IS NULL OR store_id=?)`
+  ).get(...B);
   // Item sales tagged drink/topping via the menu (so we can split the P&L and count cups).
   const itemSales = db.prepare(
     `SELECT oi.name,
@@ -237,9 +242,9 @@ export function dailyReport() {
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN menu_items mi ON mi.name = oi.name
-     WHERE o.payment_status != 'void'            -- exclude refunded/voided orders from sales
+     WHERE o.payment_status != 'void' AND (? IS NULL OR o.branch_id=?)   -- exclude void; optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
-  ).all();
+  ).all(...B);
   const grossSales = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
   itemSales.forEach((i) => { i.pct = grossSales ? i.revenue / grossSales : 0; });
   const drinkSales = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.revenue, 0);
@@ -247,24 +252,24 @@ export function dailyReport() {
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
   // Bill discounts on non-void orders reduce NET sales. revenue = gross − discounts
   // (defaults to gross since discounts are 0 until used — no behavior change).
-  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status != 'void'`).get().d || 0;
+  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status != 'void' AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
   const revenue = Math.round((grossSales - discounts) * 100) / 100;
 
   // Cancelled / refunded (voided) orders — counted separately, NOT in sales above.
   const vAgg = db.prepare(
     `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount
-     FROM orders o WHERE o.payment_status='void'`
-  ).get();
+     FROM orders o WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
+  ).get(...B);
   const vCups = db.prepare(
     `SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0) AS cups
      FROM order_items oi JOIN orders o ON o.id=oi.order_id
      LEFT JOIN menu_items mi ON mi.name=oi.name
-     WHERE o.payment_status='void'`
-  ).get();
+     WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
+  ).get(...B);
   const voided = { orders: vAgg.orders, amount: vAgg.amount, cups: vCups.cups };
 
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
-  const f = getFinanceSettings();
+  const f = getFinanceSettings(branchId);
   const ingredient = f.ingredientPct * revenue;
   const packaging = f.packagingPerCup * cups;
   const cogs = ingredient + packaging;
@@ -504,12 +509,63 @@ export function setStoreOpen(storeId, isOpen) {
 // ---------- Menu (Quick-Service) ----------
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
-export function listMenu(channelId = null) {
+export function listMenu(channelId = null, branchId = null) {
   const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
-  // Resolve channel pricing (e.g. delivery markup) when a channel is given. base_price
-  // keeps the storefront price for display ("฿X → ฿Y") if the UI wants it.
-  if (channelId) rows.forEach((r) => { r.base_price = r.price; r.price = priceFor(r.id, { channelId }); });
+  // Per-branch overrides: drop items this branch disabled; apply the branch's soldout.
+  if (branchId) {
+    const ov = new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]));
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const o = ov.get(rows[i].id);
+      if (o) { if (!o.enabled) { rows.splice(i, 1); continue; } if (o.soldout) rows[i].soldout = 1; }
+    }
+  }
+  // Resolve channel/branch pricing (delivery markup, branch price override). base_price
+  // keeps the storefront catalog price for display ("฿X → ฿Y").
+  if (channelId || branchId) rows.forEach((r) => { r.base_price = r.price; r.price = priceFor(r.id, { channelId, branchId }); });
   return rows;
+}
+
+// ---------- Branches (Phase 2): a tenant's shops ----------
+export function listBranches(tenantId = null) {
+  const rows = db.prepare(`SELECT id, name, code, is_open FROM stores WHERE (? IS NULL OR tenant_id=?) ORDER BY id`).all(tenantId, tenantId);
+  return rows.map((b) => ({ ...b, zones: db.prepare('SELECT COUNT(*) c FROM zones WHERE store_id=?').get(b.id).c }));
+}
+export function createBranch({ name, code = null, tenantId = 1 } = {}) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (!n) throw new Error('name_required');
+  const info = db.prepare('INSERT INTO stores (name, code, tenant_id) VALUES (?,?,?)').run(n, code ? code.toString().slice(0, 20) : null, tenantId);
+  const id = Number(info.lastInsertRowid);
+  // A branch needs at least one zone to issue queue numbers / take orders.
+  db.prepare('INSERT INTO zones (store_id, name, prefix) VALUES (?,?,?)').run(id, 'Zone A', 'A');
+  return { id, name: n, code, zones: 1 };
+}
+export function renameBranch(id, { name, code }) {
+  const cur = db.prepare('SELECT * FROM stores WHERE id=?').get(id);
+  if (!cur) throw new Error('branch_not_found');
+  const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  const c = code !== undefined ? (code ? code.toString().slice(0, 20) : null) : cur.code;
+  db.prepare('UPDATE stores SET name=?, code=? WHERE id=?').run(n, c, id);
+  return { id: Number(id), name: n, code: c };
+}
+/** Per-branch menu overrides: list catalog items with this branch's enable/price/soldout. */
+export function listBranchMenu(branchId) {
+  return db.prepare(
+    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category,
+            COALESCE(bm.enabled, 1) AS enabled, bm.price_override,
+            COALESCE(bm.soldout, mi.soldout) AS soldout
+       FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
+      WHERE mi.active = 1 ORDER BY mi.sort, mi.id`
+  ).all(branchId);
+}
+export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride, soldout } = {}) {
+  const cur = db.prepare('SELECT * FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId) || { enabled: 1, price_override: null, soldout: 0, sort: null };
+  const en = enabled != null ? (enabled ? 1 : 0) : cur.enabled;
+  const po = priceOverride !== undefined ? (priceOverride === null || priceOverride === '' ? null : Math.max(0, Number(priceOverride) || 0)) : cur.price_override;
+  const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
+  db.prepare(`INSERT INTO branch_menu (branch_id, item_id, enabled, price_override, soldout) VALUES (?,?,?,?,?)
+              ON CONFLICT(branch_id, item_id) DO UPDATE SET enabled=excluded.enabled, price_override=excluded.price_override, soldout=excluded.soldout`)
+    .run(branchId, itemId, en, po, so);
+  return { ok: true, branchId: Number(branchId), itemId: Number(itemId), enabled: en, priceOverride: po, soldout: so };
 }
 
 // ---------- Staff & roles (Phase 1) ----------
