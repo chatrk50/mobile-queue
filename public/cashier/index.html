@@ -132,7 +132,7 @@
     </div>
     <div class="row" style="gap:8px;align-items:center;margin-top:8px">
       <span class="muted" style="font-size:13px">ช่องทาง:</span>
-      <select id="orderChannelSel" onchange="orderChannel=Number(this.value)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px"></select>
+      <select id="orderChannelSel" onchange="onChannelChange(this.value)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px"></select>
     </div>
     <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วตรวจที่ตะกร้า 🧺</p>
     <div id="menuButtons" style="margin:12px 0"></div>
@@ -142,6 +142,7 @@
   <div id="menuCard" class="card" style="display:none;max-width:480px;margin:14px auto">
     <div class="row between"><h1>เมนู</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
+    <div id="priceMgr" style="margin:4px 0 12px"></div>
     <div id="menuMgr" style="margin:10px 0"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
       <input id="newName" placeholder="ชื่อเมนู (ภาษาไทย)">
@@ -499,9 +500,23 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 
 // ---------- Menu management ----------
 let MENU=[];
-async function loadMenu(){ try{ MENU=await (await fetch('/api/menu')).json(); }catch(e){ MENU=[]; } }
-window.showMenu=async()=>{ await loadMenu(); renderMenuMgr();
+async function loadMenu(channelId){ try{ MENU=await (await fetch('/api/menu'+(channelId?('?channelId='+channelId):''))).json(); }catch(e){ MENU=[]; } }
+window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadPriceMgr();
   $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; };
+// Owner-only: set delivery markup % per tier + platform commission % per channel.
+async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
+  if(ME && ME.role!=='owner'){ box.innerHTML=''; return; }
+  try{
+    const tiers=await api('/api/price-tiers'); const chans=await api('/api/channels/all');
+    const tierRows=tiers.filter(t=>!t.is_default).map(t=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(t.name)} (บวกจากราคาปกติ)</span><input id="tier_${t.id}" type="number" inputmode="decimal" value="${t.markup_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">%</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveTier(${t.id})">บันทึก</button></div>`).join('');
+    const chanRows=chans.map(c=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(c.name)} ${c.active?'':'<span class="muted">(ปิด)</span>'}</span><input id="chan_${c.id}" type="number" inputmode="decimal" value="${c.commission_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">% คอม</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveChan(${c.id})">บันทึก</button></div>`).join('');
+    box.innerHTML=`<details style="border:1px solid var(--line);border-radius:10px;padding:10px"><summary style="cursor:pointer;font-weight:700">💰 ราคาเดลิเวอรี่ & ค่าคอมช่องทาง</summary>
+      <div style="margin-top:8px"><div class="muted" style="font-size:12px">ราคาเดลิเวอรี่ = ราคาปกติ + % ที่ตั้ง (เช่น 150% = 2.5 เท่า)</div>${tierRows}
+      <div class="muted" style="font-size:12px;margin-top:8px">ค่าคอมแพลตฟอร์ม (ใช้คำนวณกำไรหลังหักคอม)</div>${chanRows}</div></details>`;
+  }catch(e){ box.innerHTML=''; }
+}
+window.saveTier=async(id)=>{ const mk=Number($('tier_'+id).value); try{ await api('/api/price-tiers/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({markup_pct:mk})}); toast('บันทึกราคาเดลิเวอรี่แล้ว'); }catch(e){ toast(err(e)); } };
+window.saveChan=async(id)=>{ const c=Number($('chan_'+id).value); try{ await api('/api/channels/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commission_pct:c})}); toast('บันทึกค่าคอมแล้ว'); }catch(e){ toast(err(e)); } };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
   $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
@@ -580,14 +595,20 @@ function itemImg(m){
   if(m.image) return `<img src="${esc(m.image)}" alt="" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   return fb;
 }
-window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadMenu(); await loadChannels(); renderChannelSel();
-  const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
+function renderOrderMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
+}
+// Re-price the menu when the cashier switches channel (delivery applies its markup).
+window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderChannel); renderOrderMenu();
+  if(cart.length){ toast('เปลี่ยนช่องทาง — ตรวจราคาในตะกร้าอีกครั้ง'); } };
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadChannels(); renderChannelSel();
+  await loadMenu(orderChannel); renderOrderMenu();
+  const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 

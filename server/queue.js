@@ -466,8 +466,12 @@ export function setStoreOpen(storeId, isOpen) {
 // ---------- Menu (Quick-Service) ----------
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
-export function listMenu() {
-  return db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
+export function listMenu(channelId = null) {
+  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
+  // Resolve channel pricing (e.g. delivery markup) when a channel is given. base_price
+  // keeps the storefront price for display ("฿X → ฿Y") if the UI wants it.
+  if (channelId) rows.forEach((r) => { r.base_price = r.price; r.price = priceFor(r.id, { channelId }); });
+  return rows;
 }
 
 // ---------- Staff & roles (Phase 1) ----------
@@ -540,6 +544,33 @@ export function listPriceTiers() {
 }
 export function listChannels() {
   return db.prepare('SELECT * FROM channels ORDER BY sort, id').all();
+}
+/** Owner edits a price tier's default markup % over base (and optionally its name). */
+export function updatePriceTier(id, { markup_pct, name }) {
+  const cur = db.prepare('SELECT * FROM price_tiers WHERE id=?').get(id);
+  if (!cur) throw new Error('tier_not_found');
+  const mk = markup_pct != null ? Math.max(0, Math.min(1000, Number(markup_pct) || 0)) : cur.markup_pct;
+  const nm = name != null ? (name.toString().trim().slice(0, 40) || cur.name) : cur.name;
+  db.prepare('UPDATE price_tiers SET markup_pct=?, name=? WHERE id=?').run(mk, nm, id);
+  return db.prepare('SELECT * FROM price_tiers WHERE id=?').get(id);
+}
+/** Owner edits a channel's platform commission % (and active/name). */
+export function updateChannel(id, { commission_pct, active, name }) {
+  const cur = db.prepare('SELECT * FROM channels WHERE id=?').get(id);
+  if (!cur) throw new Error('channel_not_found');
+  const c = commission_pct != null ? Math.max(0, Math.min(100, Number(commission_pct) || 0)) : cur.commission_pct;
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  const nm = name != null ? (name.toString().trim().slice(0, 40) || cur.name) : cur.name;
+  db.prepare('UPDATE channels SET commission_pct=?, active=?, name=? WHERE id=?').run(c, a, nm, id);
+  return db.prepare('SELECT * FROM channels WHERE id=?').get(id);
+}
+/** Owner sets an explicit per-item price for a tier (0/absent branch = all branches). */
+export function setItemPrice(itemId, tierId, price, branchId = 0) {
+  const p = Math.max(0, Number(price) || 0);
+  db.prepare(`INSERT INTO item_prices (item_id, tier_id, branch_id, price) VALUES (?,?,?,?)
+              ON CONFLICT(item_id, tier_id, branch_id) DO UPDATE SET price=excluded.price`)
+    .run(Number(itemId), Number(tierId), Number(branchId) || 0, p);
+  return { ok: true };
 }
 const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default=1 LIMIT 1').get();
 
