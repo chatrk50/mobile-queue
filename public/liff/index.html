@@ -16,16 +16,21 @@
   </div>
 
   <!-- STEP: get ticket -->
-  <div id="getCard" class="card" style="display:none">
+  <div id="getCard" class="card" style="display:none;text-align:center">
     <h2 id="storeName">—</h2>
-    <h1 id="zoneName">—</h1>
-    <div class="row between">
-      <span id="zoneState" class="pill open">Open</span>
-      <span class="muted">Waiting <b id="waitingCount">–</b></span>
+    <h1 id="zoneName" style="margin-bottom:4px">—</h1>
+    <span id="zoneState" class="pill open">Open</span>
+    <!-- queue load shown up front so the customer can decide before ordering -->
+    <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
+      <div class="muted" style="font-size:13px">Groups ahead of you now</div>
+      <div id="aheadNow" style="font-size:48px;font-weight:900;color:var(--navy);line-height:1">–</div>
+      <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– min</div>
+      <div class="muted" style="font-size:11px;margin-top:8px">Order now and pay at the counter — or come back later.</div>
     </div>
-    <button id="orderNowBtn" style="width:100%;margin-top:18px;display:none" onclick="showOrderUI()">
+    <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>Order now</button>
-    <button id="getBtn" style="width:100%;margin-top:10px" onclick="getTicket()">Just get a queue number</button>
+    <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">Just get a queue number</button>
+    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">Not now — close</button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 Closed</b><br>
       <span class="muted">This zone is not accepting queue right now. Please try again later.</span>
@@ -67,6 +72,14 @@
       <div class="row between" style="align-items:center"><b>Your order</b><span id="tPayPill" class="pill"></span></div>
       <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
       <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>Total</span><span id="tOrderTotal">฿0</span></div>
+      <div id="ppPay" style="display:none;margin-top:12px;text-align:center">
+        <button class="ok" id="ppBtn" style="width:100%" onclick="togglePromptPay()">
+          <svg class="ic" viewBox="0 0 24 24" style="margin-right:6px"><rect width="5" height="5" x="3" y="3"/><rect width="5" height="5" x="16" y="3"/><rect width="5" height="5" x="3" y="16"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg>Pay by PromptPay</button>
+        <div id="ppQrWrap" style="display:none;margin-top:10px">
+          <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:12px;margin-top:4px">สแกนด้วยแอปธนาคาร · Scan with any Thai bank app, then show staff.</div>
+        </div>
+      </div>
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
@@ -160,6 +173,13 @@ window.recheckFriend = async ()=>{
   if(await isFriend()){ show('addCard',false); await proceed(); }
   else { toast("You're not a friend yet — tap “Add LINE friend”"); }
 };
+// Customer decided not to order now — close the LINE in-app browser (or show a goodbye in test mode).
+window.closeApp = ()=>{
+  if(inLine && liff.closeWindow){ try{ liff.closeWindow(); return; }catch(e){} }
+  document.querySelector('.wrap').innerHTML =
+    '<div class="card" style="text-align:center"><h1>See you next time! 👋</h1>'+
+    '<p class="muted">You can close this tab whenever you like.</p></div>';
+};
 
 async function loadZone(){
   if(!zoneId) return err('No zone in the QR code.');
@@ -169,12 +189,15 @@ async function loadZone(){
   const store = stores.find(s=>s.id===z.store_id);
   $('storeName').textContent = store ? store.name : '';
   $('zoneName').textContent = z.name;
-  $('waitingCount').textContent = snap.waitingCount;
+  const ahead = snap.waitingCount, mpg = cfg.minutesPerGroup || 4;
+  $('aheadNow').textContent = ahead;
+  $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' min wait') : "No wait — you're next!";
   const open = z.is_open===1;
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'Open':'Closed';
   show('getBtn', open);
   show('orderNowBtn', open && cfg.selfOrder);
+  show('queueStatus', open);
   show('closedMsg', !open);
   show('getCard',true);
 }
@@ -294,9 +317,15 @@ function renderOrderBlock(v){
   ).join('');
   $('tOrderTotal').textContent = '฿'+v.order.total;
   const pill=$('tPayPill');
-  if(v.order.paid){ pill.className='pill open'; pill.textContent='PAID ✓'; }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 Pay ฿'+v.order.total+' at counter'; }
+  if(v.order.paid){ pill.className='pill open'; pill.textContent='PAID ✓'; show('ppPay',false); }
+  else {
+    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 Pay ฿'+v.order.total+' at counter';
+    if(cfg.promptPay){ show('ppPay',true); $('ppQrImg').src='/api/promptpay-qr?amount='+v.order.total; }
+    else show('ppPay',false);
+  }
 }
+window.togglePromptPay=()=>{ const w=$('ppQrWrap'); const on=w.style.display==='none'; w.style.display=on?'':'none';
+  $('ppBtn').textContent=''; $('ppBtn').append(on?'Hide PromptPay QR':'Pay by PromptPay'); };
 
 function render(v){
   $('tCode').textContent = v.code;

@@ -7,6 +7,7 @@ import * as Q from './queue.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText } from './line.js';
 import QRCode from 'qrcode';
+import generatePayload from 'promptpay-qr';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -20,6 +21,8 @@ const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
 const SELF_ORDER = String(process.env.SELF_ORDER ?? '1') !== '0';
+// Merchant PromptPay id (phone / national id / e-wallet). Set to enable PromptPay QR; off if empty.
+const PROMPTPAY_ID = (process.env.PROMPTPAY_ID || '').trim();
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -68,7 +71,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID) });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -103,6 +106,17 @@ app.get('/api/qr/:zoneId', async (req, res) => {
     const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.type('png').send(buf);
   } catch (e) { res.status(500).end(); }
+});
+// PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
+// payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
+app.get('/api/promptpay-qr', async (req, res) => {
+  if (!PROMPTPAY_ID) return res.status(404).json({ error: 'promptpay_off' });
+  const amount = Math.max(0, Number(req.query.amount) || 0);
+  try {
+    const payload = generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
+    const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.set('Cache-Control', 'no-store').type('png').send(buf);
+  } catch (e) { res.status(500).json({ error: 'qr_failed' }); }
 });
 app.get('/api/zones/:zoneId/snapshot', (req, res) => {
   const snap = Q.zoneSnapshot(req.params.zoneId, { reveal: pinValueOK(req) });

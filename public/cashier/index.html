@@ -118,10 +118,21 @@
   </div>
 </div>
 
+<!-- PROMPTPAY QR (show to a customer paying at the counter) -->
+<div id="ppPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
+    <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="$('ppPop').style.display='none'">✕</button></div>
+    <img id="ppPopImg" alt="PromptPay QR" style="width:240px;height:240px;border-radius:12px;border:1px solid var(--line);margin:12px auto 4px">
+    <div style="font-size:20px;font-weight:800;color:var(--navy)">฿<span id="ppPopAmt">0</span></div>
+    <p class="muted" style="font-size:12px">Customer scans with their bank app. Confirm in your bank app, then tap <b>Paid</b>.</p>
+  </div>
+</div>
+
 <script type="module">
 const $=(id)=>document.getElementById(id);
-let PIN=null, zones=[], streams=[];
+let PIN=null, zones=[], streams=[], CFG={};
 const zoneOpenState={};
+window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount; $('ppPopImg').src='/api/promptpay-qr?amount='+amount; $('ppPop').style.display='flex'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
@@ -379,6 +390,7 @@ window.confirmBasket=async()=>{
   }catch(e){ toast(err(e)); } };
 
 async function boot(){
+  try{ CFG=await (await fetch('/api/config')).json(); }catch(e){ CFG={}; }
   const stores=await (await fetch('/api/stores')).json();
   STORE=stores[0]||null; renderStoreBtn();
   zones=[]; let html='';
@@ -446,6 +458,8 @@ function renderZone(snap){
     }
     return t.order_summary?`<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ฿${t.order_total}</div>`:'';
   };
+  const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${t.order_total})">📱 QR</button>` : '';
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id})">฿ Paid</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
@@ -453,12 +467,12 @@ function renderZone(snap){
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">notified</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">Skip</button></div></div>`).join('')
     : '<p class="muted">empty</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">No-show</button>
         <button class="ok" onclick="act(${t.id},'serve')">Served</button>
       </div></div>`).join('')
