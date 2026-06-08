@@ -19,8 +19,10 @@
     "dotenv": "^16.4.7",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
-    "libsql": "^0.5.29",
     "promptpay-qr": "^0.5.0",
     "qrcode": "^1.5.4"
+  },
+  "optionalDependencies": {
+    "libsql": "^0.5.29"
   }
 }

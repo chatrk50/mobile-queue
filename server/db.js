@@ -29,8 +29,17 @@ const USE_TURSO = /^(libsql|https?):\/\//.test(TURSO_URL);
 let raw;
 let scheduleSync = () => {};   // debounced background push/pull (durable mode only)
 
+// `libsql` is an optional native dependency — load it only when Turso is
+// configured, and fall back to local mode (loudly) if it isn't installed.
+let Database = null;
 if (USE_TURSO) {
-  const { default: Database } = await import('libsql');
+  try { ({ default: Database } = await import('libsql')); }
+  catch (e) {
+    console.error('[db] TURSO_DATABASE_URL is set but the `libsql` driver is not installed (' + e.message + '). Falling back to LOCAL (ephemeral) storage. Run `npm install libsql` to enable durable mode.');
+  }
+}
+
+if (USE_TURSO && Database) {
   raw = new Database(dbPath, { syncUrl: TURSO_URL, authToken: TURSO_TOKEN });
   // Pull the durable copy into the local replica before the app reads anything.
   try { raw.sync(); } catch (e) { console.error('[db] initial Turso sync failed:', e.message); }
