@@ -16,6 +16,7 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
+import { hashPin } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.QUEUE_DATA_DIR || join(__dirname, '..', 'data');
@@ -184,7 +185,8 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE INDEX IF NOT EXISTS idx_orders_ticket ON orders(ticket_id);
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
 CREATE TABLE IF NOT EXISTS sales_history (
-  date        TEXT PRIMARY KEY,           -- 'YYYY-MM-DD' (Asia/Bangkok)
+  date        TEXT NOT NULL,              -- 'YYYY-MM-DD' (Asia/Bangkok)
+  branch_id   INTEGER NOT NULL DEFAULT 1, -- which branch this daily row summarizes
   cups        INTEGER NOT NULL DEFAULT 0, -- drinks sold (excl. voided)
   revenue     REAL NOT NULL DEFAULT 0,
   gross       REAL NOT NULL DEFAULT 0,
@@ -194,7 +196,58 @@ CREATE TABLE IF NOT EXISTS sales_history (
   void_amount REAL NOT NULL DEFAULT 0,
   issued      INTEGER NOT NULL DEFAULT 0,
   served      INTEGER NOT NULL DEFAULT 0,
-  no_shows    INTEGER NOT NULL DEFAULT 0
+  no_shows    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (date, branch_id)
+);
+-- ============ Multi-branch POS foundation (Phase 0) ============
+-- Staff identity + roles. PIN is scrypt-hashed (server/auth.js). role ∈ owner|manager|cashier.
+CREATE TABLE IF NOT EXISTS staff (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  pin_hash   TEXT NOT NULL,
+  role       TEXT NOT NULL DEFAULT 'cashier',
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Which branches a (non-owner) staffer may access. Owner role bypasses this = all branches.
+CREATE TABLE IF NOT EXISTS staff_branches (
+  staff_id  INTEGER NOT NULL REFERENCES staff(id),
+  branch_id INTEGER NOT NULL REFERENCES stores(id),
+  PRIMARY KEY (staff_id, branch_id)
+);
+-- Per-branch OVERRIDES on the global menu_items catalog. Absent row = item enabled at
+-- catalog price/soldout. A row lets a branch disable, reprice, or sold-out an item.
+CREATE TABLE IF NOT EXISTS branch_menu (
+  branch_id      INTEGER NOT NULL REFERENCES stores(id),
+  item_id        INTEGER NOT NULL REFERENCES menu_items(id),
+  enabled        INTEGER NOT NULL DEFAULT 1,
+  price_override REAL,
+  soldout        INTEGER NOT NULL DEFAULT 0,
+  sort           INTEGER,
+  PRIMARY KEY (branch_id, item_id)
+);
+-- Append-only audit / transaction trail (feeds transaction-log + void/refund/discount/
+-- payment reports + reconciliation). type ∈ order_created|paid|void|refund|discount|...
+CREATE TABLE IF NOT EXISTS sale_events (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER,
+  ticket_id INTEGER,
+  order_id  INTEGER,
+  type      TEXT NOT NULL,
+  amount    REAL NOT NULL DEFAULT 0,
+  actor     INTEGER,                 -- staff.id who performed it (null = customer/system)
+  meta      TEXT,                    -- small JSON blob (reason, method, etc.)
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sale_events_branch_at ON sale_events(branch_id, at);
+-- LINE customers — order history for reorder suggestions next visit.
+CREATE TABLE IF NOT EXISTS customers (
+  line_user_id  TEXT PRIMARY KEY,
+  name          TEXT,
+  first_seen    TEXT NOT NULL DEFAULT (datetime('now')),
+  last_order_at TEXT,
+  order_count   INTEGER NOT NULL DEFAULT 0,
+  fav_items     TEXT                 -- small JSON: [{name, qty}] most-ordered
 );
 `);
 
@@ -206,9 +259,69 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN paid_at TEXT`,
   `ALTER TABLE menu_items ADD COLUMN soldout INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE stores ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1`,
+  // --- Phase 0 multi-branch POS columns (all additive / nullable-safe) ---
+  `ALTER TABLE stores ADD COLUMN code TEXT`,
+  `ALTER TABLE orders ADD COLUMN branch_id INTEGER`,         // = tickets.store_id (denormalized)
+  `ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE orders ADD COLUMN discount_reason TEXT`,
+  `ALTER TABLE orders ADD COLUMN payment_method TEXT`,       // cash|promptpay|slip|other
+  `ALTER TABLE orders ADD COLUMN void_kind TEXT`,            // void (unpaid) | refund (paid)
+  `ALTER TABLE orders ADD COLUMN void_reason TEXT`,
+  `ALTER TABLE orders ADD COLUMN voided_at TEXT`,
+  `ALTER TABLE orders ADD COLUMN created_by INTEGER`,        // staff.id
+  `ALTER TABLE orders ADD COLUMN paid_by INTEGER`,
+  `ALTER TABLE orders ADD COLUMN voided_by INTEGER`,
+  `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
+
+// ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
+// PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
+// so it runs at most once; existing rows are assigned to branch 1.
+try {
+  const cols = db.prepare(`PRAGMA table_info(sales_history)`).all();
+  if (cols.length && !cols.some((c) => c.name === 'branch_id')) {
+    db.exec(`
+      CREATE TABLE sales_history_new (
+        date TEXT NOT NULL, branch_id INTEGER NOT NULL DEFAULT 1,
+        cups INTEGER NOT NULL DEFAULT 0, revenue REAL NOT NULL DEFAULT 0,
+        gross REAL NOT NULL DEFAULT 0, net REAL NOT NULL DEFAULT 0,
+        void_orders INTEGER NOT NULL DEFAULT 0, void_cups INTEGER NOT NULL DEFAULT 0,
+        void_amount REAL NOT NULL DEFAULT 0, issued INTEGER NOT NULL DEFAULT 0,
+        served INTEGER NOT NULL DEFAULT 0, no_shows INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (date, branch_id)
+      );
+      INSERT INTO sales_history_new (date, branch_id, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows)
+        SELECT date, 1, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows FROM sales_history;
+      DROP TABLE sales_history;
+      ALTER TABLE sales_history_new RENAME TO sales_history;
+    `);
+  }
+} catch (e) { console.error('[db] sales_history rebuild skipped:', e.message); }
+
+// ---- Backfill the new denormalized/derived columns on existing rows (idempotent) ----
+try {
+  // orders.branch_id ← the ticket's store_id
+  db.exec(`UPDATE orders SET branch_id = (SELECT t.store_id FROM tickets t WHERE t.id = orders.ticket_id)
+           WHERE branch_id IS NULL`);
+  // order_items.kind ← 'addon' when the line matches a topping in the catalog, else 'base'
+  db.exec(`UPDATE order_items SET kind = 'addon'
+           WHERE kind = 'base' AND name IN (SELECT name FROM menu_items WHERE category = 'topping')`);
+} catch (e) { console.error('[db] backfill skipped:', e.message); }
+
+// ---- Seed a bootstrap OWNER staff so the new login works and you can't get locked out.
+// PIN comes from OWNER_PIN (fallback CASHIER_PIN, fallback 1234). Idempotent: only when
+// no owner exists yet. The legacy single CASHIER_PIN gate stays active until Phase 1.
+try {
+  const ownerExists = db.prepare(`SELECT COUNT(*) c FROM staff WHERE role='owner'`).get().c;
+  if (!ownerExists) {
+    const pin = process.env.OWNER_PIN || process.env.CASHIER_PIN || '1234';
+    db.prepare(`INSERT INTO staff (name, pin_hash, role) VALUES (?,?, 'owner')`)
+      .run('Owner', hashPin(pin));
+    console.log('[db] Seeded bootstrap owner staff (role=owner).');
+  }
+} catch (e) { console.error('[db] owner seed skipped:', e.message); }
 
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

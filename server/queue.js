@@ -438,6 +438,10 @@ export function createOrder(zoneId, items, opts = {}) {
 
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
   const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
+  // Classify each line as a base drink or an addon (topping) for exact addon reporting.
+  const toppingNames = new Set(
+    db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name)
+  );
   const tx = db.transaction(() => {
     const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
     const next = cur.last_number + 1;
@@ -446,10 +450,10 @@ export function createOrder(zoneId, items, opts = {}) {
       `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
        VALUES (?,?,?,?,?,?,?)`
     ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, lineUserId, label);
-    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source) VALUES (?,?,?)')
-      .run(tinfo.lastInsertRowid, total, source);
-    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty) VALUES (?,?,?,?)');
-    for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty);
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id) VALUES (?,?,?,?)')
+      .run(tinfo.lastInsertRowid, total, source, zone.store_id);
+    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
+    for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
   const r = tx();
