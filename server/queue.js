@@ -107,6 +107,11 @@ export function setStatus(ticketId, status, threshold) {
   if (!allowed.includes(status)) throw new Error('bad_status');
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
+  // Can't serve an order that hasn't been paid yet (collect payment first).
+  if (status === 'served') {
+    const o = orderForTicket(ticketId);
+    if (o && o.payment_status === 'unpaid') throw new Error('order_unpaid');
+  }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
@@ -213,6 +218,7 @@ export function dailyReport() {
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN menu_items mi ON mi.name = oi.name
+     WHERE o.payment_status != 'void'            -- exclude refunded/voided orders from sales
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all();
   const revenue = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
@@ -404,7 +410,9 @@ export function setOrderPaid(ticketId) {
 export function cancelOrderTicket(ticketId, threshold) {
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
-  db.prepare(`UPDATE orders SET payment_status='void' WHERE ticket_id=? AND payment_status!='paid'`).run(ticketId);
+  // Void/refund: mark the order void (even if it was already paid -> a refund) so it
+  // drops out of the report and its revenue is deducted from sales.
+  db.prepare(`UPDATE orders SET payment_status='void' WHERE ticket_id=?`).run(ticketId);
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     pushQueue(t.line_user_id,

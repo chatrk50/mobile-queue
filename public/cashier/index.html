@@ -137,7 +137,7 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ return e.message==='bad_pin'?'Wrong PIN':e.message; }
+function err(e){ const m={bad_pin:'Wrong PIN',order_unpaid:'Collect payment first (mark Paid) before serving'}; return m[e.message]||e.message; }
 
 window.login=async()=>{
   const pin=$('pin').value.trim(); if(!pin) return;
@@ -464,6 +464,10 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id})">฿ Paid</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">Cancel</button>` : '';
+  // Can't serve an unpaid order — disable the button until it's marked paid.
+  const serveBtn=(t)=> (t.order_total!=null && t.payment_status==='unpaid')
+    ? `<button class="ok" disabled style="opacity:.5" title="Mark paid first">Served</button>`
+    : `<button class="ok" onclick="act(${t.id},'serve')">Served</button>`;
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">notified</span>':''}</div>${ord(t)}</div>
@@ -474,7 +478,7 @@ function renderZone(snap){
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
       <div class="row" style="gap:6px">${ppBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">No-show</button>
-        <button class="ok" onclick="act(${t.id},'serve')">Served</button>
+        ${serveBtn(t)}
       </div></div>`).join('')
     : '<p class="muted">—</p>';
 }
