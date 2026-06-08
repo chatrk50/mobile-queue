@@ -83,7 +83,9 @@
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line);object-fit:contain;background:#fff">
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
-          <button class="ok" id="claimBtn" style="width:100%;background:var(--accent2);color:#06281f" onclick="claimPaid()">✓ ฉันชำระแล้ว</button>
+          <input id="slipFile" type="file" accept="image/*" style="display:none">
+          <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()">📤 อัปโหลดสลิป (ยืนยันอัตโนมัติ)</button>
+          <button class="ghost" id="claimBtn" style="width:100%;margin-top:8px" onclick="claimPaid()">✓ ฉันชำระแล้ว (รอแคชเชียร์ตรวจ)</button>
         </div>
       </div>
     </div>
@@ -327,7 +329,7 @@ function renderOrderBlock(v){
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); }
   else if(cfg.promptPay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
-    show('payChoice',true); show('payPromptBtn',true);
+    show('payChoice',true); show('payPromptBtn',true); show('slipBtn', !!cfg.slipVerify);
     if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
     else { $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').textContent='สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง'; }
     $('counterNote').innerHTML='นำหมายเลขคิว <b>'+v.code+'</b> ไปชำระเงิน <b>฿'+total+'</b> ที่เคาน์เตอร์ได้เลยค่ะ';
@@ -347,6 +349,24 @@ window.claimPaid=async()=>{ $('claimBtn').disabled=true;
   try{ await api('/api/tickets/'+ticketId+'/claim-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
     toast('แจ้งชำระแล้ว · รอแคชเชียร์ยืนยัน'); const v=await api('/api/tickets/'+ticketId); render(v);
   }catch(e){ $('claimBtn').disabled=false; toast('แจ้งไม่สำเร็จ: '+e.message); } };
+// Auto slip verification via SlipOK: upload the slip -> server checks it -> mark paid.
+function slipResize(file,max){ return new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file);
+  img.onload=()=>{ URL.revokeObjectURL(url); const sc=Math.min(1,max/Math.max(img.width,img.height));
+    const w=Math.max(1,Math.round(img.width*sc)), h=Math.max(1,Math.round(img.height*sc));
+    const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+    resolve(c.toDataURL('image/jpeg',0.9)); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('bad image')); }; img.src=url; }); }
+function slipErr(e){ const code=e.data&&e.data.code;
+  const map={1002:'อ่านสลิปไม่ได้ ถ่ายให้เห็น QR ชัดๆ',1012:'สลิปนี้ถูกใช้ไปแล้ว',1013:'ยอดเงินไม่ตรงกับออเดอร์',1014:'บัญชีผู้รับไม่ใช่ของร้าน'};
+  return map[code]||(e.data&&e.data.message)||'ตรวจสลิปไม่สำเร็จ ลองใหม่ หรือกด "ฉันชำระแล้ว"'; }
+async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const b=$('slipBtn'); b.disabled=true; b.textContent='⏳ กำลังตรวจสลิป...';
+  try{ const dataUrl=await slipResize(f,1080);
+    const r=await api('/api/tickets/'+ticketId+'/verify-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
+    if(r.paid){ toast('✅ ตรวจสลิปผ่าน · ชำระเงินเรียบร้อย'); const v=await api('/api/tickets/'+ticketId); render(v); }
+  }catch(err2){ toast('❌ '+slipErr(err2)); b.disabled=false; b.textContent='📤 อัปโหลดสลิปอีกครั้ง'; }
+  finally{ e.target.value=''; } }
+$('slipFile').addEventListener('change', uploadSlip);
 
 function render(v){
   $('tCode').textContent = v.code;

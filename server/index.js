@@ -29,6 +29,10 @@ const PROMPTPAY_ID = (process.env.PROMPTPAY_ID || '').trim();
 const ppStaticEnv = (process.env.PROMPTPAY_STATIC || '').trim();
 const PROMPTPAY_STATIC_URL = ppStaticEnv.startsWith('/') ? ppStaticEnv
   : ((ppStaticEnv || existsSync(join(__dirname, '..', 'public', 'assets', 'promptpay.png'))) ? '/assets/promptpay.png' : '');
+// SlipOK automatic slip verification (https://slipok.com). Set both env vars to enable.
+const SLIPOK_API_KEY = (process.env.SLIPOK_API_KEY || '').trim();
+const SLIPOK_BRANCH_ID = (process.env.SLIPOK_BRANCH_ID || '').trim();
+const SLIPOK_ON = Boolean(SLIPOK_API_KEY && SLIPOK_BRANCH_ID);
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -77,7 +81,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PROMPTPAY_STATIC_URL || null });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PROMPTPAY_STATIC_URL || null, slipVerify: SLIPOK_ON });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -215,6 +219,35 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Customer uploads a payment slip -> server verifies it with SlipOK (real transfer,
+// exact amount, to OUR account, not a duplicate) and auto-marks the order PAID.
+app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
+  if (!SLIPOK_ON) return res.status(404).json({ error: 'slip_off' });
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  const ticketId = req.params.ticketId;
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return res.status(404).json({ error: 'order_not_found' });
+  if (order.payment_status === 'paid') return res.json({ ok: true, paid: true, already: true });
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(req.body?.imageData || '');
+  if (!m) return res.status(400).json({ error: 'bad_image' });
+  try {
+    const fd = new FormData();
+    fd.append('files', new Blob([Buffer.from(m[2], 'base64')], { type: m[1] }), 'slip.jpg');
+    fd.append('log', 'true');                 // verify vs linked bank + flag duplicates
+    fd.append('amount', String(order.total)); // SlipOK returns code 1013 on amount mismatch
+    const r = await fetch(`https://api.slipok.com/api/line/apikey/${SLIPOK_BRANCH_ID}`, {
+      method: 'POST', headers: { 'x-authorization': SLIPOK_API_KEY }, body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.success && j.data && j.data.success) {
+      Q.setOrderPaid(ticketId);
+      const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
+      if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+      return res.json({ ok: true, paid: true, amount: j.data.amount });
+    }
+    return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
+  } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
 });
 // Cashier marks an order paid (PIN). Defined before the generic /:action route.
 app.post('/api/tickets/:ticketId/paid', (req, res) => {
