@@ -110,6 +110,7 @@
       <button class="detTab ok" data-t="tx" style="padding:6px 12px;font-size:13px" onclick="detailTab('tx')">ธุรกรรม</button>
       <button class="detTab ghost" data-t="pay" style="padding:6px 12px;font-size:13px" onclick="detailTab('pay')">ชำระเงิน</button>
       <button class="detTab ghost" data-t="void" style="padding:6px 12px;font-size:13px" onclick="detailTab('void')">ยกเลิก/คืน</button>
+      <button class="detTab ghost" data-t="disc" style="padding:6px 12px;font-size:13px" onclick="detailTab('disc')">ส่วนลด</button>
       <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
       <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
@@ -377,6 +378,9 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)})</div>`+
       (rows.length?detTable([{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(v=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':'soon'}" style="font-size:11px">${v.void_kind==='refund'?'คืนเงิน':'ยกเลิก'}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+  } else if(t==='disc'){
+    const rows=(DET.discounts||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>ส่วนลดรวม ${baht2(DET.discountTotal)}</b> · ${rows.length} ออเดอร์</div>`+
+      (rows.length?detTable([{t:'คิว'},{t:'ส่วนลด',r:1},{t:'จากยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(d=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px"><b>${d.code}</b></td><td style="text-align:right;color:var(--danger)">−${baht2(d.amount)}</td><td style="text-align:right">${baht2(d.total)}</td><td style="color:var(--muted);font-size:12px">${esc(d.reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(d.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีส่วนลด</p>');
   } else if(t==='addon'){
     const rows=(DET.addons||[]); box.innerHTML=rows.length?detTable([{t:'ท็อปปิ้ง'},{t:'จำนวน',r:1},{t:'ยอดขาย',r:1}], rows.map(a=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(a.name)}</td><td style="text-align:right">${a.qty}</td><td style="text-align:right">${baht2(a.revenue)}</td></tr>`).join('')):'<p class="muted">ไม่มีการขายท็อปปิ้ง</p>';
   } else if(t==='hour'){
@@ -689,12 +693,18 @@ function renderZone(snap){
         l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`
       ).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
     }
-    return t.order_summary?`<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ฿${t.order_total}</div>`:'';
+    if(!t.order_summary) return '';
+    const net=(t.order_net!=null?t.order_net:t.order_total);
+    const amt=(t.order_discount>0)?`<b>฿${net}</b> <span style="text-decoration:line-through;opacity:.6">฿${t.order_total}</span> <span style="color:var(--danger)">(ลด ฿${t.order_discount})</span>`:`฿${t.order_total}`;
+    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
   };
+  const netOf=(t)=> (t.order_net!=null?t.order_net:t.order_total);
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${t.order_total})">📱 QR</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">📱 QR</button>` : '';
+  const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">ลด</button>` : '';
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${t.order_total})">฿ ชำระแล้ว</button>` : '';
+    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
@@ -704,12 +714,12 @@ function renderZone(snap){
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
         ${serveBtn(t)}
       </div></div>`).join('')
@@ -744,6 +754,11 @@ window.markPaid=async(tid,status,amount)=>{
 window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return;
   const reason=(prompt('เหตุผลในการยกเลิก/คืนเงิน (ไม่บังคับ)')||'').trim();
   try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
+window.discountTicket=async(tid,total)=>{
+  const a=prompt('ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด'); if(a===null) return;
+  const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
+  const reason=(prompt('เหตุผลส่วนลด (ไม่บังคับ) เช่น สมาชิก, โปรโมชั่น')||'').trim();
+  try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!zoneOpenState[id]})}); }catch(e){ toast(err(e)); } };
 

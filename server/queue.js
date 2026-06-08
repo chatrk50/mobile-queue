@@ -240,11 +240,15 @@ export function dailyReport() {
      WHERE o.payment_status != 'void'            -- exclude refunded/voided orders from sales
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all();
-  const revenue = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
-  itemSales.forEach((i) => { i.pct = revenue ? i.revenue / revenue : 0; });
+  const grossSales = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
+  itemSales.forEach((i) => { i.pct = grossSales ? i.revenue / grossSales : 0; });
   const drinkSales = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.revenue, 0);
-  const toppingSales = revenue - drinkSales;
+  const toppingSales = grossSales - drinkSales;
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
+  // Bill discounts on non-void orders reduce NET sales. revenue = gross − discounts
+  // (defaults to gross since discounts are 0 until used — no behavior change).
+  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status != 'void'`).get().d || 0;
+  const revenue = Math.round((grossSales - discounts) * 100) / 100;
 
   // Cancelled / refunded (voided) orders — counted separately, NOT in sales above.
   const vAgg = db.prepare(
@@ -286,7 +290,7 @@ export function dailyReport() {
     targetDaily, revenueVariance: targetDaily != null ? revenue - targetDaily : null,
   };
   return {
-    cupsSold, issued, noShows, revenue,
+    cupsSold, issued, noShows, revenue, grossSales, discounts,
     avgWaitMin: wait.s != null ? Math.round((wait.s / 60) * 10) / 10 : null,
     avgRating: rating.avg != null ? Math.round(rating.avg * 10) / 10 : null,
     ratingCount: rating.n,
@@ -350,7 +354,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   const BR = "(? IS NULL OR o.branch_id = ?)";
 
   const transactions = db.prepare(
-    `SELECT t.code, o.id AS order_id, o.created_at, o.paid_at, o.total,
+    `SELECT t.code, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
             o.payment_status, o.payment_method, o.void_kind,
             ps.name AS paid_by, cs.name AS created_by,
             (SELECT GROUP_CONCAT(oi.qty || 'x ' || oi.name, ', ') FROM order_items oi WHERE oi.order_id = o.id) AS items
@@ -363,11 +367,20 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   ).all(D, ...b);
 
   const payments = db.prepare(
-    `SELECT COALESCE(o.payment_method, 'unspecified') AS method, COUNT(*) AS orders, SUM(o.total) AS amount
+    `SELECT COALESCE(o.payment_method, 'unspecified') AS method, COUNT(*) AS orders,
+            SUM(o.total - COALESCE(o.discount,0)) AS amount
        FROM orders o
       WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
       GROUP BY method ORDER BY amount DESC`
   ).all(D, ...b);
+
+  const discounts = db.prepare(
+    `SELECT t.code, o.discount AS amount, o.discount_reason AS reason, o.total, cs.name AS by_name, o.created_at
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id LEFT JOIN staff cs ON cs.id = o.created_by
+      WHERE o.discount > 0 AND o.payment_status != 'void' AND date(o.created_at, '+7 hours') = ${DAY} AND ${BR}
+      ORDER BY o.id`
+  ).all(D, ...b);
+  const discountTotal = discounts.reduce((s, d) => s + (d.amount || 0), 0);
 
   const voids = db.prepare(
     `SELECT t.code, o.total, o.void_kind, o.void_reason, o.voided_at, s.name AS by_name
@@ -394,7 +407,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
   const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
-  return { date: D, transactions, payments, paidTotal, paidOrders, voids, voidTotals, addons, hourly };
+  return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, voids, voidTotals, addons, hourly };
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
@@ -729,6 +742,21 @@ export function claimOrderPaid(ticketId) {
   return { ok: true };
 }
 
+/** Apply a bill-level discount to a ticket's order. amount is clamped to [0, subtotal].
+ *  Net due = total − discount. Recorded as a 'discount' sale_event. */
+export function setOrderDiscount(ticketId, { amount, reason = null, actorId = null } = {}) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'void') throw new Error('order_void');
+  let amt = Math.max(0, Number(amount) || 0);
+  amt = Math.min(amt, order.total);
+  amt = Math.round(amt * 100) / 100;
+  const rsn = reason ? reason.toString().slice(0, 200) : null;
+  db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(amt, rsn, order.id);
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: amt, actor: actorId, meta: { reason: rsn } });
+  return { ok: true, ticketId: Number(ticketId), discount: amt, total: order.total, net: Math.round((order.total - amt) * 100) / 100 };
+}
+
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
  *  opts.actorId = staff; opts.reason = free text. void_kind auto: 'refund' if the order
  *  was already paid, else 'void'. */
@@ -766,7 +794,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
+  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -799,6 +827,8 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     const o = orderForTicket(t.id);
     if (o) {
       t.order_total = o.total;
+      t.order_discount = o.discount || 0;
+      t.order_net = Math.round((o.total - (o.discount || 0)) * 100) / 100;
       t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', ');
       t.order_lines = o.lines;               // grouped: drink + its toppings (dash sub-lines)
       t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'

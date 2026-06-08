@@ -336,6 +336,18 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
   } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
 });
+// Cashier applies a bill discount to an order (PIN). Before the generic /:action route.
+app.post('/api/tickets/:ticketId/discount', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.setOrderDiscount(req.params.ticketId, {
+      amount: req.body?.amount, reason: req.body?.reason || null, actorId: req.staff?.id || null,
+    });
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier marks an order paid (PIN). Defined before the generic /:action route.
 app.post('/api/tickets/:ticketId/paid', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
