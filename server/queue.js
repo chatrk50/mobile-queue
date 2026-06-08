@@ -376,6 +376,55 @@ const IMG_CAP = 300000;
 export function listMenu() {
   return db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
 }
+
+// ---------- Price tiers & sales channels (multi-price per product) ----------
+export function listPriceTiers() {
+  return db.prepare('SELECT * FROM price_tiers ORDER BY sort, id').all();
+}
+export function listChannels() {
+  return db.prepare('SELECT * FROM channels ORDER BY sort, id').all();
+}
+const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default=1 LIMIT 1').get();
+
+/**
+ * Resolve the price of an item for a (branch, channel) combination.
+ * Order: explicit price book (branch-specific → all-branch) → base × tier markup → base.
+ * Base = the branch's storefront override (branch_menu) or the catalog price.
+ * `channelId` selects the tier (defaults to the storefront tier when absent).
+ */
+export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
+  const item = db.prepare('SELECT price FROM menu_items WHERE id=?').get(itemId);
+  if (!item) return null;
+  let tier = null;
+  if (channelId) {
+    const ch = db.prepare('SELECT tier_id FROM channels WHERE id=?').get(channelId);
+    if (ch?.tier_id) tier = db.prepare('SELECT * FROM price_tiers WHERE id=?').get(ch.tier_id);
+  }
+  if (!tier) tier = defaultTier();
+  // 1) explicit price book entry for this tier (branch-specific, then all-branch=0)
+  if (tier) {
+    let row = branchId
+      ? db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=?').get(itemId, tier.id, branchId)
+      : null;
+    if (!row) row = db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(itemId, tier.id);
+    if (row) return Math.round((row.price + Number.EPSILON) * 100) / 100;
+  }
+  // 2) base price (per-branch storefront override or catalog), optionally × tier markup
+  let base = item.price;
+  if (branchId) {
+    const bm = db.prepare('SELECT price_override FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId);
+    if (bm && bm.price_override != null) base = bm.price_override;
+  }
+  const markup = tier?.markup_pct || 0;
+  return markup ? Math.round(base * (1 + markup / 100)) : base;
+}
+
+/** Net revenue an order keeps after the channel's platform commission (for P&L by channel). */
+export function channelNet(amount, channelId) {
+  const ch = channelId ? db.prepare('SELECT commission_pct FROM channels WHERE id=?').get(channelId) : null;
+  const pct = ch?.commission_pct || 0;
+  return Math.round((amount * (1 - pct / 100) + Number.EPSILON) * 100) / 100;
+}
 export function addMenuItem({ name, name_en, price, image, category }) {
   const n = (name || '').toString().trim().slice(0, 80);
   if (!n) throw new Error('name_required');

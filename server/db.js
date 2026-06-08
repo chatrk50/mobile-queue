@@ -249,6 +249,34 @@ CREATE TABLE IF NOT EXISTS customers (
   order_count   INTEGER NOT NULL DEFAULT 0,
   fav_items     TEXT                 -- small JSON: [{name, qty}] most-ordered
 );
+-- ============ Price tiers + sales channels (multi-price per product) ============
+-- A named price level (e.g. หน้าร้าน / เดลิเวอรี่). markup_pct is the default uplift
+-- over the base price when no explicit per-item price exists for the tier.
+CREATE TABLE IF NOT EXISTS price_tiers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  is_default INTEGER NOT NULL DEFAULT 0,   -- 1 = the storefront/base tier
+  markup_pct REAL NOT NULL DEFAULT 0,      -- default % uplift over base for this tier
+  sort       INTEGER NOT NULL DEFAULT 0
+);
+-- A sales channel maps to a price tier and carries the platform commission (for P&L).
+CREATE TABLE IF NOT EXISTS channels (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL,
+  tier_id        INTEGER REFERENCES price_tiers(id),
+  commission_pct REAL NOT NULL DEFAULT 0,  -- platform takes this % (Grab/LINE MAN/Shopee ~30)
+  active         INTEGER NOT NULL DEFAULT 1,
+  sort           INTEGER NOT NULL DEFAULT 0
+);
+-- Explicit price book: exact price for an item at a tier (optionally per branch).
+-- branch_id 0 = applies to all branches; a branch-specific row overrides the 0 row.
+CREATE TABLE IF NOT EXISTS item_prices (
+  item_id   INTEGER NOT NULL REFERENCES menu_items(id),
+  tier_id   INTEGER NOT NULL REFERENCES price_tiers(id),
+  branch_id INTEGER NOT NULL DEFAULT 0,
+  price     REAL NOT NULL,
+  PRIMARY KEY (item_id, tier_id, branch_id)
+);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----
@@ -271,6 +299,7 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN created_by INTEGER`,        // staff.id
   `ALTER TABLE orders ADD COLUMN paid_by INTEGER`,
   `ALTER TABLE orders ADD COLUMN voided_by INTEGER`,
+  `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
@@ -322,6 +351,25 @@ try {
     console.log('[db] Seeded bootstrap owner staff (role=owner).');
   }
 } catch (e) { console.error('[db] owner seed skipped:', e.message); }
+
+// ---- Seed default price tiers + channels (idempotent). markup_pct/commission are
+// starting points the owner edits later; delivery prices stay = base until configured
+// (no magic markup). ----
+try {
+  if (!db.prepare('SELECT COUNT(*) c FROM price_tiers').get().c) {
+    db.prepare(`INSERT INTO price_tiers (name, is_default, markup_pct, sort) VALUES ('หน้าร้าน', 1, 0, 0)`).run();
+    db.prepare(`INSERT INTO price_tiers (name, is_default, markup_pct, sort) VALUES ('เดลิเวอรี่', 0, 0, 1)`).run();
+  }
+  if (!db.prepare('SELECT COUNT(*) c FROM channels').get().c) {
+    const storefront = db.prepare(`SELECT id FROM price_tiers WHERE is_default=1 LIMIT 1`).get()?.id;
+    const delivery = db.prepare(`SELECT id FROM price_tiers WHERE is_default=0 ORDER BY sort LIMIT 1`).get()?.id;
+    db.prepare(`INSERT INTO channels (name, tier_id, commission_pct, active, sort) VALUES ('หน้าร้าน', ?, 0, 1, 0)`).run(storefront);
+    for (const [n, c] of [['Grab', 30], ['LINE MAN', 30], ['Shopee Food', 30]]) {
+      db.prepare(`INSERT INTO channels (name, tier_id, commission_pct, active, sort) VALUES (?, ?, ?, 1, 1)`).run(n, delivery, c);
+    }
+    console.log('[db] Seeded default price tiers + channels.');
+  }
+} catch (e) { console.error('[db] tier/channel seed skipped:', e.message); }
 
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
