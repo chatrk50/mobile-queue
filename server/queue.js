@@ -107,10 +107,11 @@ export function setStatus(ticketId, status, threshold) {
   if (!allowed.includes(status)) throw new Error('bad_status');
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
-  // Can't serve an order that hasn't been paid yet (collect payment first).
+  // Can't serve an order until payment is CONFIRMED (a customer "I've paid" claim
+  // is not enough — the cashier must verify and mark it paid).
   if (status === 'served') {
     const o = orderForTicket(ticketId);
-    if (o && o.payment_status === 'unpaid') throw new Error('order_unpaid');
+    if (o && o.payment_status !== 'paid') throw new Error('order_unpaid');
   }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
@@ -406,6 +407,16 @@ export function setOrderPaid(ticketId) {
   return { ok: true, ticketId: Number(ticketId), total: order.total };
 }
 
+/** Customer taps "I've paid (PromptPay)" — flags the order 'claimed' so the cashier
+ *  knows to verify the incoming transfer in their bank app, then confirm Paid. */
+export function claimOrderPaid(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') return { ok: true, already: true };
+  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
+  return { ok: true };
+}
+
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.). */
 export function cancelOrderTicket(ticketId, threshold) {
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
@@ -489,6 +500,6 @@ export function ticketView(ticketId) {
     id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid' } : null,
+    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status } : null,
   };
 }

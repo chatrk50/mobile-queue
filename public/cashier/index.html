@@ -445,9 +445,9 @@ function renderZone(snap){
   };
   const pay=(t)=>{
     if(t.order_total==null) return '';
-    return t.payment_status==='paid'
-      ? ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>'
-      : ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
+    if(t.payment_status==='paid') return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
+    if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
+    return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
   const ord=(t)=>{
     if(t.order_lines&&t.order_lines.length){
@@ -465,8 +465,8 @@ function renderZone(snap){
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
-  const serveBtn=(t)=> (t.order_total!=null && t.payment_status==='unpaid')
-    ? `<button class="ok" disabled style="opacity:.5" title="กรุณาเก็บเงินก่อน">เสิร์ฟแล้ว</button>`
+  const serveBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
+    ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
     : `<button class="ok" onclick="act(${t.id},'serve')">เสิร์ฟแล้ว</button>`;
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
