@@ -429,7 +429,7 @@ app.post('/api/reset', (req, res) => {
 });
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
@@ -463,22 +463,22 @@ app.get('/api/history', (req, res) => {
 });
 // Daily/monthly sell report from the archive (PIN).
 app.get('/api/sales-history', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.salesHistory());
 });
-// Manually save today's sales into the archive now (PIN) — also runs automatically at the daily reset.
+// Manually save today's sales into the archive now — also runs automatically at the daily reset.
 app.post('/api/archive-now', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const r = Q.archiveTodaySales();
   res.json({ ok: true, saved: !!r });
 });
-// Financial settings used by the P&L (PIN): read + update COGS %, opex, target.
+// Financial settings used by the P&L (manager/owner): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.getFinanceSettings(req.query.branchId ? Number(req.query.branchId) : null));
 });
 app.post('/api/finance', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.setFinanceSettings(req.body || {}, req.body?.branchId ? Number(req.body.branchId) : null));
 });
 // ---------- Branch management (owner) ----------
@@ -498,7 +498,7 @@ app.post('/api/branches/:id/menu', (req, res) => {
 });
 // Export the current report as an Excel workbook (PIN). Opened directly by the browser.
 app.get('/api/report.xlsx', async (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const { buildReportWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();

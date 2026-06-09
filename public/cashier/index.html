@@ -260,25 +260,32 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPop').style.display='flex'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
+async function api(path,opts={}){
+  if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
 function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่'}; return m[e.message]||e.message; }
 
 window.login=async()=>{
   const pin=$('pin').value.trim(); if(!pin) return;
   try{
-    const r=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
-    const j=await r.json();
-    if(!j.ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
-    PIN=pin; $('loginErr').textContent='';
-    // Also establish a staff session cookie (best-effort) so actions are attributed
-    // to the logged-in staff (actor stamping). Legacy PIN auth still drives requests.
-    try{ const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); ME=(await sr.json().catch(()=>null))?.staff||null; }catch{ ME=null; }
-    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display=''; $('reportBtn').style.display=''; $('menuBtn').style.display=''; $('storeBtn').style.display=''; $('historyBtn').style.display=''; $('salesBtn').style.display='';
-    $('staffBtn').style.display=(ME&&ME.role==='owner')?'':'none';
-    $('branchBtn').style.display=(!ME||ME.role==='owner')?'':'none';
-    $('detailBtn').style.display=(!ME||['owner','manager'].includes(ME.role))?'':'none';
-    $('cashBtn').style.display=(!ME||['owner','manager'].includes(ME.role))?'':'none';
+    // Per-staff login FIRST: each staffer signs in with their own PIN and gets a signed
+    // session cookie; all requests then ride that cookie (PIN stays null). Actions are
+    // attributed to the real staff member.
+    const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+    if(sr.ok){ ME=(await sr.json().catch(()=>null))?.staff||null; PIN=null; }
+    else {
+      // Legacy fallback: the shared admin CASHIER_PIN (sends x-cashier-pin per request).
+      const lr=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
+      if(!((await lr.json().catch(()=>({}))).ok)){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
+      PIN=pin; ME=null;
+    }
+    $('loginErr').textContent='';
+    const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
+    $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
+    $('historyBtn').style.display='';
+    $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
@@ -562,8 +569,8 @@ window.showReport=async()=>{
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
-window.exportReport=()=>{ window.open('/api/report.xlsx?pin='+encodeURIComponent(PIN),'_blank'); };
-window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?pin='+encodeURIComponent(PIN)+'&date='+encodeURIComponent($('detailDate').value||''),'_blank'); };
+window.exportReport=()=>{ window.open('/api/report.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
+window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?date='+encodeURIComponent($('detailDate').value||'')+(PIN?('&pin='+encodeURIComponent(PIN)):''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
 window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
@@ -775,7 +782,7 @@ async function boot(){
   $('dash').innerHTML = html;
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
-    const es=new EventSource('/api/zones/'+z.id+'/stream?pin='+encodeURIComponent(PIN));
+    const es=new EventSource('/api/zones/'+z.id+'/stream'+(PIN?('?pin='+encodeURIComponent(PIN)):''));
     es.addEventListener('update',e=>renderZone(JSON.parse(e.data)));
     streams.push(es);
   }

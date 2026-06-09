@@ -16,7 +16,7 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
-import { hashPin } from './auth.js';
+import { hashPin, verifyPin } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.QUEUE_DATA_DIR || join(__dirname, '..', 'data');
@@ -393,7 +393,16 @@ try {
       .run('Owner', hashPin(pin));
     console.log('[db] Seeded bootstrap owner staff (role=owner).');
   }
-} catch (e) { console.error('[db] owner seed skipped:', e.message); }
+  // Keep the bootstrap 'Owner' login in sync with the configured admin PIN, so a DB that
+  // was seeded with a different/dev PIN (e.g. during testing) can't be logged into with
+  // the stale PIN once per-staff login is active. (A separately-created owner is untouched.)
+  const adminPin = process.env.OWNER_PIN || process.env.CASHIER_PIN || '1234';
+  const boot = db.prepare(`SELECT id, pin_hash FROM staff WHERE role='owner' AND name='Owner' ORDER BY id LIMIT 1`).get();
+  if (boot && !verifyPin(adminPin, boot.pin_hash)) {
+    db.prepare('UPDATE staff SET pin_hash=? WHERE id=?').run(hashPin(adminPin), boot.id);
+    console.log('[db] Reset bootstrap owner PIN to the configured admin PIN.');
+  }
+} catch (e) { console.error('[db] owner seed/heal skipped:', e.message); }
 
 // ---- Seed default price tiers + channels (idempotent). markup_pct/commission are
 // starting points the owner edits later; delivery prices stay = base until configured
