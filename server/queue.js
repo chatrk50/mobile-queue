@@ -770,6 +770,90 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
   return { date, lines, total };
 }
 
+// ---------- Loyalty points (our own — LINE Reward Cards can't be awarded via API) ----------
+/** Baht spent per 1 point (e.g. 20 => 1 point per 20฿). 0 disables earning. */
+export function getEarnRate() { return Math.max(0, Number(getSetting('loyalty:baht_per_point', '20')) || 0); }
+export function setEarnRate(bahtPerPoint) {
+  const v = Math.max(0, Math.round(Number(bahtPerPoint) || 0));
+  setSetting('loyalty:baht_per_point', v);
+  return { baht_per_point: v };
+}
+/** Current + lifetime balance for a customer key (line_user_id). */
+export function loyaltyBalance(key) {
+  if (!key) return { key, points: 0, lifetime: 0 };
+  const c = db.prepare('SELECT points, lifetime_points FROM customers WHERE line_user_id=?').get(key);
+  return { key, points: c ? (c.points || 0) : 0, lifetime: c ? (c.lifetime_points || 0) : 0 };
+}
+export function loyaltyHistory(key, limit = 30) {
+  if (!key) return [];
+  return db.prepare('SELECT kind, points, order_id, note, at FROM loyalty_moves WHERE customer_key=? ORDER BY id DESC LIMIT ?').all(key, limit);
+}
+/**
+ * Award points for a paid order, once. Looks up the order's LINE customer (via its ticket);
+ * skips cashier/walk-in orders with no line_user_id. points = floor(net / earnRate).
+ * Idempotent: a second call for the same order is a no-op. Returns {key,name,awarded,balance}
+ * so the caller can send a LINE "+N points" push, or null when nothing was awarded.
+ */
+export function awardPoints(orderId) {
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  if (!order) return null;
+  const rate = getEarnRate();
+  if (!(rate > 0)) return null;
+  const t = db.prepare('SELECT line_user_id, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
+  if (!t || !t.line_user_id) return null;
+  if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
+  const net = (order.total || 0) - (order.discount || 0);
+  const pts = Math.floor(net / rate);
+  if (pts <= 0) return null;
+  const key = t.line_user_id;
+  const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO customers (line_user_id, name, points, lifetime_points)
+       VALUES (?,?,?,?)
+       ON CONFLICT(line_user_id) DO UPDATE SET
+         points = customers.points + excluded.points,
+         lifetime_points = customers.lifetime_points + excluded.points,
+         name = COALESCE(customers.name, excluded.name)`
+    ).run(key, name, pts, pts);
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
+  })();
+  return { key, name, awarded: pts, balance: loyaltyBalance(key).points };
+}
+/** Active rewards (cheapest first) for the customer to browse. */
+export function listRewards(all = false) {
+  return db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active=1'} ORDER BY sort, cost_points, id`).all();
+}
+export function addReward({ name, cost_points } = {}) {
+  const nm = (name || '').toString().trim().slice(0, 60);
+  const cost = Math.max(1, Math.round(Number(cost_points) || 0));
+  if (!nm) throw new Error('name_required');
+  const info = db.prepare('INSERT INTO rewards (name, cost_points) VALUES (?,?)').run(nm, cost);
+  return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
+}
+export function updateReward(id, { name, cost_points, active } = {}) {
+  const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
+  if (!cur) throw new Error('reward_not_found');
+  const nm = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  const cost = cost_points != null ? Math.max(1, Math.round(Number(cost_points) || 0)) : cur.cost_points;
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=? WHERE id=?').run(nm, cost, a, id);
+  return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
+}
+/** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
+export function redeemReward(key, rewardId, actorId = null) {
+  if (!key) throw new Error('customer_required');
+  const r = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId);
+  if (!r) throw new Error('reward_not_found');
+  const bal = loyaltyBalance(key).points;
+  if (bal < r.cost_points) throw new Error('insufficient_points');
+  db.transaction(() => {
+    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(r.cost_points, key);
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`).run(key, -r.cost_points, `${r.name}${actorId ? ' (โดยพนักงาน #' + actorId + ')' : ''}`);
+  })();
+  return { ok: true, redeemed: r.name, cost: r.cost_points, balance: bal - r.cost_points };
+}
+
 /** Owner sets an explicit per-item price for a tier (0/absent branch = all branches). */
 export function setItemPrice(itemId, tierId, price, branchId = 0) {
   const p = Math.max(0, Number(price) || 0);
@@ -980,7 +1064,10 @@ export function setOrderPaid(ticketId, opts = {}) {
   db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
     .run(actorId, method, order.id);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
-  return { ok: true, ticketId: Number(ticketId), total: order.total };
+  // Auto-earn loyalty points for a paid LINE order (no-op for cashier/walk-in or if disabled).
+  let loyalty = null;
+  try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ }
+  return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty };
 }
 
 /** Customer taps "I've paid (PromptPay)" — flags the order 'claimed' so the cashier

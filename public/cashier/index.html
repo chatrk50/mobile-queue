@@ -37,6 +37,7 @@
         <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
+      <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
         <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
         <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
         <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
@@ -150,6 +151,38 @@
         <button class="ok" style="padding:8px 16px" onclick="addIng()">เพิ่ม</button>
       </div>
       <p id="ingErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
+    </div>
+  </div>
+
+  <!-- LOYALTY POINTS & REWARDS (owner/manager) -->
+  <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้แต้มอัตโนมัติ</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span>อัตราได้แต้ม: ทุก</span>
+      <input id="loyRateInp" type="number" inputmode="numeric" min="1" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <span>บาท = 1 แต้ม</span>
+      <button class="ok" style="padding:8px 16px" onclick="saveEarnRate()">บันทึก</button>
+    </div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
+      <div id="rewardsBody"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แต้ม" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
+      </div>
+    </div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <h2 style="margin:0 0 8px;font-size:15px">เช็ค / แลกแต้มลูกค้า</h2>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">วางรหัสลูกค้า LINE (จากหน้าลูกค้า) เพื่อดูแต้มและแลกของรางวัล</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="loyLookup" placeholder="LINE user id (U…)" style="flex:1;min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <button class="ghost" style="padding:8px 16px" onclick="loyLookupGo()">ดูแต้ม</button>
+      </div>
+      <div id="loyLookupResult" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -322,7 +355,7 @@ window.login=async()=>{
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
@@ -331,7 +364,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
-  $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+  $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   $('adminBtn').style.display='none'; closeAdmin();
   $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
@@ -341,7 +374,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
-  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list){
   if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
@@ -374,7 +407,7 @@ window.refundHistory=async(tid,label)=>{
 let SALES=null, salesView='daily';
 window.hideSales=()=>{ $('salesCard').style.display='none'; $('dash').style.display=''; };
 window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
-  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
 window.salesTab=(v)=>{ salesView=v;
@@ -420,7 +453,7 @@ function renderSales(){
 const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
 window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
 window.showStaff=async()=>{ try{ const list=await api('/api/staff');
-  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   renderStaff(list);
 }catch(e){ toast(err(e)); } };
 function renderStaff(list){
@@ -450,7 +483,7 @@ window.resetStaffPin=async(id)=>{ const pin=prompt('PIN ใหม่ (4-8 หล
 let DET=null, detView='tx';
 window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
 window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
-  $('detailCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+  $('detailCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadDetail(); };
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
@@ -505,8 +538,8 @@ function renderDetail(){
 }
 
 // ---------- Branch management (owner) ----------
-window.hideBranch=()=>{ $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('dash').style.display=''; };
-window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none';
+window.hideBranch=()=>{ $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
+window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   try{ renderBranch(await api('/api/branches')); }catch(e){ toast(err(e)); } };
 function renderBranch(list){
   if(!list||!list.length){ $('branchBody').innerHTML='<p class="muted">ยังไม่มีสาขา</p>'; return; }
@@ -522,9 +555,30 @@ window.renameBranchUI=async(id)=>{ const name=(prompt('ชื่อสาขา�
 
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
-window.hideStock=()=>{ $('stockCard').style.display='none'; $('dash').style.display=''; };
-window.showStock=async()=>{ $('stockCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
+window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
+window.showStock=async()=>{ $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
   await loadStock(); };
+// ---------- Loyalty admin (owner/manager): earn-rate, rewards, lookup/redeem ----------
+window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
+window.showLoyalty=async()=>{ $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
+  await loadLoyaltyAdmin(); };
+let REWARDS=[];
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyRateInp').value=d.bahtPerPoint||20; renderRewards(); }catch(e){ toast(err(e)); } };
+function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
+  box.innerHTML=REWARDS.map(r=>`<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <b>(${r.cost_points} แต้ม)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span><button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`).join(''); }
+window.saveEarnRate=async()=>{ const v=Number($('loyRateInp').value)||0; try{ await api('/api/loyalty/earn-rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bahtPerPoint:v})}); toast('บันทึกอัตราแต้มแล้ว'); }catch(e){ toast(err(e)); } };
+window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
+  try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points})}); $('rwName').value='';$('rwCost').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+window.toggleReward=async(id,active)=>{ try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+let LOY_KEY=null;
+window.loyLookupGo=async()=>{ const key=$('loyLookup').value.trim(); if(!key){ return; } LOY_KEY=key;
+  try{ const b=await api('/api/loyalty/'+encodeURIComponent(key)); renderLoyLookup(b); }catch(e){ toast(err(e)); } };
+function renderLoyLookup(b){ const box=$('loyLookupResult');
+  const opts=REWARDS.filter(r=>r.active&&b.points>=r.cost_points);
+  box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:12px"><b style="font-size:20px">${b.points} แต้ม</b> <span class="muted">(สะสมตลอด ${b.lifetime})</span>
+    ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">แต้มยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
+window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!confirm('ยืนยันแลก “'+name+'” ให้ลูกค้า?')) return;
+  try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' แต้ม'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'แต้มไม่พอ':err(e)); } };
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); }catch(e){ toast(err(e)); } };
 function renderStock(d){
   const s=d.summary||{}; $('stockSummary').textContent=`${s.items||0} รายการ · มูลค่ารวม ${baht2(s.totalValue)} · ใกล้หมด ${s.lowCount||0}`;
@@ -556,7 +610,7 @@ window.stockUse=(id)=>{ const r=STOCK.find(x=>x.id===id);
 // ---------- Cash drawer / Z-report (owner/manager) ----------
 let CASH=null;
 window.hideCash=()=>{ $('cashCard').style.display='none'; $('dash').style.display=''; };
-window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadCash(); };
 window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); renderCash(); }catch(e){ toast(err(e)); } };
 function renderCash(){
@@ -661,7 +715,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -705,7 +759,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(channelId){ try{ MENU=await (await fetch('/api/menu'+(channelId?('?channelId='+channelId):''))).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadPriceMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; };
+  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 // Owner-only: set delivery markup % per tier + platform commission % per channel.
 async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
   if(ME && ME.role!=='owner'){ box.innerHTML=''; return; }
@@ -812,7 +866,7 @@ window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderC
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; };
+  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};

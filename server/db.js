@@ -339,6 +339,26 @@ CREATE TABLE IF NOT EXISTS tenders (
   active  INTEGER NOT NULL DEFAULT 1,
   sort    INTEGER NOT NULL DEFAULT 0
 );
+-- Loyalty: our own points system (LINE Reward Cards can't be awarded via API). A customer
+-- earns points when a LINE order is paid; redeems them for rewards. Balance lives on
+-- customers.points; loyalty_moves is the append-only ledger (earn +, redeem −).
+CREATE TABLE IF NOT EXISTS loyalty_moves (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_key TEXT NOT NULL,                  -- = customers.line_user_id
+  kind         TEXT NOT NULL,                  -- earn | redeem | adjust
+  points       INTEGER NOT NULL,              -- signed: earn>0, redeem<0
+  order_id     INTEGER,                        -- the paid order that earned it (earn only)
+  note         TEXT,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_loyalty_moves_key ON loyalty_moves(customer_key, at);
+CREATE TABLE IF NOT EXISTS rewards (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  cost_points INTEGER NOT NULL,
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----
@@ -370,6 +390,9 @@ for (const stmt of [
   `ALTER TABLE price_tiers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE channels ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE customers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  // Loyalty points balance (current) + lifetime (never decremented; for tiers/stats).
+  `ALTER TABLE customers ADD COLUMN points INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE customers ADD COLUMN lifetime_points INTEGER NOT NULL DEFAULT 0`,
   // 'plan' is a libSQL reserved token (returns key as 'PLAN'); rename any already-created
   // column. Throws (and is ignored) on fresh DBs where the column is already plan_name.
   `ALTER TABLE tenants RENAME COLUMN plan TO plan_name`,
@@ -477,6 +500,19 @@ try {
     console.log('[db] Seeded payment tenders.');
   }
 } catch (e) { console.error('[db] tender seed skipped:', e.message); }
+
+// ---- Seed loyalty defaults (idempotent): a starter earn-rate + one sample reward the
+// owner edits later. Earn rate = baht spent per 1 point (e.g. 20 => 1 point / 20฿). ----
+try {
+  if (db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get('loyalty:baht_per_point').c === 0) {
+    db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:baht_per_point','20')`).run();
+  }
+  if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
+    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('ส่วนลด ฿20', 20, 1, 0)`).run();
+    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('โยเกิร์ตฟรี 1 ถ้วย', 100, 1, 1)`).run();
+    console.log('[db] Seeded loyalty earn-rate + sample rewards.');
+  }
+} catch (e) { console.error('[db] loyalty seed skipped:', e.message); }
 
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

@@ -41,6 +41,18 @@
         <span id="reorderLbl">สั่งเหมือนเดิม</span>
       </button>
     </div>
+    <!-- Loyalty points (filled by loadLoyalty); shown once the customer has earned anything -->
+    <div id="loyaltyCard" style="display:none;background:linear-gradient(135deg,#1e3a5f,#2c5a8f);color:#fff;border-radius:16px;padding:16px;margin:0 0 14px;text-align:left">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;opacity:.85">⭐ แต้มสะสมของคุณ</div>
+        <div style="font-size:11px;opacity:.7" id="loyRate"></div>
+      </div>
+      <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">แต้ม</span></div>
+      <div id="loyNext" style="font-size:12px;opacity:.9;margin-bottom:8px"></div>
+      <div style="height:8px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden"><div id="loyBar" style="height:100%;width:0%;background:#ffd166;border-radius:99px;transition:width .4s"></div></div>
+      <button id="loyRewardsBtn" class="ghost" style="width:100%;margin-top:12px;background:rgba(255,255,255,.15);color:#fff;border:none" onclick="toggleRewards()">🎁 ดูของรางวัล</button>
+      <div id="loyRewards" style="display:none;margin-top:6px"></div>
+    </div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
     <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">รับแค่หมายเลขคิว</button>
@@ -229,6 +241,7 @@ async function loadZone(){
   show('closedMsg', !open);
   show('getCard',true);
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
+  loadLoyalty();            // show the customer's points balance (best-effort)
 }
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
@@ -253,6 +266,32 @@ window.reorderFav = ()=>{
   cart.push({ name:FAV.name, price:FAV.price, toppings:[], sweet:100 });
   try{ showOrderUI(); openBasket(); }catch(e){ toast&&toast('เปิดตะกร้าไม่สำเร็จ'); }
 };
+
+// Loyalty points card: balance + progress to next reward + the rewards list (read-only here;
+// redeeming is done by a cashier at the counter). Best-effort — never blocks ordering.
+let LOY=null;
+async function loadLoyalty(){
+  show('loyaltyCard', false);
+  if(!lineUserId) return;
+  try{
+    const conf = await api('/api/loyalty/config');
+    const bal  = await api('/api/loyalty/'+encodeURIComponent(lineUserId));
+    LOY = { ...conf, ...bal };
+    if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;   // only show once they've engaged
+    $('loyPoints').textContent = bal.points || 0;
+    $('loyRate').textContent = conf.bahtPerPoint ? ('ทุก '+conf.bahtPerPoint+'฿ = 1 แต้ม') : '';
+    const rewards = (conf.rewards||[]).slice().sort((a,b)=>a.cost_points-b.cost_points);
+    const next = rewards.find(r=>r.cost_points > (bal.points||0));
+    if(next){ const pct=Math.min(100,Math.round((bal.points||0)/next.cost_points*100));
+      $('loyNext').textContent = 'อีก '+(next.cost_points-(bal.points||0))+' แต้ม แลก “'+next.name+'”'; $('loyBar').style.width = pct+'%'; }
+    else if(rewards.length){ $('loyNext').textContent='พร้อมแลกของรางวัลแล้ว! 🎉'; $('loyBar').style.width='100%'; }
+    else { $('loyNext').textContent=''; $('loyBar').style.width='0%'; }
+    $('loyRewards').innerHTML = rewards.map(r=>{ const ok=(bal.points||0)>=r.cost_points;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)"><span>${esc(r.name)}</span><span style="font-weight:800;${ok?'color:#ffd166':'opacity:.6'}">${r.cost_points} แต้ม${ok?' ✓':''}</span></div>`; }).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">ยังไม่มีของรางวัล</div>';
+    show('loyaltyCard', true);
+  }catch(e){ /* never block the normal flow */ }
+}
+window.toggleRewards=()=>{ const r=$('loyRewards'); if(r) r.style.display = (r.style.display==='none'?'':'none'); };
 
 window.getTicket = async ()=>{
   $('getBtn').disabled=true;

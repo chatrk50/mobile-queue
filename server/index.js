@@ -7,7 +7,7 @@ import { db, getSetting } from './db.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
-import { LINE_ENABLED, lineMiddleware, replyText } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
 
@@ -199,6 +199,32 @@ app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
 });
+
+// ---------- Loyalty points (our own) ----------
+// Public earn-rate + active rewards (for the LIFF points card). No PIN — read-only catalog.
+app.get('/api/loyalty/config', (req, res) => res.json({ bahtPerPoint: Q.getEarnRate(), rewards: Q.listRewards(false) }));
+// A customer's balance + recent history (LIFF passes their own line_user_id).
+app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
+// Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
+app.post('/api/loyalty/:key/redeem', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.redeemReward(req.params.key, Number(req.body?.rewardId), req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Owner: manage earn-rate + rewards.
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ bahtPerPoint: Q.getEarnRate(), rewards: Q.listRewards(true) }); });
+app.post('/api/loyalty/earn-rate', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setEarnRate(req.body?.bahtPerPoint)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/rewards', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.addReward(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/rewards/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.updateReward(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/item-prices', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setItemPrice(req.body?.itemId, req.body?.tierId, req.body?.price, req.body?.branchId || 0)); } catch (e) { res.status(400).json({ error: e.message }); }
@@ -360,10 +386,11 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.success && j.data && j.data.success) {
-      Q.setOrderPaid(ticketId, { method: 'slip' });
+      const pr = Q.setOrderPaid(ticketId, { method: 'slip' });
       const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
       if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
-      return res.json({ ok: true, paid: true, amount: j.data.amount });
+      notifyLoyalty(pr);
+      return res.json({ ok: true, paid: true, amount: j.data.amount, loyalty: pr.loyalty || null });
     }
     return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
   } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
@@ -380,6 +407,13 @@ app.post('/api/tickets/:ticketId/discount', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Fire-and-forget LINE push when a paid order earned loyalty points (never blocks payment).
+function notifyLoyalty(r) {
+  const l = r && r.loyalty;
+  if (l && l.awarded > 0 && l.key) {
+    pushText(l.key, `🎉 คุณได้รับ +${l.awarded} แต้ม! รวมสะสม ${l.balance} แต้ม\nสะสมไว้แลกของรางวัลได้เลยครับ`).catch(() => {});
+  }
+}
 // Cashier marks an order paid (PIN). Defined before the generic /:action route.
 app.post('/api/tickets/:ticketId/paid', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -387,6 +421,7 @@ app.post('/api/tickets/:ticketId/paid', (req, res) => {
     const r = Q.setOrderPaid(req.params.ticketId, { actorId: req.staff?.id || null, method: req.body?.method || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    notifyLoyalty(r);
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
