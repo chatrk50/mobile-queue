@@ -19,6 +19,16 @@
   .pos-totals{ border-top:1px solid var(--line,#e2e8f0); margin-top:10px; padding-top:10px; }
   #billList .qitem{ padding:8px 4px; }
   @media (max-width:820px){ .pos-split{ grid-template-columns:1fr; } .pos-bill{ position:static; } }
+  /* iPad: use more of the screen width */
+  .wrap.wide{ max-width:1280px; }
+  /* Bigger menu item images on the cashier order/topping screens (+~10%) */
+  #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  #orderCard .menu-btn .mimg, #topPop .menu-btn .mimg{ width:68px; height:68px; }
+  #orderCard .menu-btn .mimg svg, #topPop .menu-btn .mimg svg{ width:35px; height:35px; }
+  #orderCard .menu-btn .mth{ font-size:13.5px; }
+  #orderCard .menu-btn .mpr{ font-size:15px; }
+  /* iPad landscape: give the menu grid roomy touch targets */
+  @media (min-width:900px){ #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); } }
 </style>
 </head><body>
 <div class="wrap wide">
@@ -900,7 +910,7 @@ function itemImg(m){
 function renderOrderMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
-    <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
+    <div class="mimg" style="font-size:38px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
