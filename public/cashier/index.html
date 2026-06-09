@@ -999,7 +999,6 @@ function renderZone(snap){
     return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
   const ord=(t)=>{
-    const tsLine = t.order_created_at ? `<div class="muted" style="font-size:11px;margin-top:2px">🕐 ${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
     if(t.order_lines&&t.order_lines.length){
       return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>{
         const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line
@@ -1007,13 +1006,15 @@ function renderZone(snap){
         const sw=m?`<div class="muted" style="margin-left:12px">• ${esc(m[2])}</div>`:'';
         return `<div><b>${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
           l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`;
-      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div>`+tsLine+`</div>`;
+      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
     }
     if(!t.order_summary) return '';
     const net=(t.order_net!=null?t.order_net:t.order_total);
     const amt=(t.order_discount>0)?`<b>฿${net}</b> <span style="text-decoration:line-through;opacity:.6">฿${t.order_total}</span> <span style="color:var(--danger)">(ลด ฿${t.order_discount})</span>`:`฿${t.order_total}`;
-    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}${tsLine}</div>`;
+    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
   };
+  // Date+time shown ABOVE the queue number (no clock icon).
+  const tsTop=(t)=> t.order_created_at ? `<div class="muted" style="font-size:11px;line-height:1.3">${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
   const netOf=(t)=> (t.order_net!=null?t.order_net:t.order_total);
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">📱 QR</button>` : '';
@@ -1031,13 +1032,13 @@ function renderZone(snap){
     ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
     : `<button class="ok" onclick="act(${t.id},'serve')">เสิร์ฟแล้ว</button>`;
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
-    <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
+    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
       <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
+    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
       <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
         ${serveBtn(t)}
