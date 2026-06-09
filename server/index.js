@@ -8,6 +8,7 @@ import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
+import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
 
@@ -107,7 +108,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON, linePay: PAY_ONLINE && LINEPAY_ON });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -386,7 +387,7 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.success && j.data && j.data.success) {
-      const pr = Q.setOrderPaid(ticketId, { method: 'slip' });
+      const pr = Q.setOrderPaid(ticketId, { method: 'online' });   // online QR + SlipOK → 'online' tender
       const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
       if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
       notifyLoyalty(pr);
@@ -394,6 +395,39 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     }
     return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
   } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
+});
+// LINE Pay (scaffold): reserve a payment → customer is redirected to LINE Pay's page.
+app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
+  if (!PAY_ONLINE || !LINEPAY_ON) return res.status(404).json({ error: 'linepay_off' });
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  const ticketId = req.params.ticketId;
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return res.status(404).json({ error: 'order_not_found' });
+  if (order.payment_status === 'paid') return res.json({ ok: true, already: true });
+  try {
+    const confirmUrl = `${PUBLIC_BASE_URL}/api/linepay/confirm?ticketId=${encodeURIComponent(ticketId)}`;
+    const r = await linepayReserve({ amount: order.total, orderId: order.id, productName: 'YO-DEE order', confirmUrl, cancelUrl: `${PUBLIC_BASE_URL}/liff/` });
+    if (!r.ok) return res.status(400).json({ error: 'linepay_reserve_failed', code: r.code, message: r.message });
+    res.json({ ok: true, paymentUrl: r.paymentUrl });
+  } catch (e) { res.status(502).json({ error: 'linepay_unreachable', detail: e.message }); }
+});
+// LINE Pay redirect callback: confirm the transaction, mark paid, award points.
+app.get('/api/linepay/confirm', async (req, res) => {
+  if (!PAY_ONLINE || !LINEPAY_ON) return res.status(404).send('LINE Pay off');
+  const ticketId = req.query.ticketId, transactionId = req.query.transactionId;
+  const order = ticketId ? db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId) : null;
+  if (!order || !transactionId) return res.status(400).send('คำขอไม่ถูกต้อง');
+  try {
+    if (order.payment_status !== 'paid') {
+      const c = await linepayConfirm(transactionId, order.total);
+      if (!c.ok) return res.status(400).send('ชำระเงินไม่สำเร็จ: ' + (c.message || c.code || ''));
+      const pr = Q.setOrderPaid(ticketId, { method: 'linepay' });
+      const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
+      if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+      notifyLoyalty(pr);
+    }
+    res.set('Content-Type', 'text/html; charset=utf-8').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;text-align:center;padding:40px"><h2>✅ ชำระเงินด้วย LINE Pay สำเร็จ</h2><p>กลับไปที่หน้าแอปเพื่อดูคิวของคุณได้เลย</p><a href="/liff/">เปิดแอป</a></body>');
+  } catch (e) { res.status(502).send('LINE Pay error: ' + e.message); }
 });
 // Cashier applies a bill discount to an order (PIN). Before the generic /:action route.
 app.post('/api/tickets/:ticketId/discount', (req, res) => {
