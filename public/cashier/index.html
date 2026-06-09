@@ -934,7 +934,9 @@ window.confirmBasket=async()=>{
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
   try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,channelId:orderChannel})});
-    toast('ออเดอร์ '+r.code+' — ฿'+r.total+' — แจ้งลูกค้า'); cart=[]; hideOrder();
+    cart=[]; hideOrder();
+    // Pay-first: take payment now → issues the queue number. Cancel = stays in "รอชำระเงิน".
+    await markPaid(r.ticketId,'unpaid',r.total);
   }catch(e){ toast(err(e)); } };
 
 async function boot(){
@@ -971,6 +973,7 @@ function zonePanel(z){
         <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">ปิดโซน</button>
       </div>
     </div>
+    <div id="zp-${z.id}"></div>
     <div class="zone-cols">
       <div><h2>กำลังรอ</h2><div id="zw-${z.id}" class="queue-list"></div></div>
       <div><h2>เรียกแล้ว (ล่าสุด)</h2><div id="zr-${z.id}" class="queue-list"></div></div>
@@ -1031,6 +1034,18 @@ function renderZone(snap){
   const serveBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
     : `<button class="ok" onclick="act(${t.id},'serve')">เสิร์ฟแล้ว</button>`;
+  // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
+  const zp=$('zp-'+id);
+  if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
+    `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว</h2>`+
+    `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`
+      <div class="qitem" style="background:rgba(243,203,85,.10)"><div>${tsTop(t)}<div>
+        <span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${nm(t)}
+        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
+        <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}
+          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">💵 รับเงิน → ออกคิว</button>
+          ${voidBtn(t)}</div></div>`).join('')+`</div>`
+  ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
@@ -1080,7 +1095,7 @@ window.markPaid=async(tid,status,amount)=>{
     method=await pickPayMethod(amount);
     if(method===null) return;   // cashier cancelled
   }
-  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('ชำระแล้ว ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total); }catch(e){ toast(err(e)); } };
+  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total); }catch(e){ toast(err(e)); } };
 window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return;
   const reason=(prompt('เหตุผลในการยกเลิก/คืนเงิน (ไม่บังคับ)')||'').trim();
   try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };

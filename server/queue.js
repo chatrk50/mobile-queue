@@ -29,7 +29,7 @@ export function getZone(zoneId) {
 export function findActiveTicket(zoneId, lineUserId) {
   if (!lineUserId) return null;
   return db.prepare(
-    `SELECT * FROM tickets WHERE zone_id = ? AND line_user_id = ? AND status IN ('waiting','called')
+    `SELECT * FROM tickets WHERE zone_id = ? AND line_user_id = ? AND status IN ('pending','waiting','called')
      ORDER BY id DESC LIMIT 1`
   ).get(zoneId, lineUserId);
 }
@@ -1029,14 +1029,14 @@ export function createOrder(zoneId, items, opts = {}) {
   const toppingNames = new Set(
     db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name)
   );
+  // Pay-first model: create the ticket in 'pending' state with NO queue number yet.
+  // The real queue number is issued only once payment is confirmed (assignQueueNumber),
+  // so abandoned/unpaid orders never consume a number and the kitchen only sees paid work.
   const tx = db.transaction(() => {
-    const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
-    const next = cur.last_number + 1;
-    db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
     const tinfo = db.prepare(
-      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name)
-       VALUES (?,?,?,?,?,?,?)`
-    ).run(zone.store_id, zoneId, next, code(cur.prefix, next), 1, lineUserId, label);
+      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
+       VALUES (?,?,?,?,?,?,?,'pending')`
+    ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label);
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id) VALUES (?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
@@ -1049,22 +1049,36 @@ export function createOrder(zoneId, items, opts = {}) {
   // Remember this LINE customer for next-visit reorder suggestions (best-effort).
   if (source === 'customer' && lineUserId) recordCustomerOrder(lineUserId, customerName);
 
-  // Confirmation push for customer self-orders (queue number + amount to pay at counter).
+  // Self-order: remind to pay (the queue number is pushed later, at payment confirmation).
   if (source === 'customer' && lineUserId) {
-    const ahead = aheadCount(r.ticket);
     pushQueue(lineUserId,
-      `🎫 รับออเดอร์แล้ว\n` +
-      `หมายเลขคิวของคุณ: ${r.ticket.code}\n` +
-      `คิวรอก่อนหน้า: ${ahead}\n` +
-      `💵 กรุณาชำระเงิน ฿${r.total} ที่เคาน์เตอร์\n` +
-      `เราจะแจ้งเตือนเมื่อเครื่องดื่มพร้อมค่ะ`,
-      queueLink(zoneId), 'ดูคิวของฉัน');
+      `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\n` +
+      `กรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`,
+      queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
   }
   return r;
 }
 
+/** Pay-first: issue the real queue number for a 'pending' ticket (called once payment is
+ *  confirmed). Idempotent — a ticket that already has a number is returned unchanged, so it
+ *  is safe to call from every payment path (online/LINE Pay/cashier) without double-issuing. */
+export function assignQueueNumber(ticketId) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.number > 0) return t;            // already issued — never re-number
+  return db.transaction(() => {
+    const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(t.zone_id);
+    const next = cur.last_number + 1;
+    db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, t.zone_id);
+    db.prepare("UPDATE tickets SET number=?, code=?, status='waiting' WHERE id=? AND number=0")
+      .run(next, code(cur.prefix, next), ticketId);
+    return db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  })();
+}
+
 /** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter).
- *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other. */
+ *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other.
+ *  Under the pay-first model this is also what ISSUES the queue number. */
 export function setOrderPaid(ticketId, opts = {}) {
   const { actorId = null, method = null } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -1072,10 +1086,23 @@ export function setOrderPaid(ticketId, opts = {}) {
   db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
     .run(actorId, method, order.id);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
+  // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
+  let ticket = null;
+  try { ticket = assignQueueNumber(Number(ticketId)); }
+  catch { ticket = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId); }
+  if (ticket && ticket.line_user_id) {
+    const ahead = aheadCount(ticket);
+    pushQueue(ticket.line_user_id,
+      `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
+      `🎫 หมายเลขคิวของคุณ: ${ticket.code}\n` +
+      `คิวรอก่อนหน้า: ${ahead}\n` +
+      `เราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`,
+      queueLink(ticket.zone_id), 'ดูคิวของฉัน');
+  }
   // Auto-earn loyalty points for a paid LINE order (no-op for cashier/walk-in or if disabled).
   let loyalty = null;
   try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ }
-  return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty };
+  return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
@@ -1195,8 +1222,15 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 5`
   ).all(zoneId);
+  // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
+  // here, which issues the number and moves them into `waiting`.
+  const pending = db.prepare(
+    `SELECT id, code, number, party_size, customer_name, created_at FROM tickets
+     WHERE zone_id=? AND status='pending' ORDER BY id ASC`
+  ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
-                 recentCalled.forEach((t) => { t.customer_name = maskName(t.customer_name); }); }
+                 recentCalled.forEach((t) => { t.customer_name = maskName(t.customer_name); });
+                 pending.forEach((t) => { t.customer_name = maskName(t.customer_name); }); }
   const attach = (t) => {
     const o = orderForTicket(t.id);
     if (o) {
@@ -1212,8 +1246,9 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     }
     return t;
   };
-  waiting.forEach(attach); recentCalled.forEach(attach);
-  return { zone, waiting, recentCalled, waitingCount: waiting.length };
+  waiting.forEach(attach); recentCalled.forEach(attach); pending.forEach(attach);
+  // Only the cashier (reveal) needs the awaiting-payment list; public/display omit it.
+  return { zone, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
 
 export function ticketView(ticketId) {

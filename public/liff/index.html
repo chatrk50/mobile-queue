@@ -54,8 +54,7 @@
     </div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
-    <button id="getBtn" class="ghost" style="width:100%;margin-top:10px" onclick="getTicket()">รับแค่หมายเลขคิว</button>
-    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ไว้ก่อน — ปิด</button>
+    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ปิด</button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 ปิดรับคิว</b><br>
       <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
@@ -77,13 +76,13 @@
     </div>
     <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วดูตะกร้า 🧺</p>
     <div id="menuButtons" style="margin:10px 0"></div>
-    <p class="muted" style="font-size:12px;margin-top:8px">💵 คุณจะได้รับหมายเลขคิว — ชำระเงินที่เคาน์เตอร์</p>
+    <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
   </div>
 
   <!-- STEP: my ticket -->
   <div id="ticketCard" class="card" style="display:none;text-align:center">
     <h2 id="tStore" class="muted">—</h2>
-    <p class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
+    <p id="tCodeLabel" class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
     <div id="tStatusWrap" style="margin:18px 0">
       <div id="tAheadWrap"><span class="muted">คิวรอก่อนหน้า</span>
@@ -100,17 +99,20 @@
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
         <div id="payChoiceLabel" class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
-        <div id="payBtnRow" class="row" style="gap:8px">
-          <button class="ghost" id="payCounterBtn" style="flex:1" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
-          <button class="ok" id="payPromptBtn" style="flex:1;display:none" onclick="choosePay('promptpay')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>พร้อมเพย์</button>
+        <div id="payBtnRow">
+          <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
+          <div id="payQrRow" class="row" style="gap:8px;margin-top:8px;display:none">
+            <button class="ok" id="payPromptBtn" style="flex:1;line-height:1.25" onclick="choosePay('promptpay')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>พร้อมเพย์<br><span style="font-size:11px;font-weight:600;opacity:.85">ธนาคารอื่น</span></button>
+            <button class="ok" id="payKbankBtn" style="flex:1;line-height:1.25" onclick="choosePay('kbank')">💚 KBank<br><span style="font-size:11px;font-weight:600;opacity:.85">กรอกยอดเอง</span></button>
+          </div>
         </div>
         <button class="ok" id="payLinePayBtn" style="width:100%;margin-top:8px;display:none;background:#06c755;color:#fff" onclick="startLinePay()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 9l9 5 9-5"/></svg>จ่ายด้วย LINE Pay</button>
         <div id="counterNote" class="muted" style="display:none;margin-top:10px;font-size:13px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px"></div>
         <!-- after choosing pay-at-counter, an explicit confirm so it's clear the queue is locked in -->
         <button id="counterConfirmBtn" class="ok" style="display:none;width:100%;margin-top:10px" onclick="confirmCounter()"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ยืนยัน — รับคิวเลย</button>
         <div id="counterConfirmedMsg" style="display:none;margin-top:10px;text-align:center;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;padding:14px">
-          <div style="font-weight:800;color:#047857;font-size:16px">✅ รับคิวเรียบร้อย!</div>
-          <div style="font-size:13px;margin-top:4px">นำคิว <b id="confirmedCode">—</b> ไปชำระที่เคาน์เตอร์ · ออเดอร์เริ่มทำหลังชำระเงิน</div>
+          <div style="font-weight:800;color:#047857;font-size:16px">✅ บันทึกออเดอร์แล้ว!</div>
+          <div style="font-size:13px;margin-top:4px">ชำระที่เคาน์เตอร์ได้เลย — <b>ชำระเสร็จรับหมายเลขคิวทันที</b> · ออเดอร์เริ่มทำหลังชำระเงิน</div>
           <button class="ghost" style="margin-top:8px;font-size:12px;padding:4px 10px" onclick="undoCounterConfirm()">‹ เปลี่ยนวิธีชำระเงิน</button>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
@@ -195,7 +197,7 @@ const zoneId = qs.get('zone');
 let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false;
 
 const $ = (id) => document.getElementById(id);
-const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
+const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
@@ -260,7 +262,6 @@ async function loadZone(){
   const open = z.is_open===1;
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'เปิด':'ปิด';
-  show('getBtn', open);
   show('orderNowBtn', open && cfg.selfOrder);
   show('queueStatus', open);
   show('closedMsg', !open);
@@ -321,19 +322,6 @@ async function loadLoyalty(){
   }catch(e){ /* never block the normal flow */ }
 }
 window.toggleRewards=()=>{ const r=$('loyRewards'); if(r) r.style.display = (r.style.display==='none'?'':'none'); };
-
-window.getTicket = async ()=>{
-  if(submitting) return;
-  submitting=true; $('getBtn').disabled=true; $('getBtn').textContent='⏳ กำลังรับคิว...';
-  try{
-    const r = await api('/api/zones/'+zoneId+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({partySize:1,lineUserId,customerName:displayName})});
-    ticketId = r.ticketId;
-    localStorage.setItem('ticket_'+zoneId, ticketId);
-    show('getCard',false); show('ticketCard',true);
-    startPolling();
-  }catch(e){ submitting=false; $('getBtn').disabled=false; $('getBtn').textContent='รับแค่หมายเลขคิว'; toast('รับคิวไม่สำเร็จ: '+e.message); }
-};
 
 // ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
 let MENU=[], cart=[], pendingDrink=null, pendingTops={};
@@ -446,32 +434,38 @@ function renderOrderBlock(v){
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
-    show('payChoice',true); $('confirmedCode').textContent=v.code;
-    if(counterConfirmed){   // keep the "✅ รับคิวแล้ว" state across polls
+    _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
+    show('payChoice',true);
+    if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
       ['payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
       ['payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
-      show('payPromptBtn',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
+      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
       $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
-      if(cfg.promptPay){
-        if(cfg.promptPayDynamic){ $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+total+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย'; }
-        else if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
-        else { $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').textContent='สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง'; }
-      }
-      $('counterNote').innerHTML='<div style="font-size:13px">นำหมายเลขคิวนี้ไปชำระที่เคาน์เตอร์</div>'
-        +'<div style="font-size:30px;font-weight:900;color:var(--navy);line-height:1.1;margin:2px 0">'+v.code+'</div>'
-        +'<div style="font-size:14px">ยอด <b>฿'+total+'</b></div>'
-        +'<div style="margin-top:8px;color:#946f00;font-weight:700;font-size:13px;background:#fff7e6;border:1px solid #fde68a;border-radius:8px;padding:6px 8px">⚠️ ออเดอร์จะเริ่มทำหลังชำระเงินเรียบร้อยแล้วเท่านั้น</div>';
+      $('counterNote').innerHTML='<div style="font-size:13px">ไปชำระที่เคาน์เตอร์ ยอด <b>฿'+total+'</b></div>'
+        +'<div style="margin-top:8px;color:#946f00;font-weight:700;font-size:13px;background:#fff7e6;border:1px solid #fde68a;border-radius:8px;padding:6px 8px">⚠️ ชำระเงินเรียบร้อยแล้วจึงได้รับหมายเลขคิว · ออเดอร์เริ่มทำหลังชำระเงิน</div>';
       applyPayChoice();
     }
   }
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
 }
-let payMethod=null, counterConfirmed=false;
+let payMethod=null, counterConfirmed=false, _orderTotal=0;
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
+// Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
+// KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
+// then the attached slip is checked by SlipOK against the order total.
+function setQrFor(isKbank){
+  if(isKbank){
+    $('ppQrImg').src='/api/promptpay-qr?static=1';
+    $('ppQrNote').innerHTML='ลูกค้า KBank: สแกนแล้ว <b style="color:var(--navy);font-size:15px">กรอกยอด ฿'+_orderTotal+' เอง</b><br>จ่ายแล้ว <b>แนบสลิป</b> — ระบบตรวจยอดให้อัตโนมัติ';
+  } else {
+    $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal;
+    $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
+  }
+}
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
 window.confirmCounter=()=>{
@@ -494,10 +488,12 @@ window.startLinePay=async()=>{
 };
 function applyPayChoice(){
   if(counterConfirmed) return;
-  const c=payMethod==='counter', p=payMethod==='promptpay';
-  show('counterNote', c); show('ppQrWrap', p); show('counterConfirmBtn', c);
+  const c=payMethod==='counter', p=payMethod==='promptpay', k=payMethod==='kbank';
+  show('counterNote', c); show('ppQrWrap', p||k); show('counterConfirmBtn', c);
   $('payCounterBtn').className = c?'ok':'ghost';
   $('payPromptBtn').className = p?'ok':'ghost';
+  $('payKbankBtn').className = k?'ok':'ghost';
+  if(p||k) setQrFor(k);
 }
 window.requestRefund=async()=>{
   const reason=prompt('แจ้งเหตุผลขอคืนเงิน (ถ้ามี):','')||'';
@@ -538,16 +534,35 @@ $('slipFile').addEventListener('change', uploadSlip);
 // app on the SAME phone (scan from album). Best-effort across mobile/in-app browsers.
 window.saveQR=async()=>{
   try{
-    const blob=await (await fetch($('ppQrImg').src)).blob();
-    const file=new File([blob],'promptpay-qr.png',{type:blob.type||'image/png'});
+    // Brand the saved image so it's unmistakably this shop's QR: YO-DEE header + amount band
+    // drawn around the QR on a canvas (same-origin QR → canvas stays untainted/exportable).
+    const qr=new Image(); qr.crossOrigin='anonymous';
+    await new Promise((res,rej)=>{ qr.onload=res; qr.onerror=rej; qr.src=$('ppQrImg').src; });
+    const W=520, pad=18, qrSize=384, headH=94, footH=70;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=headH+qrSize+footH+pad;
+    const g=cv.getContext('2d');
+    g.fillStyle='#ffffff'; g.fillRect(0,0,cv.width,cv.height);
+    g.fillStyle='#16314f'; g.fillRect(0,0,W,headH);              // navy header band
+    g.textAlign='center'; g.fillStyle='#ffffff';
+    g.font='800 32px system-ui,-apple-system,sans-serif'; g.fillText('YO-DEE YOGURT', W/2, 44);
+    g.font='600 16px system-ui,-apple-system,sans-serif'; g.fillText('Thai QR Payment · พร้อมเพย์', W/2, 72);
+    const qx=(W-qrSize)/2, qy=headH+pad/2;
+    g.drawImage(qr, qx, qy, qrSize, qrSize);                     // the QR itself
+    const isK = payMethod==='kbank';
+    g.fillStyle='#16314f'; g.font='800 26px system-ui,-apple-system,sans-serif';
+    g.fillText(isK ? ('KBank · กรอกยอด ฿'+_orderTotal) : ('ยอดชำระ ฿'+_orderTotal), W/2, headH+qrSize+pad+22);
+    g.fillStyle='#6b7280'; g.font='500 14px system-ui,-apple-system,sans-serif';
+    g.fillText('สแกนด้วยแอปธนาคารเพื่อชำระเงิน', W/2, headH+qrSize+pad+46);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const file=new File([blob],'yodee-qr.png',{type:'image/png'});
     // Best on mobile/LINE: native share sheet → "บันทึกรูปภาพ" / Save to Photos.
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({files:[file], title:'PromptPay QR'});
+      await navigator.share({files:[file], title:'YO-DEE YOGURT — QR ชำระเงิน'});
       toast('เลือก "บันทึกรูปภาพ" → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
       return;
     }
     // Fallback: download link (works in some browsers).
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='promptpay-qr.png';
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='yodee-qr.png';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
     toast('บันทึก QR แล้ว → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
   }catch(e){
@@ -557,11 +572,22 @@ window.saveQR=async()=>{
 };
 
 function render(v){
-  $('tCode').textContent = v.code;
+  // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
+  // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
+  const isPending = v.status==='pending';
+  $('tCode').textContent = isPending ? '💳' : v.code;
+  $('tCodeLabel').textContent = isPending ? 'ชำระเงินเพื่อรับหมายเลขคิว' : 'หมายเลขคิวของคุณ';
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
-  $('tLastCalled').textContent = v.last_called ? ('กำลังเรียกคิว: '+v.last_called) : '';
+  $('tLastCalled').textContent = (!isPending && v.last_called) ? ('กำลังเรียกคิว: '+v.last_called) : '';
   $('cancelBtn').style.display=''; $('tRate').style.display='none';
+  if(isPending){
+    show('tAheadWrap',false); show('tCalled',false);
+    $('tNotifyNote').textContent = (v.order && v.order.status==='claimed')
+      ? 'รอแคชเชียร์ยืนยันการชำระเงิน แล้วระบบจะออกหมายเลขคิวให้'
+      : 'ชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที';
+    return;
+  }
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
     $('tAhead').textContent = v.ahead;
@@ -607,7 +633,7 @@ window.cancelTicket = async ()=>{
   if(!confirm('ยกเลิกคิว?')) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}); clearInterval(poll);
     localStorage.removeItem('ticket_'+zoneId);
-    submitting=false; show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; $('getBtn').textContent='รับแค่หมายเลขคิว'; loadZone();
+    submitting=false; show('ticketCard',false); show('getCard',true); loadZone();
   }catch(e){ toast(e.message); }
 };
 

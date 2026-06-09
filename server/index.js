@@ -283,12 +283,16 @@ app.get('/api/qr/:zoneId', async (req, res) => {
 app.get('/api/promptpay-qr', async (req, res) => {
   if (!PAY_ONLINE || !PROMPTPAY_DYNAMIC) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);
+  // static=1 → the ORIGINAL no-amount merchant QR. KBank locks the amount on injected
+  // (bill-payment) QRs, so KBank customers scan this and type the amount themselves; the
+  // slip is then checked by SlipOK against the order total. Other banks use the dynamic QR.
+  const wantStatic = String(req.query.static || '') === '1';
   try {
     // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
     // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
-    const payload = MERCHANT_QR
-      ? buildDynamicPayload(MERCHANT_QR, amount)
-      : generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
+    const payload = wantStatic
+      ? (MERCHANT_QR ? MERCHANT_QR : generatePayload(PROMPTPAY_ID, {}))
+      : (MERCHANT_QR ? buildDynamicPayload(MERCHANT_QR, amount) : generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {}));
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).json({ error: 'qr_failed' }); }
