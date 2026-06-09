@@ -10,7 +10,8 @@
     "seed": "node --experimental-sqlite scripts/seed.js",
     "qr": "node --experimental-sqlite scripts/gen-qr.js",
     "test": "node --experimental-sqlite scripts/test-flow.js",
-    "test:e2e": "node --experimental-sqlite scripts/test-e2e.js"
+    "test:e2e": "node --experimental-sqlite scripts/test-e2e.js",
+    "backup": "node scripts/backup-dump.js"
   },
   "engines": {
     "node": ">=22.5.0"

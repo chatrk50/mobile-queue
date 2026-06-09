@@ -1,0 +1,38 @@
+name: Daily DB backup
+
+# Dumps the durable Turso DB once a day and keeps it as a downloadable artifact (90 days).
+# Off-platform: survives Render/app issues. Run manually anytime via "Run workflow".
+on:
+  schedule:
+    - cron: '0 19 * * *'   # 02:00 Asia/Bangkok (19:00 UTC) every day
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install deps (libsql)
+        run: npm install --no-audit --no-fund
+      - name: Dump Turso DB
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          mkdir -p backups
+          OUT="backups/yodee-backup-$(date -u +%Y%m%d-%H%M%S).sql"
+          node scripts/backup-dump.js > "$OUT"
+          echo "wrote $OUT ($(wc -c < "$OUT") bytes)"
+          head -3 "$OUT"
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yodee-db-backup
+          path: backups/*.sql
+          retention-days: 90
