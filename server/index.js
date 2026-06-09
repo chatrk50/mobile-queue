@@ -10,6 +10,7 @@ import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
+import { decodeMerchantTemplate, buildDynamicPayload } from './thaiqr.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
 
@@ -39,6 +40,12 @@ const SLIPOK_ON = Boolean(SLIPOK_API_KEY && SLIPOK_BRANCH_ID);
 // Master switch for ONLINE payment (PromptPay QR + slip verify). OFF by default ->
 // customers see "pay at counter" only. Flip PAY_ONLINE=1 in Render to re-enable later.
 const PAY_ONLINE = String(process.env.PAY_ONLINE ?? '0') === '1';
+// Decode the shop's static merchant QR (public/assets/promptpay.png) once at boot so we can
+// re-issue it DYNAMICALLY with the bill amount pre-filled (like a POS). Null if no QR image.
+const MERCHANT_QR = PAY_ONLINE ? await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay.png')) : null;
+if (MERCHANT_QR) console.log('[qr] Merchant QR decoded — dynamic amount QR enabled.');
+// Can we generate a QR with the amount baked in? (merchant template OR a PromptPay id)
+const PROMPTPAY_DYNAMIC = PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID);
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -109,7 +116,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON, linePay: PAY_ONLINE && LINEPAY_ON });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON, linePay: PAY_ONLINE && LINEPAY_ON });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -271,10 +278,14 @@ app.get('/api/qr/:zoneId', async (req, res) => {
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
 app.get('/api/promptpay-qr', async (req, res) => {
-  if (!PAY_ONLINE || !PROMPTPAY_ID) return res.status(404).json({ error: 'promptpay_off' });
+  if (!PAY_ONLINE || !PROMPTPAY_DYNAMIC) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);
   try {
-    const payload = generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
+    // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
+    // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
+    const payload = MERCHANT_QR
+      ? buildDynamicPayload(MERCHANT_QR, amount)
+      : generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).json({ error: 'qr_failed' }); }

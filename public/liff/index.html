@@ -435,7 +435,8 @@ function renderOrderBlock(v){
     $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
     $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
     if(cfg.promptPay){
-      if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
+      if(cfg.promptPayDynamic){ $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+total+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย'; }
+      else if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
       else { $('ppQrImg').src='/api/promptpay-qr?amount='+total; $('ppQrNote').textContent='สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง'; }
     }
     $('counterNote').innerHTML='<div style="font-size:13px">นำหมายเลขคิวนี้ไปชำระที่เคาน์เตอร์</div>'
