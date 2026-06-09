@@ -185,6 +185,20 @@ app.post('/api/channels/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateChannel(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---------- Payment tenders (how money is collected) ----------
+// Active tenders for the cashier/customer payment picker (any signed-in staff).
+app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
+// Owner: manage tenders (rename / toggle / fee%).
+app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listTenders(true)); });
+app.post('/api/tenders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.updateTender(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Per-tender daily settlement totals (reconcile each app/bank payout).
+app.get('/api/tender-recon', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
+});
 app.post('/api/item-prices', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setItemPrice(req.body?.itemId, req.body?.tierId, req.body?.price, req.body?.branchId || 0)); } catch (e) { res.status(400).json({ error: e.message }); }

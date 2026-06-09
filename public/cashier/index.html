@@ -277,18 +277,13 @@
   <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center">
     <h1 style="margin:0 0 4px">รับชำระเงิน</h1>
     <div style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:14px">ยอด ฿<span id="payMethodAmt">0</span></div>
-    <div style="display:grid;gap:8px">
-      <button class="ok" style="padding:12px" onclick="choosePayMethod('cash')">💵 เงินสด</button>
-      <button class="ok" style="padding:12px" onclick="choosePayMethod('promptpay')">📱 พร้อมเพย์ / โอน</button>
-      <button class="ghost" style="padding:12px" onclick="choosePayMethod('other')">อื่น ๆ</button>
-      <button class="ghost" style="padding:8px;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>
-    </div>
+    <div id="payMethodBtns" style="display:grid;gap:8px"></div>
   </div>
 </div>
 
 <script type="module">
 const $=(id)=>document.getElementById(id);
-let PIN=null, zones=[], streams=[], CFG={}, ME=null;
+let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 const zoneOpenState={};
 window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPopImg').src = CFG.promptPayStatic ? CFG.promptPayStatic : ('/api/promptpay-qr?amount='+amount);
@@ -457,7 +452,9 @@ window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.di
 window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
   $('detailCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none';
   await loadDetail(); };
-window.loadDetail=async()=>{ try{ DET=await api('/api/reports/detailed?date='+($('detailDate').value||'')); renderDetail(); }catch(e){ toast(err(e)); } };
+window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
+  try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
+  renderDetail(); }catch(e){ toast(err(e)); } };
 window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab '+(b.dataset.t===v?'ok':'ghost')); renderDetail(); };
 function baht2(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
 function detTable(head,rows){ return `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">${head.map(h=>`<th style="padding:6px 4px;${h.r?'text-align:right':''}">${h.t}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`; }
@@ -475,8 +472,18 @@ function renderDetail(){
         <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}</td>
         <td style="color:var(--muted);font-size:12px">${esc(r.paid_by||r.created_by||'')}</td></tr>`; }).join(''));
   } else if(t==='pay'){
-    const rows=(DET.payments||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>รวมรับชำระ ${baht2(DET.paidTotal)}</b> · ${DET.paidOrders||0} ออเดอร์</div>`+
-      (rows.length?detTable([{t:'วิธีชำระ'},{t:'ออเดอร์',r:1},{t:'ยอดรวม',r:1}], rows.map(p=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(p.method)}</td><td style="text-align:right">${p.orders}</td><td style="text-align:right"><b>${baht2(p.amount)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มีการชำระเงิน</p>');
+    const rec=DET.recon;
+    if(rec&&rec.lines){
+      const anyFee=rec.lines.some(l=>l.fee_pct);
+      box.innerHTML=`<div style="margin-bottom:4px"><b>รับชำระรวม ${baht2(rec.total.amount)}</b> · ${rec.total.orders} ออเดอร์</div>`+
+        `<p class="muted" style="font-size:12px;margin:0 0 10px">กระทบยอดแต่ละช่องทางกับเงินที่เข้าจริงในแต่ละแอป/บัญชี</p>`+
+        detTable([{t:'ช่องทางรับเงิน'},{t:'ออเดอร์',r:1},{t:'ยอดรวม',r:1}].concat(anyFee?[{t:'สุทธิ',r:1}]:[]),
+          rec.lines.map(l=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${TENDER_EMOJI[l.code]||'💳'} ${esc(l.label)}${l.fee_pct?` <span class="muted" style="font-size:11px">หัก ${l.fee_pct}%</span>`:''}</td><td style="text-align:right">${l.orders||'—'}</td><td style="text-align:right"><b>${baht2(l.amount)}</b></td>${anyFee?`<td style="text-align:right">${l.fee?baht2(l.net):'—'}</td>`:''}</tr>`).join('')
+          +`<tr style="font-weight:800"><td style="padding:8px 4px;border-top:2px solid var(--line)">รวม</td><td style="text-align:right;border-top:2px solid var(--line)">${rec.total.orders}</td><td style="text-align:right;border-top:2px solid var(--line)">${baht2(rec.total.amount)}</td>${anyFee?`<td style="text-align:right;border-top:2px solid var(--line)">${baht2(rec.total.net)}</td>`:''}</tr>`);
+    } else {
+      const rows=(DET.payments||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>รวมรับชำระ ${baht2(DET.paidTotal)}</b> · ${DET.paidOrders||0} ออเดอร์</div>`+
+        (rows.length?detTable([{t:'วิธีชำระ'},{t:'ออเดอร์',r:1},{t:'ยอดรวม',r:1}], rows.map(p=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${esc(p.method)}</td><td style="text-align:right">${p.orders}</td><td style="text-align:right"><b>${baht2(p.amount)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มีการชำระเงิน</p>');
+    }
   } else if(t==='void'){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)})</div>`+
@@ -860,6 +867,7 @@ window.confirmBasket=async()=>{
 
 async function boot(){
   try{ CFG=await (await fetch('/api/config')).json(); }catch(e){ CFG={}; }
+  try{ TENDERS=await (await fetch('/api/tenders')).json(); }catch(e){ TENDERS=[]; }
   const stores=await (await fetch('/api/stores')).json();
   STORE=stores[0]||null; renderStoreBtn();
   zones=[]; let html='';
@@ -966,9 +974,19 @@ window.addWalkin=async(id)=>{ try{
   const j=await r.json(); toast('ออกคิว '+j.code+' — แจ้งลูกค้า');
 }catch(e){ toast(err(e)); } };
 window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{method:'POST'}); }catch(e){ toast(err(e)); } };
-// Promise-based payment-method picker (resolves to 'cash'|'promptpay'|'other'|null).
+// Promise-based payment-method picker. Buttons come from the active COUNTER tenders
+// (เงินสด / 6040 ไทยช่วยไทย+ / K PLUS Shop …); online tenders are taken via the customer flow.
 let _payRes=null;
-function pickPayMethod(amount){ $('payMethodAmt').textContent=amount; $('payMethodPop').style.display='flex';
+const TENDER_EMOJI={cash:'💵','6040':'🟦',kplus:'🟩',online:'🌐',linepay:'💚',promptpay:'📱',other:'💳'};
+function renderPayButtons(){
+  const box=$('payMethodBtns'); if(!box) return;
+  let list=(TENDERS||[]).filter(t=>t.kind==='counter'&&t.active!==0);
+  if(!list.length) list=[{code:'cash',label:'เงินสด'},{code:'promptpay',label:'พร้อมเพย์ / โอน'}];
+  box.innerHTML=list.map(t=>`<button class="ok" style="padding:12px" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
+    +`<button class="ghost" style="padding:12px" onclick="choosePayMethod('other')">อื่น ๆ</button>`
+    +`<button class="ghost" style="padding:8px;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
+}
+function pickPayMethod(amount){ $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
   return new Promise(res=>{ _payRes=res; }); }
 window.choosePayMethod=(m)=>{ $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
 window.markPaid=async(tid,status,amount)=>{

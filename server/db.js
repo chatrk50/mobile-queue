@@ -327,6 +327,18 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_stock_moves_ing ON stock_moves(ingredient_id, at);
+-- Payment tenders (HOW money is collected). Each is a distinct settlement channel so the
+-- owner can reconcile each day's total against what each app/bank actually pays out.
+-- fee_pct is usually 0 (shop keeps 100%); reserved for a platform fee (e.g. LINE Pay).
+CREATE TABLE IF NOT EXISTS tenders (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  code    TEXT NOT NULL UNIQUE,             -- cash | 6040 | kplus | online | linepay
+  label   TEXT NOT NULL,
+  kind    TEXT NOT NULL DEFAULT 'counter',  -- counter (cashier collects) | online (customer app)
+  fee_pct REAL NOT NULL DEFAULT 0,          -- platform fee %, 0 = shop keeps all
+  active  INTEGER NOT NULL DEFAULT 1,
+  sort    INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----
@@ -447,6 +459,24 @@ try {
     console.log('[db] Seeded default price tiers + channels.');
   }
 } catch (e) { console.error('[db] tier/channel seed skipped:', e.message); }
+
+// ---- Seed the payment tenders (idempotent). The owner's current 5 ways to get paid.
+// 6040 = Krungthai "ไทยช่วยไทย พลัส" co-pay (shop receives 100%, tracked separately for
+// reconciliation). All fee_pct = 0 for now; LINE Pay's fee can be set later if desired. ----
+try {
+  if (!db.prepare('SELECT COUNT(*) c FROM tenders').get().c) {
+    const seed = [
+      ['cash',    'เงินสด',                  'counter', 0],
+      ['6040',    'ไทยช่วยไทย พลัส (เป๋าตัง)', 'counter', 1],
+      ['kplus',   'K PLUS Shop',             'counter', 2],
+      ['online',  'จ่ายออนไลน์ (QR)',         'online',  3],
+      ['linepay', 'LINE Pay',                'online',  4],
+    ];
+    const ins = db.prepare(`INSERT INTO tenders (code, label, kind, active, sort) VALUES (?,?,?,1,?)`);
+    for (const [code, label, kind, sort] of seed) ins.run(code, label, kind, sort);
+    console.log('[db] Seeded payment tenders.');
+  }
+} catch (e) { console.error('[db] tender seed skipped:', e.message); }
 
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

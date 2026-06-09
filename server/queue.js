@@ -717,6 +717,59 @@ export function updateChannel(id, { commission_pct, active, name }) {
   db.prepare('UPDATE channels SET commission_pct=?, active=?, name=? WHERE id=?').run(c, a, nm, id);
   return db.prepare('SELECT * FROM channels WHERE id=?').get(id);
 }
+
+// ---------- Payment tenders (HOW money is collected; per-tender daily reconciliation) ----------
+/** Payment tenders. includeInactive=false → only active ones (for pickers). */
+export function listTenders(includeInactive = false) {
+  return db.prepare(`SELECT * FROM tenders ${includeInactive ? '' : 'WHERE active=1'} ORDER BY sort, id`).all();
+}
+/** Owner edits a tender (label / active / fee% / sort). */
+export function updateTender(id, { label, active, fee_pct, sort } = {}) {
+  const cur = db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
+  if (!cur) throw new Error('tender_not_found');
+  const lb = label != null ? (label.toString().trim().slice(0, 40) || cur.label) : cur.label;
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  const f = fee_pct != null ? Math.max(0, Math.min(100, Number(fee_pct) || 0)) : cur.fee_pct;
+  const s = sort != null ? (Number(sort) || 0) : cur.sort;
+  db.prepare('UPDATE tenders SET label=?, active=?, fee_pct=?, sort=? WHERE id=?').run(lb, a, f, s, id);
+  return db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
+}
+/**
+ * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
+ * (0 if unused that day) so the owner can tick each line against what the app/bank actually
+ * paid out. amount = net of discount (what the customer paid); net = amount minus any fee%.
+ * Any paid orders whose method isn't a known tender (legacy promptpay/slip/other) are listed too.
+ */
+export function tenderRecon({ date = null, branchId = null } = {}) {
+  const DAY = "COALESCE(?, date('now','+7 hours'))";
+  const BR = "(? IS NULL OR o.branch_id = ?)";
+  const rows = db.prepare(
+    `SELECT COALESCE(o.payment_method,'unspecified') AS code, COUNT(*) AS orders,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
+       FROM orders o
+      WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND ${BR}
+      GROUP BY code`
+  ).all(date, branchId, branchId);
+  const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
+  const tenders = listTenders();
+  const lines = tenders.map((t) => {
+    const hit = byCode[t.code] || { orders: 0, amount: 0 };
+    const amount = r2(hit.amount);
+    const fee = r2(amount * (t.fee_pct || 0) / 100);
+    return { code: t.code, label: t.label, kind: t.kind, fee_pct: t.fee_pct || 0,
+             orders: hit.orders || 0, amount, fee, net: r2(amount - fee) };
+  });
+  const known = new Set(tenders.map((t) => t.code));
+  for (const r of rows) {
+    if (!known.has(r.code)) {
+      const amount = r2(r.amount);
+      lines.push({ code: r.code, label: r.code, kind: 'other', fee_pct: 0, orders: r.orders, amount, fee: 0, net: amount });
+    }
+  }
+  const total = lines.reduce((a, l) => ({ orders: a.orders + l.orders, amount: r2(a.amount + l.amount), net: r2(a.net + l.net) }), { orders: 0, amount: 0, net: 0 });
+  return { date, lines, total };
+}
+
 /** Owner sets an explicit per-item price for a tier (0/absent branch = all branches). */
 export function setItemPrice(itemId, tierId, price, branchId = 0) {
   const p = Math.max(0, Number(price) || 0);
