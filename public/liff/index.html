@@ -120,7 +120,7 @@
           <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
           <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:10px">
             <b>📱 จ่ายในมือถือเครื่องเดียว:</b><br>
-            1) กด <b>“บันทึกรูป QR”</b> (หรือกดค้างที่รูป)<br>
+            1) <b>แคปหน้าจอ (screenshot)</b> QR นี้ — หรือกด “บันทึกรูป QR”<br>
             2) เปิดแอปธนาคาร → <b>สแกน → เลือกรูปจากอัลบั้ม</b><br>
             3) จ่ายตามยอด<br>
             <span id="onePhoneTipStep4">4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ</span>
@@ -192,7 +192,7 @@
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
-let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false;
+let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => $(id).style.display = on ? '' : 'none';
@@ -211,7 +211,13 @@ async function initLiff(){
       const p = await liff.getProfile();
       lineUserId = p.userId; displayName = p.displayName;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
-    }catch(e){ $('liffNote').textContent = 'LIFF init failed — test mode (no LINE id).'; }
+    }catch(e){
+      // LIFF init/getProfile failed — fall back to a STABLE id so the server's per-customer
+      // duplicate-order guard still works (a null id disables it → duplicate orders).
+      lineUserId = localStorage.getItem('demoUid') || ('anon-'+Math.random().toString(36).slice(2,9));
+      localStorage.setItem('demoUid', lineUserId);
+      $('liffNote').textContent = 'LIFF init failed — ใช้โหมดสำรอง';
+    }
   } else {
     lineUserId = localStorage.getItem('demoUid') || ('demo-'+Math.random().toString(36).slice(2,9));
     localStorage.setItem('demoUid', lineUserId);
@@ -317,7 +323,8 @@ async function loadLoyalty(){
 window.toggleRewards=()=>{ const r=$('loyRewards'); if(r) r.style.display = (r.style.display==='none'?'':'none'); };
 
 window.getTicket = async ()=>{
-  $('getBtn').disabled=true;
+  if(submitting) return;
+  submitting=true; $('getBtn').disabled=true; $('getBtn').textContent='⏳ กำลังรับคิว...';
   try{
     const r = await api('/api/zones/'+zoneId+'/tickets',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({partySize:1,lineUserId,customerName:displayName})});
@@ -325,7 +332,7 @@ window.getTicket = async ()=>{
     localStorage.setItem('ticket_'+zoneId, ticketId);
     show('getCard',false); show('ticketCard',true);
     startPolling();
-  }catch(e){ $('getBtn').disabled=false; toast('รับคิวไม่สำเร็จ: '+e.message); }
+  }catch(e){ submitting=false; $('getBtn').disabled=false; $('getBtn').textContent='รับแค่หมายเลขคิว'; toast('รับคิวไม่สำเร็จ: '+e.message); }
 };
 
 // ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
@@ -350,7 +357,7 @@ function itemImg(m){
   return fb;
 }
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
-window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null;
+window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
@@ -401,9 +408,11 @@ function renderBasket(){
 }
 window.cancelBasket=()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!confirm('ยกเลิกออเดอร์ทั้งหมด?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
+// `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
 window.confirmBasket=async()=>{
+  if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
-  $('basketConfirm').disabled=true;
+  submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
   try{
@@ -412,12 +421,12 @@ window.confirmBasket=async()=>{
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
     cart=[]; ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
-    if(e.data && e.data.error==='already_in_queue'){
+    if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); return;
+      ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
-    $('basketConfirm').disabled=false; toast('สั่งไม่สำเร็จ: '+e.message);
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
   }
 };
 
@@ -529,14 +538,22 @@ $('slipFile').addEventListener('change', uploadSlip);
 // app on the SAME phone (scan from album). Best-effort across mobile/in-app browsers.
 window.saveQR=async()=>{
   try{
-    const src=$('ppQrImg').src;
-    const blob=await (await fetch(src)).blob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='promptpay-qr.png';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),4000);
-    toast('บันทึก QR แล้ว → เปิดแอปธนาคาร → สแกน → เลือกจากอัลบั้ม');
-  }catch(e){ toast('กดค้างที่รูป QR ค้างไว้เพื่อบันทึกลงอัลบั้ม'); }
+    const blob=await (await fetch($('ppQrImg').src)).blob();
+    const file=new File([blob],'promptpay-qr.png',{type:blob.type||'image/png'});
+    // Best on mobile/LINE: native share sheet → "บันทึกรูปภาพ" / Save to Photos.
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'PromptPay QR'});
+      toast('เลือก "บันทึกรูปภาพ" → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
+      return;
+    }
+    // Fallback: download link (works in some browsers).
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='promptpay-qr.png';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+    toast('บันทึก QR แล้ว → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
+  }catch(e){
+    // Universal fallback: screenshot works on every phone.
+    toast('แคปหน้าจอ (screenshot) รูป QR นี้ → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
+  }
 };
 
 function render(v){
@@ -590,7 +607,7 @@ window.cancelTicket = async ()=>{
   if(!confirm('ยกเลิกคิว?')) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}); clearInterval(poll);
     localStorage.removeItem('ticket_'+zoneId);
-    show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; loadZone();
+    submitting=false; show('ticketCard',false); show('getCard',true); $('getBtn').disabled=false; $('getBtn').textContent='รับแค่หมายเลขคิว'; loadZone();
   }catch(e){ toast(e.message); }
 };
 
