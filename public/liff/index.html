@@ -44,10 +44,10 @@
     <!-- Loyalty points (filled by loadLoyalty); shown once the customer has earned anything -->
     <div id="loyaltyCard" style="display:none;background:linear-gradient(135deg,#1e3a5f,#2c5a8f);color:#fff;border-radius:16px;padding:16px;margin:0 0 14px;text-align:left">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:13px;opacity:.85">⭐ แต้มสะสมของคุณ</div>
+        <div style="font-size:13px;opacity:.85">⭐ สะสมแก้วของคุณ</div>
         <div style="font-size:11px;opacity:.7" id="loyRate"></div>
       </div>
-      <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">แต้ม</span></div>
+      <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">ดวง</span></div>
       <div id="loyNext" style="font-size:12px;opacity:.9;margin-bottom:8px"></div>
       <div style="height:8px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden"><div id="loyBar" style="height:100%;width:0%;background:#ffd166;border-radius:99px;transition:width .4s"></div></div>
       <button id="loyRewardsBtn" class="ghost" style="width:100%;margin-top:12px;background:rgba(255,255,255,.15);color:#fff;border:none" onclick="toggleRewards()">🎁 ดูของรางวัล</button>
@@ -285,19 +285,18 @@ async function loadLoyalty(){
   if(!lineUserId) return;
   try{
     const conf = await api('/api/loyalty/config');
+    if(!conf.enabled) return;                                      // feature off → never show
     const bal  = await api('/api/loyalty/'+encodeURIComponent(lineUserId));
     LOY = { ...conf, ...bal };
-    if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;   // only show once they've engaged
-    $('loyPoints').textContent = bal.points || 0;
-    $('loyRate').textContent = conf.bahtPerPoint ? ('ทุก '+conf.bahtPerPoint+'฿ = 1 แต้ม') : '';
-    const rewards = (conf.rewards||[]).slice().sort((a,b)=>a.cost_points-b.cost_points);
-    const next = rewards.find(r=>r.cost_points > (bal.points||0));
-    if(next){ const pct=Math.min(100,Math.round((bal.points||0)/next.cost_points*100));
-      $('loyNext').textContent = 'อีก '+(next.cost_points-(bal.points||0))+' แต้ม แลก “'+next.name+'”'; $('loyBar').style.width = pct+'%'; }
-    else if(rewards.length){ $('loyNext').textContent='พร้อมแลกของรางวัลแล้ว! 🎉'; $('loyBar').style.width='100%'; }
-    else { $('loyNext').textContent=''; $('loyBar').style.width='0%'; }
-    $('loyRewards').innerHTML = rewards.map(r=>{ const ok=(bal.points||0)>=r.cost_points;
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)"><span>${esc(r.name)}</span><span style="font-weight:800;${ok?'color:#ffd166':'opacity:.6'}">${r.cost_points} แต้ม${ok?' ✓':''}</span></div>`; }).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">ยังไม่มีของรางวัล</div>';
+    if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;    // only show once they've earned
+    const per = conf.stampsPerReward||10, have = bal.points||0;
+    $('loyPoints').textContent = have;
+    $('loyRate').textContent = 'ครบ '+per+' แก้ว = ฟรี 1 แก้ว';
+    const inCycle = have % per, toGo = (per - inCycle) % per;
+    if(toGo===0 && have>0){ $('loyNext').textContent='ครบแล้ว! รับเครื่องดื่มฟรีได้เลย 🎉'; $('loyBar').style.width='100%'; }
+    else { $('loyNext').textContent='อีก '+toGo+' แก้ว รับเครื่องดื่มฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
+    $('loyRewards').innerHTML = (conf.rewards||[]).map(r=>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)"><span>${esc(r.name)}</span><span style="font-weight:800">${r.cost_points} แก้ว</span></div>`).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">—</div>';
     show('loyaltyCard', true);
   }catch(e){ /* never block the normal flow */ }
 }

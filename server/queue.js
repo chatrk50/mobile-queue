@@ -359,7 +359,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   const BR = "(? IS NULL OR o.branch_id = ?)";
 
   const transactions = db.prepare(
-    `SELECT t.code, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
+    `SELECT t.code, t.status AS ticket_status, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
             o.payment_status, o.payment_method, o.void_kind,
             ps.name AS paid_by, cs.name AS created_by,
             (SELECT GROUP_CONCAT(oi.qty || 'x ' || oi.name, ', ') FROM order_items oi WHERE oi.order_id = o.id) AS items
@@ -770,15 +770,19 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
   return { date, lines, total };
 }
 
-// ---------- Loyalty points (our own — LINE Reward Cards can't be awarded via API) ----------
-/** Baht spent per 1 point (e.g. 20 => 1 point per 20฿). 0 disables earning. */
-export function getEarnRate() { return Math.max(0, Number(getSetting('loyalty:baht_per_point', '20')) || 0); }
-export function setEarnRate(bahtPerPoint) {
-  const v = Math.max(0, Math.round(Number(bahtPerPoint) || 0));
-  setSetting('loyalty:baht_per_point', v);
-  return { baht_per_point: v };
+// ---------- Loyalty STAMP CARD (our own — LINE Reward Cards can't be awarded via API) ----------
+// Model: 1 stamp per drink cup; collect `stamps_per_reward` cups → 1 free drink (≤49฿).
+// "points" in the DB == stamps. Disabled by default (owner enables later).
+export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
+export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
+/** Cups (drink stamps) needed to earn one free drink. */
+export function getStampsPerReward() { return Math.max(1, Math.round(Number(getSetting('loyalty:stamps_per_reward', '10')) || 10)); }
+export function setStampsPerReward(n) {
+  const v = Math.max(1, Math.round(Number(n) || 0));
+  setSetting('loyalty:stamps_per_reward', v);
+  return { stamps_per_reward: v };
 }
-/** Current + lifetime balance for a customer key (line_user_id). */
+/** Current + lifetime stamp balance for a customer key (line_user_id). */
 export function loyaltyBalance(key) {
   if (!key) return { key, points: 0, lifetime: 0 };
   const c = db.prepare('SELECT points, lifetime_points FROM customers WHERE line_user_id=?').get(key);
@@ -789,21 +793,23 @@ export function loyaltyHistory(key, limit = 30) {
   return db.prepare('SELECT kind, points, order_id, note, at FROM loyalty_moves WHERE customer_key=? ORDER BY id DESC LIMIT ?').all(key, limit);
 }
 /**
- * Award points for a paid order, once. Looks up the order's LINE customer (via its ticket);
- * skips cashier/walk-in orders with no line_user_id. points = floor(net / earnRate).
- * Idempotent: a second call for the same order is a no-op. Returns {key,name,awarded,balance}
- * so the caller can send a LINE "+N points" push, or null when nothing was awarded.
+ * Award stamps for a paid order, once: 1 stamp per drink cup (toppings excluded). Skips
+ * cashier/walk-in (no line_user_id) and no-ops when loyalty is disabled. Idempotent per order.
+ * Returns {key,name,awarded,balance} for a LINE "+N ดวง" push, or null.
  */
 export function awardPoints(orderId) {
+  if (!loyaltyEnabled()) return null;
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
   if (!order) return null;
-  const rate = getEarnRate();
-  if (!(rate > 0)) return null;
   const t = db.prepare('SELECT line_user_id, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
   if (!t || !t.line_user_id) return null;
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
-  const net = (order.total || 0) - (order.discount || 0);
-  const pts = Math.floor(net / rate);
+  // 1 stamp per drink cup (non-topping lines); sweetened drink names don't match the menu
+  // catalog so they COALESCE to 'drink' — counted, which is correct.
+  const pts = db.prepare(
+    `SELECT COALESCE(SUM(oi.qty),0) c FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name
+      WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
+  ).get(orderId).c;
   if (pts <= 0) return null;
   const key = t.line_user_id;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;

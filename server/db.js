@@ -505,16 +505,16 @@ try {
   }
 } catch (e) { console.error('[db] tender seed skipped:', e.message); }
 
-// ---- Seed loyalty defaults (idempotent): a starter earn-rate + one sample reward the
-// owner edits later. Earn rate = baht spent per 1 point (e.g. 20 => 1 point / 20฿). ----
+// ---- Seed loyalty defaults (idempotent). Model = STAMP CARD: 1 stamp per drink cup;
+// collect `stamps_per_reward` cups → 1 free drink (≤49฿). DISABLED by default
+// (loyalty:enabled='0') — the owner turns it on later. ----
 try {
-  if (db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get('loyalty:baht_per_point').c === 0) {
-    db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:baht_per_point','20')`).run();
-  }
+  const have = (k) => db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get(k).c > 0;
+  if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','0')`).run();
+  if (!have('loyalty:stamps_per_reward')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:stamps_per_reward','10')`).run();
   if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
-    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('ส่วนลด ฿20', 20, 1, 0)`).run();
-    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('โยเกิร์ตฟรี 1 ถ้วย', 100, 1, 1)`).run();
-    console.log('[db] Seeded loyalty earn-rate + sample rewards.');
+    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0)`).run();
+    console.log('[db] Seeded loyalty stamp card (disabled) + free-drink reward.');
   }
 } catch (e) { console.error('[db] loyalty seed skipped:', e.message); }
 

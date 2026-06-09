@@ -203,8 +203,8 @@ app.get('/api/tender-recon', (req, res) => {
 });
 
 // ---------- Loyalty points (our own) ----------
-// Public earn-rate + active rewards (for the LIFF points card). No PIN — read-only catalog.
-app.get('/api/loyalty/config', (req, res) => res.json({ bahtPerPoint: Q.getEarnRate(), rewards: Q.listRewards(false) }));
+// Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
@@ -213,11 +213,16 @@ app.post('/api/loyalty/:key/redeem', (req, res) => {
   try { res.json(Q.redeemReward(req.params.key, Number(req.body?.rewardId), req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
-// Owner: manage earn-rate + rewards.
-app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ bahtPerPoint: Q.getEarnRate(), rewards: Q.listRewards(true) }); });
-app.post('/api/loyalty/earn-rate', (req, res) => {
+// Owner: manage loyalty settings + rewards.
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), rewards: Q.listRewards(true) }); });
+app.post('/api/loyalty/settings', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.setEarnRate(req.body?.bahtPerPoint)); } catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const out = {};
+    if (req.body?.enabled != null) Object.assign(out, Q.setLoyaltyEnabled(!!req.body.enabled));
+    if (req.body?.stampsPerReward != null) Object.assign(out, Q.setStampsPerReward(req.body.stampsPerReward));
+    res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/rewards', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -446,7 +451,7 @@ app.post('/api/tickets/:ticketId/discount', (req, res) => {
 function notifyLoyalty(r) {
   const l = r && r.loyalty;
   if (l && l.awarded > 0 && l.key) {
-    pushText(l.key, `🎉 คุณได้รับ +${l.awarded} แต้ม! รวมสะสม ${l.balance} แต้ม\nสะสมไว้แลกของรางวัลได้เลยครับ`).catch(() => {});
+    pushText(l.key, `🎉 คุณได้รับ +${l.awarded} ดวง! สะสมรวม ${l.balance} ดวง\nสะสมครบแลกเครื่องดื่มฟรีได้เลยครับ`).catch(() => {});
   }
 }
 // Cashier marks an order paid (PIN). Defined before the generic /:action route.

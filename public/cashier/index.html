@@ -161,17 +161,19 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span>อัตราได้แต้ม: ทุก</span>
-      <input id="loyRateInp" type="number" inputmode="numeric" min="1" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px">
-      <span>บาท = 1 แต้ม</span>
-      <button class="ok" style="padding:8px 16px" onclick="saveEarnRate()">บันทึก</button>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:700"><input id="loyEnabledInp" type="checkbox"> เปิดใช้งานสะสมแก้ว</label>
+      <span style="margin-left:8px">สะสมครบ</span>
+      <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <span>แก้ว = ฟรี 1 แก้ว (ไม่เกิน 49฿)</span>
+      <button class="ok" style="padding:8px 16px" onclick="saveLoyaltySettings()">บันทึก</button>
     </div>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/แก้ว · ตอนนี้ปิดอยู่ตามค่าเริ่มต้น เปิดเมื่อพร้อมใช้</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
       <div id="rewardsBody"></div>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แต้ม" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
       </div>
     </div>
@@ -298,7 +300,7 @@
 <!-- PROMPTPAY QR (show to a customer paying at the counter) -->
 <div id="ppPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
-    <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="$('ppPop').style.display='none'">✕</button></div>
+    <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="closePromptPay()">✕</button></div>
     <img id="ppPopImg" alt="PromptPay QR" style="width:240px;max-height:300px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px auto 4px">
     <div style="font-size:22px;font-weight:800;color:var(--navy)">ยอด ฿<span id="ppPopAmt">0</span></div>
     <p id="ppPopNote" class="muted" style="font-size:12px">ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด <b>ชำระแล้ว</b></p>
@@ -322,6 +324,7 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPopImg').src = CFG.promptPayStatic ? CFG.promptPayStatic : ('/api/promptpay-qr?amount='+amount);
   $('ppPopNote').textContent = CFG.promptPayStatic ? 'ลูกค้าสแกนแล้วกรอกยอดข้างบนเอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว' : 'ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว';
   $('ppPop').style.display='flex'; };
+window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
@@ -502,7 +505,7 @@ function renderDetail(){
         return `<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
-        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}</td>
+        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}${r.ticket_status==='no_show'?` <span class="pill closed" style="font-size:11px;background:rgba(146,111,0,.18);color:#946f00">ไม่มารับ</span>`:''}</td>
         <td style="color:var(--muted);font-size:12px">${esc(r.paid_by||r.created_by||'')}</td></tr>`; }).join(''));
   } else if(t==='pay'){
     const rec=DET.recon;
@@ -563,10 +566,10 @@ window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.
 window.showLoyalty=async()=>{ $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyRateInp').value=d.bahtPerPoint||20; renderRewards(); }catch(e){ toast(err(e)); } };
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
-  box.innerHTML=REWARDS.map(r=>`<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <b>(${r.cost_points} แต้ม)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span><button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`).join(''); }
-window.saveEarnRate=async()=>{ const v=Number($('loyRateInp').value)||0; try{ await api('/api/loyalty/earn-rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bahtPerPoint:v})}); toast('บันทึกอัตราแต้มแล้ว'); }catch(e){ toast(err(e)); } };
+  box.innerHTML=REWARDS.map(r=>`<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span><button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`).join(''); }
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10; try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points})}); $('rwName').value='';$('rwCost').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.toggleReward=async(id,active)=>{ try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
@@ -575,10 +578,10 @@ window.loyLookupGo=async()=>{ const key=$('loyLookup').value.trim(); if(!key){ r
   try{ const b=await api('/api/loyalty/'+encodeURIComponent(key)); renderLoyLookup(b); }catch(e){ toast(err(e)); } };
 function renderLoyLookup(b){ const box=$('loyLookupResult');
   const opts=REWARDS.filter(r=>r.active&&b.points>=r.cost_points);
-  box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:12px"><b style="font-size:20px">${b.points} แต้ม</b> <span class="muted">(สะสมตลอด ${b.lifetime})</span>
-    ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">แต้มยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
+  box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:12px"><b style="font-size:20px">${b.points} ดวง</b> <span class="muted">(สะสมตลอด ${b.lifetime})</span>
+    ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">ดวงยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
 window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!confirm('ยืนยันแลก “'+name+'” ให้ลูกค้า?')) return;
-  try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' แต้ม'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'แต้มไม่พอ':err(e)); } };
+  try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); }catch(e){ toast(err(e)); } };
 function renderStock(d){
   const s=d.summary||{}; $('stockSummary').textContent=`${s.items||0} รายการ · มูลค่ารวม ${baht2(s.totalValue)} · ใกล้หมด ${s.lowCount||0}`;
@@ -982,10 +985,13 @@ function renderZone(snap){
   };
   const ord=(t)=>{
     if(t.order_lines&&t.order_lines.length){
-      return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>
-        `<div><b>${l.qty}× ${esc(l.name)}</b> <span class="muted">฿${l.price*l.qty}</span>`+
-        l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`
-      ).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
+      return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>{
+        const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line
+        const nm=m?m[1]:l.name;
+        const sw=m?`<div class="muted" style="margin-left:12px">• ${esc(m[2])}</div>`:'';
+        return `<div><b>${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
+          l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`;
+      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
     }
     if(!t.order_summary) return '';
     const net=(t.order_net!=null?t.order_net:t.order_total);
@@ -1036,9 +1042,9 @@ function renderPayButtons(){
   const box=$('payMethodBtns'); if(!box) return;
   let list=(TENDERS||[]).filter(t=>t.kind==='counter'&&t.active!==0);
   if(!list.length) list=[{code:'cash',label:'เงินสด'},{code:'promptpay',label:'พร้อมเพย์ / โอน'}];
-  box.innerHTML=list.map(t=>`<button class="ok" style="padding:12px" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
-    +`<button class="ghost" style="padding:12px" onclick="choosePayMethod('other')">อื่น ๆ</button>`
-    +`<button class="ghost" style="padding:8px;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
+  box.innerHTML=list.map(t=>`<button class="ok" style="padding:12px;text-align:left" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
+    +`<button class="ghost" style="padding:12px;text-align:left" onclick="choosePayMethod('other')">อื่น ๆ</button>`
+    +`<button class="ghost" style="padding:8px;text-align:left;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
 }
 function pickPayMethod(amount){ $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
   return new Promise(res=>{ _payRes=res; }); }
