@@ -4,3 +4,5 @@ data/*.db-shm
 data/*.db-wal
 .env
 public/assets/qr/
+.e2e-test/
+.smoke/

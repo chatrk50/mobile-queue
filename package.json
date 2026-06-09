@@ -9,7 +9,8 @@
     "dev": "node --experimental-sqlite --watch server/index.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
     "qr": "node --experimental-sqlite scripts/gen-qr.js",
-    "test": "node --experimental-sqlite scripts/test-flow.js"
+    "test": "node --experimental-sqlite scripts/test-flow.js",
+    "test:e2e": "node --experimental-sqlite scripts/test-e2e.js"
   },
   "engines": {
     "node": ">=22.5.0"
