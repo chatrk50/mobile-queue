@@ -58,6 +58,23 @@ export function parseTLV(s) {
 }
 const tlv = (tag, val) => tag + String(val.length).padStart(2, '0') + val;
 
+/**
+ * Can we safely inject a customer-set amount into this merchant QR and have banks PAY it?
+ * Only true for a standard PromptPay P2P/merchant rail (AID A000000677010111). K SHOP /
+ * Thai-QR merchant QRs use Bill Payment (…0113) or acquirer-merchant (…0112) rails where the
+ * amount must come from the merchant terminal — banks scan but refuse a customer-set amount.
+ */
+export function isInjectable(template) {
+  for (const f of parseTLV(template)) {
+    const n = Number(f.tag);
+    if (n >= 26 && n <= 51) {
+      const sub = parseTLV(f.val).find((s) => s.tag === '00');
+      if (sub && sub.val === 'A000000677010111') return true;
+    }
+  }
+  return false;
+}
+
 /** Recompute and verify a payload's CRC (sanity check on a decoded static QR). */
 export function verifyCRC(payload) {
   const i = payload.lastIndexOf('6304');

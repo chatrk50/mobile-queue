@@ -329,8 +329,9 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 const zoneOpenState={};
 window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
-  $('ppPopImg').src = CFG.promptPayStatic ? CFG.promptPayStatic : ('/api/promptpay-qr?amount='+amount);
-  $('ppPopNote').textContent = CFG.promptPayStatic ? 'ลูกค้าสแกนแล้วกรอกยอดข้างบนเอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว' : 'ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว';
+  if(CFG.promptPayDynamic){ $('ppPopImg').src='/api/promptpay-qr?amount='+amount; $('ppPopNote').textContent='ยอด ฿'+amount+' ใส่ให้อัตโนมัติ · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว'; }
+  else if(CFG.promptPayStatic){ $('ppPopImg').src=CFG.promptPayStatic; $('ppPopNote').textContent='ลูกค้าสแกนแล้วกรอกยอด ฿'+amount+' เอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว'; }
+  else { $('ppPopImg').src='/api/promptpay-qr?amount='+amount; $('ppPopNote').textContent='ลูกค้าสแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกด ชำระแล้ว'; }
   $('ppPop').style.display='flex'; };
 window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
