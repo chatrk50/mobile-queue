@@ -338,6 +338,9 @@ window.closeSlip=()=>{ $('slipPop').style.display='none'; };
 window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
+function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
+  return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
 window.toggleAdmin=(e)=>{ if(e) e.stopPropagation(); const m=$('adminMenu'); m.style.display=(m.style.display==='flex')?'none':'flex'; };
 window.closeAdmin=()=>{ const m=$('adminMenu'); if(m) m.style.display='none'; };
@@ -397,7 +400,7 @@ function renderHistory(list){
   $('historyBody').innerHTML=list.map(t=>{
     const st=stMap[t.status]||[t.status,''];
     const pay=t.payment_status?(payMap[t.payment_status]||[t.payment_status,'']):null;
-    const time=t.closed_at?t.closed_at.slice(11,16):'';
+    const time=fmtDT(t.closed_at);
     const items=(t.lines||[]).map(l=>`${l.qty}× ${esc(l.name)}${(l.toppings||[]).map(tp=>' -'+esc(tp.name)).join('')}`).join(', ');
     // A past order can still be voided/refunded later (e.g. the customer comes back).
     const canVoid = t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
@@ -996,6 +999,7 @@ function renderZone(snap){
     return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
   const ord=(t)=>{
+    const tsLine = t.order_created_at ? `<div class="muted" style="font-size:11px;margin-top:2px">🕐 ${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
     if(t.order_lines&&t.order_lines.length){
       return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>{
         const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line
@@ -1003,12 +1007,12 @@ function renderZone(snap){
         const sw=m?`<div class="muted" style="margin-left:12px">• ${esc(m[2])}</div>`:'';
         return `<div><b>${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
           l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`;
-      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
+      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div>`+tsLine+`</div>`;
     }
     if(!t.order_summary) return '';
     const net=(t.order_net!=null?t.order_net:t.order_total);
     const amt=(t.order_discount>0)?`<b>฿${net}</b> <span style="text-decoration:line-through;opacity:.6">฿${t.order_total}</span> <span style="color:var(--danger)">(ลด ฿${t.order_discount})</span>`:`฿${t.order_total}`;
-    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
+    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}${tsLine}</div>`;
   };
   const netOf=(t)=> (t.order_net!=null?t.order_net:t.order_total);
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')

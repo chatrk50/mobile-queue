@@ -1168,7 +1168,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null };
+  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -1207,6 +1207,8 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_lines = o.lines;               // grouped: drink + its toppings (dash sub-lines)
       t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'
       t.order_source = o.source;             // 'cashier' | 'customer'
+      t.order_created_at = o.created_at;     // when the order was placed (UTC)
+      t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
     }
     return t;
   };
