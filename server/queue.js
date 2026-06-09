@@ -242,7 +242,7 @@ export function dailyReport(branchId = null) {
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN menu_items mi ON mi.name = oi.name
-     WHERE o.payment_status != 'void' AND (? IS NULL OR o.branch_id=?)   -- exclude void; optional branch
+     WHERE o.payment_status = 'paid' AND (? IS NULL OR o.branch_id=?)   -- SALES = paid only (pay-first); optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all(...B);
   const grossSales = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
@@ -252,10 +252,10 @@ export function dailyReport(branchId = null) {
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
   // Bill discounts on non-void orders reduce NET sales. revenue = gross − discounts
   // (defaults to gross since discounts are 0 until used — no behavior change).
-  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status != 'void' AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
+  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status = 'paid' AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
   const revenue = Math.round((grossSales - discounts) * 100) / 100;
 
-  // Cancelled / refunded (voided) orders — counted separately, NOT in sales above.
+  // Cancelled / refunded / wasted orders — all excluded from sales above, reported separately.
   const vAgg = db.prepare(
     `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount
      FROM orders o WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
@@ -266,7 +266,19 @@ export function dailyReport(branchId = null) {
      LEFT JOIN menu_items mi ON mi.name=oi.name
      WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
   ).get(...B);
-  const voided = { orders: vAgg.orders, amount: vAgg.amount, cups: vCups.cups };
+  // Break the voids down by kind so the report shows: cancelled (neutral, no money),
+  // refunded (money returned), waste (made-but-binned → a COST with no revenue).
+  const vByKind = db.prepare(
+    `SELECT COALESCE(o.void_kind,'void') AS kind, COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount,
+            COALESCE(SUM((SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0)
+                          FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name WHERE oi.order_id=o.id)),0) AS cups
+     FROM orders o WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)
+     GROUP BY COALESCE(o.void_kind,'void')`
+  ).all(...B);
+  const byKind = { void:{orders:0,amount:0,cups:0}, refund:{orders:0,amount:0,cups:0}, waste:{orders:0,amount:0,cups:0} };
+  for (const r of vByKind) byKind[r.kind] = { orders: r.orders, amount: r.amount, cups: r.cups };
+  const voided = { orders: vAgg.orders, amount: vAgg.amount, cups: vCups.cups,
+    cancelled: byKind.void, refunded: byKind.refund, waste: byKind.waste };
 
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings(branchId);
@@ -274,9 +286,13 @@ export function dailyReport(branchId = null) {
   const packaging = f.packagingPerCup * cups;
   const cogs = ingredient + packaging;
   const grossProfit = revenue - cogs;
+  // Waste = product made then discarded: its ingredient+packaging is spent but earns nothing.
+  // A real cost with no revenue → it reduces net profit (separate from sold-goods COGS).
+  const wasteCost = Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
+  voided.waste.cost = wasteCost;
   const monthlyOpex = f.rent + f.wages + f.utilities + f.supplies + f.marketing;
   const dailyOpex = f.daysPerMonth > 0 ? monthlyOpex / f.daysPerMonth : monthlyOpex;
-  const netProfit = grossProfit - dailyOpex;
+  const netProfit = grossProfit - dailyOpex - wasteCost;
   // Break-even: how many cups/day cover the prorated fixed costs, using the menu's
   // average drink price (so it's meaningful even before the first sale of the day).
   const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1").get().a || 0;
@@ -285,7 +301,7 @@ export function dailyReport(branchId = null) {
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
-    ingredient, packaging, cogs,
+    ingredient, packaging, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex,
     opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
@@ -1159,14 +1175,16 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
 }
 
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
- *  opts.actorId = staff; opts.reason = free text. void_kind auto: 'refund' if the order
- *  was already paid, else 'void'. */
+ *  opts.actorId = staff; opts.reason = free text; opts.kind = optional explicit category.
+ *  void_kind: 'refund' if the order was already paid (money goes back); else 'waste' when
+ *  the cashier marks it discarded (made-but-binned → a no-revenue COST), otherwise 'void'
+ *  (cancelled before any product/money — neutral). All three are excluded from sales. */
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
-  const kind = order && order.payment_status === 'paid' ? 'refund' : 'void';
+  const kind = (order && order.payment_status === 'paid') ? 'refund' : (kindOpt === 'waste' ? 'waste' : 'void');
   // Void/refund: mark the order void (even if it was already paid -> a refund) so it
   // drops out of the report and its revenue is deducted from sales.
   db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE ticket_id=?`)

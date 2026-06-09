@@ -316,6 +316,14 @@
   </div>
 </div>
 
+<div id="voidPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0;text-align:center">
+    <h1 style="margin:0 0 2px">ยกเลิกออเดอร์</h1>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">เลือกเหตุผล — มีผลต่อรายงาน (ขาย/คืนเงิน/ของเสีย)</p>
+    <div id="voidReasonBtns" style="display:grid;gap:8px"></div>
+  </div>
+</div>
+
 <div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
     <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
@@ -537,8 +545,9 @@ function renderDetail(){
     }
   } else if(t==='void'){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
-    box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)})</div>`+
-      (rows.length?detTable([{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(v=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':'soon'}" style="font-size:11px">${v.void_kind==='refund'?'คืนเงิน':'ยกเลิก'}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+    const vlabel=(k)=> k==='refund'?'คืนเงิน':k==='waste'?'ของเสีย':'ยกเลิก';
+    box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)}) · 🗑️ ของเสีย ${vt.waste?.count||0} (${baht2(vt.waste?.amount||0)})</div>`+
+      (rows.length?detTable([{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map(v=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
   } else if(t==='chan'){
     const rows=(DET.channels||[]); const ct=DET.channelTotals||{gross:0,commission:0,net:0};
     box.innerHTML=`<div style="margin-bottom:10px">ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
@@ -706,7 +715,7 @@ window.showReport=async()=>{
       `</div>`+
       `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
         <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> แก้ว · รวม <b>${money(r.revenue)}</b></span>
-        <span>ยกเลิก/คืน <b style="color:#c43a4b">${r.voided?r.voided.cups:0}</b> แก้ว <span class="muted">(${r.voided?r.voided.orders:0} ออเดอร์ · ${money(r.voided?r.voided.amount:0)})</span></span>
+        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> แก้ว</span>
       </div>`+
       `<h2>กำไร–ขาดทุน (วันนี้)</h2><div class="queue-list" style="gap:4px">`+
         pl('ยอดเครื่องดื่ม',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
@@ -716,6 +725,7 @@ window.showReport=async()=>{
         pl('− แพ็กเกจ',p.packaging,{neg:true})+
         pl('กำไรขั้นต้น',p.grossProfit,{bold:true,accent:true,pct:p.grossMargin})+
         pl("− ค่าใช้จ่ายดำเนินงาน (เฉลี่ย/วัน)",p.opexDaily,{neg:true})+
+        ((p.wasteCost||0)>0?pl('− ของเสีย/ทิ้ง (ต้นทุนไม่มีรายได้)',p.wasteCost,{neg:true}):'')+
         pl('กำไรสุทธิ',p.netProfit,{bold:true,navy:true,pct:p.netMargin})+
       `</div>`+
       (p.breakEvenCups!=null?`<div class="row between" style="font-size:12px;margin-top:8px;background:var(--surface);border-radius:10px;padding:8px 12px">
@@ -1096,9 +1106,28 @@ window.markPaid=async(tid,status,amount)=>{
     if(method===null) return;   // cashier cancelled
   }
   try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total); }catch(e){ toast(err(e)); } };
-window.voidTicket=async(tid)=>{ if(!confirm('ยกเลิกออเดอร์/คิวนี้?')) return;
-  const reason=(prompt('เหตุผลในการยกเลิก/คืนเงิน (ไม่บังคับ)')||'').trim();
-  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}); toast('ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
+// Quick-service void: pick a preset reason (no typing). `kind:'waste'` flags made-but-binned
+// product so the report counts it as a no-revenue cost; the rest auto-classify as
+// cancel (unpaid → neutral) or refund (paid → money back) on the server.
+const VOID_REASONS=[
+  {label:'🙅 ลูกค้ายกเลิก', reason:'ลูกค้ายกเลิก'},
+  {label:'🔁 สั่ง/เลือกผิด', reason:'สั่งหรือเลือกผิด'},
+  {label:'⏰ รอนานเกินไป', reason:'รอนานเกินไป'},
+  {label:'🚶 ลูกค้าไม่มารับ', reason:'ลูกค้าไม่มารับ'},
+  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้'},
+  {label:'🗑️ ของเสีย / ทำพลาด / ทิ้ง', reason:'ของเสีย/ทำพลาด/ทิ้ง', kind:'waste'},
+];
+let _voidRes=null;
+function pickVoidReason(){ const box=$('voidReasonBtns');
+  box.innerHTML=VOID_REASONS.map((r,i)=>`<button class="${r.kind==='waste'?'ghost danger':'ok'}" style="padding:12px;text-align:left" onclick="chooseVoidReason(${i})">${r.label}</button>`).join('')
+    +`<button class="ghost" style="padding:8px;text-align:left;color:var(--muted)" onclick="chooseVoidReason(-1)">ยกเลิก (ไม่ทำรายการ)</button>`;
+  $('voidPop').style.display='flex';
+  return new Promise(res=>{ _voidRes=res; }); }
+window.chooseVoidReason=(i)=>{ $('voidPop').style.display='none'; const r=_voidRes; _voidRes=null; if(r) r(i<0?null:VOID_REASONS[i]); };
+window.voidTicket=async(tid)=>{
+  const choice=await pickVoidReason(); if(!choice) return;
+  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null})});
+    toast(choice.kind==='waste'?'🗑️ บันทึกเป็นของเสียแล้ว':'ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
   const a=prompt('ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด'); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }

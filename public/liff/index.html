@@ -103,7 +103,7 @@
           <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
           <div id="payQrRow" class="row" style="gap:8px;margin-top:8px;display:none">
             <button class="ok" id="payPromptBtn" style="flex:1;line-height:1.25" onclick="choosePay('promptpay')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>พร้อมเพย์<br><span style="font-size:11px;font-weight:600;opacity:.85">ธนาคารอื่น</span></button>
-            <button class="ok" id="payKbankBtn" style="flex:1;line-height:1.25" onclick="choosePay('kbank')">💚 KBank<br><span style="font-size:11px;font-weight:600;opacity:.85">กรอกยอดเอง</span></button>
+            <button class="ok" id="payKbankBtn" style="flex:1;line-height:1.25" onclick="choosePay('kbank')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>พร้อมเพย์ Kbank<br><span style="font-size:11px;font-weight:600;opacity:.85">กรอกยอดเอง</span></button>
           </div>
         </div>
         <button class="ok" id="payLinePayBtn" style="width:100%;margin-top:8px;display:none;background:#06c755;color:#fff" onclick="startLinePay()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 9l9 5 9-5"/></svg>จ่ายด้วย LINE Pay</button>
@@ -443,6 +443,9 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',false);
       ['payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
+      // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
+      // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
+      show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
       $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
       $('counterNote').innerHTML='<div style="font-size:13px">ไปชำระที่เคาน์เตอร์ ยอด <b>฿'+total+'</b></div>'
