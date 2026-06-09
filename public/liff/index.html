@@ -31,7 +31,6 @@
       <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
       <div id="aheadNow" style="font-size:48px;font-weight:900;color:var(--navy);line-height:1">–</div>
       <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– นาที</div>
-      <div class="muted" style="font-size:11px;margin-top:8px">สั่งเลยแล้วชำระที่เคาน์เตอร์ — หรือกลับมาใหม่ภายหลังก็ได้</div>
     </div>
     <!-- Returning-customer one-tap reorder of their usual favourite (filled in by loadReorder) -->
     <div id="reorderCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;margin:0 0 14px;text-align:left">
@@ -275,7 +274,7 @@ async function loadReorder(){
     const fav = (s.favourites||[]).find(f=>!f.soldout && f.itemId);
     if(!fav) return;
     FAV=fav;
-    $('reorderHi').textContent = s.name ? ('👋 ยินดีต้อนรับกลับคุณ '+s.name+'!') : '👋 ยินดีต้อนรับกลับ!';
+    $('reorderHi').textContent = s.name ? ('คุณ '+s.name+' วันนี้สั่งเหมือนเดิมเลยไหม!') : 'วันนี้สั่งเหมือนเดิมเลยไหม!';
     $('reorderLbl').textContent = 'สั่ง '+fav.name+' เหมือนเดิม';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
     show('reorderCard', true);
@@ -433,7 +432,7 @@ function renderOrderBlock(v){
   $('tOrderTotal').textContent = '฿'+v.order.total;
   const pill=$('tPayPill'), st=v.order.status, total=v.order.total;
   const refundReq = !!(v.order && v.order.refund_requested);
-  show('refundReqBtn', st==='paid' && !refundReq); show('refundReqDone', st==='paid' && refundReq);
+  show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
   if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null; }
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
