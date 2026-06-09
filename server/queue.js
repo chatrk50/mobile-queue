@@ -1076,6 +1076,24 @@ export function setOrderPaid(ticketId, opts = {}) {
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty };
 }
 
+/** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
+ *  order is flagged 'claimed' so the cashier knows to verify + confirm. */
+export function attachSlip(ticketId, imageData) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') return { ok: true, already: true };
+  db.prepare(`INSERT INTO slips (order_id, ticket_id, image) VALUES (?,?,?)
+              ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, at=datetime('now')`).run(order.id, Number(ticketId), imageData);
+  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
+  return { ok: true };
+}
+/** The slip image a customer attached for this ticket's order, or null. */
+export function getSlip(ticketId) {
+  const order = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return null;
+  return db.prepare('SELECT image, at FROM slips WHERE order_id=?').get(order.id) || null;
+}
+
 /** Customer taps "I've paid (PromptPay)" — flags the order 'claimed' so the cashier
  *  knows to verify the incoming transfer in their bank app, then confirm Paid. */
 export function claimOrderPaid(ticketId) {

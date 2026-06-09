@@ -316,6 +316,14 @@
   </div>
 </div>
 
+<div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
+    <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
+    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:60vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
+    <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+  </div>
+</div>
+
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -325,6 +333,8 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPopNote').textContent = CFG.promptPayStatic ? 'ลูกค้าสแกนแล้วกรอกยอดข้างบนเอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว' : 'ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว';
   $('ppPop').style.display='flex'; };
 window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
+window.closeSlip=()=>{ $('slipPop').style.display='none'; };
+window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
@@ -1007,6 +1017,9 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
+  // A customer who attached a slip shows as 'claimed' — let the cashier view it.
+  const slipViewBtn=(t)=> (t.payment_status==='claimed')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">🧾 สลิป</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
   const serveBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
@@ -1014,12 +1027,12 @@ function renderZone(snap){
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div><div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
         ${serveBtn(t)}
       </div></div>`).join('')

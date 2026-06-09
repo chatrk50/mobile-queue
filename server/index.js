@@ -402,6 +402,27 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
     return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
   } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
 });
+// Manual slip attach (works WITHOUT SlipOK): customer uploads a slip image, the cashier
+// eyeballs it and confirms paid. Auto-verification (SlipOK) is the verify-slip route above.
+app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
+  if (!PAY_ONLINE) return res.status(404).json({ error: 'pay_off' });
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  const img = (req.body?.imageData || '').toString();
+  if (!/^data:image\//.test(img) || img.length > 4_000_000) return res.status(400).json({ error: 'bad_image' });
+  try {
+    const r = Q.attachSlip(req.params.ticketId, img);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier views the attached slip image to verify manually.
+app.get('/api/tickets/:ticketId/slip', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const s = Q.getSlip(req.params.ticketId);
+  if (!s) return res.status(404).json({ error: 'no_slip' });
+  res.json(s);
+});
 // LINE Pay (scaffold): reserve a payment → customer is redirected to LINE Pay's page.
 app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
   if (!PAY_ONLINE || !LINEPAY_ON) return res.status(404).json({ error: 'linepay_off' });

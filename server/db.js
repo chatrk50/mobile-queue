@@ -343,6 +343,14 @@ CREATE TABLE IF NOT EXISTS tenders (
   active  INTEGER NOT NULL DEFAULT 1,
   sort    INTEGER NOT NULL DEFAULT 0
 );
+-- Payment slips a customer attaches for the cashier to verify manually (works without SlipOK).
+-- One per order (latest wins). Stored as a data: URL; only written when a slip is attached.
+CREATE TABLE IF NOT EXISTS slips (
+  order_id  INTEGER PRIMARY KEY,
+  ticket_id INTEGER,
+  image     TEXT NOT NULL,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Loyalty: our own points system (LINE Reward Cards can't be awarded via API). A customer
 -- earns points when a LINE order is paid; redeems them for rewards. Balance lives on
 -- customers.points; loyalty_moves is the append-only ledger (earn +, redeem −).
