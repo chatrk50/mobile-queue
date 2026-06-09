@@ -3,7 +3,8 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting } from './db.js';
+import { db, getSetting, DURABLE } from './db.js';
+import { seedDemo } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
@@ -686,6 +687,16 @@ function scheduleDailyReset() {
   setTimeout(() => { doDailyReset(); scheduleDailyReset(); }, msUntilBangkokMidnight());
 }
 scheduleDailyReset();
+
+// Ephemeral (non-durable) deploys — the UAT sandbox — start with an empty DB on every boot.
+// Auto-seed the demo store/menu so the app is immediately usable. No-op when durable (prod:
+// Turso keeps the real data) or when a store already exists.
+if (!DURABLE) {
+  try {
+    const r = seedDemo();
+    if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);
+  } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
+}
 
 app.listen(PORT, () => {
   console.log(`Mobile Queue running on ${PUBLIC_BASE_URL}`);

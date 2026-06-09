@@ -78,6 +78,10 @@ if (USE_TURSO && Database) {
   console.log('[db] Local mode — node:sqlite (ephemeral on Render free; set TURSO_DATABASE_URL for durable storage)');
 }
 
+// True only when Turso/libSQL durable storage is actually active. Ephemeral (false) =
+// node:sqlite — used by the UAT sandbox, where the app auto-seeds demo data on boot.
+export const DURABLE = Boolean(USE_TURSO && Database);
+
 // WAL improves concurrency but isn't supported on some mounted/networked FS;
 // fall back to the default rollback journal if it can't be enabled.
 try { raw.exec('PRAGMA journal_mode = WAL'); } catch { /* default journal */ }
