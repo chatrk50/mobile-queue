@@ -568,6 +568,65 @@ export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride
   return { ok: true, branchId: Number(branchId), itemId: Number(itemId), enabled: en, priceOverride: po, soldout: so };
 }
 
+// ---------- Inventory: raw materials + stock movements ----------
+const round2i = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+export function listIngredients() {
+  const rows = db.prepare('SELECT * FROM ingredients WHERE active=1 ORDER BY name').all();
+  return rows.map((r) => ({ ...r, low: r.stock_qty <= r.low_threshold, value: round2i(r.stock_qty * r.avg_cost) }));
+}
+export function inventorySummary() {
+  const list = listIngredients();
+  return {
+    items: list.length,
+    totalValue: round2i(list.reduce((s, r) => s + r.value, 0)),
+    lowCount: list.filter((r) => r.low).length,
+  };
+}
+export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0, branchId = null } = {}) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (!n) throw new Error('name_required');
+  const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, branch_id) VALUES (?,?,?,?)')
+    .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), branchId);
+  return db.prepare('SELECT * FROM ingredients WHERE id=?').get(info.lastInsertRowid);
+}
+export function updateIngredient(id, { name, unit, lowThreshold, active }) {
+  const cur = db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
+  if (!cur) throw new Error('ingredient_not_found');
+  const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  const u = unit != null ? (unit.toString().slice(0, 20) || cur.unit) : cur.unit;
+  const lt = lowThreshold != null ? Math.max(0, Number(lowThreshold) || 0) : cur.low_threshold;
+  const a = active != null ? (active ? 1 : 0) : cur.active;
+  db.prepare('UPDATE ingredients SET name=?, unit=?, low_threshold=?, active=? WHERE id=?').run(n, u, lt, a, id);
+  return db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
+}
+/** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;
+ *  use/waste=qty out; adjust=set on-hand to qty (stock count). */
+export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null } = {}) {
+  const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
+  if (!ing) throw new Error('ingredient_not_found');
+  let q = Number(qty) || 0;
+  let newStock, moveQty, newAvg = ing.avg_cost;
+  if (kind === 'purchase') {
+    q = Math.max(0, q); moveQty = q; newStock = round2i(ing.stock_qty + q);
+    const c = Number(cost) || 0;
+    if (c > 0 && newStock > 0) newAvg = round2i((ing.stock_qty * ing.avg_cost + c) / newStock);
+  } else if (kind === 'adjust') {
+    newStock = Math.max(0, round2i(q)); moveQty = round2i(newStock - ing.stock_qty);
+  } else { // use | waste
+    q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
+  }
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor) VALUES (?,?,?,?,?,?,?)')
+      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId);
+  });
+  tx();
+  return db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
+}
+export function stockMoves(ingredientId, limit = 50) {
+  return db.prepare('SELECT * FROM stock_moves WHERE ingredient_id=? ORDER BY id DESC LIMIT ?').all(ingredientId, limit);
+}
+
 // ---------- Staff & roles (Phase 1) ----------
 const ROLES = new Set(['owner', 'manager', 'cashier']);
 const branchIdsOf = (staffId) =>

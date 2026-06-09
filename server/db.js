@@ -302,6 +302,31 @@ CREATE TABLE IF NOT EXISTS cash_sessions (
   over_short    REAL,
   note          TEXT
 );
+-- Inventory: raw materials/ingredients + a movement log (purchases / stock counts / usage).
+CREATE TABLE IF NOT EXISTS ingredients (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id     INTEGER NOT NULL DEFAULT 1,
+  branch_id     INTEGER,                       -- null = shared across branches
+  name          TEXT NOT NULL,
+  unit          TEXT NOT NULL DEFAULT 'หน่วย', -- กล่อง/ขวด/กก./ลิตร/ถุง ...
+  stock_qty     REAL NOT NULL DEFAULT 0,       -- current on-hand quantity
+  avg_cost      REAL NOT NULL DEFAULT 0,       -- weighted-average cost per unit
+  low_threshold REAL NOT NULL DEFAULT 0,       -- alert when stock_qty <= this
+  active        INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS stock_moves (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  branch_id     INTEGER,
+  kind          TEXT NOT NULL,                 -- purchase | adjust | use | waste
+  qty           REAL NOT NULL,                 -- signed change applied to stock
+  cost          REAL,                          -- total cost of a purchase (optional)
+  note          TEXT,
+  actor         INTEGER,
+  at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_stock_moves_ing ON stock_moves(ingredient_id, at);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----

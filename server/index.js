@@ -496,6 +496,27 @@ app.post('/api/branches/:id/menu', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setBranchMenuOverride(Number(req.params.id), Number(req.body?.itemId), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---------- Inventory (manager/owner): raw materials + stock movements ----------
+app.get('/api/ingredients', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ summary: Q.inventorySummary(), items: Q.listIngredients() });
+});
+app.post('/api/ingredients', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.addIngredient(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/ingredients/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.updateIngredient(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/ingredients/:id/move', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.recordStockMove(Number(req.params.id), { ...req.body, actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/ingredients/:id/moves', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.stockMoves(Number(req.params.id)));
+});
 // Export the current report as an Excel workbook (PIN). Opened directly by the browser.
 app.get('/api/report.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
