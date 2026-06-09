@@ -43,12 +43,12 @@ const PAY_ONLINE = String(process.env.PAY_ONLINE ?? '0') === '1';
 // Decode the shop's static merchant QR (public/assets/promptpay.png) once at boot so we can
 // re-issue it DYNAMICALLY with the bill amount pre-filled (like a POS). Null if no QR image.
 const MERCHANT_QR = PAY_ONLINE ? await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay.png')) : null;
-// Only standard PromptPay (AID …0111) accepts a customer-injected amount. K SHOP / Thai-QR
-// merchant QRs (Bill Payment / acquirer rails) must stay STATIC — the customer types the amount.
-const MERCHANT_QR_INJECTABLE = MERCHANT_QR ? isInjectable(MERCHANT_QR) : false;
-if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — ${MERCHANT_QR_INJECTABLE ? 'dynamic amount enabled' : 'STATIC only (merchant/bill-payment rail — customer enters amount)'}.`);
-// Dynamic = inject amount into an injectable merchant QR, or generate from a plain PromptPay id.
-const PROMPTPAY_DYNAMIC = PAY_ONLINE && (MERCHANT_QR_INJECTABLE || (!MERCHANT_QR && Boolean(PROMPTPAY_ID)));
+// Inject the bill amount into the shop's merchant QR (dynamic). Empirically this is payable
+// from most banks' apps via the Bill Payment rail; KBank is the known exception (it routes its
+// own merchant QR through its acquirer, which won't accept a customer-set amount).
+const MERCHANT_QR_DYNAMIC = Boolean(MERCHANT_QR);
+if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — dynamic amount ON (${isInjectable(MERCHANT_QR) ? 'standard PromptPay P2P' : 'merchant/bill-payment rail; KBank app may not accept the injected amount'}).`);
+const PROMPTPAY_DYNAMIC = PAY_ONLINE && (MERCHANT_QR_DYNAMIC || (!MERCHANT_QR && Boolean(PROMPTPAY_ID)));
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -286,7 +286,7 @@ app.get('/api/promptpay-qr', async (req, res) => {
   try {
     // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
     // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
-    const payload = MERCHANT_QR_INJECTABLE
+    const payload = MERCHANT_QR
       ? buildDynamicPayload(MERCHANT_QR, amount)
       : generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {});
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
