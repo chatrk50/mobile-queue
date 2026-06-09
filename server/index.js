@@ -416,6 +416,12 @@ app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Customer requests a refund (paid online, can't come) — flags it for the cashier in history.
+app.post('/api/tickets/:ticketId/request-refund', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  try { res.json(Q.requestRefund(req.params.ticketId, (req.body?.reason || '').toString().slice(0, 200) || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier views the attached slip image to verify manually.
 app.get('/api/tickets/:ticketId/slip', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

@@ -130,6 +130,9 @@
         <div class="muted" style="font-size:13px;margin:4px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div>
         <img id="counterPoster" src="/assets/4060.png" alt="" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display='none'">
       </div>
+      <!-- paid online but can't come — request a refund (cashier processes it) -->
+      <button id="refundReqBtn" class="ghost" style="width:100%;display:none;margin-top:10px;font-size:13px;color:var(--danger);border-color:var(--danger)" onclick="requestRefund()">ขอคืนเงิน (จ่ายแล้วแต่มารับไม่ได้)</button>
+      <div id="refundReqDone" class="muted" style="display:none;margin-top:10px;font-size:12px;text-align:center;color:var(--accent2)">✅ ส่งคำขอคืนเงินแล้ว · ทางร้านจะดำเนินการให้ค่ะ</div>
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
@@ -271,10 +274,15 @@ async function loadReorder(){
     show('reorderCard', true);
   }catch(e){ /* never block the normal flow */ }
 }
-window.reorderFav = ()=>{
+window.reorderFav = async ()=>{
   if(!FAV) return;
-  cart.push({ name:FAV.name, price:FAV.price, toppings:[], sweet:100 });
-  try{ showOrderUI(); openBasket(); }catch(e){ toast&&toast('เปิดตะกร้าไม่สำเร็จ'); }
+  const fav=FAV;
+  try{
+    await showOrderUI();      // resets cart + loads menu — MUST run before we add the item
+    cart.push({ name:fav.name, price:fav.price, toppings:[], sweet:100 });
+    renderBasketCount();
+    openBasket();
+  }catch(e){ toast&&toast('เปิดตะกร้าไม่สำเร็จ'); }
 };
 
 // Loyalty points card: balance + progress to next reward + the rewards list (read-only here;
@@ -417,6 +425,8 @@ function renderOrderBlock(v){
   ).join('');
   $('tOrderTotal').textContent = '฿'+v.order.total;
   const pill=$('tPayPill'), st=v.order.status, total=v.order.total;
+  const refundReq = !!(v.order && v.order.refund_requested);
+  show('refundReqBtn', st==='paid' && !refundReq); show('refundReqDone', st==='paid' && refundReq);
   if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); payMethod=null; }
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); }
   else if(cfg.promptPay || cfg.linePay){
@@ -455,6 +465,14 @@ function applyPayChoice(){
   $('payCounterBtn').className = c?'ok':'ghost';
   $('payPromptBtn').className = p?'ok':'ghost';
 }
+window.requestRefund=async()=>{
+  const reason=prompt('แจ้งเหตุผลขอคืนเงิน (ถ้ามี):','')||'';
+  if(reason===null) return;
+  const b=$('refundReqBtn'); b.disabled=true;
+  try{ await api('/api/tickets/'+ticketId+'/request-refund',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,reason})});
+    show('refundReqBtn',false); show('refundReqDone',true); toast('✅ ส่งคำขอคืนเงินแล้ว');
+  }catch(e){ b.disabled=false; toast('ส่งคำขอไม่สำเร็จ: '+(e.message||'')); }
+};
 window.claimPaid=async()=>{ $('claimBtn').disabled=true;
   try{ await api('/api/tickets/'+ticketId+'/claim-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
     toast('แจ้งชำระแล้ว · รอแคชเชียร์ยืนยัน'); const v=await api('/api/tickets/'+ticketId); render(v);

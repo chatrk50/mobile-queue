@@ -405,6 +405,9 @@ for (const stmt of [
   // Loyalty points balance (current) + lifetime (never decremented; for tiers/stats).
   `ALTER TABLE customers ADD COLUMN points INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE customers ADD COLUMN lifetime_points INTEGER NOT NULL DEFAULT 0`,
+  // Customer-initiated refund request (paid online, can't come to the shop).
+  `ALTER TABLE orders ADD COLUMN refund_requested INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE orders ADD COLUMN refund_note TEXT`,
   // 'plan' is a libSQL reserved token (returns key as 'PLAN'); rename any already-created
   // column. Throws (and is ignored) on fresh DBs where the column is already plan_name.
   `ALTER TABLE tenants RENAME COLUMN plan TO plan_name`,

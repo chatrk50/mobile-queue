@@ -318,6 +318,8 @@ export function orderHistory(limit = 100) {
       closed_at: t.closed_at,
       order_total: o ? o.total : null,
       payment_status: o ? o.payment_status : null,
+      refund_requested: o ? (o.refund_requested || 0) : 0,
+      refund_note: o ? (o.refund_note || null) : null,
       lines: o ? o.lines : [],
     };
   });
@@ -1087,6 +1089,16 @@ export function attachSlip(ticketId, imageData) {
   db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
   return { ok: true };
 }
+/** Customer asks for a refund (paid online but can't come). Flags the order so the cashier
+ *  sees it in history and processes the refund. */
+export function requestRefund(ticketId, reason = null) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status !== 'paid') throw new Error('not_paid');
+  if (order.void_kind) return { ok: true, already: true };
+  db.prepare(`UPDATE orders SET refund_requested=1, refund_note=? WHERE id=?`).run(reason ? reason.toString().slice(0, 200) : null, order.id);
+  return { ok: true };
+}
 /** The slip image a customer attached for this ticket's order, or null. */
 export function getSlip(ticketId) {
   const order = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -1156,7 +1168,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier' };
+  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -1211,6 +1223,6 @@ export function ticketView(ticketId) {
     id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status } : null,
+    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, refund_requested: o.refund_requested || 0 } : null,
   };
 }
