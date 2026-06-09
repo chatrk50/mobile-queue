@@ -9,8 +9,9 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) */
-  #adminMenu button.adm{ width:100%; justify-content:flex-start; padding:10px 14px; font-size:14px; border-radius:10px; }
+  /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) — left aligned */
+  #adminMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
+  #adminMenu button.adm svg{ flex:none; margin:0; }
   #adminMenu button.adm:hover{ background:var(--surface,#f1f5f9); }
 </style>
 </head><body>
@@ -336,11 +337,23 @@ function renderHistory(list){
     const pay=t.payment_status?(payMap[t.payment_status]||[t.payment_status,'']):null;
     const time=t.closed_at?t.closed_at.slice(11,16):'';
     const items=(t.lines||[]).map(l=>`${l.qty}× ${esc(l.name)}${(l.toppings||[]).map(tp=>' -'+esc(tp.name)).join('')}`).join(', ');
+    // A past order can still be voided/refunded later (e.g. the customer comes back).
+    const canVoid = t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
+    const label = t.payment_status==='paid' ? 'คืนเงิน' : 'ยกเลิก';
     return `<div class="qitem"><div style="flex:1">
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
-      ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}</div></div>`;
+      ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}</div>
+      ${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px;align-self:center" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div>`;
   }).join('');
 }
+// Void / refund a PAST transaction from the history (with a reason). Refund if it was
+// already paid (deducts from sales + drops it from the report); otherwise just void.
+window.refundHistory=async(tid,label)=>{
+  if(!confirm((label||'ยกเลิก')+'รายการนี้?\n(จะถูกหักออกจากยอดขายและรายงาน)')) return;
+  const reason=(prompt('เหตุผลในการ'+(label||'ยกเลิก')+' (ไม่บังคับ) เช่น ลูกค้าคืนของ, สั่งผิด')||'').trim();
+  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});
+    toast(label==='คืนเงิน'?'คืนเงินเรียบร้อย':'ยกเลิกเรียบร้อย'); showHistory();
+  }catch(e){ toast(err(e)); } };
 
 // ---------- Sell history (daily / monthly) ----------
 let SALES=null, salesView='daily';
