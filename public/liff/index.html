@@ -102,15 +102,15 @@
       <div id="payChoice" style="display:none;margin-top:12px">
         <div class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
         <div class="row" style="gap:8px">
-          <button class="ghost" id="payCounterBtn" style="flex:1" onclick="choosePay('counter')">💵 จ่ายที่เคาน์เตอร์</button>
-          <button class="ok" id="payPromptBtn" style="flex:1;display:none" onclick="choosePay('promptpay')">📱 พร้อมเพย์</button>
+          <button class="ghost" id="payCounterBtn" style="flex:1" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
+          <button class="ok" id="payPromptBtn" style="flex:1;display:none" onclick="choosePay('promptpay')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>พร้อมเพย์</button>
         </div>
-        <button class="ok" id="payLinePayBtn" style="width:100%;margin-top:8px;display:none;background:#06c755;color:#fff" onclick="startLinePay()">💚 จ่ายด้วย LINE Pay</button>
+        <button class="ok" id="payLinePayBtn" style="width:100%;margin-top:8px;display:none;background:#06c755;color:#fff" onclick="startLinePay()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 9l9 5 9-5"/></svg>จ่ายด้วย LINE Pay</button>
         <div id="counterNote" class="muted" style="display:none;margin-top:10px;font-size:13px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px"></div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line);object-fit:contain;background:#fff">
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
-          <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()">💾 บันทึกรูป QR</button>
+          <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>บันทึกรูป QR</button>
           <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
           <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:10px">
             <b>📱 จ่ายในมือถือเครื่องเดียว:</b><br>
@@ -120,8 +120,8 @@
             <span id="onePhoneTipStep4">4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ</span>
           </div>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
-          <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()">📤 แนบสลิป (ยืนยันอัตโนมัติ)</button>
-          <button class="ghost" id="claimBtn" style="width:100%;margin-top:8px" onclick="claimPaid()">✓ ฉันชำระแล้ว (รอแคชเชียร์ตรวจ)</button>
+          <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
+          <button class="ghost" id="claimBtn" style="width:100%;margin-top:8px" onclick="claimPaid()"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ฉันชำระแล้ว (รอแคชเชียร์ตรวจ)</button>
         </div>
       </div>
       <!-- จ่ายที่เคาน์เตอร์อย่างเดียว -->
@@ -432,7 +432,7 @@ function renderOrderBlock(v){
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
     show('payChoice',true); show('payPromptBtn',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
-    $('slipBtn').textContent = cfg.slipVerify ? '📤 แนบสลิป (ยืนยันอัตโนมัติ)' : '📤 แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
+    $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
     $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
     if(cfg.promptPay){
       if(cfg.promptPayStatic){ $('ppQrImg').src=cfg.promptPayStatic; $('ppQrNote').innerHTML='ยอดที่ต้องโอน <b style="color:var(--navy);font-size:15px">฿'+total+'</b><br>กรอกยอดเองในแอปธนาคาร แล้วกดยืนยัน'; }
@@ -488,7 +488,7 @@ function slipErr(e){ const code=e.data&&e.data.code;
   const map={1002:'อ่านสลิปไม่ได้ ถ่ายให้เห็น QR ชัดๆ',1012:'สลิปนี้ถูกใช้ไปแล้ว',1013:'ยอดเงินไม่ตรงกับออเดอร์',1014:'บัญชีผู้รับไม่ใช่ของร้าน'};
   return map[code]||(e.data&&e.data.message)||'ตรวจสลิปไม่สำเร็จ ลองใหม่ หรือกด "ฉันชำระแล้ว"'; }
 async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) return;
-  const b=$('slipBtn'); b.disabled=true; b.textContent='⏳ กำลังส่งสลิป...';
+  const b=$('slipBtn'); b.disabled=true; $('slipBtnLabel').textContent='กำลังส่งสลิป...';
   try{ const dataUrl=await slipResize(f,1080);
     if(cfg.slipVerify){   // SlipOK auto-verify
       const r=await api('/api/tickets/'+ticketId+'/verify-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
@@ -497,7 +497,7 @@ async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) 
       await api('/api/tickets/'+ticketId+'/attach-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
       toast('✅ ส่งสลิปแล้ว · รอแคชเชียร์ยืนยัน'); const v=await api('/api/tickets/'+ticketId); render(v);
     }
-  }catch(err2){ toast('❌ '+slipErr(err2)); b.disabled=false; b.textContent='📤 แนบสลิปอีกครั้ง'; }
+  }catch(err2){ toast('❌ '+slipErr(err2)); b.disabled=false; $('slipBtnLabel').textContent='แนบสลิปอีกครั้ง'; }
   finally{ e.target.value=''; } }
 $('slipFile').addEventListener('change', uploadSlip);
 // Save the QR image to the phone's photo album so the customer can pay with their banking
