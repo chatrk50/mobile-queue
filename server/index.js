@@ -119,7 +119,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON, linePay: PAY_ONLINE && LINEPAY_ON });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled() });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -231,6 +231,20 @@ app.post('/api/loyalty/settings', (req, res) => {
     const out = {};
     if (req.body?.enabled != null) Object.assign(out, Q.setLoyaltyEnabled(!!req.body.enabled));
     if (req.body?.stampsPerReward != null) Object.assign(out, Q.setStampsPerReward(req.body.stampsPerReward));
+    res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
+app.get('/api/admin/features', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled() });
+});
+app.post('/api/admin/features', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const out = {};
+    if (req.body?.slipAuto != null) Object.assign(out, Q.setSlipAuto(!!req.body.slipAuto));
+    if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -393,7 +407,7 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
 // Customer uploads a payment slip -> server verifies it with SlipOK (real transfer,
 // exact amount, to OUR account, not a duplicate) and auto-marks the order PAID.
 app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
-  if (!PAY_ONLINE || !SLIPOK_ON) return res.status(404).json({ error: 'slip_off' });
+  if (!PAY_ONLINE || !SLIPOK_ON || !Q.slipAutoEnabled()) return res.status(404).json({ error: 'slip_off' });
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   const ticketId = req.params.ticketId;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);

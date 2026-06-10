@@ -793,6 +793,14 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
 // "points" in the DB == stamps. Disabled by default (owner enables later).
 export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
 export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
+// SlipOK auto-verify is an OWNER TOGGLE (default OFF) on top of the env creds, so the shop
+// can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
+// can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
+export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
+export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); return { slipAuto: !!on }; }
+// Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
+export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
+export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
 /** Cups (drink stamps) needed to earn one free drink. */
 export function getStampsPerReward() { return Math.max(1, Math.round(Number(getSetting('loyalty:stamps_per_reward', '10')) || 10)); }
 export function setStampsPerReward(n) {
@@ -1213,7 +1221,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -1275,9 +1283,9 @@ export function ticketView(ticketId) {
   const zone = getZone(t.zone_id);
   const o = orderForTicket(t.id);
   return {
-    id: t.id, code: t.code, status: t.status, party_size: t.party_size, rating: t.rating,
+    id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, refund_requested: o.refund_requested || 0 } : null,
+    order: o ? { total: o.total, discount: o.discount, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
   };
 }

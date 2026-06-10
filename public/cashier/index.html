@@ -29,6 +29,20 @@
   #orderCard .menu-btn .mpr{ font-size:15px; }
   /* iPad landscape: give the menu grid roomy touch targets */
   @media (min-width:900px){ #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); } }
+  /* Receipt printing: 58/80mm-friendly slip. Hidden on screen; only it prints. */
+  #printArea{ display:none; }
+  #printArea .rcpt{ width:72mm; margin:0 auto; color:#000; font-family:"Courier New",ui-monospace,monospace; font-size:12px; line-height:1.45; }
+  #printArea .rcpt h2{ text-align:center; margin:0 0 2px; font-size:16px; }
+  #printArea .rcpt .ctr{ text-align:center; }
+  #printArea .rcpt .big{ font-size:22px; font-weight:800; text-align:center; margin:4px 0; }
+  #printArea .rcpt .hr{ border-top:1px dashed #000; margin:6px 0; }
+  #printArea .rcpt .li{ display:flex; justify-content:space-between; gap:8px; }
+  #printArea .rcpt .sub{ padding-left:10px; font-size:11px; }
+  @media print {
+    body > *:not(#printArea){ display:none !important; }
+    #printArea{ display:block !important; }
+    @page{ margin:5mm; }
+  }
 </style>
 </head><body>
 <div class="wrap wide">
@@ -57,6 +71,7 @@
         <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
         <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
         <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
+        <button id="featuresBtn" class="ghost adm" style="display:none" onclick="showFeatures()"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>ตั้งค่าระบบ</button>
       </div>
     </div>
   </div>
@@ -288,6 +303,7 @@
   <div id="dash" style="display:none"></div>
 </div>
 <div id="toast" class="toast"></div>
+<div id="printArea"></div>
 
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
@@ -351,6 +367,14 @@
   </div>
 </div>
 
+<div id="featuresPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:420px;width:100%;margin:0">
+    <div class="row between"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="$('featuresPop').style.display='none'">✕</button></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
+    <div id="featuresBody" style="display:grid;gap:10px"></div>
+  </div>
+</div>
+
 <div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
     <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
@@ -408,7 +432,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
 };
@@ -1080,6 +1104,9 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
+  // Receipt print: only when the owner has enabled printing (a printer is wired) + order is paid.
+  const printBtn=(t)=> (CFG.printEnabled && t.order_total!=null && t.payment_status==='paid')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="printReceipt(${t.id})">🖨️ พิมพ์</button>` : '';
   // A customer who attached a slip shows as 'claimed' — let the cashier view it.
   const slipViewBtn=(t)=> (t.payment_status==='claimed')
     ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">🧾 สลิป</button>` : '';
@@ -1102,12 +1129,12 @@ function renderZone(snap){
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
     <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
         ${serveBtn(t)}
       </div></div>`).join('')
@@ -1148,7 +1175,59 @@ window.markPaid=async(tid,status,amount)=>{
     method=await pickPayMethod(amount);
     if(method===null) return;   // cashier cancelled
   }
-  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total); }catch(e){ toast(err(e)); } };
+  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total);
+    if(CFG.printEnabled) printReceipt(tid); }catch(e){ toast(err(e)); } };
+// Receipt printing (prepared; only active when the owner enables it + a printer is wired).
+// Renders an 80mm-style slip into #printArea and calls the browser print (works with any
+// AirPrint / connected printer on the iPad). No hardware lock-in.
+const methodTH=(m)=> m==='cash'?'เงินสด':m==='promptpay'?'พร้อมเพย์':m==='online'?'ออนไลน์':m==='slip'?'สลิป':(m||'-');
+window.printReceipt=async(tid)=>{
+  try{
+    const v=await api('/api/tickets/'+tid); const o=v.order||{};
+    const when=o.paid_at||o.created_at; const dt=when?fmtDT(when):'';
+    const itemsHtml=(o.lines||[]).map(l=>{
+      const tops=(l.toppings||[]).map(t=>`<div class="li sub"><span>+ ${esc(t.name)}</span><span>${baht2(t.price*t.qty)}</span></div>`).join('');
+      return `<div class="li"><span>${l.qty}× ${esc(l.name)}</span><span>${baht2(l.price)}</span></div>${tops}`;
+    }).join('');
+    const net=Math.round((((o.total||0)-(o.discount||0)))*100)/100;
+    $('printArea').innerHTML=`<div class="rcpt">
+      <h2>YO-DEE YOGURT</h2>
+      <div class="ctr">${esc(v.zone||'')}</div>
+      <div class="ctr">${dt}</div>
+      <div class="hr"></div>
+      <div class="ctr">หมายเลขคิว</div>
+      <div class="big">${esc(v.code||'-')}</div>
+      <div class="hr"></div>
+      ${itemsHtml||'<div class="ctr">—</div>'}
+      <div class="hr"></div>
+      ${o.discount?`<div class="li"><span>ส่วนลด</span><span>-${baht2(o.discount)}</span></div>`:''}
+      <div class="li" style="font-weight:800;font-size:14px"><span>รวมสุทธิ</span><span>฿${baht2(net)}</span></div>
+      <div class="li"><span>ชำระโดย</span><span>${methodTH(o.method)}${o.paid?' ✓':''}</span></div>
+      <div class="hr"></div>
+      <div class="ctr">ขอบคุณที่ใช้บริการค่ะ 🙏</div>
+      <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(v.code||'')}</div>
+    </div>`;
+    window.print();
+  }catch(e){ toast(err(e)); }
+};
+// Owner: toggle prepared-but-dormant features (receipt printing, SlipOK auto-verify).
+window.showFeatures=async()=>{
+  $('adminMenu').style.display='none';
+  let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
+  const row=(key,on,title,desc,disabled)=>`
+    <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
+      <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
+      <button class="${on?'ok':'ghost'}" ${disabled?'disabled style="opacity:.5"':''} style="padding:8px 14px;min-width:64px" onclick="toggleFeature('${key}',${on?0:1})">${on?'เปิด':'ปิด'}</button>
+    </div>`;
+  $('featuresBody').innerHTML=
+    row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
+    row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady);
+  $('featuresPop').style.display='flex';
+};
+window.toggleFeature=async(key,on)=>{
+  try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
+    toast('บันทึกแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 // Quick-service void: pick a preset reason (no typing). `kind:'waste'` flags made-but-binned
 // product so the report counts it as a no-revenue cost; the rest auto-classify as
 // cancel (unpaid → neutral) or refund (paid → money back) on the server.

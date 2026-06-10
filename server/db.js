@@ -523,6 +523,9 @@ try {
   const have = (k) => db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get(k).c > 0;
   if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','0')`).run();
   if (!have('loyalty:stamps_per_reward')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:stamps_per_reward','10')`).run();
+  // SlipOK auto-verify + receipt printing: both prepared but OFF by default (owner enables later).
+  if (!have('slip:auto')) db.prepare(`INSERT INTO settings(key,value) VALUES('slip:auto','0')`).run();
+  if (!have('print:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('print:enabled','0')`).run();
   if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
     db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0)`).run();
     console.log('[db] Seeded loyalty stamp card (disabled) + free-drink reward.');
