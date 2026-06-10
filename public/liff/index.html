@@ -103,7 +103,7 @@
       <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
-        <div style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
+        <div id="payReassure" style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
         <div id="payChoiceLabel" class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
         <div id="payBtnRow">
           <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
@@ -443,11 +443,12 @@ function renderOrderBlock(v){
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
     show('payChoice',true);
     if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
-      ['payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
+      // Hide the top reassurance — the green confirmed box is now the single source of truth.
+      ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
-      ['payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
+      ['payReassure','payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
@@ -483,7 +484,7 @@ window.confirmCounter=()=>{
   // The queue number is issued only after the cashier collects payment (pay-first preserved).
   const refEl=$('counterRefNum'); if(refEl) refEl.textContent = ticketId || '-';
   const amtEl=$('counterRefAmt'); if(amtEl) amtEl.textContent = _orderTotal || 0;
-  ['payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
+  ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
   show('counterConfirmedMsg',true);
 };
 window.undoCounterConfirm=()=>{ counterConfirmed=false; payMethod='counter'; show('counterConfirmedMsg',false);
@@ -593,12 +594,14 @@ function render(v){
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
   $('tLastCalled').textContent = (!isPending && v.last_called) ? ('กำลังเรียกคิว: '+v.last_called) : '';
-  $('cancelBtn').style.display=''; $('tRate').style.display='none';
+  $('cancelBtn').style.display=''; $('cancelBtn').textContent = isPending ? 'ยกเลิกออเดอร์' : 'ยกเลิกคิวของฉัน'; $('tRate').style.display='none';
   if(isPending){
     show('tAheadWrap',false); show('tCalled',false);
+    // Only show a bottom note for the claimed (waiting-on-cashier) state — the pay prompt is
+    // already covered by the header + the in-card reassurance, so don't repeat it here.
     $('tNotifyNote').textContent = (v.order && v.order.status==='claimed')
       ? 'รอแคชเชียร์ยืนยันการชำระเงิน แล้วระบบจะออกหมายเลขคิวให้'
-      : 'ชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที';
+      : '';
     return;
   }
   if(v.status==='waiting'){
