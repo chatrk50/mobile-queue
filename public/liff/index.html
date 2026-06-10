@@ -116,8 +116,8 @@
         <!-- after choosing pay-at-counter, an explicit confirm so it's clear the queue is locked in -->
         <button id="counterConfirmBtn" class="ok" style="display:none;width:100%;margin-top:10px" onclick="confirmCounter()"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ยืนยัน — รับคิวเลย</button>
         <div id="counterConfirmedMsg" style="display:none;margin-top:10px;text-align:center;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;padding:14px">
-          <div style="font-weight:800;color:#047857;font-size:16px">✅ บันทึกออเดอร์แล้ว!</div>
-          <div style="font-size:13px;margin-top:4px">ชำระที่เคาน์เตอร์ได้เลย — <b>ชำระเสร็จรับหมายเลขคิวทันที</b> · ออเดอร์เริ่มทำหลังชำระเงิน</div>
+          <div style="font-weight:800;color:#047857;font-size:16px">✅ บันทึกออเดอร์แล้ว! · รอการชำระเงิน</div>
+          <div style="font-size:13.5px;margin-top:6px;color:#dc2626;font-weight:700">ออเดอร์จะถูกดำเนินการหลังชำระเงินสำเร็จเท่านั้น</div>
           <button class="ghost" style="margin-top:8px;font-size:12px;padding:4px 10px" onclick="undoCounterConfirm()">‹ เปลี่ยนวิธีชำระเงิน</button>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
@@ -453,7 +453,8 @@ function renderOrderBlock(v){
       show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
       $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
-      $('counterNote').innerHTML='<div style="font-size:13px">ไปชำระที่เคาน์เตอร์ ยอด <b>฿'+total+'</b></div>'
+      $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">💵 ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
+        +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">แจ้งพนักงานว่าสั่งผ่าน LINE เพื่อชำระเงิน · รับหมายเลขคิวทันทีหลังชำระเสร็จ</div>'
         +'<div style="margin-top:8px;color:#dc2626;font-weight:800;font-size:13px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;text-align:center">⚠️ ออเดอร์จะเริ่มดำเนินการหลังจากชำระเงินเรียบร้อยแล้วเท่านั้น</div>';
       applyPayChoice();
     }
