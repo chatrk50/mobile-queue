@@ -300,6 +300,7 @@
   </div>
 
   <!-- DASHBOARD (all zones) -->
+  <div id="lowStockBanner" onclick="showStock()" style="display:none;margin:10px 0;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.32);color:var(--danger);font-weight:700;cursor:pointer"></div>
   <div id="dash" style="display:none"></div>
 </div>
 <div id="toast" class="toast"></div>
@@ -666,7 +667,7 @@ function renderLoyLookup(b){ const box=$('loyLookupResult');
     ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">ดวงยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
 window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!confirm('ยืนยันแลก “'+name+'” ให้ลูกค้า?')) return;
   try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
-window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); }catch(e){ toast(err(e)); } };
+window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock(); }catch(e){ toast(err(e)); } };
 function renderStock(d){
   const s=d.summary||{}; $('stockSummary').textContent=`${s.items||0} รายการ · มูลค่ารวม ${baht2(s.totalValue)} · ใกล้หมด ${s.lowCount||0}`;
   const rows=d.items||[];
@@ -1044,6 +1045,19 @@ async function boot(){
     es.addEventListener('update',e=>renderZone(JSON.parse(e.data)));
     streams.push(es);
   }
+  refreshLowStock();
+  if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
+}
+// Proactive low-stock alert on the dashboard (manager only) — so the owner notices ingredients
+// running out without opening the stock screen. Stock auto-deducts on sales, so this can change
+// during a shift; re-checked on boot + every 3 min + after stock edits.
+async function refreshLowStock(){
+  const b=$('lowStockBanner'); if(!b) return;
+  const mgr=(!ME||['owner','manager'].includes(ME.role)); if(!mgr){ b.style.display='none'; return; }
+  try{ const d=await api('/api/ingredients'); const low=(d.items||[]).filter(r=>r.low);
+    if(low.length){ b.innerHTML='⚠️ วัตถุดิบใกล้หมด '+low.length+' รายการ: '+low.slice(0,4).map(r=>esc(r.name)+' ('+r.stock_qty+' '+esc(r.unit)+')').join(', ')+(low.length>4?' …':'')+' · แตะเพื่อเติม'; b.style.display=''; }
+    else b.style.display='none';
+  }catch(e){ b.style.display='none'; }
 }
 
 function zonePanel(z){
