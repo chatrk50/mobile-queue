@@ -1,3 +1,6 @@
+/* Brand fonts: Poppins (EN headings), Nunito Sans (EN body), LINE Seed Sans TH (Thai) */
+@import url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/LINESeedSansTH/LINESeedSansTH.css');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap');
 :root{
   /* YO-DEE Yogurt brand palette */
   --bg1:#dcf1f6;          /* arctic mist */
@@ -5,7 +8,7 @@
   --card:#ffffff;         /* yogurt white */
   --ink:#16314f;          /* deep navy text */
   --muted:#5c7187;
-  --accent:#1ab3ce;       /* Arctic Sunrise Blue (primary) */
+  --accent:#00b5d8;       /* Arctic Paradise Blue (primary) */
   --accent2:#2fc2a6;      /* Fresh mint */
   --navy:#1e3a5f;         /* Navy accent */
   --warn:#f3cb55;         /* Butter yellow */
@@ -17,9 +20,11 @@
 *{box-sizing:border-box}
 a{text-decoration:none}
 .ic{width:18px;height:18px;vertical-align:-4px;margin-right:6px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+body{margin:0;font-family:"Nunito Sans","LINE Seed Sans TH",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
   background:radial-gradient(1200px 600px at 50% -10%,var(--bg1),var(--bg2));color:var(--ink);
   min-height:100vh;-webkit-font-smoothing:antialiased}
+/* Headings use Poppins (EN) with LINE Seed Sans TH for Thai glyphs */
+h1,h2,h3,.brand{font-family:"Poppins","LINE Seed Sans TH","Nunito Sans",sans-serif}
 .wrap{max-width:480px;margin:0 auto;padding:20px}
 .wrap.wide{max-width:1100px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px;margin-bottom:6px;color:var(--navy)}
