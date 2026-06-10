@@ -1,5 +1,5 @@
 import { db, getSetting, setSetting } from './db.js';
-import { pushQueue } from './line.js';
+import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -680,7 +680,13 @@ function deductStockForOrder(order) {
       const recipe = db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id);
       for (const r of recipe) {
         const use = (Number(r.qty) || 0) * (Number(it.qty) || 1);
-        if (use > 0) try { recordStockMove(r.ingredient_id, { kind: 'use', qty: use, note: 'ขายอัตโนมัติ ' + code }); } catch { /* never block a sale on stock */ }
+        if (use > 0) try {
+          const before = db.prepare('SELECT stock_qty, low_threshold, name, unit FROM ingredients WHERE id=?').get(r.ingredient_id);
+          const after = recordStockMove(r.ingredient_id, { kind: 'use', qty: use, note: 'ขายอัตโนมัติ ' + code });
+          // Notify the owner the moment a sale pushes an ingredient to/under its low mark.
+          if (before && before.low_threshold > 0 && before.stock_qty > before.low_threshold && after.stock_qty <= before.low_threshold)
+            notifyOwner(`⚠️ วัตถุดิบใกล้หมด: ${before.name} เหลือ ${after.stock_qty} ${before.unit}`);
+        } catch { /* never block a sale on stock */ }
       }
     }
   } catch { /* deduction must never break a payment */ }
@@ -842,6 +848,24 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
+// Owner LINE notifications: DORMANT until the owner stores their LINE userId. notifyOwner()
+// no-ops when unset or when the LINE channel is off — so this is safe to ship disabled.
+export function getOwnerLineId() { return (getSetting('owner:line_id', '') || '').trim(); }
+export function setOwnerLineId(id) { setSetting('owner:line_id', (id || '').toString().trim().slice(0, 80)); return { ownerLineId: getOwnerLineId() }; }
+export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text) pushText(id, text); return { sent: !!id }; }
+/** Compose a short Thai end-of-day summary from today's report. */
+export function composeDailySummary(branchId = null) {
+  const r = dailyReport(branchId); const v = r.voided || {};
+  const lines = [
+    '📊 สรุปยอดวันนี้ — YO-DEE Yogurt',
+    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} แก้ว)`,
+    `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
+    `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} แก้ว`,
+  ];
+  if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
+  return lines.join('\n');
+}
+export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */
 export function getStampsPerReward() { return Math.max(1, Math.round(Number(getSetting('loyalty:stamps_per_reward', '10')) || 10)); }
 export function setStampsPerReward(n) {

@@ -1269,9 +1269,22 @@ window.showFeatures=async()=>{
     </div>`;
   $('featuresBody').innerHTML=
     row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
-    row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady);
+    row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
+    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>📲 แจ้งเตือนเจ้าของทาง LINE</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div>
+      <div class="row" style="gap:6px"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
+      <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
+    </div>`;
   $('featuresPop').style.display='flex';
 };
+window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
+window.testOwnerSummary=async()=>{
+  try{ const r=await api('/api/admin/owner-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    toast(r.sent?'✅ ส่งสรุปเข้า LINE แล้ว':'ℹ️ ยังไม่ได้ตั้ง LINE เจ้าของ (หรือ LINE ปิดบน UAT)');
+    alert('ข้อความสรุปที่จะส่ง:\n\n'+(r.text||'')); }catch(e){ toast(err(e)); } };
 window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
