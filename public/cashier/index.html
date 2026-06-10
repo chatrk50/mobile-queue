@@ -292,7 +292,7 @@
   </div>
 
   <!-- MENU MANAGEMENT -->
-  <div id="menuCard" class="card" style="display:none;max-width:480px;margin:14px auto">
+  <div id="menuCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between"><h1>เมนู</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="priceMgr" style="margin:4px 0 12px"></div>
@@ -917,7 +917,8 @@ window.saveTier=async(id)=>{ const mk=Number($('tier_'+id).value); try{ await ap
 window.saveChan=async(id)=>{ const c=Number($('chan_'+id).value); try{ await api('/api/channels/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commission_pct:c})}); toast('บันทึกค่าคอมแล้ว'); }catch(e){ toast(err(e)); } };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 function renderMenuMgr(){
-  $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
+  // Responsive grid: 1 column on phones, 2-3 on tablet/desktop (uses the wider screen).
+  $('menuMgr').innerHTML = MENU.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">`+MENU.map(m=>`
     <div class="qitem" style="flex-wrap:wrap;gap:8px">
       <div class="row" style="gap:8px;align-items:center;${m.active?'':'opacity:.5'}">
         <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
@@ -933,7 +934,7 @@ function renderMenuMgr(){
         <button class="ghost" style="padding:6px 9px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'ซ่อน':'แสดง'}</button>
         <button class="ghost" style="padding:6px 9px" onclick="showRecipe(${m.id},'${esc(m.name).replace(/'/g,"\\'")}')">🧪 สูตร</button>
         <button class="ghost danger" style="padding:6px 9px" onclick="delItem(${m.id})">✕</button>
-      </div></div>`).join('') : '<p class="muted">ยังไม่มีเมนู — เพิ่มด้านล่าง</p>';
+      </div></div>`).join('')+`</div>` : '<p class="muted">ยังไม่มีเมนู — เพิ่มด้านล่าง</p>';
 }
 window.editName=async(id)=>{ const m=MENU.find(x=>x.id===id);
   const name=prompt('ชื่อภาษาไทย', m.name); if(name===null) return;
