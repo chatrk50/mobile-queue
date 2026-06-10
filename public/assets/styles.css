@@ -41,6 +41,9 @@ h2{font-size:16px;margin:.2em 0;color:var(--muted);font-weight:600}
   background:linear-gradient(90deg,var(--navy),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row.between{justify-content:space-between}
+/* Form controls don't inherit the page font by default — force the brand font so menu
+   buttons, the keypad, inputs, etc. all use Nunito Sans / LINE Seed Sans TH. */
+button,.btn,input,select,textarea{font-family:inherit}
 button,.btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;
   color:#fff;background:var(--accent);cursor:pointer;transition:transform .05s,filter .15s}
 button:active{transform:translateY(1px)}
