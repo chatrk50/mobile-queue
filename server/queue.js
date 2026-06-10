@@ -329,6 +329,7 @@ export function orderHistory(limit = 100) {
   ).all(Math.max(1, Math.min(500, Number(limit) || 100)));
   return rows.map((t) => {
     const o = orderForTicket(t.id);
+    const hasSlip = !!db.prepare('SELECT 1 FROM slips s JOIN orders o2 ON o2.id=s.order_id WHERE o2.ticket_id=? LIMIT 1').get(t.id);
     return {
       id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
       closed_at: t.closed_at,
@@ -336,6 +337,7 @@ export function orderHistory(limit = 100) {
       payment_status: o ? o.payment_status : null,
       refund_requested: o ? (o.refund_requested || 0) : 0,
       refund_note: o ? (o.refund_note || null) : null,
+      has_slip: hasSlip,
       lines: o ? o.lines : [],
     };
   });
