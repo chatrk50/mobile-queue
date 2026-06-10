@@ -1114,9 +1114,10 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
-  // Receipt print: only when the owner has enabled printing (a printer is wired) + order is paid.
+  // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
+  // and the customer receipt. Auto-print on payment produces the kitchen ticket.
   const printBtn=(t)=> (CFG.printEnabled && t.order_total!=null && t.payment_status==='paid')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="printReceipt(${t.id})">🖨️ พิมพ์</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="printKitchen(${t.id})">🍳 ครัว</button><button class="ghost" style="padding:8px 10px" onclick="printReceipt(${t.id})">🖨️ ใบเสร็จ</button>` : '';
   // A customer who attached a slip shows as 'claimed' — let the cashier view it.
   const slipViewBtn=(t)=> (t.payment_status==='claimed')
     ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">🧾 สลิป</button>` : '';
@@ -1186,7 +1187,7 @@ window.markPaid=async(tid,status,amount)=>{
     if(method===null) return;   // cashier cancelled
   }
   try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total);
-    if(CFG.printEnabled) printReceipt(tid); }catch(e){ toast(err(e)); } };
+    if(CFG.printEnabled) printKitchen(tid); }catch(e){ toast(err(e)); } };
 // Receipt printing (prepared; only active when the owner enables it + a printer is wired).
 // Renders an 80mm-style slip into #printArea and calls the browser print (works with any
 // AirPrint / connected printer on the iPad). No hardware lock-in.
@@ -1216,6 +1217,29 @@ window.printReceipt=async(tid)=>{
       <div class="hr"></div>
       <div class="ctr">ขอบคุณที่ใช้บริการค่ะ 🙏</div>
       <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(v.code||'')}</div>
+    </div>`;
+    window.print();
+  }catch(e){ toast(err(e)); }
+};
+// Kitchen ticket: what to MAKE (queue#, items, sweetness, toppings) — no prices. Auto-printed
+// on payment so the drink-maker gets it immediately; also reprintable from the ticket row.
+window.printKitchen=async(tid)=>{
+  try{
+    const v=await api('/api/tickets/'+tid); const o=v.order||{};
+    const when=o.paid_at||o.created_at; const dt=when?fmtDT(when):'';
+    const itemsHtml=(o.lines||[]).map(l=>{
+      const sweet=(l.name.split(' · ')[1]||'').trim();
+      const tops=(l.toppings||[]).map(t=>`<div class="sub">+ ${esc(t.name)}${t.qty>1?(' ×'+t.qty):''}</div>`).join('');
+      return `<div style="margin:6px 0"><div style="font-size:16px;font-weight:800">${l.qty}× ${esc(l.name.split(' · ')[0])}</div>${sweet?`<div class="sub" style="font-weight:700">• ${esc(sweet)}</div>`:''}${tops}</div>`;
+    }).join('');
+    $('printArea').innerHTML=`<div class="rcpt">
+      <div class="ctr" style="font-weight:800">★ ใบทำเครื่องดื่ม ★</div>
+      <div class="big">${esc(v.code||'-')}</div>
+      <div class="ctr">${dt}</div>
+      <div class="hr"></div>
+      ${itemsHtml||'<div class="ctr">—</div>'}
+      <div class="hr"></div>
+      <div class="ctr" style="font-size:10px">${esc(v.zone||'')} · ${esc(v.code||'')}</div>
     </div>`;
     window.print();
   }catch(e){ toast(err(e)); }
