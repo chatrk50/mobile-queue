@@ -117,7 +117,11 @@
         <button id="counterConfirmBtn" class="ok" style="display:none;width:100%;margin-top:10px" onclick="confirmCounter()"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ยืนยัน — รับคิวเลย</button>
         <div id="counterConfirmedMsg" style="display:none;margin-top:10px;text-align:center;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;padding:14px">
           <div style="font-weight:800;color:#047857;font-size:16px">✅ บันทึกออเดอร์แล้ว! · รอการชำระเงิน</div>
-          <div style="font-size:13.5px;margin-top:6px;color:#dc2626;font-weight:700">ออเดอร์จะถูกดำเนินการหลังชำระเงินสำเร็จเท่านั้น</div>
+          <div style="margin-top:10px;background:#fff;border:1px dashed #6ee7b7;border-radius:12px;padding:12px">
+            <div style="font-size:12px;color:var(--muted)">แจ้งพนักงานที่เคาน์เตอร์</div>
+            <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:2px">ออเดอร์ #<span id="counterRefNum">-</span> · ฿<span id="counterRefAmt">0</span></div>
+          </div>
+          <div style="font-size:13.5px;margin-top:8px;color:#dc2626;font-weight:700">ออเดอร์จะถูกดำเนินการหลังชำระเงินสำเร็จเท่านั้น · รับหมายเลขคิวหลังชำระ</div>
           <button class="ghost" style="margin-top:8px;font-size:12px;padding:4px 10px" onclick="undoCounterConfirm()">‹ เปลี่ยนวิธีชำระเงิน</button>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
@@ -479,6 +483,10 @@ function setQrFor(isKbank){
 // keep toggling payment methods). Survives polling via the render branch above.
 window.confirmCounter=()=>{
   counterConfirmed=true;
+  // Model B: show the customer their ORDER REF (= ticket id) to tell staff at the counter.
+  // The queue number is issued only after the cashier collects payment (pay-first preserved).
+  const refEl=$('counterRefNum'); if(refEl) refEl.textContent = ticketId || '-';
+  const amtEl=$('counterRefAmt'); if(amtEl) amtEl.textContent = _orderTotal || 0;
   ['payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
   show('counterConfirmedMsg',true);
 };
