@@ -84,8 +84,7 @@
   <div id="loginCard" class="card" style="max-width:360px;margin:48px auto;text-align:center">
     <h1>เข้าสู่ระบบพนักงาน</h1>
     <p class="muted">ใส่ PIN เพื่อจัดการคิว</p>
-    <input id="pin" type="password" inputmode="none" placeholder="PIN" readonly style="margin:14px 0;text-align:center;letter-spacing:8px;font-size:22px"
-      onkeydown="if(event.key==='Enter')login()">
+    <input id="pin" type="password" inputmode="none" readonly aria-label="PIN" style="margin:14px 0;text-align:center;letter-spacing:8px;font-size:22px">
     <div class="pinpad">
       <button class="pinkey" onclick="pinKey('1')">1</button><button class="pinkey" onclick="pinKey('2')">2</button><button class="pinkey" onclick="pinKey('3')">3</button>
       <button class="pinkey" onclick="pinKey('4')">4</button><button class="pinkey" onclick="pinKey('5')">5</button><button class="pinkey" onclick="pinKey('6')">6</button>
@@ -438,6 +437,15 @@ window.pinKey=(k)=>{ const el=$('pin'); $('loginErr').textContent='';
   if(k==='C') el.value='';
   else if(k==='back') el.value=el.value.slice(0,-1);
   else el.value=(el.value+k).slice(0,8); };
+// Notebook/desktop keyboard: while the login screen is up, route digit keys into the PIN so
+// staff can type directly. Touch devices use the on-screen pad (field is readonly → no soft
+// keyboard popup). Gated on the login card being visible so it never hijacks keys elsewhere.
+document.addEventListener('keydown',(e)=>{
+  const lc=$('loginCard'); if(!lc || lc.offsetParent===null) return;
+  if(e.key==='Enter'){ login(); e.preventDefault(); }
+  else if(e.key==='Backspace'){ pinKey('back'); e.preventDefault(); }
+  else if(/^[0-9]$/.test(e.key)){ pinKey(e.key); e.preventDefault(); }
+});
 window.login=async()=>{
   const pin=$('pin').value.trim(); if(!pin) return;
   try{
@@ -500,10 +508,9 @@ function renderHistory(list){
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
 // already paid (deducts from sales + drops it from the report); otherwise just void.
 window.refundHistory=async(tid,label)=>{
-  if(!confirm((label||'ยกเลิก')+'รายการนี้?\n(จะถูกหักออกจากยอดขายและรายงาน)')) return;
-  const reason=(prompt('เหตุผลในการ'+(label||'ยกเลิก')+' (ไม่บังคับ) เช่น ลูกค้าคืนของ, สั่งผิด')||'').trim();
-  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});
-    toast(label==='คืนเงิน'?'คืนเงินเรียบร้อย':'ยกเลิกเรียบร้อย'); showHistory();
+  const choice=await pickVoidReason(); if(!choice) return;   // same preset reasons + stock logic
+  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock})});
+    toast((label==='คืนเงิน'?'คืนเงิน':'ยกเลิก')+(choice.restock?' + คืนวัตถุดิบ':'')+'เรียบร้อย'); showHistory();
   }catch(e){ toast(err(e)); } };
 
 // ---------- Sell history (daily / monthly) ----------
@@ -1343,13 +1350,14 @@ window.saveRecipe=async()=>{
 // Quick-service void: pick a preset reason (no typing). `kind:'waste'` flags made-but-binned
 // product so the report counts it as a no-revenue cost; the rest auto-classify as
 // cancel (unpaid → neutral) or refund (paid → money back) on the server.
+// restock:true = ยังไม่ได้ทำ → คืนวัตถุดิบเข้าสต๊อก · restock:false = ทำแล้ว → หักสต๊อกเป็นของเสีย
 const VOID_REASONS=[
-  {label:'🙅 ลูกค้ายกเลิก', reason:'ลูกค้ายกเลิก'},
-  {label:'🔁 สั่ง/เลือกผิด', reason:'สั่งหรือเลือกผิด'},
-  {label:'⏰ รอนานเกินไป', reason:'รอนานเกินไป'},
-  {label:'🚶 ลูกค้าไม่มารับ', reason:'ลูกค้าไม่มารับ'},
-  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้'},
-  {label:'🗑️ ของเสีย / ทำพลาด / ทิ้ง', reason:'ของเสีย/ทำพลาด/ทิ้ง', kind:'waste'},
+  {label:'🙅 ลูกค้ายกเลิก · ยังไม่ได้ทำ', reason:'ลูกค้ายกเลิก', restock:true},
+  {label:'🔁 สั่ง/กดผิด · ยังไม่ได้ทำ', reason:'สั่งหรือกดผิด', restock:true},
+  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้', restock:true},
+  {label:'🚶 ลูกค้าไม่มารับ · ทำแล้ว', reason:'ลูกค้าไม่มารับ', restock:false, kind:'waste'},
+  {label:'😞 ลูกค้าไม่พอใจ · ทำแล้ว', reason:'ลูกค้าไม่พอใจ', restock:false, kind:'waste'},
+  {label:'🗑️ ของเสีย/ทำพลาด · ทำแล้ว', reason:'ของเสีย/ทำพลาด', restock:false, kind:'waste'},
 ];
 let _voidRes=null;
 function pickVoidReason(){ const box=$('voidReasonBtns');
@@ -1360,8 +1368,8 @@ function pickVoidReason(){ const box=$('voidReasonBtns');
 window.chooseVoidReason=(i)=>{ $('voidPop').style.display='none'; const r=_voidRes; _voidRes=null; if(r) r(i<0?null:VOID_REASONS[i]); };
 window.voidTicket=async(tid)=>{
   const choice=await pickVoidReason(); if(!choice) return;
-  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null})});
-    toast(choice.kind==='waste'?'🗑️ บันทึกเป็นของเสียแล้ว':'ยกเลิกออเดอร์แล้ว'); }catch(e){ toast(err(e)); } };
+  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock})});
+    toast(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
   const a=prompt('ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด'); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }

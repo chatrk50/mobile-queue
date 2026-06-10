@@ -638,6 +638,8 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
     if (c > 0 && newStock > 0) newAvg = round2i((ing.stock_qty * ing.avg_cost + c) / newStock);
   } else if (kind === 'adjust') {
     newStock = Math.max(0, round2i(q)); moveQty = round2i(newStock - ing.stock_qty);
+  } else if (kind === 'return') {           // ingredients back from a not-made / cancelled order
+    q = Math.max(0, q); moveQty = q; newStock = round2i(ing.stock_qty + q);  // avg cost unchanged
   } else { // use | waste
     q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
   }
@@ -1275,17 +1277,38 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
  *  void_kind: 'refund' if the order was already paid (money goes back); else 'waste' when
  *  the cashier marks it discarded (made-but-binned → a no-revenue COST), otherwise 'void'
  *  (cancelled before any product/money — neutral). All three are excluded from sales. */
+// Reverse a paid order's recipe deduction — ingredients go BACK to stock when the cancel
+// reason says the drink was never made (e.g. customer cancelled / wrong order / can't make).
+function returnStockForOrder(order) {
+  try {
+    const items = db.prepare('SELECT name, qty FROM order_items WHERE order_id=?').all(order.id);
+    const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
+    for (const it of items) {
+      const base = String(it.name).split(' · ')[0];
+      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
+      if (!mi) continue;
+      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id)) {
+        const back = (Number(r.qty) || 0) * (Number(it.qty) || 1);
+        if (back > 0) try { recordStockMove(r.ingredient_id, { kind: 'return', qty: back, note: 'คืนสต๊อก (ยกเลิก) ' + code }); } catch { /* never block a void */ }
+      }
+    }
+  } catch { /* stock return must never break a void */ }
+}
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null, kind: kindOpt = null } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null, restock = false } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
-  const kind = (order && order.payment_status === 'paid') ? 'refund' : (kindOpt === 'waste' ? 'waste' : 'void');
+  const wasPaid = !!(order && order.payment_status === 'paid');   // paid => stock was deducted
+  const kind = wasPaid ? 'refund' : (kindOpt === 'waste' ? 'waste' : 'void');
   // Void/refund: mark the order void (even if it was already paid -> a refund) so it
   // drops out of the report and its revenue is deducted from sales.
   db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE ticket_id=?`)
     .run(kind, reason, actorId, ticketId);
-  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason } });
+  // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
+  // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
+  if (order && wasPaid && restock) returnStockForOrder(order);
+  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     pushQueue(t.line_user_id,
