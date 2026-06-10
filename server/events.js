@@ -17,6 +17,19 @@ export function subscribe(zoneId, res, { reveal = false } = {}) {
  * `data` may be a plain value (sent to everyone) or a function `(reveal) => value`
  * so privileged (cashier) and public (display) subscribers get different payloads.
  */
+// Heartbeat: proxies / load balancers (and Render's free tier) silently close idle SSE
+// sockets, after which the cashier stops getting live pushes until a manual refresh. A
+// periodic comment keeps the connection alive and lets the browser detect a dead one and
+// auto-reconnect. Dead writes are pruned.
+setInterval(() => {
+  for (const [zoneId, set] of clients) {
+    for (const sub of set) {
+      try { sub.res.write(': hb\n\n'); } catch { set.delete(sub); }
+    }
+    if (!set.size) clients.delete(zoneId);
+  }
+}, 20000);
+
 export function emit(zoneId, event, data) {
   const set = clients.get(String(zoneId));
   if (!set) return;
