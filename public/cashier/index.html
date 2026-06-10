@@ -830,14 +830,36 @@ window.showReport=async()=>{
       `<h2 style="margin-top:16px">สัดส่วนยอดขาย</h2>${bars||'<p class="muted">ยังไม่มีการขายวันนี้</p>'}`+
       `<div class="row" style="justify-content:space-around;margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+
         kpi('ออกคิว',r.issued)+kpi('ไม่มารับ',r.noShows)+kpi('รอเฉลี่ย',r.avgWaitMin!=null?r.avgWaitMin+' น.':'—')+kpi('คะแนน',r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
-      `</div>`;
+      `</div>`+
+      `<div id="insightsBox" style="margin-top:16px"></div>`;
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
-    calcGoal();
+    calcGoal(); loadInsights();
     $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+// Customer satisfaction (star breakdown) + repeat-buyer (returning LINE customers) — appended
+// to the daily report so the owner can find the satisfaction view in one place.
+async function loadInsights(){
+  const box=$('insightsBox'); if(!box) return;
+  let d; try{ d=await api('/api/reports/insights'); }catch(e){ return; }
+  const sat=d.satisfaction||{}, cu=d.customers||{}, stars=sat.stars||{};
+  const maxN=Math.max(1,...[1,2,3,4,5].map(s=>stars[s]||0));
+  const starBars=[5,4,3,2,1].map(s=>`<div class="row" style="align-items:center;gap:8px;font-size:12px;margin:3px 0">
+    <span style="width:28px">${s}★</span>
+    <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${((stars[s]||0)/maxN*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+    <span class="muted" style="width:28px;text-align:right">${stars[s]||0}</span></div>`).join('');
+  const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}</span><span class="muted">${t.order_count} ครั้ง</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
+  box.innerHTML=`<h2>⭐ ความพึงพอใจลูกค้า</h2>
+    <div class="card" style="margin:8px 0;padding:14px">
+      <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
+      ${sat.total?starBars:'<p class="muted" style="font-size:12px">ยังไม่มีรีวิว</p>'}</div>
+    <h2>🔁 ลูกค้าซื้อซ้ำ (LINE)</h2>
+    <div class="card" style="margin:8px 0;padding:14px">
+      <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
+      <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
+}
 window.exportReport=()=>{ window.open('/api/report.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
 window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?date='+encodeURIComponent($('detailDate').value||'')+(PIN?('&pin='+encodeURIComponent(PIN)):''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.

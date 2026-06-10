@@ -214,6 +214,19 @@ export function setFinanceSettings(patch = {}, branchId = null) {
   return getFinanceSettings(branchId);
 }
 
+/** Customer satisfaction (star distribution) + repeat-buyer stats (returning LINE customers). */
+export function customerInsights() {
+  const stars = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; let total = 0, sum = 0;
+  for (const r of db.prepare('SELECT rating, COUNT(*) n FROM tickets WHERE rating IS NOT NULL GROUP BY rating').all()) {
+    if (stars[r.rating] != null) { stars[r.rating] = r.n; total += r.n; sum += r.rating * r.n; }
+  }
+  const c = db.prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN order_count>=2 THEN 1 ELSE 0 END),0) repeat FROM customers').get();
+  const top = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE order_count>=2 ORDER BY order_count DESC, last_order_at DESC LIMIT 10').all();
+  return {
+    satisfaction: { avg: total ? Math.round((sum / total) * 10) / 10 : null, total, stars },
+    customers: { total: c.total || 0, repeat: c.repeat || 0, repeatPct: c.total ? Math.round((c.repeat / c.total) * 100) : 0, top },
+  };
+}
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport(branchId = null) {
   const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards

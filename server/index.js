@@ -596,6 +596,10 @@ app.get('/api/reports/detailed', (req, res) => {
   const branchId = req.query.branchId ? Number(req.query.branchId) : null;
   res.json(Q.detailedReports({ date, branchId }));
 });
+app.get('/api/reports/insights', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.customerInsights());
+});
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
 app.get('/api/cash/session', (req, res) => {
