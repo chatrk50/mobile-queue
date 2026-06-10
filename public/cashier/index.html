@@ -370,7 +370,7 @@
 
 <div id="recipePop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="$('recipePop').style.display='none'">✕</button></div>
+    <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('recipePop').style.display='none'">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 แก้ว — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
     <div id="recipeRows" style="display:grid;gap:8px"></div>
     <button class="ok" style="width:100%;margin-top:12px" onclick="saveRecipe()">บันทึกสูตร</button>
@@ -379,7 +379,7 @@
 
 <div id="featuresPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <div class="row between"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="$('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
