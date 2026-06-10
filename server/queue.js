@@ -871,6 +871,28 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
+// Store opening hours → auto-close. Empty open/close = always open (no behaviour change).
+// days = CSV of open weekdays (0=Sun..6=Sat); empty = open every day. Times are "HH:MM" BKK.
+export function getStoreHours() {
+  return { open: getSetting('hours:open', '') || '', close: getSetting('hours:close', '') || '', days: getSetting('hours:days', '') || '' };
+}
+export function setStoreHours({ open, close, days } = {}) {
+  if (open != null) setSetting('hours:open', /^\d{1,2}:\d{2}$/.test(open) ? open : '');
+  if (close != null) setSetting('hours:close', /^\d{1,2}:\d{2}$/.test(close) ? close : '');
+  if (days != null) setSetting('hours:days', Array.isArray(days) ? days.join(',') : String(days || ''));
+  return getStoreHours();
+}
+/** Is the shop open right now (Bangkok time)? True when no hours are configured. */
+export function isStoreOpen() {
+  const h = getStoreHours();
+  if (!h.open || !h.close) return true;
+  const b = new Date(Date.now() + 7 * 3600 * 1000);          // shift to BKK wall-clock
+  const hm = b.getUTCHours() * 60 + b.getUTCMinutes(), day = b.getUTCDay();
+  if (h.days && !h.days.split(',').filter(Boolean).includes(String(day))) return false;
+  const [oh, om] = h.open.split(':').map(Number), [ch, cm] = h.close.split(':').map(Number);
+  const openM = oh * 60 + om, closeM = ch * 60 + cm;
+  return closeM > openM ? (hm >= openM && hm < closeM) : (hm >= openM || hm < closeM);  // handle past-midnight
+}
 // Owner LINE notifications: DORMANT until the owner stores their LINE userId. notifyOwner()
 // no-ops when unset or when the LINE channel is off — so this is safe to ship disabled.
 export function getOwnerLineId() { return (getSetting('owner:line_id', '') || '').trim(); }

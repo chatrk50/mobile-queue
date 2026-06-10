@@ -1314,9 +1314,26 @@ window.showFeatures=async()=>{
       <div class="row" style="gap:6px"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
+    </div>`+
+    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <div class="row between"><b>⏰ เวลาเปิด-ปิดร้าน</b><span class="pill ${f.open?'open':'closed'}" style="font-size:11px">${f.open?'เปิดอยู่':'ปิดอยู่'}</span></div>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">นอกเวลานี้ลูกค้าจะสั่งไม่ได้อัตโนมัติ (เว้นว่าง = เปิดตลอด)</div>
+      <div class="row" style="gap:6px;align-items:center">
+        <input id="hoursOpen" type="time" value="${(f.hours&&f.hours.open)||''}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <span class="muted">ถึง</span>
+        <input id="hoursClose" type="time" value="${(f.hours&&f.hours.close)||''}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <button class="ok" style="padding:8px 12px" onclick="saveHours()">บันทึก</button>
+      </div>
+      <div id="hoursDays" style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(f.hours&&f.hours.days)?String(f.hours.days).split(',').filter(Boolean):[];const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
     </div>`;
   $('featuresPop').style.display='flex';
 };
+window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
+window.saveHours=async()=>{ const open=$('hoursOpen').value, close=$('hoursClose').value;
+  const days=[...document.querySelectorAll('#hoursDays [data-day].on')].map(e=>e.dataset.day);
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hours:{open,close,days:days.length===7?[]:days}})});
+    try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
+    toast('บันทึกเวลาร้านแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.testOwnerSummary=async()=>{

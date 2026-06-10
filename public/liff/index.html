@@ -265,9 +265,13 @@ async function loadZone(){
   const ahead = snap.waitingCount, mpg = cfg.minutesPerGroup || 4;
   $('aheadNow').textContent = ahead;
   $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
-  const open = z.is_open===1;
+  // Open = zone is open AND within the shop's hours (auto-close when outside hours).
+  const open = z.is_open===1 && cfg.open!==false;
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'เปิด':'ปิด';
+  if(!open && z.is_open===1 && cfg.open===false && cfg.hours && cfg.hours.open){
+    const cm=$('closedMsg'); if(cm) cm.textContent='⏰ ร้านปิดอยู่ · เปิด '+cfg.hours.open+'–'+cfg.hours.close+' น.';
+  }
   show('orderNowBtn', open && cfg.selfOrder);
   show('queueStatus', open);
   show('closedMsg', !open);
