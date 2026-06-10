@@ -8,6 +8,11 @@
 <meta name="apple-mobile-web-app-title" content="YO-DEE">
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
+<style>
+  /* Customer menu thumbnails +20% for easier tapping/visibility */
+  #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
+  #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
+</style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
@@ -98,11 +103,7 @@
       <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
-        <div style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px;text-align:center">
-          <div style="font-weight:800;color:#dc2626;font-size:15px">⏳ รอการชำระเงิน</div>
-          <div style="font-size:12.5px;color:#b91c1c;margin-top:4px;font-weight:700">ออเดอร์จะถูกดำเนินการหลังชำระเงินสำเร็จเท่านั้น</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:6px">หากเลือก <b>ชำระที่เคาน์เตอร์</b> กรุณาแจ้งหมายเลขออเดอร์กับพนักงานเพื่อยืนยันรายการ</div>
-        </div>
+        <div style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
         <div id="payChoiceLabel" class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
         <div id="payBtnRow">
           <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
@@ -129,12 +130,8 @@
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
           <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>บันทึกรูป QR</button>
           <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
-          <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:10px">
-            <b>📱 จ่ายในมือถือเครื่องเดียว:</b><br>
-            1) <b>แคปหน้าจอ (screenshot)</b> QR นี้ — หรือกด “บันทึกรูป QR”<br>
-            2) เปิดแอปธนาคาร → <b>สแกน → เลือกรูปจากอัลบั้ม</b><br>
-            3) จ่ายตามยอด<br>
-            <span id="onePhoneTipStep4">4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ</span>
+          <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5;margin-bottom:10px;color:#334155">
+            <b style="color:var(--navy)">จ่ายในมือถือเครื่องเดียว</b> · บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span>
           </div>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
           <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
@@ -357,7 +354,7 @@ async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[];
 window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
-    <div class="mimg" style="font-size:34px">${itemImg(m)}</div>
+    <div class="mimg" style="font-size:41px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
@@ -456,10 +453,9 @@ function renderOrderBlock(v){
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
-      $('onePhoneTipStep4').textContent = cfg.slipVerify ? '4) กลับมาแนบสลิป — ยืนยันอัตโนมัติ' : '4) กลับมาแนบสลิป — แคชเชียร์ตรวจให้';
-      $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">💵 ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
-        +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">แจ้งพนักงานว่าสั่งผ่าน LINE เพื่อชำระเงิน · รับหมายเลขคิวทันทีหลังชำระเสร็จ</div>'
-        +'<div style="margin-top:8px;color:#dc2626;font-weight:800;font-size:13px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;text-align:center">⚠️ ออเดอร์จะเริ่มดำเนินการหลังจากชำระเงินเรียบร้อยแล้วเท่านั้น</div>';
+      $('onePhoneTipStep4').textContent = cfg.slipVerify ? 'กลับมาแนบสลิป (ตรวจอัตโนมัติ)' : 'กลับมาแนบสลิป (แคชเชียร์ตรวจ)';
+      $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
+        +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">แจ้งพนักงานว่าสั่งผ่าน LINE · รับหมายเลขคิวหลังชำระเสร็จ</div>';
       applyPayChoice();
     }
   }
