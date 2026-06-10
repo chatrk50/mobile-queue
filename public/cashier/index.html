@@ -43,6 +43,10 @@
     #printArea{ display:block !important; }
     @page{ margin:5mm; }
   }
+  /* On-screen PIN keypad — tap numbers directly, no device keyboard needed */
+  .pinpad{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0; }
+  .pinkey{ font-size:22px; font-weight:700; padding:16px 0; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--navy); cursor:pointer; transition:background .08s; }
+  .pinkey:active{ background:var(--surface,#f1f5f9); transform:translateY(1px); }
 </style>
 </head><body>
 <div class="wrap wide">
@@ -80,8 +84,14 @@
   <div id="loginCard" class="card" style="max-width:360px;margin:48px auto;text-align:center">
     <h1>เข้าสู่ระบบพนักงาน</h1>
     <p class="muted">ใส่ PIN เพื่อจัดการคิว</p>
-    <input id="pin" type="password" inputmode="numeric" placeholder="PIN" style="margin:14px 0"
+    <input id="pin" type="password" inputmode="none" placeholder="PIN" readonly style="margin:14px 0;text-align:center;letter-spacing:8px;font-size:22px"
       onkeydown="if(event.key==='Enter')login()">
+    <div class="pinpad">
+      <button class="pinkey" onclick="pinKey('1')">1</button><button class="pinkey" onclick="pinKey('2')">2</button><button class="pinkey" onclick="pinKey('3')">3</button>
+      <button class="pinkey" onclick="pinKey('4')">4</button><button class="pinkey" onclick="pinKey('5')">5</button><button class="pinkey" onclick="pinKey('6')">6</button>
+      <button class="pinkey" onclick="pinKey('7')">7</button><button class="pinkey" onclick="pinKey('8')">8</button><button class="pinkey" onclick="pinKey('9')">9</button>
+      <button class="pinkey" style="color:var(--danger)" onclick="pinKey('C')">C</button><button class="pinkey" onclick="pinKey('0')">0</button><button class="pinkey" onclick="pinKey('back')">⌫</button>
+    </div>
     <button style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
     <p id="loginErr" style="color:var(--danger);min-height:18px;margin-top:10px"></p>
   </div>
@@ -423,6 +433,11 @@ async function api(path,opts={}){
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
 function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่'}; return m[e.message]||e.message; }
 
+// On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
+window.pinKey=(k)=>{ const el=$('pin'); $('loginErr').textContent='';
+  if(k==='C') el.value='';
+  else if(k==='back') el.value=el.value.slice(0,-1);
+  else el.value=(el.value+k).slice(0,8); };
 window.login=async()=>{
   const pin=$('pin').value.trim(); if(!pin) return;
   try{
