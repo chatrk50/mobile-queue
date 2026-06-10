@@ -1105,6 +1105,14 @@ async function boot(){
     es.addEventListener('update',e=>renderZone(JSON.parse(e.data)));
     streams.push(es);
   }
+  // Self-heal: the live SSE stream can silently drop (proxy/idle/cold start), which made new
+  // orders appear only after a manual refresh. Re-pull each zone's snapshot every 15s so the
+  // board always catches up — instant via SSE when it's healthy, ≤15s otherwise.
+  if(window._zonePollTimer) clearInterval(window._zonePollTimer);
+  window._zonePollTimer=setInterval(()=>{
+    const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;   // not while logged out
+    zones.forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} });
+  }, 15000);
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
 }
