@@ -12,6 +12,11 @@
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
+  /* "It's your turn" celebration */
+  @keyframes callpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+  .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
+    padding:18px 16px;text-align:center;box-shadow:0 10px 30px rgba(0,181,216,.35);animation:callpulse 1.2s ease-in-out infinite}
+  .callcard .big{font-size:26px;font-weight:800;margin-top:2px}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -94,7 +99,10 @@
         <div style="font-size:40px;font-weight:800" id="tAhead">–</div>
         <div class="pill soon" id="tEta" style="display:inline-block;margin-top:8px"></div></div>
       <div id="tCalled" style="display:none">
-        <span class="pill soon" id="tCalledPill">⏰ ใกล้ถึงคิวคุณแล้ว</span>
+        <div class="callcard">
+          <div style="font-size:15px;font-weight:700">🎉 ถึงคิวของคุณแล้ว!</div>
+          <div class="big" id="tCalledPill">เชิญรับเครื่องดื่มที่เคาน์เตอร์</div>
+        </div>
       </div>
     </div>
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
@@ -620,8 +628,8 @@ function render(v){
       : `(โหมดทดสอบ) แจ้งเตือนเมื่อเหลือ ${cfg.threshold} คิว — ดูที่ server log`;
   } else if(v.status==='called'){
     show('tAheadWrap',false); show('tCalled',true);
-    $('tCalledPill').textContent="🔔 ถึงคิวของคุณแล้ว!";
-    $('tNotifyNote').textContent='กรุณามาที่เคาน์เตอร์ค่ะ';
+    $('tCalledPill').textContent='คิว '+v.code+' · เชิญรับที่เคาน์เตอร์';
+    $('tNotifyNote').textContent='';
   } else if(v.status==='served'){
     show('tAheadWrap',false); show('tCalled',false);
     $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
