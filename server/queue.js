@@ -542,6 +542,10 @@ export function listMenu(channelId = null, branchId = null) {
   // Resolve channel/branch pricing (delivery markup, branch price override). base_price
   // keeps the storefront catalog price for display ("฿X → ฿Y").
   if (channelId || branchId) rows.forEach((r) => { r.base_price = r.price; r.price = priceFor(r.id, { channelId, branchId }); });
+  // BOM availability: items with a recipe get `makeable` (cups left from stock) + `stockSoldout`
+  // (makeable<=0). Items without a recipe are unlimited (makeable=null) — unaffected.
+  const mk = menuMakeable();
+  rows.forEach((r) => { if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; } });
   return rows;
 }
 
@@ -670,6 +674,19 @@ export function setRecipe(menuItemId, rows = []) {
   });
   tx();
   return getRecipe(menuItemId);
+}
+/** How many cups of each menu item can still be made from current ingredient stock, per its
+ *  recipe. Returns Map(menuItemId → makeable count) ONLY for items that have a recipe. */
+export function menuMakeable() {
+  const rows = db.prepare(
+    `SELECT r.menu_item_id AS mid, r.qty, i.stock_qty FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.qty>0`
+  ).all();
+  const byMenu = new Map();
+  for (const r of rows) {
+    const can = Math.floor((Number(r.stock_qty) || 0) / r.qty);
+    byMenu.set(r.mid, Math.min(byMenu.has(r.mid) ? byMenu.get(r.mid) : Infinity, can));
+  }
+  return byMenu;
 }
 /** Auto-deduct ingredient stock for every line of a paid order, per its menu item's recipe.
  *  No-op for any line whose menu item has no recipe → safe/dormant until recipes are set. */

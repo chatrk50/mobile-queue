@@ -353,10 +353,12 @@ function itemImg(m){
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
+  // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
+  const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
+    return `<button class="menu-btn" ${out?'disabled style="opacity:.5;filter:grayscale(1)"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:41px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
+    <div class="mpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };

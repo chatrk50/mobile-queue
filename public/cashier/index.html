@@ -952,11 +952,19 @@ function itemImg(m){
 }
 function renderOrderMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
+  // BOM availability per menu (m.makeable from stock). Cashier can OVERRIDE a BOM-soldout item
+  // (still sells at the counter), unlike the customer; only manual soldout disables it here.
+  const mk=(m)=>{ if(m.makeable==null) return '';
+    if(m.stockSoldout) return `<div class="men" style="color:var(--danger);font-weight:700">วัตถุดิบหมด · ขายต่อได้</div>`;
+    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} แก้ว</div>`; };
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:38px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`;
-  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
+    <div class="mpr">${m.soldout?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${mk(m)}</button>`;
+  // Alert: menus that can make fewer than 5 cups (incl. 0) — so the cashier preps/restocks.
+  const low=drinks.filter(m=>m.makeable!=null && m.makeable<5);
+  const alert=low.length?`<div style="margin:0 0 8px;padding:9px 12px;border-radius:10px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);color:var(--danger);font-weight:700;font-size:13px">⚠️ ใกล้ทำไม่ได้: ${low.map(m=>esc(m.name)+' ('+m.makeable+')').join(' · ')}</div>`:'';
+  $('menuButtons').innerHTML = drinks.length ? `${alert}<div class="menu-section">เมนูเครื่องดื่ม</div><div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ยังไม่มีเครื่องดื่ม — เพิ่มที่เมนู</p>';
 }
 // Re-price the menu when the cashier switches channel (delivery applies its markup).
 window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderChannel); renderOrderMenu();
