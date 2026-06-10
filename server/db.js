@@ -537,6 +537,21 @@ try {
   // SlipOK auto-verify + receipt printing: both prepared but OFF by default (owner enables later).
   if (!have('slip:auto')) db.prepare(`INSERT INTO settings(key,value) VALUES('slip:auto','0')`).run();
   if (!have('print:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('print:enabled','0')`).run();
+  // Starter raw materials (from the shop's Makro receipts) — only when the table is empty, so
+  // it's a one-time editable seed. Stock left at 0 (owner counts/fills later); cost = price/unit.
+  if (!db.prepare('SELECT COUNT(*) c FROM ingredients').get().c) {
+    const ins = db.prepare('INSERT INTO ingredients (name, unit, avg_cost, low_threshold, stock_qty) VALUES (?,?,?,?,0)');
+    for (const [n, u, c, lt] of [
+      ['โยเกิร์ตรสธรรมชาติ (ดัชชี/เอ ไวร์)', 'กก.', 53, 2],
+      ['โยเกิร์ตพร่องมันเนย (ดัชชี)', 'ลิตร', 56, 2],
+      ['สตรอเบอร์รี่แช่แข็ง', 'กก.', 80, 1],
+      ['มะม่วงน้ำดอกไม้', 'กก.', 95, 1],
+      ['คิทแคท', 'ถุง', 115, 2],
+      ['โอรีโอ แซนวิช', 'แพ็ก', 46, 2],
+      ['น้ำเชื่อมเข้มข้น (มิตรผล)', 'ขวด', 85, 1],
+    ]) ins.run(n, u, c, lt);
+    console.log('[db] Seeded starter raw materials from Makro (stock 0, editable).');
+  }
   if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
     db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0)`).run();
     console.log('[db] Seeded loyalty stamp card (disabled) + free-drink reward.');

@@ -602,21 +602,23 @@ export function inventorySummary() {
     lowCount: list.filter((r) => r.low).length,
   };
 }
-export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0, branchId = null } = {}) {
+export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0, costPrice = 0, branchId = null } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
-  const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, branch_id) VALUES (?,?,?,?)')
-    .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), branchId);
+  // costPrice = purchase price per unit (สfor costing). Stock starts at 0 — fill in later.
+  const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, avg_cost, branch_id) VALUES (?,?,?,?,?)')
+    .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), branchId);
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateIngredient(id, { name, unit, lowThreshold, active }) {
+export function updateIngredient(id, { name, unit, lowThreshold, active, costPrice }) {
   const cur = db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
   if (!cur) throw new Error('ingredient_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const u = unit != null ? (unit.toString().slice(0, 20) || cur.unit) : cur.unit;
   const lt = lowThreshold != null ? Math.max(0, Number(lowThreshold) || 0) : cur.low_threshold;
   const a = active != null ? (active ? 1 : 0) : cur.active;
-  db.prepare('UPDATE ingredients SET name=?, unit=?, low_threshold=?, active=? WHERE id=?').run(n, u, lt, a, id);
+  const c = costPrice != null ? Math.max(0, Number(costPrice) || 0) : cur.avg_cost;
+  db.prepare('UPDATE ingredients SET name=?, unit=?, low_threshold=?, active=?, avg_cost=? WHERE id=?').run(n, u, lt, a, c, id);
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
 }
 /** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;

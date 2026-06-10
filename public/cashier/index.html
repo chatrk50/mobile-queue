@@ -177,7 +177,8 @@
       <h2 style="margin:0 0 8px;font-size:15px">เพิ่มวัตถุดิบใหม่</h2>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
         <input id="ingName" placeholder="ชื่อวัตถุดิบ" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="ingUnit" placeholder="หน่วย (กล่อง/ขวด/กก.)" style="width:150px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="ingUnit" placeholder="หน่วย (กล่อง/ขวด/กก.)" style="width:140px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="ingCost" type="number" inputmode="decimal" placeholder="ราคาซื้อ/หน่วย ฿" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="ingLow" type="number" inputmode="decimal" placeholder="เตือนเมื่อเหลือ" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addIng()">เพิ่ม</button>
       </div>
@@ -677,12 +678,19 @@ function renderStock(d){
     <td style="text-align:right;${r.low?'color:var(--danger);font-weight:700':''}">${r.stock_qty} <span class="muted" style="font-size:11px">${esc(r.unit)}</span></td>
     <td style="text-align:right">${baht2(r.avg_cost)}</td>
     <td style="text-align:right">${baht2(r.value)}</td>
-    <td style="text-align:right;white-space:nowrap"><button class="ok" style="padding:4px 8px;font-size:12px" onclick="stockBuy(${r.id})">ซื้อเข้า</button> <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="stockCount(${r.id})">นับ</button> <button class="ghost danger" style="padding:4px 8px;font-size:12px" onclick="stockUse(${r.id})">เบิก</button></td></tr>`).join('')}</tbody></table>`;
+    <td style="text-align:right;white-space:nowrap"><button class="ok" style="padding:4px 8px;font-size:12px" onclick="stockBuy(${r.id})">ซื้อเข้า</button> <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="stockCount(${r.id})">นับ</button> <button class="ghost danger" style="padding:4px 8px;font-size:12px" onclick="stockUse(${r.id})">เบิก</button> <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="editIng(${r.id})">✎</button></td></tr>`).join('')}</tbody></table>`;
 }
-window.addIng=async()=>{ $('ingErr').textContent=''; const name=$('ingName').value.trim(), unit=$('ingUnit').value.trim()||'หน่วย', lowThreshold=Number($('ingLow').value)||0;
+window.addIng=async()=>{ $('ingErr').textContent=''; const name=$('ingName').value.trim(), unit=$('ingUnit').value.trim()||'หน่วย', costPrice=Number($('ingCost').value)||0, lowThreshold=Number($('ingLow').value)||0;
   if(!name){ $('ingErr').textContent='กรอกชื่อวัตถุดิบ'; return; }
-  try{ await api('/api/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,unit,lowThreshold})}); $('ingName').value='';$('ingUnit').value='';$('ingLow').value=''; toast('เพิ่มวัตถุดิบแล้ว'); loadStock(); }
+  try{ await api('/api/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,unit,costPrice,lowThreshold})}); ['ingName','ingUnit','ingCost','ingLow'].forEach(id=>$(id).value=''); toast('เพิ่มวัตถุดิบแล้ว'); loadStock(); }
   catch(e){ $('ingErr').textContent=err(e); } };
+// Edit a raw material's details (name/unit/cost/low) — owner refines the starter list.
+window.editIng=async(id)=>{ const r=(STOCK||[]).find(x=>x.id===id); if(!r) return;
+  const name=prompt('ชื่อวัตถุดิบ',r.name); if(name===null) return;
+  const unit=prompt('หน่วย (กก./ลิตร/ขวด...)',r.unit); if(unit===null) return;
+  const costPrice=prompt('ราคาซื้อ/หน่วย ฿',r.avg_cost); if(costPrice===null) return;
+  const lowThreshold=prompt('เตือนเมื่อเหลือ',r.low_threshold); if(lowThreshold===null) return;
+  try{ await api('/api/ingredients/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()||r.name,unit:unit.trim()||r.unit,costPrice:Number(costPrice)||0,lowThreshold:Number(lowThreshold)||0})}); toast('บันทึกแล้ว'); loadStock(); }catch(e){ toast(err(e)); } };
 async function stockMove(id,body,msg){ try{ await api('/api/ingredients/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast(msg); loadStock(); }catch(e){ toast(err(e)); } }
 window.stockBuy=(id)=>{ const r=STOCK.find(x=>x.id===id); if(!r) return;
   const q=prompt('ซื้อเข้า "'+r.name+'" — จำนวน ('+r.unit+')'); if(q===null) return; const qty=Number(q); if(!(qty>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
