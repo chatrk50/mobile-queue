@@ -645,6 +645,47 @@ export function stockMoves(ingredientId, limit = 50) {
   return db.prepare('SELECT * FROM stock_moves WHERE ingredient_id=? ORDER BY id DESC LIMIT ?').all(ingredientId, limit);
 }
 
+// ---------- Recipes (bill-of-materials) → auto stock deduction on sale ----------
+/** Ingredients (with qty per unit) that make up one menu item. */
+export function getRecipe(menuItemId) {
+  return db.prepare(
+    `SELECT r.ingredient_id AS ingredientId, r.qty, i.name, i.unit, i.stock_qty
+       FROM recipes r JOIN ingredients i ON i.id = r.ingredient_id
+      WHERE r.menu_item_id = ? ORDER BY i.name`
+  ).all(menuItemId);
+}
+/** Replace a menu item's recipe with the given {ingredientId, qty} rows (qty>0 kept). */
+export function setRecipe(menuItemId, rows = []) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(menuItemId);
+    const ins = db.prepare('INSERT INTO recipes(menu_item_id, ingredient_id, qty) VALUES(?,?,?)');
+    for (const r of rows) {
+      const q = Number(r.qty) || 0; const ing = Number(r.ingredientId);
+      if (q > 0 && ing) ins.run(menuItemId, ing, q);
+    }
+  });
+  tx();
+  return getRecipe(menuItemId);
+}
+/** Auto-deduct ingredient stock for every line of a paid order, per its menu item's recipe.
+ *  No-op for any line whose menu item has no recipe → safe/dormant until recipes are set. */
+function deductStockForOrder(order) {
+  try {
+    const items = db.prepare('SELECT name, qty FROM order_items WHERE order_id=?').all(order.id);
+    const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
+    for (const it of items) {
+      const base = String(it.name).split(' · ')[0];   // strip the " · หวาน X%" suffix
+      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
+      if (!mi) continue;
+      const recipe = db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id);
+      for (const r of recipe) {
+        const use = (Number(r.qty) || 0) * (Number(it.qty) || 1);
+        if (use > 0) try { recordStockMove(r.ingredient_id, { kind: 'use', qty: use, note: 'ขายอัตโนมัติ ' + code }); } catch { /* never block a sale on stock */ }
+      }
+    }
+  } catch { /* deduction must never break a payment */ }
+}
+
 // ---------- Staff & roles (Phase 1) ----------
 const ROLES = new Set(['owner', 'manager', 'cashier']);
 const branchIdsOf = (staffId) =>
@@ -1123,6 +1164,8 @@ export function setOrderPaid(ticketId, opts = {}) {
       `เราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`,
       queueLink(ticket.zone_id), 'ดูคิวของฉัน');
   }
+  // Auto-deduct ingredient stock per recipe (dormant until recipes are defined).
+  deductStockForOrder(order);
   // Auto-earn loyalty points for a paid LINE order (no-op for cashier/walk-in or if disabled).
   let loyalty = null;
   try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ }

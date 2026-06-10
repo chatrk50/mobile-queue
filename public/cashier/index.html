@@ -367,6 +367,15 @@
   </div>
 </div>
 
+<div id="recipePop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
+    <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="$('recipePop').style.display='none'">✕</button></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 แก้ว — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
+    <div id="recipeRows" style="display:grid;gap:8px"></div>
+    <button class="ok" style="width:100%;margin-top:12px" onclick="saveRecipe()">บันทึกสูตร</button>
+  </div>
+</div>
+
 <div id="featuresPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
     <div class="row between"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="$('featuresPop').style.display='none'">✕</button></div>
@@ -869,6 +878,7 @@ function renderMenuMgr(){
         <button class="ghost" style="padding:6px 9px" onclick="uploadImg(${m.id})">📷</button>
         <button class="ghost" style="padding:6px 9px" onclick="toggleSoldout(${m.id},${m.soldout?0:1})">${m.soldout?'มีของ':'ของหมด'}</button>
         <button class="ghost" style="padding:6px 9px" onclick="toggleItem(${m.id},${m.active?0:1})">${m.active?'ซ่อน':'แสดง'}</button>
+        <button class="ghost" style="padding:6px 9px" onclick="showRecipe(${m.id},'${esc(m.name).replace(/'/g,"\\'")}')">🧪 สูตร</button>
         <button class="ghost danger" style="padding:6px 9px" onclick="delItem(${m.id})">✕</button>
       </div></div>`).join('') : '<p class="muted">ยังไม่มีเมนู — เพิ่มด้านล่าง</p>';
 }
@@ -1228,6 +1238,26 @@ window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
     toast('บันทึกแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+// Recipe editor: map a menu item → ingredient quantities per cup (drives auto stock deduction).
+let _recipeMenuId=null;
+window.showRecipe=async(menuId,name)=>{
+  _recipeMenuId=menuId; $('recipeName').textContent=name||'';
+  let ings=[], cur=[];
+  try{ const inv=await api('/api/ingredients'); ings=inv.items||[]; }catch(e){ toast(err(e)); return; }
+  try{ cur=await api('/api/menu/'+menuId+'/recipe'); }catch(e){ cur=[]; }
+  if(!ings.length){ $('recipeRows').innerHTML='<p class="muted">ยังไม่มีวัตถุดิบ — เพิ่มที่ "สต๊อก/วัตถุดิบ" ก่อน</p>'; }
+  else{ const byId={}; cur.forEach(c=>byId[c.ingredientId]=c.qty);
+    $('recipeRows').innerHTML=ings.map(i=>`
+      <div class="row between" style="align-items:center;gap:8px">
+        <span style="flex:1">${esc(i.name)} <span class="muted" style="font-size:12px">(${esc(i.unit)} · เหลือ ${i.stock_qty})</span></span>
+        <input type="number" inputmode="decimal" min="0" step="0.01" data-ing="${i.id}" value="${byId[i.id]!=null?byId[i.id]:''}" placeholder="0" style="width:90px;padding:7px;border:1px solid var(--line);border-radius:8px;text-align:right">
+      </div>`).join(''); }
+  $('recipePop').style.display='flex';
+};
+window.saveRecipe=async()=>{
+  const rows=[...document.querySelectorAll('#recipeRows input[data-ing]')].map(el=>({ingredientId:Number(el.dataset.ing),qty:Number(el.value)||0})).filter(r=>r.qty>0);
+  try{ await api('/api/menu/'+_recipeMenuId+'/recipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
+    toast('บันทึกสูตรแล้ว · จะตัดสต๊อกอัตโนมัติเมื่อขาย'); $('recipePop').style.display='none'; }catch(e){ toast(err(e)); } };
 // Quick-service void: pick a preset reason (no typing). `kind:'waste'` flags made-but-binned
 // product so the report counts it as a no-revenue cost; the rest auto-classify as
 // cancel (unpaid → neutral) or refund (paid → money back) on the server.

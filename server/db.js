@@ -331,6 +331,17 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_stock_moves_ing ON stock_moves(ingredient_id, at);
+-- Recipe / bill-of-materials: how much of each ingredient one unit of a menu item uses.
+-- Drives AUTO stock deduction when a sale is paid. Empty by default → no deduction
+-- (dormant) until the owner defines recipes, so existing behaviour is unchanged.
+CREATE TABLE IF NOT EXISTS recipes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  menu_item_id  INTEGER NOT NULL REFERENCES menu_items(id),
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  qty           REAL NOT NULL DEFAULT 0,        -- ingredient units consumed per 1 menu unit
+  UNIQUE(menu_item_id, ingredient_id)
+);
+CREATE INDEX IF NOT EXISTS idx_recipes_menu ON recipes(menu_item_id);
 -- Payment tenders (HOW money is collected). Each is a distinct settlement channel so the
 -- owner can reconcile each day's total against what each app/bank actually pays out.
 -- fee_pct is usually 0 (shop keeps 100%); reserved for a platform fee (e.g. LINE Pay).

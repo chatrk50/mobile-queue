@@ -665,6 +665,16 @@ app.get('/api/ingredients/:id/moves', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.stockMoves(Number(req.params.id)));
 });
+// Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
+app.get('/api/menu/:id/recipe', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.getRecipe(Number(req.params.id)));
+});
+app.post('/api/menu/:id/recipe', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setRecipe(Number(req.params.id), Array.isArray(req.body?.rows) ? req.body.rows : [])); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Export the current report as an Excel workbook (PIN). Opened directly by the browser.
 app.get('/api/report.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
