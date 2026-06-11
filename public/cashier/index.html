@@ -202,9 +202,14 @@
       <span style="margin-left:8px">สะสมครบ</span>
       <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
       <span>แก้ว = ฟรี 1 แก้ว (ไม่เกิน 49฿)</span>
-      <button class="ok" style="padding:8px 16px" onclick="saveLoyaltySettings()">บันทึก</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/แก้ว · ตอนนี้ปิดอยู่ตามค่าเริ่มต้น เปิดเมื่อพร้อมใช้</p>
+    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span>🎁 สั่งผ่านไลน์ครั้งแรก แถมฟรี</span>
+      <input id="loyWelcomeInp" type="number" inputmode="numeric" min="0" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <span>ดวง (0 = ปิด)</span>
+      <button class="ok" style="padding:8px 16px;margin-left:auto" onclick="saveLoyaltySettings()">บันทึก</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/แก้ว (เฉพาะสั่งผ่านไลน์ — หน้าร้านไม่ได้ดวง เป็นแรงจูงใจให้ย้ายมาสั่งไลน์) · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
       <div id="rewardsBody"></div>
@@ -739,10 +744,10 @@ window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.
 window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; renderRewards(); }catch(e){ toast(err(e)); } };
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2); renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>`<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span><button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10; try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points})}); $('rwName').value='';$('rwCost').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.toggleReward=async(id,active)=>{ try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };

@@ -983,6 +983,10 @@ export function setStampsPerReward(n) {
   setSetting('loyalty:stamps_per_reward', v);
   return { stamps_per_reward: v };
 }
+/** Welcome head-start: bonus stamps granted on a customer's FIRST paid LINE order — the hook
+ *  that pulls counter customers into ordering via LINE (endowed-progress effect). 0 = off. */
+export function getWelcomeBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:welcome_bonus', '2')) || 0)); }
+export function setWelcomeBonus(n) { const v = Math.max(0, Math.round(Number(n) || 0)); setSetting('loyalty:welcome_bonus', String(v)); return { welcomeBonus: v }; }
 /** Current + lifetime stamp balance for a customer key (line_user_id). */
 export function loyaltyBalance(key) {
   if (!key) return { key, points: 0, lifetime: 0 };
@@ -1014,6 +1018,10 @@ export function awardPoints(orderId) {
   if (pts <= 0) return null;
   const key = t.line_user_id;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
+  // First-ever LINE order for this customer? Grant a one-time welcome head-start.
+  const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
+  const bonus = isFirst ? getWelcomeBonus() : 0;
+  const total = pts + bonus;
   db.transaction(() => {
     db.prepare(
       `INSERT INTO customers (line_user_id, name, points, lifetime_points)
@@ -1022,10 +1030,11 @@ export function awardPoints(orderId) {
          points = customers.points + excluded.points,
          lifetime_points = customers.lifetime_points + excluded.points,
          name = COALESCE(customers.name, excluded.name)`
-    ).run(key, name, pts, pts);
+    ).run(key, name, total, total);
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
+    if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
   })();
-  return { key, name, awarded: pts, balance: loyaltyBalance(key).points };
+  return { key, name, awarded: pts, bonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {
@@ -1301,20 +1310,32 @@ export function setOrderPaid(ticketId, opts = {}) {
   let ticket = null;
   try { ticket = assignQueueNumber(Number(ticketId)); }
   catch { ticket = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId); }
-  if (ticket && ticket.line_user_id) {
-    const ahead = aheadCount(ticket);
-    pushQueue(ticket.line_user_id,
-      `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
-      `🎫 หมายเลขคิวของคุณ: ${ticket.code}\n` +
-      `คิวรอก่อนหน้า: ${ahead}\n` +
-      `เราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`,
-      queueLink(ticket.zone_id), 'ดูคิวของฉัน');
-  }
   // Auto-deduct ingredient stock per recipe (dormant until recipes are defined).
   deductStockForOrder(order);
-  // Auto-earn loyalty points for a paid LINE order (no-op for cashier/walk-in or if disabled).
+  // Auto-earn loyalty stamps for a paid LINE order (no-op for cashier/walk-in or if disabled).
   let loyalty = null;
   try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ }
+  if (ticket && ticket.line_user_id) {
+    const ahead = aheadCount(ticket);
+    let msg = `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
+      `🎫 หมายเลขคิวของคุณ: ${ticket.code}\n` +
+      `คิวรอก่อนหน้า: ${ahead}`;
+    if (loyalty && loyalty.awarded != null) {
+      // Recognition: greet returning customers, show stamps earned + progress to the next free drink.
+      const per = getStampsPerReward();
+      const bal = loyalty.balance || 0;
+      const free = Math.floor(bal / per);
+      const bonusTxt = loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '';
+      const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
+      msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
+      msg += free >= 1
+        ? `\n🎉 ครบ ${per} ดวงแล้ว! แลกฟรีได้ ${free} แก้ว — เปิดแอปกดแลกได้เลย`
+        : `\n🥤 อีก ${per - bal} แก้ว ได้ฟรี 1 แก้ว!`;
+    } else {
+      msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
+    }
+    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน');
+  }
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 

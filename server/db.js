@@ -534,12 +534,14 @@ try {
 } catch (e) { console.error('[db] tender seed skipped:', e.message); }
 
 // ---- Seed loyalty defaults (idempotent). Model = STAMP CARD: 1 stamp per drink cup;
-// collect `stamps_per_reward` cups → 1 free drink (≤49฿). DISABLED by default
-// (loyalty:enabled='0') — the owner turns it on later. ----
+// collect `stamps_per_reward` cups → 1 free drink (≤49฿). ENABLED on fresh DBs (the shop
+// is rolling out a LINE-first stamp card); existing prod keeps whatever it already has, so
+// `have()` leaves prod untouched until the owner toggles it in ⚙ จัดการ. ----
 try {
   const have = (k) => db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get(k).c > 0;
-  if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','0')`).run();
+  if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','1')`).run();
   if (!have('loyalty:stamps_per_reward')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:stamps_per_reward','10')`).run();
+  if (!have('loyalty:welcome_bonus')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:welcome_bonus','2')`).run();
   // SlipOK auto-verify + receipt printing: both prepared but OFF by default (owner enables later).
   if (!have('slip:auto')) db.prepare(`INSERT INTO settings(key,value) VALUES('slip:auto','0')`).run();
   if (!have('print:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('print:enabled','0')`).run();
