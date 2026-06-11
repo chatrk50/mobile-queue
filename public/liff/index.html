@@ -73,6 +73,8 @@
       <div id="loyRewards" style="display:none;margin-top:6px"></div>
       <div id="loyBday" style="margin-top:10px"></div>
     </div>
+    <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
+    <div id="referralCard" style="display:none;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px;text-align:left"><div id="referralBody"></div></div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
     <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ปิด</button>
@@ -297,6 +299,7 @@ async function loadZone(){
   show('getCard',true);
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadLoyalty();            // show the customer's points balance (best-effort)
+  loadReferral();           // invite-a-friend code + enter-a-code (best-effort)
 }
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
@@ -367,6 +370,33 @@ function renderBday(bal){
 }
 window.saveBirthday=async()=>{ const el=$('bdayInp'), v=el&&el.value; if(!v){ if(window.toast) toast('เลือกวันเกิดก่อน'); return; }
   try{ await api('/api/loyalty/'+encodeURIComponent(lineUserId)+'/birthday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({birthday:v})}); if(window.toast) toast('🎂 บันทึกวันเกิดแล้ว!'); loadLoyalty(); }catch(e){ if(window.toast) toast('บันทึกไม่สำเร็จ'); } };
+// Referral: show the customer's own invite code (+ share) and, for new customers, an enter-a-code box.
+async function loadReferral(){
+  show('referralCard', false);
+  if(!lineUserId || !cfg.selfOrder) return;
+  try{
+    const conf = await api('/api/loyalty/config'); if(!conf.enabled) return;
+    const s = await api('/api/loyalty/'+encodeURIComponent(lineUserId)+'/referral');
+    let html='';
+    if(s.code){ html += `<div style="font-size:14px;font-weight:800;color:var(--navy)">👫 ชวนเพื่อน รับฟรีทั้งคู่</div>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">เพื่อนใช้โค้ดนี้แล้วสั่งครั้งแรก → ได้ดวงทั้งคู่</div>
+      <div class="row" style="gap:6px;align-items:center"><div style="flex:1;font-weight:900;font-size:18px;letter-spacing:1px;background:var(--surface);border-radius:8px;padding:9px 10px;text-align:center">${esc(s.code)}</div>
+      <button class="ok" style="padding:10px 16px" onclick="shareRef('${esc(s.code)}')">แชร์</button></div>`; }
+    if(s.eligible){ html += `<div style="margin-top:${s.code?'12px':'0'};${s.code?'border-top:1px solid var(--line);padding-top:10px':''}">
+      <div style="font-size:13px;color:var(--navy);font-weight:700;margin-bottom:6px">🎁 ได้รับโค้ดเพื่อนมา? ใส่รับ 5 ดวง</div>
+      <div class="row" style="gap:6px"><input id="refInp" placeholder="เช่น YD1A" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-transform:uppercase">
+      <button class="ghost" style="padding:9px 16px" onclick="applyRef()">ใช้โค้ด</button></div></div>`; }
+    if(!html) return;
+    $('referralBody').innerHTML = html; show('referralCard', true);
+  }catch(e){ /* never block ordering */ }
+}
+window.shareRef=(code)=>{ const msg='มาสะสมแก้วฟรีกับ YO-DEE Yogurt! 🥤 ใช้โค้ด '+code+' ครั้งแรก รับดวงฟรีทั้งคู่';
+  try{ if(window.liff && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')){ liff.shareTargetPicker([{type:'text',text:msg}]).catch(()=>copyRef(msg)); return; } }catch(e){}
+  copyRef(msg); };
+function copyRef(msg){ try{ navigator.clipboard.writeText(msg); if(window.toast) toast('คัดลอกข้อความชวนเพื่อนแล้ว ✅'); }catch(e){ if(window.toast) toast('คัดลอกไม่ได้ — ลองจดโค้ดส่งเพื่อน'); } }
+window.applyRef=async()=>{ const el=$('refInp'), v=el&&el.value.trim().toUpperCase(); if(!v){ if(window.toast) toast('ใส่โค้ดก่อน'); return; }
+  try{ await api('/api/loyalty/'+encodeURIComponent(lineUserId)+'/refer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:v})}); if(window.toast) toast('🎉 ใช้โค้ดเพื่อนแล้ว! สั่งครั้งแรกรับ 5 ดวงทั้งคู่'); loadReferral(); }
+  catch(e){ const m=(e&&e.message)||''; if(window.toast) toast(m==='not_new_customer'?'ใช้ได้เฉพาะลูกค้าใหม่':(m==='own_code'?'ใส่โค้ดตัวเองไม่ได้':(m==='already_referred'?'ใช้โค้ดไปแล้ว':((m==='code_not_found'||m==='bad_code')?'ไม่พบโค้ดนี้':'ใช้โค้ดไม่สำเร็จ')))); } };
 
 // ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
 let MENU=[], cart=[], pendingDrink=null, pendingTops={};

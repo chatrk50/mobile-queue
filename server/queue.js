@@ -1015,6 +1015,39 @@ export function loyaltyBalance(key) {
   const lifetime = c ? (c.lifetime_points || 0) : 0;
   return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
+/** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
+ *  and when that friend completes their FIRST paid order both sides get bonus stamps. */
+export function getReferralBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:referral_bonus', '5')) || 0)); }
+function refCodeFor(rowid) { return 'YD' + Number(rowid).toString(36).toUpperCase(); }
+function rowidFromRefCode(code) { const m = String(code || '').trim().toUpperCase().match(/^YD([0-9A-Z]+)$/); return m ? parseInt(m[1], 36) : null; }
+function hasLoyaltyHistory(key) { return !!db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? LIMIT 1').get(key); }
+export function getReferralCode(key) {
+  if (!key) return null;
+  const c = db.prepare('SELECT rowid, referral_code FROM customers WHERE line_user_id=?').get(key);
+  if (!c) return null;
+  if (c.referral_code) return c.referral_code;
+  const code = refCodeFor(c.rowid);
+  db.prepare('UPDATE customers SET referral_code=? WHERE rowid=?').run(code, c.rowid);
+  return code;
+}
+export function referralStatus(key) {
+  if (!key) return { code: null, referredBy: null, eligible: false };
+  const c = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=?').get(key);
+  return { code: getReferralCode(key), referredBy: c ? (c.referred_by || null) : null, eligible: !(c && c.referred_by) && !hasLoyaltyHistory(key) };
+}
+export function applyReferralCode(key, code) {
+  if (!key) throw new Error('customer_required');
+  if (hasLoyaltyHistory(key)) throw new Error('not_new_customer');
+  const me = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=?').get(key);
+  if (me && me.referred_by) throw new Error('already_referred');
+  const rid = rowidFromRefCode(code);
+  if (!rid) throw new Error('bad_code');
+  const ref = db.prepare('SELECT line_user_id FROM customers WHERE rowid=?').get(rid);
+  if (!ref) throw new Error('code_not_found');
+  if (ref.line_user_id === key) throw new Error('own_code');
+  db.prepare('INSERT INTO customers (line_user_id, referred_by) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET referred_by=excluded.referred_by').run(key, ref.line_user_id);
+  return { ok: true };
+}
 export function loyaltyHistory(key, limit = 30) {
   if (!key) return [];
   return db.prepare('SELECT kind, points, order_id, note, at FROM loyalty_moves WHERE customer_key=? ORDER BY id DESC LIMIT ?').all(key, limit);
@@ -1045,11 +1078,14 @@ export function awardPoints(orderId) {
   const bonus = isFirst ? getWelcomeBonus() : 0;
   // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
   // customer orders on their birthday (and has saved one).
-  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=?').get(key);
   const yr = bkkYear();
   const bdayBonus = (cust && isBirthdayToday(cust.birthday) && !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?").get(key, 'birthday ' + yr))
     ? getStampsPerReward() : 0;
-  const total = pts + bonus + bdayBonus;
+  // Referral: on the invited friend's FIRST order, both the friend and the referrer get a bonus.
+  const referrerKey = (isFirst && cust && cust.referred_by) ? cust.referred_by : null;
+  const refBonus = referrerKey ? getReferralBonus() : 0;
+  const total = pts + bonus + bdayBonus + refBonus;
   db.transaction(() => {
     db.prepare(
       `INSERT INTO customers (line_user_id, name, points, lifetime_points)
@@ -1062,8 +1098,14 @@ export function awardPoints(orderId) {
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
     if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
     if (bdayBonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bdayBonus, orderId, 'birthday ' + yr);
+    if (refBonus > 0 && referrerKey) {
+      db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, refBonus, orderId, 'referral (เพื่อนชวน)');
+      db.prepare('UPDATE customers SET points=points+?, lifetime_points=lifetime_points+? WHERE line_user_id=?').run(refBonus, refBonus, referrerKey);
+      db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(referrerKey, refBonus, orderId, 'referral (เพื่อนที่ชวนสั่งครั้งแรก)');
+    }
   })();
-  return { key, name, awarded: pts, bonus, bdayBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
+  if (refBonus > 0 && referrerKey) pushQueue(referrerKey, `👫 เพื่อนที่คุณชวนสั่งครั้งแรกแล้ว! รับ +${refBonus} ดวง 🎉`, null);
+  return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {

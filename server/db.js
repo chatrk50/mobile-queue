@@ -413,6 +413,8 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
   `ALTER TABLE customers ADD COLUMN birthday TEXT`,        // 'YYYY-MM-DD' (optional) → birthday free drink
+  `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
+  `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -535,12 +537,12 @@ try {
 } catch (e) { console.error('[db] tender seed skipped:', e.message); }
 
 // ---- Seed loyalty defaults (idempotent). Model = STAMP CARD: 1 stamp per drink cup;
-// collect `stamps_per_reward` cups → 1 free drink (≤49฿). ENABLED on fresh DBs (the shop
-// is rolling out a LINE-first stamp card); existing prod keeps whatever it already has, so
-// `have()` leaves prod untouched until the owner toggles it in ⚙ จัดการ. ----
+// collect `stamps_per_reward` cups → 1 free drink (≤49฿). DISABLED by default so a prod
+// cutover never auto-enables it; the UAT sandbox turns it on explicitly at boot (see index.js
+// `!DURABLE` block), and the owner flips it on in prod via ⚙ จัดการ when ready. ----
 try {
   const have = (k) => db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get(k).c > 0;
-  if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','1')`).run();
+  if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','0')`).run();
   if (!have('loyalty:stamps_per_reward')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:stamps_per_reward','10')`).run();
   if (!have('loyalty:welcome_bonus')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:welcome_bonus','2')`).run();
   // SlipOK auto-verify + receipt printing: both prepared but OFF by default (owner enables later).

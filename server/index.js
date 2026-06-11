@@ -228,6 +228,13 @@ app.post('/api/loyalty/:key/birthday', (req, res) => {
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Referral: this customer's own invite code + whether they can still enter a friend's code.
+app.get('/api/loyalty/:key/referral', (req, res) => res.json(Q.referralStatus(req.params.key)));
+// A new customer enters a friend's invite code (both get stamps when this customer first orders).
+app.post('/api/loyalty/:key/refer', (req, res) => {
+  try { res.json(Q.applyReferralCode(req.params.key, req.body?.code)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Owner: manage loyalty settings + rewards.
 app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
@@ -821,6 +828,9 @@ if (!DURABLE) {
   try {
     const r = seedDemo();
     if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);
+    // Loyalty rewards are exercised on the UAT sandbox only; prod stays OFF until the owner
+    // flips it on in ⚙ จัดการ (seed default is '0', so a prod cutover never auto-enables it).
+    Q.setLoyaltyEnabled(true);
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
 
