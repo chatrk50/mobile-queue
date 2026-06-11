@@ -718,12 +718,16 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
 // ---------- Menu management + quick-service ordering (PIN) ----------
 app.post('/api/menu', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  try { res.json(Q.addMenuItem(req.body || {})); }
+  try { const item = Q.addMenuItem(req.body || {});
+    if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(item.id, req.body.priceDelivery);
+    res.json(item); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/menu/:id', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
-  try { res.json(Q.updateMenuItem(req.params.id, req.body || {})); }
+  try { const item = Q.updateMenuItem(req.params.id, req.body || {});
+    if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(Number(req.params.id), req.body.priceDelivery);
+    res.json(item); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.delete('/api/menu/:id', (req, res) => {

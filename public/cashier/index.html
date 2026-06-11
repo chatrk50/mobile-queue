@@ -977,9 +977,10 @@ window.editMenuForm=(id)=>{
       <label class="ff">ชื่อเมนู (ไทย) *<input id="mf_name" value="${esc(m.name||'')}"></label>
       <label class="ff">ชื่ออังกฤษ<input id="mf_en" value="${esc(m.name_en||'')}"></label>
       <div class="row" style="gap:10px">
-        <label class="ff" style="flex:1">ราคา ฿<input id="mf_price" type="number" inputmode="decimal" value="${m.price||''}"></label>
-        <label class="ff" style="flex:1">หมวด<select id="mf_cat"><option value="drink"${m.category!=='topping'?' selected':''}>เครื่องดื่ม</option><option value="topping"${m.category==='topping'?' selected':''}>ท็อปปิ้ง</option></select></label>
+        <label class="ff" style="flex:1">ราคาหน้าร้าน ฿<input id="mf_price" type="number" inputmode="decimal" value="${m.price||''}"></label>
+        <label class="ff" style="flex:1">ราคา Delivery ฿<input id="mf_delivery" type="number" inputmode="decimal" value="${m.price_delivery||''}" placeholder="เว้น=เท่าหน้าร้าน"></label>
       </div>
+      <label class="ff">หมวด<select id="mf_cat"><option value="drink"${m.category!=='topping'?' selected':''}>เครื่องดื่ม</option><option value="topping"${m.category==='topping'?' selected':''}>ท็อปปิ้ง</option></select></label>
       <label class="ff">ลิงก์รูป<input id="mf_img" value="${esc(m.image||'')}" placeholder="https://... หรืออัปโหลด"></label>
       ${isNew?'':`<button class="ghost" style="width:100%" onclick="uploadImg(${m.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>อัปโหลดรูปจากเครื่อง</button>
       <div class="row" style="gap:8px">
@@ -994,7 +995,7 @@ window.editMenuForm=(id)=>{
     </div>`;
 };
 window.saveMenuForm=async()=>{
-  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), price:Number($('mf_price').value)||0, image:$('mf_img').value.trim(), category:$('mf_cat').value };
+  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value };
   if(!body.name){ toast('กรอกชื่อเมนู (ไทย)'); return; }
   try{
     if(_selMenuId==='new'){ const r=await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('เพิ่มเมนูแล้ว'); await loadMenu(); editMenuForm(r.id); }

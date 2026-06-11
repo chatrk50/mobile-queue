@@ -590,7 +590,11 @@ export function listMenu(channelId = null, branchId = null) {
   // BOM availability: items with a recipe get `makeable` (cups left from stock) + `stockSoldout`
   // (makeable<=0). Items without a recipe are unlimited (makeable=null) — unaffected.
   const mk = menuMakeable();
-  rows.forEach((r) => { if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; } });
+  const dtid = deliveryTierId();
+  rows.forEach((r) => {
+    if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; }
+    r.price_delivery = dtid ? (db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(r.id, dtid)?.price ?? null) : null;
+  });
   return rows;
 }
 
@@ -1046,6 +1050,18 @@ export function redeemReward(key, rewardId, actorId = null) {
 }
 
 /** Owner sets an explicit per-item price for a tier (0/absent branch = all branches). */
+// Per-item Delivery price = an item_prices row for the (single, shared) เดลิเวอรี่ tier.
+function deliveryTierId() { return db.prepare('SELECT id FROM price_tiers WHERE is_default=0 ORDER BY sort LIMIT 1').get()?.id || null; }
+export function getMenuDeliveryPrice(itemId) {
+  const tid = deliveryTierId(); if (!tid) return null;
+  const r = db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(itemId, tid);
+  return r ? r.price : null;
+}
+export function setMenuDeliveryPrice(itemId, price) {
+  const tid = deliveryTierId(); if (!tid) return { ok: false };
+  if (price == null || price === '' || Number(price) <= 0) { db.prepare('DELETE FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').run(itemId, tid); return { ok: true, cleared: true }; }
+  return setItemPrice(itemId, tid, price, 0);
+}
 export function setItemPrice(itemId, tierId, price, branchId = 0) {
   const p = Math.max(0, Number(price) || 0);
   db.prepare(`INSERT INTO item_prices (item_id, tier_id, branch_id, price) VALUES (?,?,?,?)
