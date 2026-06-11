@@ -146,25 +146,17 @@
   </div>
 
   <!-- STAFF MANAGEMENT (owner) -->
-  <div id="staffCard" class="card" style="display:none;max-width:640px;margin:14px auto">
+  <div id="staffCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
     </div>
-    <div id="staffBody" style="margin-top:14px"></div>
-    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-      <h2 style="margin:0 0 8px;font-size:15px">เพิ่มพนักงานใหม่</h2>
-      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="stName" placeholder="ชื่อ" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="stPin" placeholder="PIN (4-8 หลัก)" inputmode="numeric" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <select id="stRole" style="padding:8px;border:1px solid var(--line);border-radius:8px">
-          <option value="cashier">แคชเชียร์</option>
-          <option value="manager">ผู้จัดการ</option>
-          <option value="owner">เจ้าของร้าน</option>
-        </select>
-        <button class="ok" style="padding:8px 16px" onclick="addStaff()">เพิ่ม</button>
+    <div class="ms-split" style="margin-top:12px">
+      <div class="ms-list">
+        <button class="ok" style="width:100%;margin-bottom:10px" onclick="editStaffForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มพนักงานใหม่</button>
+        <div id="staffBody"></div>
       </div>
-      <p id="stErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
+      <div class="ms-edit"><div id="staffEditForm"><p class="muted" style="text-align:center;padding:34px 8px">← เลือกพนักงานทางซ้ายเพื่อแก้ไข</p></div></div>
     </div>
   </div>
 
@@ -184,22 +176,17 @@
   </div>
 
   <!-- INVENTORY / STOCK (owner/manager) -->
-  <div id="stockCard" class="card" style="display:none;max-width:680px;margin:14px auto">
+  <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
     </div>
-    <div id="stockBody" style="margin-top:14px"></div>
-    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-      <h2 style="margin:0 0 8px;font-size:15px">เพิ่มวัตถุดิบใหม่</h2>
-      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="ingName" placeholder="ชื่อวัตถุดิบ" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="ingUnit" placeholder="หน่วย (กล่อง/ขวด/กก.)" style="width:140px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="ingCost" type="number" inputmode="decimal" placeholder="ราคาซื้อ/หน่วย ฿" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="ingLow" type="number" inputmode="decimal" placeholder="เตือนเมื่อเหลือ" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <button class="ok" style="padding:8px 16px" onclick="addIng()">เพิ่ม</button>
+    <div class="ms-split" style="margin-top:12px">
+      <div class="ms-list">
+        <button class="ok" style="width:100%;margin-bottom:10px" onclick="editIngForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มวัตถุดิบใหม่</button>
+        <div id="stockBody"></div>
       </div>
-      <p id="ingErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
+      <div class="ms-edit"><div id="stockEditForm"><p class="muted" style="text-align:center;padding:34px 8px">← เลือกวัตถุดิบทางซ้ายเพื่อแก้ไข · รับเข้า · เบิก</p></div></div>
     </div>
   </div>
 
@@ -570,28 +557,52 @@ window.showStaff=async()=>{ try{ const list=await api('/api/staff');
   $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   renderStaff(list);
 }catch(e){ toast(err(e)); } };
-function renderStaff(list){
-  if(!list||!list.length){ $('staffBody').innerHTML='<p class="muted">ยังไม่มีพนักงาน</p>'; return; }
-  $('staffBody').innerHTML=list.map(s=>`<div class="qitem" style="${s.active?'':'opacity:.5'}"><div style="flex:1">
-    <div><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิดใช้งาน</span>'}</div></div>
-    <div class="row" style="gap:6px">
-      <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="resetStaffPin(${s.id})">เปลี่ยน PIN</button>
-      ${s.active?`<button class="danger" style="padding:5px 10px;font-size:12px" onclick="removeStaff(${s.id},'${esc(s.name)}')">ปิดใช้งาน</button>`:`<button class="ok" style="padding:5px 10px;font-size:12px" onclick="reactivateStaff(${s.id})">เปิดใช้งาน</button>`}
-    </div></div>`).join('');
+let STAFF=[], _selStaffId=null;
+function renderStaff(list){ STAFF=list||[];
+  if(!STAFF.length){ $('staffBody').innerHTML='<p class="muted">ยังไม่มีพนักงาน</p>'; return; }
+  $('staffBody').innerHTML=STAFF.map(s=>`<div class="ms-item${_selStaffId===s.id?' sel':''}" style="${s.active?'':'opacity:.55'}" onclick="editStaffForm(${s.id})">
+    <div style="flex:1"><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิด</span>'}</div></div>`).join('');
 }
-window.addStaff=async()=>{ $('stErr').textContent='';
-  const name=$('stName').value.trim(), pin=$('stPin').value.trim(), role=$('stRole').value;
-  if(!name||!pin){ $('stErr').textContent='กรอกชื่อและ PIN'; return; }
-  try{ await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[1]})});
-    $('stName').value='';$('stPin').value=''; toast('เพิ่มพนักงานแล้ว'); renderStaff(await api('/api/staff'));
-  }catch(e){ const m=err(e); $('stErr').textContent=m==='pin_taken'?'PIN นี้ถูกใช้แล้ว':(m==='pin_must_be_4_8_digits'?'PIN ต้องเป็นตัวเลข 4-8 หลัก':m); } };
+async function refreshStaff(sel){ renderStaff(await api('/api/staff')); if(sel!==undefined) editStaffForm(sel); }
+window.editStaffForm=(id)=>{ _selStaffId=id;
+  document.querySelectorAll('#staffBody .ms-item').forEach(el=>el.classList.remove('sel'));
+  if(id==='new'){
+    $('staffEditForm').innerHTML=`<h2 style="margin:0 0 12px;font-size:16px">เพิ่มพนักงานใหม่</h2>
+      <label class="ff">ชื่อ<input id="sf_name" placeholder="ชื่อพนักงาน"></label>
+      <label class="ff">PIN (ตัวเลข 4-8 หลัก)<input id="sf_pin" inputmode="numeric" placeholder="เช่น 1234"></label>
+      <label class="ff">ตำแหน่ง<select id="sf_role"><option value="cashier">แคชเชียร์</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของร้าน</option></select></label>
+      <p id="sf_err" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
+      <button class="ok" style="width:100%" onclick="saveStaffForm()">เพิ่มพนักงาน</button>`;
+    return;
+  }
+  const s=(STAFF||[]).find(x=>x.id===id); if(!s) return;
+  const el=document.querySelector(`#staffBody .ms-item[onclick*="(${id})"]`); if(el) el.classList.add('sel');
+  $('staffEditForm').innerHTML=`<h2 style="margin:0 0 4px;font-size:16px">${esc(s.name)} <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px;vertical-align:middle">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px;vertical-align:middle">ปิดใช้งานอยู่</span>'}</h2>
+    <label class="ff">ชื่อ<input id="sf_name" value="${esc(s.name)}"></label>
+    <label class="ff">ตำแหน่ง<select id="sf_role"><option value="cashier"${s.role==='cashier'?' selected':''}>แคชเชียร์</option><option value="manager"${s.role==='manager'?' selected':''}>ผู้จัดการ</option><option value="owner"${s.role==='owner'?' selected':''}>เจ้าของร้าน</option></select></label>
+    <label class="ff">เปลี่ยน PIN <span class="muted" style="font-weight:400">(เว้นว่าง = คงเดิม)</span><input id="sf_pin" inputmode="numeric" placeholder="ตัวเลข 4-8 หลัก"></label>
+    <p id="sf_err" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
+    <div class="row" style="gap:8px">
+      <button class="ok" style="flex:1" onclick="saveStaffForm()">บันทึก</button>
+      ${s.active?`<button class="ghost danger" style="flex:1" onclick="removeStaff(${s.id},'${esc(s.name)}')">ปิดใช้งาน</button>`:`<button class="ghost" style="flex:1" onclick="reactivateStaff(${s.id})">เปิดใช้งาน</button>`}
+    </div>`;
+};
+window.saveStaffForm=async()=>{ const errEl=$('sf_err'); if(errEl) errEl.textContent='';
+  const name=$('sf_name').value.trim(), role=$('sf_role').value, pin=$('sf_pin').value.trim();
+  if(!name){ if(errEl) errEl.textContent='กรอกชื่อ'; return; }
+  try{
+    if(_selStaffId==='new'){ if(!pin){ if(errEl) errEl.textContent='กรอก PIN'; return; }
+      await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[1]})});
+      toast('เพิ่มพนักงานแล้ว'); await refreshStaff('new');
+    } else { const body={name,role}; if(pin) body.pin=pin;
+      await api('/api/staff/'+_selStaffId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      toast('บันทึกแล้ว'); await refreshStaff(_selStaffId);
+    }
+  }catch(e){ const m=err(e); if(errEl) errEl.textContent=m==='pin_taken'?'PIN นี้ถูกใช้แล้ว':(m==='pin_must_be_4_8_digits'?'PIN ต้องเป็นตัวเลข 4-8 หลัก':(m==='cannot_remove_last_owner'?'ต้องมีเจ้าของร้านอย่างน้อย 1 คน':m)); } };
 window.removeStaff=async(id,name)=>{ if(!confirm('ปิดใช้งานพนักงาน '+name+'?')) return;
-  try{ await api('/api/staff/'+id,{method:'DELETE'}); renderStaff(await api('/api/staff')); }
-  catch(e){ toast(err(e)==='cannot_remove_last_owner'?'ลบเจ้าของร้านคนสุดท้ายไม่ได้':err(e)); } };
-window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:1})}); renderStaff(await api('/api/staff')); }catch(e){ toast(err(e)); } };
-window.resetStaffPin=async(id)=>{ const pin=prompt('PIN ใหม่ (4-8 หลัก)'); if(!pin) return;
-  try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}); toast('เปลี่ยน PIN แล้ว'); }
-  catch(e){ toast(err(e)==='pin_taken'?'PIN นี้ถูกใช้แล้ว':err(e)); } };
+  try{ await api('/api/staff/'+id,{method:'DELETE'}); toast('ปิดใช้งานแล้ว'); await refreshStaff(id); }
+  catch(e){ toast(err(e)==='cannot_remove_last_owner'?'ต้องมีเจ้าของร้านอย่างน้อย 1 คน':err(e)); } };
+window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:1})}); toast('เปิดใช้งานแล้ว'); await refreshStaff(id); }catch(e){ toast(err(e)); } };
 
 // ---------- Detailed reports (owner/manager) ----------
 let DET=null, detView='tx';
@@ -727,39 +738,68 @@ function renderLoyLookup(b){ const box=$('loyLookupResult');
 window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!confirm('ยืนยันแลก “'+name+'” ให้ลูกค้า?')) return;
   try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock(); }catch(e){ toast(err(e)); } };
+let _selIngId=null;
 function renderStock(d){
   const s=d.summary||{}; $('stockSummary').textContent=`${s.items||0} รายการ · มูลค่ารวม ${baht2(s.totalValue)} · ใกล้หมด ${s.lowCount||0}`;
   const rows=d.items||[];
-  if(!rows.length){ $('stockBody').innerHTML='<p class="muted">ยังไม่มีวัตถุดิบ — เพิ่มด้านล่าง</p>'; return; }
-  $('stockBody').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)"><th style="padding:6px 4px">วัตถุดิบ</th><th style="text-align:right">คงเหลือ</th><th style="text-align:right">ทุน/หน่วย</th><th style="text-align:right">มูลค่า</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
-    <td style="padding:7px 4px">${esc(r.name)}${r.low?' <span class="pill closed" style="font-size:10px">ใกล้หมด</span>':''}</td>
-    <td style="text-align:right;${r.low?'color:var(--danger);font-weight:700':''}">${r.stock_qty} <span class="muted" style="font-size:11px">${esc(r.unit)}</span></td>
-    <td style="text-align:right">${baht2(r.avg_cost)}</td>
-    <td style="text-align:right">${baht2(r.value)}</td>
-    <td style="text-align:right;white-space:nowrap"><button class="ok" style="padding:4px 8px;font-size:12px" onclick="stockBuy(${r.id})">ซื้อเข้า</button> <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="stockCount(${r.id})">นับ</button> <button class="ghost danger" style="padding:4px 8px;font-size:12px" onclick="stockUse(${r.id})">เบิก</button> <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="editIng(${r.id})">✎</button></td></tr>`).join('')}</tbody></table>`;
+  if(!rows.length){ $('stockBody').innerHTML='<p class="muted">ยังไม่มีวัตถุดิบ — กด “เพิ่มวัตถุดิบใหม่”</p>'; return; }
+  $('stockBody').innerHTML=rows.map(r=>`<div class="ms-item${_selIngId===r.id?' sel':''}" onclick="editIngForm(${r.id})">
+    <div style="flex:1"><b>${esc(r.name)}</b>${r.low?' <span class="pill closed" style="font-size:10px">ใกล้หมด</span>':''}<div class="muted" style="font-size:12px">คงเหลือ <span style="${r.low?'color:var(--danger);font-weight:700':''}">${r.stock_qty} ${esc(r.unit)}</span> · ทุน ${baht2(r.avg_cost)}/หน่วย</div></div></div>`).join('');
 }
-window.addIng=async()=>{ $('ingErr').textContent=''; const name=$('ingName').value.trim(), unit=$('ingUnit').value.trim()||'หน่วย', costPrice=Number($('ingCost').value)||0, lowThreshold=Number($('ingLow').value)||0;
-  if(!name){ $('ingErr').textContent='กรอกชื่อวัตถุดิบ'; return; }
-  try{ await api('/api/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,unit,costPrice,lowThreshold})}); ['ingName','ingUnit','ingCost','ingLow'].forEach(id=>$(id).value=''); toast('เพิ่มวัตถุดิบแล้ว'); loadStock(); }
-  catch(e){ $('ingErr').textContent=err(e); } };
-// Edit a raw material's details (name/unit/cost/low) — owner refines the starter list.
-window.editIng=async(id)=>{ const r=(STOCK||[]).find(x=>x.id===id); if(!r) return;
-  const name=prompt('ชื่อวัตถุดิบ',r.name); if(name===null) return;
-  const unit=prompt('หน่วย (กก./ลิตร/ขวด...)',r.unit); if(unit===null) return;
-  const costPrice=prompt('ราคาซื้อ/หน่วย ฿',r.avg_cost); if(costPrice===null) return;
-  const lowThreshold=prompt('เตือนเมื่อเหลือ',r.low_threshold); if(lowThreshold===null) return;
-  try{ await api('/api/ingredients/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()||r.name,unit:unit.trim()||r.unit,costPrice:Number(costPrice)||0,lowThreshold:Number(lowThreshold)||0})}); toast('บันทึกแล้ว'); loadStock(); }catch(e){ toast(err(e)); } };
-async function stockMove(id,body,msg){ try{ await api('/api/ingredients/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast(msg); loadStock(); }catch(e){ toast(err(e)); } }
-window.stockBuy=(id)=>{ const r=STOCK.find(x=>x.id===id); if(!r) return;
-  const q=prompt('ซื้อเข้า "'+r.name+'" — จำนวน ('+r.unit+')'); if(q===null) return; const qty=Number(q); if(!(qty>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  const c=prompt('ราคารวมที่จ่าย (บาท) — เพื่อคำนวณต้นทุนเฉลี่ย\nเว้นว่างได้ถ้าไม่ต้องการ'); const cost=Number(c)||0;
-  stockMove(id,{kind:'purchase',qty,cost},'รับเข้าสต๊อกแล้ว'); };
-window.stockCount=(id)=>{ const r=STOCK.find(x=>x.id===id);
-  const q=prompt('นับสต๊อกจริง "'+(r?r.name:'')+'" — คงเหลือเท่าไหร่?', r?r.stock_qty:0); if(q===null) return; const qty=Number(q); if(!(qty>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  stockMove(id,{kind:'adjust',qty},'ปรับสต๊อกแล้ว'); };
-window.stockUse=(id)=>{ const r=STOCK.find(x=>x.id===id);
-  const q=prompt('เบิกใช้/ของเสีย "'+(r?r.name:'')+'" — จำนวน'); if(q===null) return; const qty=Number(q); if(!(qty>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  stockMove(id,{kind:'use',qty},'บันทึกการเบิกแล้ว'); };
+async function refreshStock(sel){ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock(); if(sel!==undefined) editIngForm(sel); }
+window.editIngForm=(id)=>{ _selIngId=id;
+  document.querySelectorAll('#stockBody .ms-item').forEach(el=>el.classList.remove('sel'));
+  if(id==='new'){
+    $('stockEditForm').innerHTML=`<h2 style="margin:0 0 12px;font-size:16px">เพิ่มวัตถุดิบใหม่</h2>
+      <label class="ff">ชื่อวัตถุดิบ<input id="if_name" placeholder="เช่น โยเกิร์ตถัง"></label>
+      <div class="row" style="gap:10px">
+        <label class="ff" style="flex:1">หน่วย<input id="if_unit" placeholder="กล่อง/ขวด/กก."></label>
+        <label class="ff" style="flex:1">ราคาซื้อ/หน่วย ฿<input id="if_cost" type="number" inputmode="decimal"></label>
+      </div>
+      <label class="ff">เตือนเมื่อเหลือ<input id="if_low" type="number" inputmode="decimal" placeholder="เช่น 5"></label>
+      <p id="ingErr" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
+      <button class="ok" style="width:100%" onclick="saveIngForm()">เพิ่มวัตถุดิบ</button>`;
+    return;
+  }
+  const r=(STOCK||[]).find(x=>x.id===id); if(!r) return;
+  const el=document.querySelector(`#stockBody .ms-item[onclick*="(${id})"]`); if(el) el.classList.add('sel');
+  $('stockEditForm').innerHTML=`<div class="row between" style="align-items:flex-start"><h2 style="margin:0;font-size:16px">${esc(r.name)}</h2>${r.low?'<span class="pill closed">ใกล้หมด</span>':''}</div>
+    <div style="background:var(--surface);border-radius:10px;padding:10px 12px;margin:8px 0 14px"><b style="font-size:22px;${r.low?'color:var(--danger)':''}">${r.stock_qty}</b> <span class="muted">${esc(r.unit)} คงเหลือ</span><div class="muted" style="font-size:12px;margin-top:2px">ทุนเฉลี่ย ${baht2(r.avg_cost)}/หน่วย · มูลค่า ${baht2(r.value)}</div></div>
+    <h3 style="margin:0 0 8px;font-size:14px;color:var(--muted)">เคลื่อนไหวสต๊อก</h3>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <label class="ff" style="flex:1;min-width:90px">จำนวน (${esc(r.unit)})<input id="if_qty" type="number" inputmode="decimal"></label>
+      <label class="ff" style="flex:1;min-width:90px">ราคารวม ฿ <span class="muted" style="font-weight:400">(เฉพาะรับเข้า)</span><input id="if_buycost" type="number" inputmode="decimal" placeholder="เว้นว่างได้"></label>
+    </div>
+    <div class="row" style="gap:8px;margin:2px 0 16px">
+      <button class="ok" style="flex:1" onclick="stockMoveForm('purchase')">รับเข้า</button>
+      <button class="ghost" style="flex:1" onclick="stockMoveForm('adjust')">นับใหม่</button>
+      <button class="ghost danger" style="flex:1" onclick="stockMoveForm('use')">เบิก/ของเสีย</button>
+    </div>
+    <div style="border-top:1px solid var(--line);padding-top:12px">
+      <h3 style="margin:0 0 8px;font-size:14px;color:var(--muted)">แก้ไขข้อมูล</h3>
+      <label class="ff">ชื่อวัตถุดิบ<input id="if_name" value="${esc(r.name)}"></label>
+      <div class="row" style="gap:10px">
+        <label class="ff" style="flex:1">หน่วย<input id="if_unit" value="${esc(r.unit)}"></label>
+        <label class="ff" style="flex:1">ราคาซื้อ/หน่วย ฿<input id="if_cost" type="number" inputmode="decimal" value="${r.avg_cost||''}"></label>
+      </div>
+      <label class="ff">เตือนเมื่อเหลือ<input id="if_low" type="number" inputmode="decimal" value="${r.low_threshold||''}"></label>
+      <p id="ingErr" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
+      <button class="ok" style="width:100%" onclick="saveIngForm()">บันทึกข้อมูล</button>
+    </div>`;
+};
+window.saveIngForm=async()=>{ const errEl=$('ingErr'); if(errEl) errEl.textContent='';
+  const name=$('if_name').value.trim(), unit=$('if_unit').value.trim()||'หน่วย', costPrice=Number($('if_cost').value)||0, lowThreshold=Number($('if_low').value)||0;
+  if(!name){ if(errEl) errEl.textContent='กรอกชื่อวัตถุดิบ'; return; }
+  try{
+    if(_selIngId==='new'){ await api('/api/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,unit,costPrice,lowThreshold})}); toast('เพิ่มวัตถุดิบแล้ว'); await refreshStock('new'); }
+    else { await api('/api/ingredients/'+_selIngId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,unit,costPrice,lowThreshold})}); toast('บันทึกแล้ว'); await refreshStock(_selIngId); }
+  }catch(e){ if(errEl) errEl.textContent=err(e); } };
+window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
+  if(kind==='adjust'){ if(!(qty>=0)){ toast('ใส่จำนวนคงเหลือ'); return; } }
+  else if(!(qty>0)){ toast('ใส่จำนวน'); return; }
+  const body={kind,qty}; if(kind==='purchase') body.cost=Number($('if_buycost').value)||0;
+  const msg=kind==='purchase'?'รับเข้าสต๊อกแล้ว':(kind==='adjust'?'ปรับสต๊อกแล้ว':'บันทึกการเบิกแล้ว');
+  try{ await api('/api/ingredients/'+_selIngId+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast(msg); await refreshStock(_selIngId); }catch(e){ toast(err(e)); } };
 
 // ---------- Cash drawer / Z-report (owner/manager) ----------
 let CASH=null;
