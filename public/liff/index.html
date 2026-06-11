@@ -300,7 +300,8 @@ async function loadReorder(){
     if(!fav) return;
     FAV=fav;
     $('reorderHi').textContent = s.name ? ('คุณ '+s.name+' วันนี้สั่งเหมือนเดิมเลยไหม!') : 'วันนี้สั่งเหมือนเดิมเลยไหม!';
-    $('reorderLbl').textContent = 'สั่ง '+fav.name+' เหมือนเดิม';
+    const favNm = (fav.name||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
     show('reorderCard', true);
   }catch(e){ /* never block the normal flow */ }
