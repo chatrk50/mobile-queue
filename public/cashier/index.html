@@ -1274,13 +1274,13 @@ async function boot(){
     streams.push(es);
   }
   // Self-heal: the live SSE stream can silently drop (proxy/idle/cold start), which made new
-  // orders appear only after a manual refresh. Re-pull each zone's snapshot every 15s so the
-  // board always catches up — instant via SSE when it's healthy, ≤15s otherwise.
+  // orders appear only after a manual refresh. Re-pull each zone's snapshot every 5s so the
+  // board always catches up — instant via SSE when it's healthy, ≤5s worst case otherwise.
   if(window._zonePollTimer) clearInterval(window._zonePollTimer);
   window._zonePollTimer=setInterval(()=>{
     const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;   // not while logged out
     zones.forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} });
-  }, 15000);
+  }, 5000);
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
 }
@@ -1330,8 +1330,11 @@ function renderZone(snap){
   const nm=(t)=>{
     const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
     const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0e7c93;margin-left:6px">LINE</span>' : '';
-    return (real?` <span class="muted">· ${esc(t.customer_name)}</span>`:'')+src;
+    return (real?` <span class="muted">· ${esc(t.customer_name)}</span>`:'')+src+loyChip(t);
   };
+  // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
+  const loyChip=(t)=> (t.loy_points!=null)
+    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">⭐ ${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
   const pay=(t)=>{
     if(t.order_total==null) return '';
     if(t.payment_status==='paid') return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';

@@ -405,16 +405,23 @@ function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.t
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount(); };
+// Identical drinks (same name + sweetness + toppings) collapse to one line "N× …"; any
+// difference in sweetness or toppings keeps them on separate lines.
+function entrySig(e){ return e.name+'|'+(e.sweet==null?100:e.sweet)+'|'+(e.toppings||[]).map(t=>t.name+'x'+t.qty).sort().join(','); }
+function cartGroups(){ const g=[]; cart.forEach(e=>{ const sig=entrySig(e); let x=g.find(o=>o.sig===sig); if(!x){ x={sig,e,qty:0}; g.push(x); } x.qty++; }); return g; }
 function renderBasket(){
-  $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div style="flex:1">
-      <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+  const groups=cartGroups();
+  $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e;
+    return `<div class="qitem"><div style="flex:1">
+      <div class="row between"><b>${g.qty}× ${esc(e.name)}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง</p>';
+      ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 แก้ว" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
 }
+// Remove a single cup from a (possibly consolidated) line.
+window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
 window.cancelBasket=()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!confirm('ยกเลิกออเดอร์ทั้งหมด?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
@@ -423,7 +430,7 @@ window.confirmBasket=async()=>{
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
   const items=[];
-  cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
+  cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
