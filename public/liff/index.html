@@ -17,6 +17,16 @@
   .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
     padding:18px 16px;text-align:center;box-shadow:0 10px 30px rgba(0,181,216,.35);animation:callpulse 1.2s ease-in-out infinite}
   .callcard .big{font-size:26px;font-weight:800;margin-top:2px}
+  /* First-order "wow" celebration */
+  #wowPop{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;padding:24px;
+    background:rgba(22,49,79,.55);backdrop-filter:blur(3px);overflow:hidden}
+  #wowPop .wowcard{background:linear-gradient(150deg,#fff,#f2fbfd);border-radius:22px;padding:26px 22px;max-width:330px;width:100%;
+    text-align:center;box-shadow:0 24px 60px rgba(30,58,95,.35);position:relative;z-index:2;animation:wowpop .5s cubic-bezier(.2,1.3,.4,1) both}
+  @keyframes wowpop{0%{transform:scale(.6) translateY(20px);opacity:0}100%{transform:scale(1) translateY(0);opacity:1}}
+  #wowPop .wowemoji{font-size:64px;line-height:1;animation:wowspin .9s ease-out both}
+  @keyframes wowspin{0%{transform:rotate(-25deg) scale(0)}60%{transform:rotate(8deg) scale(1.15)}100%{transform:rotate(0) scale(1)}}
+  .confetti{position:absolute;top:-12px;width:9px;height:14px;border-radius:2px;opacity:.9;animation:conffall linear forwards}
+  @keyframes conffall{0%{transform:translateY(-10px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(620deg);opacity:.6}}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -332,8 +342,8 @@ async function loadLoyalty(){
     const per = conf.stampsPerReward||10, have = bal.points||0;
     $('loyPoints').textContent = have;
     $('loyRate').textContent = 'ครบ '+per+' แก้ว = ฟรี 1 แก้ว';
-    const inCycle = have % per, toGo = (per - inCycle) % per;
-    if(toGo===0 && have>0){ $('loyNext').textContent='🎉 ครบแล้ว! แจ้งพนักงานตอนสั่ง รับเครื่องดื่มฟรีได้เลย'; $('loyBar').style.width='100%'; }
+    const inCycle = have % per, toGo = (per - inCycle) % per, free = Math.floor(have/per);
+    if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' แก้ว! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' แก้วได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
     else { $('loyNext').textContent='อีก '+toGo+' แก้ว รับเครื่องดื่มฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
     $('loyRewards').innerHTML = (conf.rewards||[]).map(r=>
       `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)"><span>${esc(r.name)}</span><span style="font-weight:800">${r.cost_points} แก้ว</span></div>`).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">—</div>';
@@ -446,6 +456,28 @@ window.confirmBasket=async()=>{
   }
 };
 
+// First-order "wow": a one-time celebration when a new LINE customer's first order is paid.
+function maybeWow(v){ const k='wow_'+v.id; try{ if(localStorage.getItem(k)) return; localStorage.setItem(k,'1'); }catch(e){} showWow(v.loyalty); }
+window.closeWow=()=>{ const p=$('wowPop'); if(p) p.style.display='none'; };
+function showWow(loy){
+  let p=$('wowPop'); if(!p){ p=document.createElement('div'); p.id='wowPop'; p.onclick=()=>closeWow(); document.body.appendChild(p); }
+  const per=loy.per||10, bal=loy.balance||0, toGo=Math.max(0, per-(bal%per||0));
+  const colors=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f'];
+  let conf=''; for(let i=0;i<28;i++){ const l=Math.round(Math.random()*100), d=(2.6+Math.random()*1.8).toFixed(2), dl=(Math.random()*0.6).toFixed(2); conf+=`<span class="confetti" style="left:${l}%;background:${colors[i%colors.length]};animation-duration:${d}s;animation-delay:${dl}s"></span>`; }
+  p.innerHTML=conf+`<div class="wowcard" onclick="event.stopPropagation()">
+    <div class="wowemoji">🎉</div>
+    <h1 style="margin:10px 0 2px;color:var(--navy)">ยินดีต้อนรับสมาชิกใหม่!</h1>
+    <p class="muted" style="margin:0 0 12px">ขอบคุณที่สั่งผ่านไลน์ครั้งแรก 💛</p>
+    <div style="background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:14px;padding:14px">
+      <div style="font-size:13px;opacity:.9">คุณได้รับ</div>
+      <div style="font-size:34px;font-weight:900;line-height:1.1">+${loy.bonus} ดวงต้อนรับ 🎁</div>
+      <div style="font-size:13px;margin-top:4px;opacity:.95">สะสมแล้ว ${bal} ดวง · อีก ${toGo} แก้ว ได้ฟรี 1 แก้ว!</div>
+    </div>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow()">เยี่ยมเลย!</button>
+  </div>`;
+  p.style.display='flex';
+  try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
+}
 function renderOrderBlock(v){
   if(!v.order){ show('tOrder',false); return; }
   show('tOrder',true);
@@ -458,7 +490,8 @@ function renderOrderBlock(v){
   const pill=$('tPayPill'), st=v.order.status, total=v.order.total;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
-  if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null; }
+  if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+    if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
