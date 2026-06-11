@@ -63,7 +63,7 @@
     <!-- Loyalty points (filled by loadLoyalty); shown once the customer has earned anything -->
     <div id="loyaltyCard" style="display:none;background:linear-gradient(135deg,#1e3a5f,#2c5a8f);color:#fff;border-radius:16px;padding:16px;margin:0 0 14px;text-align:left">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:13px;opacity:.85">⭐ สะสมแก้วของคุณ</div>
+        <div style="font-size:13px;opacity:.85">⭐ สะสมแก้วของคุณ <span id="loyBadge" style="display:none;background:rgba(255,255,255,.22);border-radius:99px;padding:2px 9px;font-weight:800;margin-left:4px;font-size:12px"></span></div>
         <div style="font-size:11px;opacity:.7" id="loyRate"></div>
       </div>
       <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">ดวง</span></div>
@@ -342,6 +342,7 @@ async function loadLoyalty(){
     const per = conf.stampsPerReward||10, have = bal.points||0;
     $('loyPoints').textContent = have;
     $('loyRate').textContent = 'ครบ '+per+' แก้ว = ฟรี 1 แก้ว';
+    const badge=$('loyBadge'); if(bal.tier){ badge.textContent=bal.tier.emoji+' '+bal.tier.label; badge.style.display=''; } else if(badge){ badge.style.display='none'; }
     const inCycle = have % per, toGo = (per - inCycle) % per, free = Math.floor(have/per);
     if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' แก้ว! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' แก้วได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
     else { $('loyNext').textContent='อีก '+toGo+' แก้ว รับเครื่องดื่มฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }

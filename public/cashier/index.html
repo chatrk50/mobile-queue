@@ -927,7 +927,7 @@ async function renderCharts(){
   const days=(hist.daily||[]).slice(0,7).reverse().map(d=>({ label:(d.date||'').slice(5), value:Math.round(d.net||d.revenue||0), sub:(d.date||'').slice(5) }));
   const top=(det.topItems||[]).slice(0,5).map(r=>({ label:r.name, value:r.qty }));
   const hrs=(det.hourly||[]).map(h=>({ label:h.hr+':00', value:h.orders, sub:h.hr }));
-  const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',other:'อื่นๆ'};
+  const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
   const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
   $('chartsBody').innerHTML =
@@ -1334,7 +1334,7 @@ function renderZone(snap){
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)
-    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">⭐ ${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
+    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?t.loy_tier+' ':'⭐ '}${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
   const pay=(t)=>{
     if(t.order_total==null) return '';
     if(t.payment_status==='paid') return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
@@ -1424,7 +1424,7 @@ window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{m
 // Promise-based payment-method picker. Buttons come from the active COUNTER tenders
 // (เงินสด / 6040 ไทยช่วยไทย+ / K PLUS Shop …); online tenders are taken via the customer flow.
 let _payRes=null;
-const TENDER_EMOJI={cash:'💵','6040':'🟦',kplus:'🟩',online:'🌐',linepay:'💚',promptpay:'📱',other:'💳'};
+const TENDER_EMOJI={cash:'💵','6040':'🟦',kplus:'🟩',online:'🌐',linepay:'💚',promptpay:'📱',reward:'🎁',other:'💳'};
 function renderPayButtons(){
   const box=$('payMethodBtns'); if(!box) return;
   let list=(TENDERS||[]).filter(t=>t.kind==='counter'&&t.active!==0);

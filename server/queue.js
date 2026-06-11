@@ -987,11 +987,20 @@ export function setStampsPerReward(n) {
  *  that pulls counter customers into ordering via LINE (endowed-progress effect). 0 = off. */
 export function getWelcomeBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:welcome_bonus', '2')) || 0)); }
 export function setWelcomeBonus(n) { const v = Math.max(0, Math.round(Number(n) || 0)); setSetting('loyalty:welcome_bonus', String(v)); return { welcomeBonus: v }; }
-/** Current + lifetime stamp balance for a customer key (line_user_id). */
+/** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
+export function loyaltyTier(lifetime) {
+  const l = lifetime || 0;
+  if (l >= 100) return { key: 'vip', label: 'VIP', emoji: '👑' };
+  if (l >= 50) return { key: 'gold', label: 'ลูกค้าประจำ', emoji: '🏅' };
+  if (l >= 20) return { key: 'silver', label: 'ขาประจำ', emoji: '⭐' };
+  return null;
+}
+/** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier. */
 export function loyaltyBalance(key) {
-  if (!key) return { key, points: 0, lifetime: 0 };
+  if (!key) return { key, points: 0, lifetime: 0, tier: null };
   const c = db.prepare('SELECT points, lifetime_points FROM customers WHERE line_user_id=?').get(key);
-  return { key, points: c ? (c.points || 0) : 0, lifetime: c ? (c.lifetime_points || 0) : 0 };
+  const lifetime = c ? (c.lifetime_points || 0) : 0;
+  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime) };
 }
 export function loyaltyHistory(key, limit = 30) {
   if (!key) return [];
@@ -1300,7 +1309,7 @@ export function assignQueueNumber(ticketId) {
  *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other.
  *  Under the pay-first model this is also what ISSUES the queue number. */
 export function setOrderPaid(ticketId, opts = {}) {
-  const { actorId = null, method = null } = opts;
+  const { actorId = null, method = null, skipLoyalty = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
@@ -1313,8 +1322,9 @@ export function setOrderPaid(ticketId, opts = {}) {
   // Auto-deduct ingredient stock per recipe (dormant until recipes are defined).
   deductStockForOrder(order);
   // Auto-earn loyalty stamps for a paid LINE order (no-op for cashier/walk-in or if disabled).
+  // skipLoyalty = a fully-redeemed (free) order shouldn't earn new stamps on the free cup.
   let loyalty = null;
-  try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ }
+  if (!skipLoyalty) { try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ } }
   if (ticket && ticket.line_user_id) {
     const ahead = aheadCount(ticket);
     let msg = `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
@@ -1425,7 +1435,14 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
   })();
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
-  return { ok: true, redeemed: reward.name, cost: reward.cost_points, freeAmount: free, balance: bal - reward.cost_points, net: res.net };
+  // If the reward fully covers the bill (net 0), don't make the customer pay anything more —
+  // settle it as a 'reward' tender and issue the queue number right away.
+  let autoPaid = false;
+  if (res.net <= 0) {
+    try { setOrderPaid(ticketId, { actorId, method: 'reward', skipLoyalty: true }); autoPaid = true; }
+    catch { /* leave it unpaid if completion fails */ }
+  }
+  return { ok: true, redeemed: reward.name, cost: reward.cost_points, freeAmount: free, balance: bal - reward.cost_points, net: autoPaid ? 0 : res.net, autoPaid };
 }
 
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
@@ -1571,7 +1588,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     // Cashier-only: attach the LINE customer's stamp balance so staff can redeem on the spot.
     if (reveal && loyaltyEnabled()) {
       const li = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(t.id)?.line_user_id;
-      if (li) t.loy_points = loyaltyBalance(li).points;
+      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; }
     }
     return t;
   };
