@@ -441,6 +441,14 @@ export function detailedReports({ date = null, branchId = null } = {}) {
       GROUP BY hr ORDER BY hr`
   ).all(D, ...b);
 
+  // Best-selling drinks (base items only) for the day — feeds the "เมนูขายดี" chart.
+  const topItems = db.prepare(
+    `SELECT oi.name, SUM(oi.qty) AS qty, SUM(oi.qty * oi.price) AS revenue
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+      WHERE oi.kind = 'base' AND o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY oi.name ORDER BY qty DESC LIMIT 8`
+  ).all(D, ...b);
+
   // By-channel sales (net of discount) + platform commission → profit after commission.
   const chanRows = db.prepare(
     `SELECT COALESCE(c.name, 'หน้าร้าน') AS channel, COALESCE(c.commission_pct, 0) AS commission_pct,
@@ -459,7 +467,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
   const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
-  return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly };
+  return { date: D, transactions, payments, paidTotal, paidOrders, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly, topItems };
 }
 
 // ---------- Cash drawer / Z-report (end-of-day cash-up) ----------

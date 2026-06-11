@@ -77,6 +77,7 @@
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:210px;flex-direction:column;gap:2px">
+        <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</button>
         <button id="reportBtn" class="ghost adm" style="display:none" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</button>
         <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
         <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
@@ -231,6 +232,15 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCash()">ปิด</button>
     </div>
     <div id="cashBody" style="margin-top:14px"></div>
+  </div>
+
+  <!-- OVERVIEW / CHARTS (owner/manager) -->
+  <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>ภาพรวม / กราฟ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">ปิด</button>
+    </div>
+    <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
   </div>
 
   <!-- DETAILED REPORTS (owner/manager) -->
@@ -475,7 +485,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
   $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   $('adminBtn').style.display='none'; closeAdmin();
-  $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
+  $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
@@ -483,7 +493,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
-  $('historyCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list){
   if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
@@ -516,7 +526,7 @@ window.refundHistory=async(tid,label)=>{
 let SALES=null, salesView='daily';
 window.hideSales=()=>{ $('salesCard').style.display='none'; $('dash').style.display=''; };
 window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
-  $('salesCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  $('salesCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
 window.salesTab=(v)=>{ salesView=v;
@@ -562,7 +572,7 @@ function renderSales(){
 const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
 window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
 window.showStaff=async()=>{ try{ const list=await api('/api/staff');
-  $('staffCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  $('staffCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   renderStaff(list);
 }catch(e){ toast(err(e)); } };
 let STAFF=[], _selStaffId=null;
@@ -616,7 +626,7 @@ window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POS
 let DET=null, detView='tx';
 window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
 window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
-  $('detailCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  $('detailCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadDetail(); };
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
@@ -673,7 +683,7 @@ function renderDetail(){
 
 // ---------- Branch management (owner) ----------
 window.hideBranch=()=>{ $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   try{ renderBranch(await api('/api/branches')); }catch(e){ toast(err(e)); } };
 let _selBranchId=null, BRANCHES=[];
 function renderBranch(list){
@@ -722,11 +732,11 @@ window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{me
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
 window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showStock=async()=>{ $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
+window.showStock=async()=>{ $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
   await loadStock(); };
 // ---------- Loyalty admin (owner/manager): earn-rate, rewards, lookup/redeem ----------
 window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showLoyalty=async()=>{ $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
+window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
 window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; renderRewards(); }catch(e){ toast(err(e)); } };
@@ -812,7 +822,7 @@ window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
 // ---------- Cash drawer / Z-report (owner/manager) ----------
 let CASH=null;
 window.hideCash=()=>{ $('cashCard').style.display='none'; $('dash').style.display=''; };
-window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadCash(); };
 window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); renderCash(); }catch(e){ toast(err(e)); } };
 function renderCash(){
@@ -872,6 +882,57 @@ window.toggleStore=async()=>{ if(!STORE) return; const next=STORE.is_open!==0?0:
 
 const money=(n)=>'฿'+Math.round(n||0).toLocaleString();
 const pctf=(n)=>((n||0)*100).toFixed(1)+'%';
+
+// ---------- Overview / charts (owner/manager): lightweight inline charts, no libraries ----------
+const CHART_COLORS=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f','#946f00'];
+// Vertical bars (% heights in a fixed-height flex row) — for time series & peak hours.
+function chartCols(rows, fmt){
+  if(!rows.length) return '<p class="muted" style="padding:10px 0">ยังไม่มีข้อมูล</p>';
+  const max=Math.max(1,...rows.map(r=>r.value));
+  return `<div style="display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:16px">`+rows.map(r=>{
+    const h=Math.round(r.value/max*100);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:2px;white-space:nowrap">${r.value?fmt(r.value):''}</div>
+      <div title="${esc(r.label)}: ${fmt(r.value)}" style="width:72%;max-width:34px;height:${h}%;min-height:${r.value?'4px':'0'};background:var(--accent);border-radius:4px 4px 0 0"></div>
+      <div style="font-size:9px;color:var(--muted);margin-top:4px;white-space:nowrap">${esc(r.sub||r.label)}</div>
+    </div>`;}).join('')+`</div>`;
+}
+// Horizontal bars (ranked) — for top sellers & payment-channel mix.
+function chartBars(rows, fmt){
+  if(!rows.length) return '<p class="muted" style="padding:10px 0">ยังไม่มีข้อมูล</p>';
+  const max=Math.max(1,...rows.map(r=>r.value));
+  return '<div style="display:grid;gap:8px">'+rows.map((r,i)=>{
+    const pct=Math.round(r.value/max*100);
+    return `<div style="display:grid;grid-template-columns:84px 1fr auto;gap:8px;align-items:center;font-size:13px">
+      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.label)}">${esc(r.label)}</div>
+      <div style="background:var(--surface);border-radius:6px;height:18px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${CHART_COLORS[i%CHART_COLORS.length]};border-radius:6px"></div></div>
+      <div style="font-weight:700;white-space:nowrap">${fmt(r.value)}</div>
+    </div>`;}).join('')+'</div>';
+}
+window.hideCharts=()=>{ $('chartsCard').style.display='none'; $('dash').style.display=''; };
+window.showCharts=async()=>{ $('adminMenu').style.display='none';
+  ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
+  $('dash').style.display='none'; $('chartsCard').style.display='';
+  $('chartsBody').innerHTML='<p class="muted">กำลังโหลด…</p>'; renderCharts(); };
+async function renderCharts(){
+  let hist={}, det={};
+  try{ [hist,det]=await Promise.all([api('/api/sales-history'), api('/api/reports/detailed')]); }
+  catch(e){ $('chartsBody').innerHTML='<p class="muted">โหลดข้อมูลไม่สำเร็จ — '+err(e)+'</p>'; return; }
+  const baht=(n)=>'฿'+Math.round(Number(n)||0).toLocaleString('en-US');
+  const days=(hist.daily||[]).slice(0,7).reverse().map(d=>({ label:(d.date||'').slice(5), value:Math.round(d.net||d.revenue||0), sub:(d.date||'').slice(5) }));
+  const top=(det.topItems||[]).slice(0,5).map(r=>({ label:r.name, value:r.qty }));
+  const hrs=(det.hourly||[]).map(h=>({ label:h.hr+':00', value:h.orders, sub:h.hr }));
+  const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',other:'อื่นๆ'};
+  const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
+  const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
+  $('chartsBody').innerHTML =
+    card('📈 ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
+    `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
+      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' แก้ว'))+
+      card('💳 ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
+    `</div>`+
+    card('🕐 ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v));
+}
 window.showReport=async()=>{
   try{ const r=await api('/api/report'); const p=r.pnl||{};
     const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
@@ -919,7 +980,7 @@ window.showReport=async()=>{
     const s=r.settings||{};
     GOAL={ refAvg:p.refAvgPrice||0, ing:s.ingredientPct||0, pack:s.packagingPerCup||0, opexDaily:p.opexDaily||0, days:s.daysPerMonth||26 };
     calcGoal(); loadInsights();
-    $('reportCard').style.display=''; $('dash').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+    $('reportCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
 window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
@@ -984,7 +1045,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 let MENU=[];
 async function loadMenu(channelId){ try{ MENU=await (await fetch('/api/menu'+(channelId?('?channelId='+channelId):''))).json(); }catch(e){ MENU=[]; } }
 window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadPriceMgr();
-  $('dash').style.display='none'; $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
+  $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 // Owner-only: set delivery markup % per tier + platform commission % per channel.
 async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
   if(ME && ME.role!=='owner'){ box.innerHTML=''; return; }
@@ -1118,7 +1179,7 @@ window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderC
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
-  renderBasketCount(); $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
+  renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
