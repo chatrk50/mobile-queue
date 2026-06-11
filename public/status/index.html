@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>สถานะโปรเจกต์ — YO-DEE POS</title>
+<link rel="icon" href="/assets/logo.png">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .wrap{max-width:680px}
+  .updated{font-size:13px;color:var(--muted);margin:0 0 4px}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;vertical-align:middle}
+  .pill.live{background:rgba(47,194,166,.16);color:#178a72}
+  .pill.hold{background:rgba(243,203,85,.22);color:#946f00}
+  .pill.todo{background:rgba(0,181,216,.14);color:#0b7d96}
+  .pill.wait{background:rgba(92,113,135,.14);color:var(--muted)}
+  h2.sec{font-size:17px;color:var(--navy);font-weight:800;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
+  .row-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start;font-size:14.5px}
+  .row-item:last-child{border-bottom:0}
+  .row-item .t{flex:1}
+  .row-item .t small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+  .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .links a{flex:1;min-width:140px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 8px;font-weight:700;color:var(--navy)}
+  .links a span{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+  .note{background:var(--surface);border-radius:12px;padding:12px 14px;font-size:13.5px;color:var(--ink);margin-top:8px}
+  ul.clean{margin:6px 0 0;padding-left:18px}
+  ul.clean li{margin:5px 0;font-size:14px}
+  .legend{font-size:12px;color:var(--muted);margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand hero">
+    <img class="logo" src="/assets/logo.png" alt="YO-DEE">
+    <div style="font-size:20px;font-weight:800;color:var(--navy)">YO-DEE POS — สถานะโปรเจกต์</div>
+  </div>
+  <p class="updated">อัปเดตล่าสุด: 11 มิถุนายน 2026 · หน้านี้เปิดอ่านจากมือถือได้ทุกที่</p>
+
+  <div class="card">
+    <h2 class="sec">🚦 สถานะระบบตอนนี้</h2>
+    <div class="row-item"><div class="t"><b>ตัวทดสอบ (UAT)</b> <span class="pill live">ใช้งานได้</span><small>ทดลองได้เต็มที่ ข้อมูลไม่กระทบร้านจริง · รีเซ็ตเองทุกครั้งที่รีสตาร์ท</small></div></div>
+    <div class="row-item"><div class="t"><b>ร้านจริง (Production)</b> <span class="pill wait">ยังเป็นเวอร์ชันเดิม</span><small>ของใหม่ทั้งหมดยังไม่ขึ้นร้านจริง — รอเจ้าของสั่ง “ขึ้น prod” เมื่อทดสอบพอใจ</small></div></div>
+    <div class="links">
+      <a href="/cashier/" target="_blank">แคชเชียร์ <span>หน้าขาย/จัดการ</span></a>
+      <a href="/liff/" target="_blank">หน้าลูกค้า <span>สั่ง/จ่าย/คิว</span></a>
+      <a href="/display/" target="_blank">จอแสดงคิว <span>หน้าร้าน</span></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="sec">✅ ทำเสร็จแล้ว (ขึ้น UAT)</h2>
+    <ul class="clean">
+      <li><b>ระบบจ่ายก่อนรับคิว</b> — แจกหมายเลขคิวหลังชำระเงินเท่านั้น</li>
+      <li><b>พร้อมเพย์ 2 แบบ</b> — ธนาคารอื่น (QR ไดนามิก) / KBank (กรอกยอดเอง)</li>
+      <li><b>จ่ายที่เคาน์เตอร์</b> — ออเดอร์อ้างอิงเลขที่ กันจ่ายซ้ำ</li>
+      <li><b>หน้าจัดการแบบเลือกซ้าย-แก้ขวา</b> — เมนู · สาขา · สต๊อก · พนักงาน (รูปแบบเดียวกันหมด)</li>
+      <li><b>ราคา Delivery แยกจากหน้าร้าน</b> — Grab / LINE MAN / Shopee ใช้ราคาเดลิเวอรี่</li>
+      <li><b>สต๊อก/วัตถุดิบ + สูตร (BOM)</b> — ตัดสต๊อกอัตโนมัติเมื่อขาย · เตือนของใกล้หมด · เมนูที่ทำไม่ได้ขึ้น “หมด”</li>
+      <li><b>เวลาเปิด-ปิดรายสาขา</b> — ปิดรับออเดอร์อัตโนมัตินอกเวลา</li>
+      <li><b>รายงาน</b> — ยอดขาย/คืน/ของเสียแยกกัน · ความพึงพอใจ · ลูกค้าซื้อซ้ำ · กระทบยอดแยกช่องทาง</li>
+      <li><b>คิวอัปเดตสด</b> — ออเดอร์เด้งเข้าจอแคชเชียร์ทันที (heartbeat + กันหลุด)</li>
+      <li><b>แบรนด์</b> — ฟอนต์ Poppins/LINE Seed · สี Arctic Paradise Blue · คีย์แพด PIN</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2 class="sec">🛠️ กำลังทำ / คิวถัดไป</h2>
+    <div class="row-item"><div class="t"><b>เอกสารสถานะ (หน้านี้)</b> <span class="pill live">เสร็จ</span><small>เปิดอ่านบนมือถือเพื่อคุยต่อกับ Claude ได้</small></div></div>
+    <div class="row-item"><div class="t"><b>ออเดอร์ค้างชำระหายเอง</b> <span class="pill todo">กำลังทำ</span><small>auto-void ตั๋วที่ไม่จ่ายเกินเวลา + ปุ่มเคลียร์</small></div></div>
+    <div class="row-item"><div class="t"><b>ไอคอนชุดเดียว (SVG)</b> <span class="pill todo">คิวถัดไป</span><small>เปลี่ยน emoji ที่เหลือให้เป็นเส้นชุดเดียวทั้งระบบ</small></div></div>
+    <div class="row-item"><div class="t"><b>รายงานเป็นกราฟ/เทรนด์</b> <span class="pill todo">คิวถัดไป</span><small>กราฟยอดขาย · เมนูขายดี · ช่วงเวลาพีค</small></div></div>
+    <div class="row-item"><div class="t"><b>ออกแบบหน้าจ่ายเงินลูกค้าใหม่</b> <span class="pill hold">รอตัดสินใจ</span><small>ให้สะอาด/เข้าใจง่ายขึ้น</small></div></div>
+  </div>
+
+  <div class="card">
+    <h2 class="sec">📋 สิ่งที่เจ้าของต้องเตรียม (เพื่อขึ้นใช้จริงเต็มรูปแบบ)</h2>
+    <div class="row-item"><div class="t"><b>เครื่องปริ้นใบเสร็จ/สลิปครัว</b> <span class="pill wait">รอฮาร์ดแวร์</span><small>โค้ดเขียนรอไว้แล้ว เสียบเครื่อง (เช่น Sunmi) แล้วเปิดใช้ได้</small></div></div>
+    <div class="row-item"><div class="t"><b>พร้อมเพย์แบบร้านค้า (สำหรับตรวจสลิปอัตโนมัติ)</b> <span class="pill wait">รอคีย์</span><small>K SHOP เดิมใช้กับ SlipOK ไม่ได้ — ตอนนี้ใช้แคชเชียร์กดยืนยันเอง</small></div></div>
+    <div class="row-item"><div class="t"><b>LINE token (แจ้งเตือนเจ้าของ)</b> <span class="pill wait">รอคีย์</span><small>สรุปยอดรายวัน + เตือนของใกล้หมดเข้า LINE</small></div></div>
+    <div class="row-item"><div class="t"><b>ฐานข้อมูลถาวรของ UAT</b> <span class="pill wait">ทางเลือก</span><small>ตอนนี้ UAT รีเซ็ตเองทุกครั้ง — ถ้าอยากให้ข้อมูลทดสอบอยู่ถาวรค่อยตั้ง</small></div></div>
+  </div>
+
+  <div class="card">
+    <h2 class="sec">💬 คุยกันต่อบนมือถือยังไง</h2>
+    <ul class="clean">
+      <li>เปิด <b>แอป Claude บนมือถือ</b> (claude.ai) — บอกสิ่งที่อยากได้/อยากแก้</li>
+      <li>ส่งลิงก์หน้านี้ หรือก๊อปหัวข้อให้ Claude ดู → ต่อบริบทได้ทันที</li>
+      <li>เข้าดูผลงานจริงที่ลิงก์ด้านบนได้ตลอด (ไม่ต้องผ่านใคร)</li>
+      <li>กลับมาเปิดคอม → resume งานในเครื่องเพื่อแก้โค้ด + ขึ้น UAT ให้</li>
+    </ul>
+    <div class="note">หมายเหตุ: แอป Claude บนมือถือคุย/วางแผนได้ แต่ <b>แก้โค้ดในระบบเองไม่ได้</b> — การลงมือแก้จริงทำตอนเปิดคอม</div>
+  </div>
+
+  <p class="legend">
+    <span><span class="pill live">เสร็จ</span> ใช้งานได้</span>
+    <span><span class="pill todo">กำลังทำ</span> อยู่ในคิว</span>
+    <span><span class="pill hold">รอตัดสินใจ</span></span>
+    <span><span class="pill wait">รอของ/คีย์</span></span>
+  </p>
+
+</div>
+</body>
+</html>
