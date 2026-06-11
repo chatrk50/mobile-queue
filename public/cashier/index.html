@@ -1282,6 +1282,10 @@ function renderZone(snap){
   // Date+time shown ABOVE the queue number (no clock icon).
   const tsTop=(t)=> t.order_created_at ? `<div class="muted" style="font-size:11px;line-height:1.3">${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
   const netOf=(t)=> (t.order_net!=null?t.order_net:t.order_total);
+  // Pay-first ageing: how long an unpaid order has waited, + a stale flag vs the auto-void limit.
+  const waitMin=(t)=>{ const c=t.order_created_at; if(!c) return 0; const ms=Date.now()-Date.parse(c.replace(' ','T')+'Z'); return ms>0?Math.floor(ms/60000):0; };
+  const isStale=(t)=>{ const lim=CFG.pendingVoidMinutes||0; return lim>0 && waitMin(t)>=lim; };
+  const agePill=(t)=>{ const m=waitMin(t), lim=CFG.pendingVoidMinutes||0; const warn=lim>0&&m>=Math.max(1,lim-5); return `<span class="pill" style="background:${warn?'rgba(229,91,107,.16)':'rgba(92,113,135,.12)'};color:${warn?'#c0394a':'#5c7187'};font-size:11px;margin-left:6px">⏳ รอ ${m} นาที</span>`; };
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">📱 QR</button>` : '';
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
@@ -1303,11 +1307,12 @@ function renderZone(snap){
     : `<button class="ok" onclick="act(${t.id},'serve')">เสิร์ฟแล้ว</button>`;
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
+  const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
-    `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว</h2>`+
+    `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`
-      <div class="qitem" style="background:rgba(243,203,85,.10)"><div>${tsTop(t)}<div>
-        <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${nm(t)}
+      <div class="qitem" style="background:${isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'}"><div>${tsTop(t)}<div>
+        <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
         <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">💵 รับเงิน → ออกคิว</button>
@@ -1433,6 +1438,12 @@ window.showFeatures=async()=>{
     row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
     row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
     `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>⌛ ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div>
+      <div class="row" style="gap:8px;align-items:center"><input id="pendVoidInp" type="number" inputmode="numeric" min="0" value="${f.pendingVoidMinutes!=null?f.pendingVoidMinutes:30}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิด)</span>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="savePendVoid()">บันทึก</button></div>
+    </div>`+
+    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>📲 แจ้งเตือนเจ้าของทาง LINE</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div>
       <div class="row" style="gap:6px"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
@@ -1445,6 +1456,10 @@ window.showFeatures=async()=>{
 window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
+window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
+window.sweepPending=async()=>{ if(!confirm('ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?')) return;
+  try{ const r=await api('/api/pending/sweep',{method:'POST'}); toast(r.voided?('เคลียร์ค้างชำระ '+r.voided+' รายการ'):'ไม่มีรายการค้างเกินเวลา'); }catch(e){ toast(err(e)); } };
 window.testOwnerSummary=async()=>{
   try{ const r=await api('/api/admin/owner-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
     toast(r.sent?'✅ ส่งสรุปเข้า LINE แล้ว':'ℹ️ ยังไม่ได้ตั้ง LINE เจ้าของ (หรือ LINE ปิดบน UAT)');

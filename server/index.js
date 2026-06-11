@@ -119,7 +119,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours() });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes() });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -237,7 +237,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -246,8 +246,18 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.slipAuto != null) Object.assign(out, Q.setSlipAuto(!!req.body.slipAuto));
     if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
     if (req.body?.ownerLineId != null) Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId));
+    if (req.body?.pendingVoidMinutes != null) Object.assign(out, Q.setPendingVoidMinutes(req.body.pendingVoidMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Manual "clear stale unpaid orders now" — cashier-triggered; mirrors the background sweep.
+app.post('/api/pending/sweep', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.sweepStalePending({ actorId: req.staff?.id || null });
+    for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
+    res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
@@ -777,6 +787,15 @@ function scheduleDailyReset() {
   setTimeout(() => { doDailyReset(); scheduleDailyReset(); }, msUntilBangkokMidnight());
 }
 scheduleDailyReset();
+
+// Background sweep: void abandoned (unpaid) pending orders so they don't pile up on the till.
+// Controlled by the owner's "pending:void_min" setting (0 = off). Refreshes any zone it touches.
+setInterval(() => {
+  try {
+    const r = Q.sweepStalePending();
+    if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
+  } catch { /* never let the sweep crash the server */ }
+}, 60 * 1000);
 
 // Ephemeral (non-durable) deploys — the UAT sandbox — start with an empty DB on every boot.
 // Auto-seed the demo store/menu so the app is immediately usable. No-op when durable (prod:

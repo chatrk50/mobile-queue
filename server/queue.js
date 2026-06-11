@@ -924,6 +924,10 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
+// Auto-void abandoned (unpaid) pending orders after N minutes so they don't pile up on the
+// till. Default 30 min; 0 disables. Owner-configurable in ⚙ จัดการ.
+export function getPendingVoidMinutes() { return Math.max(0, Math.floor(Number(getSetting('pending:void_min', '30')) || 0)); }
+export function setPendingVoidMinutes(m) { const n = Math.max(0, Math.floor(Number(m) || 0)); setSetting('pending:void_min', String(n)); return { pendingVoidMinutes: n }; }
 // Store opening hours → auto-close. Empty open/close = always open (no behaviour change).
 // days = CSV of open weekdays (0=Sun..6=Sat); empty = open every day. Times are "HH:MM" BKK.
 export function getStoreHours() {
@@ -1404,6 +1408,37 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
+}
+
+/** Auto-void abandoned pending tickets (pay-first orders that were never paid). Voids any
+ *  'pending' ticket whose latest order is still unpaid and was created more than the configured
+ *  number of minutes ago. Returns the affected zone ids so callers can refresh live views.
+ *  A 0-minute setting disables the sweep. Safe to call frequently (idempotent on already-void). */
+export function sweepStalePending({ actorId = null } = {}) {
+  const mins = getPendingVoidMinutes();
+  if (!(mins > 0)) return { voided: 0, zones: [] };
+  const rows = db.prepare(
+    `SELECT t.id, t.zone_id, t.line_user_id, o.id AS order_id, o.branch_id, o.total
+       FROM tickets t
+       JOIN orders o ON o.id = (SELECT id FROM orders WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1)
+      WHERE t.status='pending' AND o.payment_status NOT IN ('paid','void')
+        AND t.created_at <= datetime('now', ?)`
+  ).all(`-${mins} minutes`);
+  if (!rows.length) return { voided: 0, zones: [] };
+  const zones = new Set();
+  db.transaction(() => {
+    for (const r of rows) {
+      db.prepare(`UPDATE orders SET payment_status='void', void_kind='void', void_reason='auto: หมดเวลาชำระ', voided_at=datetime('now'), voided_by=? WHERE id=?`).run(actorId, r.order_id);
+      db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(r.id);
+      logSaleEvent({ branchId: r.branch_id, ticketId: r.id, orderId: r.order_id, type: 'void', amount: r.total, actor: actorId, meta: { reason: 'auto_timeout' } });
+      zones.add(r.zone_id);
+    }
+  })();
+  // Best-effort: tell each customer their unpaid order expired (graceful no-op without a token).
+  for (const r of rows) {
+    if (r.line_user_id) pushQueue(r.line_user_id, '⌛ ออเดอร์ของคุณหมดเวลาชำระและถูกยกเลิกอัตโนมัติ\nสั่งใหม่ได้ตลอดเลยค่ะ 🙂', null);
+  }
+  return { voided: rows.length, zones: [...zones] };
 }
 
 export function orderForTicket(ticketId) {
