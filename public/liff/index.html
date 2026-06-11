@@ -333,7 +333,7 @@ async function loadLoyalty(){
     $('loyPoints').textContent = have;
     $('loyRate').textContent = 'ครบ '+per+' แก้ว = ฟรี 1 แก้ว';
     const inCycle = have % per, toGo = (per - inCycle) % per;
-    if(toGo===0 && have>0){ $('loyNext').textContent='ครบแล้ว! รับเครื่องดื่มฟรีได้เลย 🎉'; $('loyBar').style.width='100%'; }
+    if(toGo===0 && have>0){ $('loyNext').textContent='🎉 ครบแล้ว! แจ้งพนักงานตอนสั่ง รับเครื่องดื่มฟรีได้เลย'; $('loyBar').style.width='100%'; }
     else { $('loyNext').textContent='อีก '+toGo+' แก้ว รับเครื่องดื่มฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
     $('loyRewards').innerHTML = (conf.rewards||[]).map(r=>
       `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)"><span>${esc(r.name)}</span><span style="font-weight:800">${r.cost_points} แก้ว</span></div>`).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">—</div>';

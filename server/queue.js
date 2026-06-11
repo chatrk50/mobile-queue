@@ -1329,7 +1329,7 @@ export function setOrderPaid(ticketId, opts = {}) {
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
       msg += free >= 1
-        ? `\n🎉 ครบ ${per} ดวงแล้ว! แลกฟรีได้ ${free} แก้ว — เปิดแอปกดแลกได้เลย`
+        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับเครื่องดื่มฟรีได้เลยในออเดอร์ถัดไป`
         : `\n🥤 อีก ${per - bal} แก้ว ได้ฟรี 1 แก้ว!`;
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
@@ -1390,6 +1390,42 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
   db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(amt, rsn, order.id);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: amt, actor: actorId, meta: { reason: rsn } });
   return { ok: true, ticketId: Number(ticketId), discount: amt, total: order.total, net: Math.round((order.total - amt) * 100) / 100 };
+}
+
+/** Redeem a stamp reward against a specific UNPAID LINE order: deduct the reward's stamps and
+ *  apply a free-drink discount (cheapest drink in the cart, capped 49฿) to that order. The order
+ *  already carries the customer's line_user_id, so no QR/id handshake is needed at the counter —
+ *  the cashier just taps "แลกฟรี" on the customer's order. One redemption per order. */
+export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
+  const t = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t || !t.line_user_id) throw new Error('not_line_order');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') throw new Error('order_already_paid');
+  if (order.payment_status === 'void') throw new Error('order_void');
+  if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='redeem'").get(order.id)) throw new Error('already_redeemed');
+  const key = t.line_user_id;
+  const reward = rewardId
+    ? db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId)
+    : db.prepare('SELECT * FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get();
+  if (!reward) throw new Error('reward_not_found');
+  const bal = loyaltyBalance(key).points;
+  if (bal < reward.cost_points) throw new Error('insufficient_points');
+  const cheapest = db.prepare(
+    `SELECT MIN(oi.price) p FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name
+      WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
+  ).get(order.id)?.p;
+  const room = Math.max(0, order.total - (order.discount || 0));
+  const free = Math.round(Math.min(49, cheapest || room, room) * 100) / 100;
+  if (free <= 0) throw new Error('nothing_to_discount');
+  const reason = '🎁 แลกแต้ม: ' + reward.name;
+  db.transaction(() => {
+    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, key);
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'redeem', ?, ?, ?)`).run(key, -reward.cost_points, order.id, reason);
+  })();
+  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
+  if (t.line_user_id) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  return { ok: true, redeemed: reward.name, cost: reward.cost_points, freeAmount: free, balance: bal - reward.cost_points, net: res.net };
 }
 
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
@@ -1531,6 +1567,11 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_source = o.source;             // 'cashier' | 'customer'
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
+    }
+    // Cashier-only: attach the LINE customer's stamp balance so staff can redeem on the spot.
+    if (reveal && loyaltyEnabled()) {
+      const li = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(t.id)?.line_user_id;
+      if (li) t.loy_points = loyaltyBalance(li).points;
     }
     return t;
   };
