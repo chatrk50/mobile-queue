@@ -264,7 +264,7 @@
     <div class="pos-split">
       <!-- LEFT: live bill / receipt -->
       <div class="card pos-bill" style="margin:0">
-        <h2 style="margin:0 0 8px">🧾 รายการในบิล</h2>
+        <h2 style="margin:0 0 8px"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg>รายการในบิล</h2>
         <div id="billList" class="queue-list" style="min-height:160px"></div>
         <div class="pos-totals">
           <div class="row between" style="font-size:13px"><span class="muted">จำนวนรายการ</span><span id="billCount">0</span></div>
@@ -272,7 +272,7 @@
         </div>
         <div class="row" style="gap:8px;margin-top:12px">
           <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ล้างบิล</button>
-          <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled>💵 ชำระเงิน → ออกคิว</button>
+          <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน → ออกคิว</button>
         </div>
       </div>
       <!-- RIGHT: menu -->
@@ -422,6 +422,14 @@ async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
 function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่'}; return m[e.message]||e.message; }
+// Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
+const IC={
+  cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
+  qr:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 21v.01M21 17v.01M17 21v.01"/></svg>',
+  print:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>',
+  kitchen:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 13.5V21h12v-7.5"/><path d="M5 9a4 4 0 0 1 4-4 3.5 3.5 0 0 1 6 0 4 4 0 0 1 4 4 3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/></svg>',
+  slip:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg>',
+};
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
 window.pinKey=(k)=>{ const el=$('pin'); $('loginErr').textContent='';
@@ -493,7 +501,7 @@ function renderHistory(list){
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
       ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
-      <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">🧾 สลิป</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
+      <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
   }).join('');
 }
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
@@ -1287,7 +1295,7 @@ function renderZone(snap){
   const isStale=(t)=>{ const lim=CFG.pendingVoidMinutes||0; return lim>0 && waitMin(t)>=lim; };
   const agePill=(t)=>{ const m=waitMin(t), lim=CFG.pendingVoidMinutes||0; const warn=lim>0&&m>=Math.max(1,lim-5); return `<span class="pill" style="background:${warn?'rgba(229,91,107,.16)':'rgba(92,113,135,.12)'};color:${warn?'#c0394a':'#5c7187'};font-size:11px;margin-left:6px">⏳ รอ ${m} นาที</span>`; };
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">📱 QR</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">${IC.qr}QR</button>` : '';
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">ลด</button>` : '';
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
@@ -1297,10 +1305,10 @@ function renderZone(snap){
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
   // and the customer receipt. Auto-print on payment produces the kitchen ticket.
   const printBtn=(t)=> (CFG.printEnabled && t.order_total!=null && t.payment_status==='paid')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="printKitchen(${t.id})">🍳 ครัว</button><button class="ghost" style="padding:8px 10px" onclick="printReceipt(${t.id})">🖨️ ใบเสร็จ</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="printKitchen(${t.id})">${IC.kitchen}ครัว</button><button class="ghost" style="padding:8px 10px" onclick="printReceipt(${t.id})">${IC.print}ใบเสร็จ</button>` : '';
   // A customer who attached a slip shows as 'claimed' — let the cashier view it.
   const slipViewBtn=(t)=> (t.payment_status==='claimed')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">🧾 สลิป</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
   const serveBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
@@ -1315,7 +1323,7 @@ function renderZone(snap){
         <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
         <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}
-          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">💵 รับเงิน → ออกคิว</button>
+          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
