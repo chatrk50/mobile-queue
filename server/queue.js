@@ -995,12 +995,25 @@ export function loyaltyTier(lifetime) {
   if (l >= 20) return { key: 'silver', label: 'ขาประจำ', emoji: '⭐' };
   return null;
 }
-/** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier. */
+/** Bangkok-local helpers for the birthday free drink. */
+function bkkMonthDay() { return db.prepare("SELECT strftime('%m-%d', datetime('now','+7 hours')) md").get().md; }
+function bkkYear() { return db.prepare("SELECT strftime('%Y', datetime('now','+7 hours')) y").get().y; }
+function birthdayMD(bd) { if (!bd) return null; const m = String(bd).match(/(\d{2})-(\d{2})$/); return m ? m[1] + '-' + m[2] : null; }
+export function isBirthdayToday(bd) { const md = birthdayMD(bd); return !!md && md === bkkMonthDay(); }
+/** Save a customer's birthday (optional, 'YYYY-MM-DD' or 'MM-DD'). Upserts the customer row. */
+export function setCustomerBirthday(key, birthday) {
+  if (!key) throw new Error('customer_required');
+  if (!birthdayMD(birthday)) throw new Error('bad_birthday');
+  const val = String(birthday).slice(0, 10);
+  db.prepare(`INSERT INTO customers (line_user_id, birthday) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET birthday=excluded.birthday`).run(key, val);
+  return { ok: true, birthday: val, isBirthday: isBirthdayToday(val) };
+}
+/** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier + birthday. */
 export function loyaltyBalance(key) {
-  if (!key) return { key, points: 0, lifetime: 0, tier: null };
-  const c = db.prepare('SELECT points, lifetime_points FROM customers WHERE line_user_id=?').get(key);
+  if (!key) return { key, points: 0, lifetime: 0, tier: null, birthday: null, isBirthday: false };
+  const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=?').get(key);
   const lifetime = c ? (c.lifetime_points || 0) : 0;
-  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime) };
+  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
 export function loyaltyHistory(key, limit = 30) {
   if (!key) return [];
@@ -1030,7 +1043,13 @@ export function awardPoints(orderId) {
   // First-ever LINE order for this customer? Grant a one-time welcome head-start.
   const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
   const bonus = isFirst ? getWelcomeBonus() : 0;
-  const total = pts + bonus;
+  // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
+  // customer orders on their birthday (and has saved one).
+  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  const yr = bkkYear();
+  const bdayBonus = (cust && isBirthdayToday(cust.birthday) && !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?").get(key, 'birthday ' + yr))
+    ? getStampsPerReward() : 0;
+  const total = pts + bonus + bdayBonus;
   db.transaction(() => {
     db.prepare(
       `INSERT INTO customers (line_user_id, name, points, lifetime_points)
@@ -1042,8 +1061,9 @@ export function awardPoints(orderId) {
     ).run(key, name, total, total);
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
     if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
+    if (bdayBonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bdayBonus, orderId, 'birthday ' + yr);
   })();
-  return { key, name, awarded: pts, bonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
+  return { key, name, awarded: pts, bonus, bdayBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {
@@ -1335,7 +1355,7 @@ export function setOrderPaid(ticketId, opts = {}) {
       const per = getStampsPerReward();
       const bal = loyalty.balance || 0;
       const free = Math.floor(bal / per);
-      const bonusTxt = loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '';
+      const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
       msg += free >= 1

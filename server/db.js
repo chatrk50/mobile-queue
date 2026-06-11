@@ -412,6 +412,7 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN voided_by INTEGER`,
   `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
+  `ALTER TABLE customers ADD COLUMN birthday TEXT`,        // 'YYYY-MM-DD' (optional) → birthday free drink
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

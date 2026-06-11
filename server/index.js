@@ -223,6 +223,11 @@ app.post('/api/loyalty/:key/redeem', (req, res) => {
   try { res.json(Q.redeemReward(req.params.key, Number(req.body?.rewardId), req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Customer saves their own birthday (optional) from the LIFF → birthday free drink.
+app.post('/api/loyalty/:key/birthday', (req, res) => {
+  try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Owner: manage loyalty settings + rewards.
 app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
