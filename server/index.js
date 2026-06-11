@@ -277,7 +277,7 @@ app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
 
 // ---------- Stores & zones ----------
 app.get('/api/stores', (req, res) => {
-  res.json(db.prepare('SELECT * FROM stores ORDER BY id').all());
+  res.json(Q.listStores());
 });
 app.get('/api/stores/:storeId/zones', (req, res) => {
   const zones = db.prepare('SELECT * FROM zones WHERE store_id = ? ORDER BY id').all(req.params.storeId);
@@ -649,7 +649,7 @@ app.post('/api/branches', (req, res) => {
 });
 app.post('/api/branches/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.renameBranch(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+  try { res.json(Q.updateStore(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.get('/api/branches/:id/menu', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranchMenu(Number(req.params.id))); });
 app.post('/api/branches/:id/menu', (req, res) => {

@@ -538,6 +538,38 @@ export function setStoreOpen(storeId, isOpen) {
   db.prepare('UPDATE zones SET is_open=? WHERE store_id=?').run(v, storeId);
   return db.prepare('SELECT id FROM zones WHERE store_id=?').all(storeId).map((z) => z.id);
 }
+/** Is this branch within its own opening hours right now (BKK)? True if no hours configured. */
+export function isStoreOpenRow(s) {
+  if (!s || !s.hours_open || !s.hours_close) return true;
+  const b = new Date(Date.now() + 7 * 3600 * 1000);
+  const hm = b.getUTCHours() * 60 + b.getUTCMinutes(), day = b.getUTCDay();
+  if (s.hours_days && !s.hours_days.split(',').filter(Boolean).includes(String(day))) return false;
+  const [oh, om] = s.hours_open.split(':').map(Number), [ch, cm] = s.hours_close.split(':').map(Number);
+  const openM = oh * 60 + om, closeM = ch * 60 + cm;
+  return closeM > openM ? (hm >= openM && hm < closeM) : (hm >= openM || hm < closeM);
+}
+/** All branches with their profile + zone count + computed open_now (manual toggle AND hours). */
+export function listStores() {
+  return db.prepare('SELECT * FROM stores ORDER BY id').all().map((s) => ({
+    ...s,
+    zones: db.prepare('SELECT COUNT(*) c FROM zones WHERE store_id=?').get(s.id).c,
+    open_now: (s.is_open === 1) && isStoreOpenRow(s),
+  }));
+}
+/** Edit a branch's profile + hours. `isOpen` (manual temp open/close) handled via setStoreOpen. */
+export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen, hoursClose, hoursDays } = {}) {
+  const cur = db.prepare('SELECT * FROM stores WHERE id=?').get(id);
+  if (!cur) throw new Error('store_not_found');
+  const opt = (x, col, max) => x != null ? (x === '' ? null : x.toString().slice(0, max)) : cur[col];
+  const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  const ho = hoursOpen != null ? (/^\d{1,2}:\d{2}$/.test(hoursOpen) ? hoursOpen : null) : cur.hours_open;
+  const hc = hoursClose != null ? (/^\d{1,2}:\d{2}$/.test(hoursClose) ? hoursClose : null) : cur.hours_close;
+  const hd = hoursDays != null ? (Array.isArray(hoursDays) ? hoursDays.join(',') : String(hoursDays || '')) : cur.hours_days;
+  db.prepare('UPDATE stores SET name=?, code=?, address=?, phone=?, hours_open=?, hours_close=?, hours_days=? WHERE id=?')
+    .run(n, opt(code, 'code', 20), opt(address, 'address', 200), opt(phone, 'phone', 30), ho, hc, hd, id);
+  if (isOpen != null) setStoreOpen(id, !!isOpen);
+  return db.prepare('SELECT * FROM stores WHERE id=?').get(id);
+}
 
 // ---------- Menu (Quick-Service) ----------
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
@@ -564,8 +596,12 @@ export function listMenu(channelId = null, branchId = null) {
 
 // ---------- Branches (Phase 2): a tenant's shops ----------
 export function listBranches(tenantId = null) {
-  const rows = db.prepare(`SELECT id, name, code, is_open FROM stores WHERE (? IS NULL OR tenant_id=?) ORDER BY id`).all(tenantId, tenantId);
-  return rows.map((b) => ({ ...b, zones: db.prepare('SELECT COUNT(*) c FROM zones WHERE store_id=?').get(b.id).c }));
+  const rows = db.prepare(`SELECT id, name, code, is_open, address, phone, hours_open, hours_close, hours_days FROM stores WHERE (? IS NULL OR tenant_id=?) ORDER BY id`).all(tenantId, tenantId);
+  return rows.map((b) => ({
+    ...b,
+    zones: db.prepare('SELECT name FROM zones WHERE store_id=? ORDER BY id').all(b.id).map((z) => z.name),
+    open_now: (b.is_open === 1) && isStoreOpenRow(b),
+  }));
 }
 export function createBranch({ name, code = null, tenantId = 1 } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);

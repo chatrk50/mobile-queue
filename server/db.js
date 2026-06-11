@@ -394,6 +394,12 @@ for (const stmt of [
   `ALTER TABLE stores ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1`,
   // --- Phase 0 multi-branch POS columns (all additive / nullable-safe) ---
   `ALTER TABLE stores ADD COLUMN code TEXT`,
+  // --- Per-branch profile + opening hours (additive) ---
+  `ALTER TABLE stores ADD COLUMN address TEXT`,
+  `ALTER TABLE stores ADD COLUMN phone TEXT`,
+  `ALTER TABLE stores ADD COLUMN hours_open TEXT`,
+  `ALTER TABLE stores ADD COLUMN hours_close TEXT`,
+  `ALTER TABLE stores ADD COLUMN hours_days TEXT`,
   `ALTER TABLE orders ADD COLUMN branch_id INTEGER`,         // = tickets.store_id (denormalized)
   `ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN discount_reason TEXT`,

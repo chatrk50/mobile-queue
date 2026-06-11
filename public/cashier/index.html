@@ -169,20 +169,17 @@
   </div>
 
   <!-- BRANCH MANAGEMENT (owner) -->
-  <div id="branchCard" class="card" style="display:none;max-width:560px;margin:14px auto">
+  <div id="branchCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>สาขา</h1><p class="muted" style="margin:2px 0 0">จัดการสาขา · ต้นทุน/เมนูแยกสาขาตั้งได้ที่หน้าต้นทุนและเมนู</p></div>
+      <div><h1>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()">ปิด</button>
     </div>
-    <div id="branchBody" style="margin-top:14px"></div>
-    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-      <h2 style="margin:0 0 8px;font-size:15px">เพิ่มสาขาใหม่</h2>
-      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="brName" placeholder="ชื่อสาขา" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="brCode" placeholder="รหัส (ไม่บังคับ)" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <button class="ok" style="padding:8px 16px" onclick="addBranch()">เพิ่ม</button>
+    <div class="ms-split" style="margin-top:12px">
+      <div class="ms-list">
+        <button class="ok" style="width:100%;margin-bottom:10px" onclick="editBranchForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มสาขาใหม่</button>
+        <div id="branchBody"></div>
       </div>
-      <p id="brErr" class="muted" style="color:var(--danger);margin:6px 0 0;font-size:13px"></p>
+      <div class="ms-edit"><div id="branchEditForm"><p class="muted" style="text-align:center;padding:34px 8px">← เลือกสาขาทางซ้ายเพื่อแก้ไข</p></div></div>
     </div>
   </div>
 
@@ -659,17 +656,49 @@ function renderDetail(){
 window.hideBranch=()=>{ $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
 window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   try{ renderBranch(await api('/api/branches')); }catch(e){ toast(err(e)); } };
+let _selBranchId=null, BRANCHES=[];
 function renderBranch(list){
-  if(!list||!list.length){ $('branchBody').innerHTML='<p class="muted">ยังไม่มีสาขา</p>'; return; }
-  $('branchBody').innerHTML=list.map(b=>`<div class="qitem"><div style="flex:1"><b>${esc(b.name)}</b>${b.code?` <span class="muted" style="font-size:12px">[${esc(b.code)}]</span>`:''} <span class="muted" style="font-size:12px">· ${b.zones} โซน</span></div>
-    <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="renameBranchUI(${b.id})">เปลี่ยนชื่อ</button></div>`).join('');
+  if(list) BRANCHES=list;
+  $('branchBody').innerHTML = BRANCHES.length ? BRANCHES.map(b=>`
+    <div class="ms-item ${b.id===_selBranchId?'sel':''}" onclick="editBranchForm(${b.id})">
+      <div style="flex:1;min-width:0"><b>${esc(b.name)}</b>${b.code?` <span class="muted" style="font-size:11px">[${esc(b.code)}]</span>`:''}
+        <div class="muted" style="font-size:12px">${(b.zones||[]).length} โซน · <span style="color:${b.open_now?'#16876f':'var(--danger)'};font-weight:700">${b.open_now?'เปิด':'ปิด'}</span></div></div>
+      <svg class="ic" viewBox="0 0 24 24" style="opacity:.35;margin:0"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`).join('') : '<p class="muted">ยังไม่มีสาขา</p>';
 }
-window.addBranch=async()=>{ $('brErr').textContent=''; const name=$('brName').value.trim(), code=$('brCode').value.trim();
-  if(!name){ $('brErr').textContent='กรอกชื่อสาขา'; return; }
-  try{ await api('/api/branches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,code})}); $('brName').value='';$('brCode').value=''; toast('เพิ่มสาขาแล้ว'); renderBranch(await api('/api/branches')); }
-  catch(e){ $('brErr').textContent=err(e); } };
-window.renameBranchUI=async(id)=>{ const name=(prompt('ชื่อสาขาใหม่')||'').trim(); if(!name) return;
-  try{ await api('/api/branches/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); renderBranch(await api('/api/branches')); }catch(e){ toast(err(e)); } };
+window.editBranchForm=(id)=>{
+  _selBranchId=id; const isNew=id==='new';
+  const b=isNew?{id:'new',name:'',code:'',address:'',phone:'',hours_open:'',hours_close:'',hours_days:'',is_open:1,zones:['Zone A']}:BRANCHES.find(x=>x.id===id);
+  if(!b) return; renderBranch();
+  $('branchEditForm').innerHTML=`<h2 style="margin:0 0 10px">${isNew?'เพิ่มสาขาใหม่':'แก้ไขสาขา'}</h2>
+    <div style="display:grid;gap:10px">
+      ${isNew?'':`<div class="ff">Store ID<input value="${b.id}" disabled style="background:var(--surface)"></div>`}
+      <label class="ff">ชื่อสาขา *<input id="bf_name" value="${esc(b.name||'')}"></label>
+      <label class="ff">รหัสสาขา (code)<input id="bf_code" value="${esc(b.code||'')}" placeholder="เช่น YODEE-01"></label>
+      ${isNew?'<p class="muted" style="font-size:12px;margin:0">บันทึกแล้วค่อยเพิ่มที่ตั้ง/เวลา/เบอร์ได้</p>':`
+      <label class="ff">ที่ตั้ง / ที่อยู่<input id="bf_addr" value="${esc(b.address||'')}" placeholder="เช่น ตลาดนัด กกท หน้าราม"></label>
+      <label class="ff">เบอร์ติดต่อ<input id="bf_phone" value="${esc(b.phone||'')}" placeholder="08x-xxx-xxxx"></label>
+      <div class="ff">โซน<div style="font-size:13px;color:var(--ink)">${(b.zones||[]).map(esc).join(' · ')||'-'}</div></div>
+      <div class="ff">เวลาเปิด-ปิด <span style="font-weight:400">(นอกเวลา ลูกค้าสั่งไม่ได้)</span>
+        <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
+        <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
+      </div>
+      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'🟢 เปิดอยู่ — กดปิดร้านชั่วคราว':'🔴 ปิดอยู่ — กดเปิดร้าน'}</button>`}
+      <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
+    </div>`;
+};
+window.saveBranchForm=async()=>{
+  if(_selBranchId==='new'){
+    const name=$('bf_name').value.trim(); if(!name){ toast('กรอกชื่อสาขา'); return; }
+    try{ const r=await api('/api/branches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,code:$('bf_code').value.trim()})}); toast('เพิ่มสาขาแล้ว'); renderBranch(await api('/api/branches')); editBranchForm(r.id); }catch(e){ toast(err(e)); }
+    return;
+  }
+  const days=[...document.querySelectorAll('#bf_days [data-day].on')].map(e=>e.dataset.day);
+  const body={ name:$('bf_name').value.trim(), code:$('bf_code').value.trim(), address:$('bf_addr').value.trim(), phone:$('bf_phone').value.trim(), hoursOpen:$('bf_open').value, hoursClose:$('bf_close').value, hoursDays:days.length===7?[]:days };
+  if(!body.name){ toast('กรอกชื่อสาขา'); return; }
+  try{ await api('/api/branches/'+_selBranchId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกแล้ว'); renderBranch(await api('/api/branches')); editBranchForm(_selBranchId); }catch(e){ toast(err(e)); }
+};
+window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!!open})}); renderBranch(await api('/api/branches')); editBranchForm(id); }catch(e){ toast(err(e)); } };
 
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
@@ -1365,25 +1394,10 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
-    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <div class="row between"><b>⏰ เวลาเปิด-ปิดร้าน</b><span class="pill ${f.open?'open':'closed'}" style="font-size:11px">${f.open?'เปิดอยู่':'ปิดอยู่'}</span></div>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">นอกเวลานี้ลูกค้าจะสั่งไม่ได้อัตโนมัติ (เว้นว่าง = เปิดตลอด)</div>
-      <div class="row" style="gap:6px;align-items:center">
-        <input id="hoursOpen" type="time" value="${(f.hours&&f.hours.open)||''}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <span class="muted">ถึง</span>
-        <input id="hoursClose" type="time" value="${(f.hours&&f.hours.close)||''}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <button class="ok" style="padding:8px 12px" onclick="saveHours()">บันทึก</button>
-      </div>
-      <div id="hoursDays" style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(f.hours&&f.hours.days)?String(f.hours.days).split(',').filter(Boolean):[];const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
-    </div>`;
+    `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`;
   $('featuresPop').style.display='flex';
 };
 window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
-window.saveHours=async()=>{ const open=$('hoursOpen').value, close=$('hoursClose').value;
-  const days=[...document.querySelectorAll('#hoursDays [data-day].on')].map(e=>e.dataset.day);
-  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hours:{open,close,days:days.length===7?[]:days}})});
-    try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
-    toast('บันทึกเวลาร้านแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.testOwnerSummary=async()=>{
