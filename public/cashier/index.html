@@ -953,15 +953,19 @@ window.saveTier=async(id)=>{ const mk=Number($('tier_'+id).value); try{ await ap
 window.saveChan=async(id)=>{ const c=Number($('chan_'+id).value); try{ await api('/api/channels/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commission_pct:c})}); toast('บันทึกค่าคอมแล้ว'); }catch(e){ toast(err(e)); } };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 let _selMenuId=null;
-// Left pane: clickable item list (click → loads the edit form on the right).
+// Left pane: clickable item list, grouped by Menu (เครื่องดื่ม) and Topping.
 function renderMenuMgr(){
-  $('menuMgr').innerHTML = MENU.length ? MENU.map(m=>`
+  if(!MENU.length){ $('menuMgr').innerHTML='<p class="muted">ยังไม่มีเมนู</p>'; return; }
+  const row=(m)=>`
     <div class="ms-item ${m.id===_selMenuId?'sel':''}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
       <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
-      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>${m.category==='topping'?' <span class="muted" style="font-size:11px">ท็อป</span>':''}
+      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>
         <div class="muted" style="font-size:12px">฿${m.price}${m.soldout?' · หมด':''}${m.active?'':' · ซ่อน'}</div></div>
       <svg class="ic" viewBox="0 0 24 24" style="opacity:.35;margin:0"><path d="M9 18l6-6-6-6"/></svg>
-    </div>`).join('') : '<p class="muted">ยังไม่มีเมนู</p>';
+    </div>`;
+  const drinks=MENU.filter(m=>m.category!=='topping'), tops=MENU.filter(m=>m.category==='topping');
+  const sec=(title,items)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length})</div>`+items.map(row).join(''):'';
+  $('menuMgr').innerHTML = sec('🥤 เครื่องดื่ม · Menu', drinks)+(tops.length?'<div style="height:8px"></div>':'')+sec('🍫 ท็อปปิ้ง · Topping', tops);
 }
 // Right pane: full edit form for the selected item (or a new one).
 window.editMenuForm=(id)=>{
