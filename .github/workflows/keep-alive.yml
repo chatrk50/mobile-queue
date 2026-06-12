@@ -1,39 +1,46 @@
 name: keep-alive
 
-# Keeps the Render free service warm so it doesn't spin down (~15 min idle ->
-# ~50s cold start). Pings a lightweight endpoint every 14 minutes.
-# NOTE: GitHub scheduled crons run in UTC and are best-effort (can be delayed a
-# few minutes under load), so an occasional cold start is still possible.
+# Keeps the Render free services warm so they don't spin down (~15 min idle -> ~50s cold
+# start, which on the till looks like "the order took forever / I tapped twice").
+#
+# GitHub scheduled crons are best-effort and often delayed, so instead of relying on a ping
+# *exactly* every N minutes, each run is a single job that LOOPS — pinging every 3 minutes for
+# ~55 minutes. The hourly cron just (re)starts that loop. Net effect: near-continuous pings
+# during the day with at most a ~5-min gap, well under Render's ~15-min idle timeout.
+# This repo is PUBLIC, so Actions minutes are unlimited/free — the long-running job is fine.
+#
+# Hours: Asia/Bangkok ~06:00–24:00 (the shop's waking hours). For belt-and-suspenders 24/7
+# warmth, an external monitor (cron-job.org / UptimeRobot, free) can also hit /api/config.
 
 on:
   schedule:
-    # GitHub crons are best-effort and often delayed, so we ask for every 10 min
-    # to leave margin under Render's ~15-min idle timeout. For RELIABLE warmth,
-    # also add an external monitor (UptimeRobot / cron-job.org) — see README.
-    - cron: '*/10 * * * *'
+    - cron: '0 23 * * *'      # 06:00 Asia/Bangkok
+    - cron: '0 0-16 * * *'    # 07:00–23:59 Asia/Bangkok (hourly)
   workflow_dispatch:          # allow manual run from the Actions tab
 
-# Avoid overlapping runs if one is slow
+# One warming loop at a time; let a running loop finish rather than cancelling it.
 concurrency:
   group: keep-alive
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 58
     steps:
-      - name: Wake the service
+      - name: Keep services warm (ping every 3 min for ~55 min)
         env:
-          URL: https://mobile-queue.onrender.com/api/config
+          URLS: "https://mobile-queue.onrender.com/api/config https://mobile-queue-uat.onrender.com/api/config"
         run: |
-          for i in 1 2 3; do
-            code=$(curl -fsS --max-time 90 -o /dev/null -w '%{http_code}' "$URL" || echo "000")
-            if [ "$code" = "200" ]; then
-              echo "OK ($code) at $(date -u)"
-              exit 0
-            fi
-            echo "attempt $i: HTTP $code — retrying in 15s..."
-            sleep 15
+          deadline=$((SECONDS + 3300))   # ~55 minutes, then a fresh hourly run takes over
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            for u in $URLS; do
+              code=$(curl -fsS --max-time 60 -o /dev/null -w '%{http_code}' "$u" || echo "000")
+              echo "$(date -u +%H:%M:%S)Z  $u -> $code"
+            done
+            sleep 180
           done
-          echo "service did not respond after 3 attempts"
-          exit 1
+          echo "loop done at $(date -u)"
