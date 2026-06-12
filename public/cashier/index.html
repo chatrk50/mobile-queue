@@ -216,8 +216,10 @@
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwImg" placeholder="ลิงก์รูป (ไม่บังคับ)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
       </div>
+      <p class="muted" style="font-size:11px;margin:6px 0 0">เพิ่มของรางวัลก่อน แล้วกด 📷 ที่รายการเพื่ออัปโหลดรูปจากเครื่องได้</p>
     </div>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">เช็ค / แลกแต้มลูกค้า</h2>
@@ -746,10 +748,16 @@ window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&(
 let REWARDS=[];
 window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2); renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
-  box.innerHTML=REWARDS.map(r=>`<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span><button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`).join(''); }
+  box.innerHTML=REWARDS.map(r=>{
+    const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
+    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
+      <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
+  }).join(''); }
 window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
-window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
-  try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points})}); $('rwName').value='';$('rwCost').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
+  try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
 window.toggleReward=async(id,active)=>{ try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 let LOY_KEY=null;
 window.loyLookupGo=async()=>{ const key=$('loyLookup').value.trim(); if(!key){ return; } LOY_KEY=key;
@@ -1119,12 +1127,12 @@ window.saveMenuForm=async()=>{
 const _refreshMenu=()=>{ if(_selMenuId&&_selMenuId!=='new') editMenuForm(_selMenuId); else renderMenuMgr(); };
 window.toggleSoldout=async(id,soldout)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({soldout})}); await loadMenu(); _refreshMenu(); }catch(e){ toast(err(e)); } };
 window.toggleItem=async(id,active)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); await loadMenu(); _refreshMenu(); }catch(e){ toast(err(e)); } };
-let uploadTargetId=null;
-window.uploadImg=(id)=>{ uploadTargetId=id; const f=$('imgFile'); f.value=''; f.click(); };
+let uploadTargetId=null, _uploadKind='menu';
+window.uploadImg=(id)=>{ uploadTargetId=id; _uploadKind='menu'; const f=$('imgFile'); f.value=''; f.click(); };
 async function onImgFile(e){ const f=e.target.files&&e.target.files[0]; if(!f||uploadTargetId==null) return;
   try{ const dataUrl=await resizeImage(f,320);
-    await api('/api/menu/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})});
-    toast('อัปเดตรูปแล้ว'); await loadMenu(); _refreshMenu();
+    if(_uploadKind==='reward'){ await api('/api/rewards/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}); toast('อัปเดตรูปรางวัลแล้ว'); loadLoyaltyAdmin(); }
+    else { await api('/api/menu/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}); toast('อัปเดตรูปแล้ว'); await loadMenu(); _refreshMenu(); }
   }catch(err2){ toast('อัปโหลดไม่สำเร็จ: '+(err2.message||err2)); } }
 function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file);
   img.onload=()=>{ URL.revokeObjectURL(url); const scale=Math.min(1,max/Math.max(img.width,img.height));

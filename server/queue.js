@@ -1111,20 +1111,21 @@ export function awardPoints(orderId) {
 export function listRewards(all = false) {
   return db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active=1'} ORDER BY sort, cost_points, id`).all();
 }
-export function addReward({ name, cost_points } = {}) {
+export function addReward({ name, cost_points, image = null } = {}) {
   const nm = (name || '').toString().trim().slice(0, 60);
   const cost = Math.max(1, Math.round(Number(cost_points) || 0));
   if (!nm) throw new Error('name_required');
-  const info = db.prepare('INSERT INTO rewards (name, cost_points) VALUES (?,?)').run(nm, cost);
+  const info = db.prepare('INSERT INTO rewards (name, cost_points, image) VALUES (?,?,?)').run(nm, cost, image ? image.toString() : null);
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateReward(id, { name, cost_points, active } = {}) {
+export function updateReward(id, { name, cost_points, active, image } = {}) {
   const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
   if (!cur) throw new Error('reward_not_found');
   const nm = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const cost = cost_points != null ? Math.max(1, Math.round(Number(cost_points) || 0)) : cur.cost_points;
   const a = active != null ? (active ? 1 : 0) : cur.active;
-  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=? WHERE id=?').run(nm, cost, a, id);
+  const img = image !== undefined ? (image || null) : cur.image;
+  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=? WHERE id=?').run(nm, cost, a, img, id);
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
 }
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
@@ -1562,8 +1563,10 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
   // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
   if (order && wasPaid && restock) returnStockForOrder(order);
-  // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order.
-  const pointsReturned = order ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
+  // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order — BUT only
+  // if the drink wasn't already served. Once served, the product cost is incurred and the free
+  // drink was handed over, so points are never returned (owner rule).
+  const pointsReturned = (order && t.status !== 'served') ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
   if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
