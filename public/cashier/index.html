@@ -289,6 +289,7 @@
         </div>
         <div class="row" style="gap:8px;margin-top:12px">
           <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ล้างบิล</button>
+          <button class="ghost" id="billHoldBtn" style="flex:1.4;background:rgba(243,203,85,.18);color:#946f00;border-color:#f3cb55" onclick="holdBill()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>พักบิล (จ่ายทีหลัง)</button>
           <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน → ออกคิว</button>
         </div>
       </div>
@@ -1234,6 +1235,7 @@ function renderBill(){
   const bt=$('billTotal'); if(bt) bt.textContent=total;
   const bc=$('billCount'); if(bc) bc.textContent=cart.length;
   const pay=$('billPayBtn'); if(pay) pay.disabled=!cart.length;
+  const hold=$('billHoldBtn'); if(hold) hold.disabled=!cart.length;
 }
 // Kept for back-compat (old basket modal): also refreshes the live bill.
 function renderBasketCount(){ const c=$('basketCount'); if(c){ c.textContent=cart.length; c.style.display=cart.length?'':'none'; } renderBill(); }
@@ -1253,15 +1255,24 @@ function renderBasket(){
 }
 window.cancelBasket=()=>{ if(!cart.length) return;
   if(!confirm('ล้างรายการทั้งหมดในบิล?')) return; cart=[]; renderBasketCount(); };
-window.confirmBasket=async()=>{
-  if(!cart.length){ toast('ตะกร้าว่าง'); return; }
+// Shared: build the bill items + create the order (pending). Returns the created ticket or null.
+async function _sendBill(){
+  if(!cart.length){ toast('ตะกร้าว่าง'); return null; }
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
-  try{ const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,channelId:orderChannel})});
-    cart=[]; hideOrder();
-    // Pay-first: take payment now → issues the queue number. Cancel = stays in "รอชำระเงิน".
+  const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,channelId:orderChannel})});
+  cart=[]; hideOrder();
+  return r;
+}
+window.confirmBasket=async()=>{
+  try{ const r=await _sendBill(); if(!r) return;
+    // Pay-first: take payment now → issues the queue number.
     await markPaid(r.ticketId,'unpaid',r.total);
   }catch(e){ toast(err(e)); } };
+// Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
+window.holdBill=async()=>{
+  try{ const r=await _sendBill(); if(r) toast('🅿️ พักบิลไว้แล้ว · ออเดอร์ #'+r.ticketId+' อยู่ใน "รอชำระเงิน" — กดรับเงินภายหลังได้'); }
+  catch(e){ toast(err(e)); } };
 
 async function boot(){
   try{ CFG=await (await fetch('/api/config')).json(); }catch(e){ CFG={}; }
