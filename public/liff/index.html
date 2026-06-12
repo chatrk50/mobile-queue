@@ -98,6 +98,7 @@
       </div>
     </div>
     <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วดูตะกร้า 🧺</p>
+    <div id="orderLoyChip" style="display:none;margin:8px 0 0;font-size:13px;font-weight:700;color:var(--navy);background:rgba(0,181,216,.10);border:1px solid rgba(0,181,216,.3);border-radius:999px;padding:7px 12px;text-align:center"></div>
     <div id="menuButtons" style="margin:10px 0"></div>
     <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
   </div>
@@ -209,6 +210,7 @@
 <div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" class="queue-list" style="margin:12px 0"></div>
     <div class="row between" style="align-items:center;margin-bottom:12px"><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     <div class="row" style="gap:8px">
@@ -333,15 +335,36 @@ window.reorderFav = async ()=>{
 
 // Loyalty points card: balance + progress to next reward + the rewards list (read-only here;
 // redeeming is done by a cashier at the counter). Best-effort — never blocks ordering.
-let LOY=null;
+let LOY=null, _loyOn=false, _loyPts=0, _loyPer=10;
+// Goal-gradient motivator: a subtle chip on the order screen + a dynamic cart nudge that only
+// shouts when the customer is CLOSE to a free drink (counting drinks already in the cart).
+function cartDrinkCount(){ return (typeof cart!=='undefined'&&cart) ? cart.length : 0; }   // each cart entry = 1 cup
+function updateNudges(){
+  const chip=$('orderLoyChip'), nudge=$('cartNudge');
+  if(!_loyOn){ if(chip) chip.style.display='none'; if(nudge) nudge.style.display='none'; return; }
+  const per=_loyPer||10, now=_loyPts||0, inCart=cartDrinkCount(), projected=now+inCart;
+  const inCycle=now%per, toGo=(per-inCycle)%per;
+  // Subtle chip while browsing: progress in the current cycle (hidden if far away).
+  if(chip){ if(now>0 && toGo<=3 && toGo>0){ chip.textContent='⭐ '+inCycle+'/'+per+' · อีก '+toGo+' แก้ว ได้ฟรี 1 แก้ว!'; chip.style.display=''; } else chip.style.display='none'; }
+  // Cart nudge (the hero): celebrate when this cart crosses a reward, else nudge only when close.
+  if(nudge){
+    const earnsNew = Math.floor(projected/per) > Math.floor(now/per);
+    const needFromProjected = (per-(projected%per))%per;
+    if(inCart>0 && earnsNew){ nudge.innerHTML='🎉 ตะกร้านี้ทำให้คุณครบ '+per+' ดวง — รอบหน้าแลกฟรีได้เลย!'; nudge.style.background='rgba(47,194,166,.16)'; nudge.style.color='#178a72'; nudge.style.display=''; }
+    else if(needFromProjected>0 && needFromProjected<=2){ nudge.innerHTML='🥤 เพิ่มอีก '+needFromProjected+' แก้ว ได้ฟรี 1 แก้ว!'; nudge.style.background='rgba(243,203,85,.20)'; nudge.style.color='#946f00'; nudge.style.display=''; }
+    else nudge.style.display='none';
+  }
+}
 async function loadLoyalty(){
   show('loyaltyCard', false);
   if(!lineUserId) return;
   try{
     const conf = await api('/api/loyalty/config');
     if(!conf.enabled) return;                                      // feature off → never show
+    _loyOn=true; _loyPer=conf.stampsPerReward||10;
     const bal  = await api('/api/loyalty/'+encodeURIComponent(lineUserId));
     LOY = { ...conf, ...bal };
+    _loyPts = bal.points||0; updateNudges();                       // power the order-screen chip + cart nudge
     if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;    // only show once they've earned
     const per = conf.stampsPerReward||10, have = bal.points||0;
     $('loyPoints').textContent = have;
@@ -458,7 +481,7 @@ window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink
   $('sweetPop').style.display='none'; renderBasketCount(); toast('เพิ่มลงตะกร้าแล้ว'); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
-function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; }
+function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; updateNudges(); }
 // Step 4: review basket -> confirm or cancel.
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
@@ -477,6 +500,7 @@ function renderBasket(){
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 แก้ว" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
+  updateNudges();
 }
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
