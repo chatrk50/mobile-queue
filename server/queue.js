@@ -1324,11 +1324,27 @@ export function createOrder(zoneId, items, opts = {}) {
   // Pay-first model: create the ticket in 'pending' state with NO queue number yet.
   // The real queue number is issued only once payment is confirmed (assignQueueNumber),
   // so abandoned/unpaid orders never consume a number and the kitchen only sees paid work.
+  const dedup = source === 'customer' && lineUserId;
   const tx = db.transaction(() => {
-    const tinfo = db.prepare(
-      `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
-       VALUES (?,?,?,?,?,?,?,'pending')`
-    ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label);
+    // Atomic dedup: for a LINE customer, only insert if they have NO active order — done as a
+    // single conditional INSERT so two near-simultaneous submits (cold-start retry/reload) can
+    // never both create a ticket. A pre-check above already fast-paths the common case.
+    const tinfo = dedup
+      ? db.prepare(
+          `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
+           SELECT ?,?,0,'',1,?,?,'pending'
+           WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE zone_id=? AND line_user_id=? AND status IN ('pending','waiting','called'))`
+        ).run(zone.store_id, zoneId, lineUserId, label, zoneId, lineUserId)
+      : db.prepare(
+          `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
+           VALUES (?,?,?,?,?,?,?,'pending')`
+        ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label);
+    if (dedup && tinfo.changes === 0) {                 // a race lost: an active order already exists
+      const ex = findActiveTicket(zoneId, lineUserId);
+      const e = new Error('already_in_queue');
+      e.ticketId = ex?.id; e.code = ex?.code;
+      throw e;
+    }
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id) VALUES (?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
