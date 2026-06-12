@@ -5,14 +5,28 @@ import { hashPin, verifyPin } from './auth.js';
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
 
-/** Append a row to the immutable sale_events audit/transaction trail. Best-effort:
- *  a logging failure must never block the actual sale. */
-function logSaleEvent({ branchId = null, ticketId = null, orderId = null, type, amount = 0, actor = null, meta = null }) {
+/** Append to the immutable sale_events audit trail — DEFERRED off the request path. These rows
+ *  are pure audit (never read for reports/correctness), but writing them synchronously inside the
+ *  order/pay transactions added a remote round-trip (to the Turso primary) to every cashier action.
+ *  We queue them and flush on the next tick, so the till's response returns immediately. Best-effort:
+ *  a logging failure (or a crash before flush) must never affect the actual sale. */
+const _saleEventQueue = [];
+let _saleEventScheduled = false;
+function flushSaleEvents() {
+  _saleEventScheduled = false;
+  if (!_saleEventQueue.length) return;
+  const batch = _saleEventQueue.splice(0, _saleEventQueue.length);
   try {
-    db.prepare('INSERT INTO sale_events (branch_id, ticket_id, order_id, type, amount, actor, meta) VALUES (?,?,?,?,?,?,?)')
-      .run(branchId, ticketId, orderId, type, amount, actor, meta ? JSON.stringify(meta) : null);
+    const ins = db.prepare('INSERT INTO sale_events (branch_id, ticket_id, order_id, type, amount, actor, meta) VALUES (?,?,?,?,?,?,?)');
+    for (const e of batch) ins.run(e.branchId, e.ticketId, e.orderId, e.type, e.amount, e.actor, e.meta ? JSON.stringify(e.meta) : null);
   } catch { /* audit is best-effort */ }
 }
+function logSaleEvent({ branchId = null, ticketId = null, orderId = null, type, amount = 0, actor = null, meta = null }) {
+  _saleEventQueue.push({ branchId, ticketId, orderId, type, amount, actor, meta });
+  if (!_saleEventScheduled) { _saleEventScheduled = true; setImmediate(flushSaleEvents); }
+}
+// Flush any queued audit rows on shutdown (best-effort) so a clean restart doesn't drop them.
+for (const sig of ['SIGTERM', 'SIGINT', 'beforeExit']) { try { process.on(sig, flushSaleEvents); } catch { /* ignore */ } }
 
 // LIFF link so the customer can re-open their queue anytime (sent as a button
 // on the LINE card, so the raw URL stays hidden behind a label).
@@ -1354,8 +1368,9 @@ export function createOrder(zoneId, items, opts = {}) {
   });
   const r = tx();
 
-  // Remember this LINE customer for next-visit reorder suggestions (best-effort).
-  if (source === 'customer' && lineUserId) recordCustomerOrder(lineUserId, customerName);
+  // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
+  // extra write doesn't add a remote round-trip to the order response).
+  if (source === 'customer' && lineUserId) setImmediate(() => { try { recordCustomerOrder(lineUserId, customerName); } catch { /* best-effort */ } });
 
   // Self-order: remind to pay (the queue number is pushed later, at payment confirmation).
   if (source === 'customer' && lineUserId) {
