@@ -415,6 +415,7 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN birthday TEXT`,        // 'YYYY-MM-DD' (optional) → birthday free drink
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
+  `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -564,7 +565,7 @@ try {
     console.log('[db] Seeded starter raw materials from Makro (stock 0, editable).');
   }
   if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
-    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0)`).run();
+    db.prepare(`INSERT INTO rewards (name, cost_points, active, sort, image) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0, '/assets/menu/1-Original.png')`).run();
     console.log('[db] Seeded loyalty stamp card (disabled) + free-drink reward.');
   }
 } catch (e) { console.error('[db] loyalty seed skipped:', e.message); }

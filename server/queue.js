@@ -1529,6 +1529,25 @@ function returnStockForOrder(order) {
     }
   } catch { /* stock return must never break a void */ }
 }
+/** Undo an order's loyalty effects when it's voided: returns redeemed stamps to the customer
+ *  and removes any stamps it earned, keeping the ledger consistent. Returns net points returned
+ *  to the ticket's own customer (positive = points given back). */
+function reverseLoyaltyForOrder(orderId, ownerKey) {
+  const moves = db.prepare("SELECT customer_key, kind, points FROM loyalty_moves WHERE order_id=? AND kind IN ('earn','redeem')").all(orderId);
+  if (!moves.length) return 0;
+  const byKey = {};
+  for (const m of moves) { const k = (byKey[m.customer_key] = byKey[m.customer_key] || { pts: 0, life: 0 }); k.pts += m.points; if (m.kind === 'earn') k.life += m.points; }
+  let returnedToOwner = 0;
+  for (const key of Object.keys(byKey)) {
+    const v = byKey[key];
+    if (v.pts === 0 && v.life === 0) continue;
+    db.prepare('UPDATE customers SET points = MAX(0, points - ?), lifetime_points = MAX(0, lifetime_points - ?) WHERE line_user_id=?').run(v.pts, v.life, key);
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'adjust', ?, ?, ?)`).run(key, -v.pts, orderId, 'ยกเลิกออเดอร์ — ปรับแต้มกลับ');
+    if (key === ownerKey) returnedToOwner = -v.pts;   // -(net) : a net redeem (neg) returns positive points
+  }
+  return returnedToOwner;
+}
+
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   const { actorId = null, reason = null, kind: kindOpt = null, restock = false } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
@@ -1543,11 +1562,14 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
   // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
   if (order && wasPaid && restock) returnStockForOrder(order);
-  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock } });
+  // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order.
+  const pointsReturned = order ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
+  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     pushQueue(t.line_user_id,
       `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n` +
+      (pointsReturned > 0 ? `🔄 คืน ${pointsReturned} ดวงเข้าบัญชีของคุณแล้ว\n` : '') +
       `หากมีข้อสงสัย กรุณาสอบถามพนักงาน ขอบคุณค่ะ`, null);
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
