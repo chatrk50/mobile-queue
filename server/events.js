@@ -32,14 +32,22 @@ setInterval(() => {
 
 export function emit(zoneId, event, data) {
   const set = clients.get(String(zoneId));
-  if (!set) return;
-  const isFn = typeof data === 'function';
-  let cachedPublic, cachedReveal, hasPub = false, hasRev = false;
-  for (const { res, reveal } of set) {
-    let payloadData;
-    if (!isFn) payloadData = data;
-    else if (reveal) { if (!hasRev) { cachedReveal = data(true); hasRev = true; } payloadData = cachedReveal; }
-    else { if (!hasPub) { cachedPublic = data(false); hasPub = true; } payloadData = cachedPublic; }
-    res.write(`event: ${event}\ndata: ${JSON.stringify(payloadData)}\n\n`);
-  }
+  if (!set || !set.size) return;
+  // Defer the broadcast to the next tick: `data` is usually a snapshot builder whose queries
+  // would otherwise run synchronously and delay the HTTP response that triggered this emit
+  // (e.g. the cashier's "take order" / "pay" call). The committed writes are already in the DB,
+  // so the deferred snapshot still reflects them — subscribers just get it a tick later.
+  setImmediate(() => {
+    const live = clients.get(String(zoneId));
+    if (!live || !live.size) return;
+    const isFn = typeof data === 'function';
+    let cachedPublic, cachedReveal, hasPub = false, hasRev = false;
+    for (const { res, reveal } of live) {
+      let payloadData;
+      if (!isFn) payloadData = data;
+      else if (reveal) { if (!hasRev) { cachedReveal = data(true); hasRev = true; } payloadData = cachedReveal; }
+      else { if (!hasPub) { cachedPublic = data(false); hasPub = true; } payloadData = cachedPublic; }
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(payloadData)}\n\n`); } catch { /* dropped client */ }
+    }
+  });
 }

@@ -93,16 +93,27 @@ const stripMeta = (row) => { if (row && typeof row === 'object' && '_metadata' i
 const MUTATING = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
 const SCHEMA_OR_WRITE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/i;
 
+// Cache compiled statements by SQL text. raw.prepare() has real cost on libSQL, and hot paths
+// (zoneSnapshot runs ~30 queries) re-prepare the same SQL on every request — caching turns that
+// into a one-time compile, cutting hundreds of ms per cashier action. Safe: statements are
+// reused read-only with fresh args each call (single-threaded, sequential).
+const _stmtCache = new Map();
+const _wrapCache = new Map();
 // Compatibility wrapper: prepare(...).run/get/all, exec, transaction()
 export const db = {
   prepare(sql) {
-    const st = raw.prepare(sql);
+    let wrap = _wrapCache.get(sql);
+    if (wrap) return wrap;
+    let st = _stmtCache.get(sql);
+    if (!st) { st = raw.prepare(sql); _stmtCache.set(sql, st); }
     const mutating = MUTATING.test(sql);
-    return {
+    wrap = {
       run: (...a) => { const r = st.run(...a); if (mutating) scheduleSync(); return r; },
       get: (...a) => stripMeta(st.get(...a)),
       all: (...a) => st.all(...a).map(stripMeta),
     };
+    _wrapCache.set(sql, wrap);
+    return wrap;
   },
   exec(sql) { const r = raw.exec(sql); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
   // Mimics better-sqlite3 transaction(fn) -> function returning fn's result.
