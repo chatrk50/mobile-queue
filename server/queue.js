@@ -1614,6 +1614,25 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
  *  'pending' ticket whose latest order is still unpaid and was created more than the configured
  *  number of minutes ago. Returns the affected zone ids so callers can refresh live views.
  *  A 0-minute setting disables the sweep. Safe to call frequently (idempotent on already-void). */
+/** Owner "start fresh" — wipe TRANSACTION data only (orders, sales, queue history, loyalty
+ *  ledger, cash rounds, audit, slips) and reset each zone's queue counter to 0. KEEPS all
+ *  configuration: menu, stores, zones, staff, settings, recipes, ingredients + stock, rewards,
+ *  price tiers, channels, tenders. Used once after test runs before real trading begins.
+ *  Atomic; returns the row count removed per table. */
+export function clearTransactions() {
+  // order matters for FKs: order_items → orders → tickets; the rest are independent.
+  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  return db.transaction(() => {
+    const removed = {};
+    for (const t of tables) {
+      try { removed[t] = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c; db.prepare(`DELETE FROM ${t}`).run(); }
+      catch { removed[t] = 'skip'; }   // table absent on an older schema → ignore
+    }
+    db.prepare('UPDATE zones SET last_number=0, last_called=0').run();   // queue numbers restart at 1
+    return removed;
+  })();
+}
+
 export function sweepStalePending({ actorId = null } = {}) {
   const mins = getPendingVoidMinutes();
   if (!(mins > 0)) return { voided: 0, zones: [] };

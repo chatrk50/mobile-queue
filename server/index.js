@@ -279,6 +279,18 @@ app.post('/api/admin/owner-summary', (req, res) => {
   try { res.json(Q.pushOwnerSummary(req.body?.branchId != null ? Number(req.body.branchId) : null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Owner "start fresh": wipe TEST transaction data (orders/sales/queue/loyalty/cash/audit) and
+// reset queue numbers, KEEPING all config (menu/stores/staff/settings/recipes/stock/rewards).
+// Owner-only + the client requires a typed "CLEAR" confirmation. Irreversible.
+app.post('/api/admin/reset-transactions', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (req.body?.confirm !== 'CLEAR') return res.status(400).json({ error: 'confirm_required' });
+  try {
+    const removed = Q.clearTransactions();
+    try { for (const z of db.prepare('SELECT id FROM zones').all()) emit(z.id, 'update', (reveal) => Q.zoneSnapshot(z.id, { reveal })); } catch { /* refresh best-effort */ }
+    res.json({ ok: true, removed });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/rewards', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.addReward(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }

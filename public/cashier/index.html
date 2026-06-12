@@ -1549,10 +1549,23 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
-    `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`;
+    `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
+    `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
+      <b style="color:var(--danger)">🧹 ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div>
+      <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
+    </div>`;
   $('featuresPop').style.display='flex';
 };
 window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
+window.resetTransactions=async()=>{
+  if(!confirm('⚠️ ล้างข้อมูลทดสอบทั้งหมด?\n\nลบ: ออเดอร์ · ยอดขาย · คิว · รอบเงินสด · ประวัติทั้งหมด\nเก็บ: เมนู · สาขา · พนักงาน · ตั้งค่า · สูตร · สต๊อก\n\nใช้ตอนเลิกทดสอบ เพื่อเริ่มนับยอดจริงจาก 0 — ย้อนกลับไม่ได้!')) return;
+  const c=prompt('ยืนยันครั้งสุดท้าย: พิมพ์  CLEAR  (ตัวพิมพ์ใหญ่)'); if(c!=='CLEAR'){ toast('ยกเลิก — ไม่ได้ล้างข้อมูล'); return; }
+  try{ const r=await api('/api/admin/reset-transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'CLEAR'})});
+    const n=Object.values(r.removed||{}).reduce((a,b)=>a+(typeof b==='number'?b:0),0);
+    toast('🧹 ล้างข้อมูลทดสอบแล้ว ('+n+' รายการ) · เริ่มนับยอดจริงได้เลย!');
+    document.getElementById('featuresPop').style.display='none';
+  }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
