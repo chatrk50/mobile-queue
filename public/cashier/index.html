@@ -1255,19 +1255,26 @@ function renderBasket(){
 }
 window.cancelBasket=()=>{ if(!cart.length) return;
   if(!confirm('ล้างรายการทั้งหมดในบิล?')) return; cart=[]; renderBasketCount(); };
-// Shared: build the bill items + create the order (pending). Returns the created ticket or null.
-async function _sendBill(){
+// Shared: build the bill items + create the order. If payMethod is given, the server creates
+// AND pays it in one request (one round-trip). Returns the created ticket or null.
+async function _sendBill(payMethod){
   if(!cart.length){ toast('ตะกร้าว่าง'); return null; }
   const items=[];
   cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
-  const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,channelId:orderChannel})});
+  const body={items,channelId:orderChannel}; if(payMethod) body.pay=payMethod;
+  const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   cart=[]; hideOrder();
   return r;
 }
 window.confirmBasket=async()=>{
-  try{ const r=await _sendBill(); if(!r) return;
-    // Pay-first: take payment now → issues the queue number.
-    await markPaid(r.ticketId,'unpaid',r.total);
+  if(!cart.length){ toast('ตะกร้าว่าง'); return; }
+  // Pick the tender FIRST (popup shows instantly — no order created yet), then create+pay in a
+  // single request. Cancelling the picker creates nothing (no orphan pending order).
+  const total=cart.reduce((s,e)=>s+entryTotal(e),0);
+  const method=await pickPayMethod(total); if(method===null) return;
+  try{ const r=await _sendBill(method); if(!r) return;
+    toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+(method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ')+') · ฿'+r.total);
+    if(CFG.printEnabled && r.ticketId) printKitchen(r.ticketId);
   }catch(e){ toast(err(e)); } };
 // Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
 window.holdBill=async()=>{
