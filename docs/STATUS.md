@@ -50,7 +50,11 @@
 4. **รวม create+pay ของแคชเชียร์เป็น request เดียว + tender picker เด้งทันที** (ล่าสุด)
 5. Duplicate-order fix: atomic `INSERT … WHERE NOT EXISTS(active ticket)`
 
-**ยังไม่ทำ (ถ้าอยากเร็วกว่านี้):** batch DB writes (รวบ ~12 round-trips → ~3-4) — ต้องทดสอบกับ libsql จริงก่อน (UAT เป็น node:sqlite ทดสอบ path นี้ตรงๆ ไม่ได้)
+6. **Optimistic UI ตอนกดจ่าย/พักบิล** (🟡 อยู่บน **UAT** แล้ว — รอเจ้าของลองฟีล ก่อนขึ้น prod): กดจ่าย→เคลียร์บิล+เสียง "ติ๊ง"+กลับหน้าคิว **ทันที (0ms)** แล้วยิง network เบื้องหลัง · เลขคิวเด้งอัปเดต toast เองตอน server ตอบ · network หลุด = **กู้บิลคืนอัตโนมัติ** (ไม่เสียออเดอร์) · server ยังเป็นเจ้าของเลขคิว (ไม่มีคิวชน)
+
+**ยังไม่ทำ (ถ้าอยากเร็วกว่านี้):**
+- **Outbox + auto-retry เต็มรูป** — ตอนนี้ network fail = กู้บิลให้กดใหม่ (manual) · ขั้นถัดไป = retry อัตโนมัติ
+- **Batch DB writes** (รวบ ~12 round-trips → ~3-4) — ต้องทดสอบกับ libsql จริงก่อน (UAT เป็น node:sqlite ทดสอบ path นี้ตรงๆ ไม่ได้)
 
 ---
 
