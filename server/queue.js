@@ -1305,7 +1305,7 @@ export function customerSuggestions(lineUserId) {
  * resume it and receive pushes. Customer self-orders are deduped (one open order each).
  */
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -1339,25 +1339,43 @@ export function createOrder(zoneId, items, opts = {}) {
   // The real queue number is issued only once payment is confirmed (assignQueueNumber),
   // so abandoned/unpaid orders never consume a number and the kitchen only sees paid work.
   const dedup = source === 'customer' && lineUserId;
+  // Idempotency fast-path: a retried request carrying a token we've already accepted returns the
+  // SAME order (no duplicate ticket). The conditional INSERT inside the tx closes the race window.
+  if (clientToken) {
+    const seen = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
+    if (seen) { const o = db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(seen.id);
+      return { ticket: seen, total: o?.total ?? 0, idempotent: true }; }
+  }
   const tx = db.transaction(() => {
-    // Atomic dedup: for a LINE customer, only insert if they have NO active order — done as a
-    // single conditional INSERT so two near-simultaneous submits (cold-start retry/reload) can
-    // never both create a ticket. A pre-check above already fast-paths the common case.
-    const tinfo = dedup
-      ? db.prepare(
-          `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
-           SELECT ?,?,0,'',1,?,?,'pending'
-           WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE zone_id=? AND line_user_id=? AND status IN ('pending','waiting','called'))`
-        ).run(zone.store_id, zoneId, lineUserId, label, zoneId, lineUserId)
-      : db.prepare(
-          `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status)
-           VALUES (?,?,?,?,?,?,?,'pending')`
-        ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label);
-    if (dedup && tinfo.changes === 0) {                 // a race lost: an active order already exists
-      const ex = findActiveTicket(zoneId, lineUserId);
-      const e = new Error('already_in_queue');
-      e.ticketId = ex?.id; e.code = ex?.code;
-      throw e;
+    // Atomic insert. Each branch is a single conditional INSERT so two near-simultaneous submits
+    // (double-tap / cold-start retry / reload) can never both create a ticket.
+    let tinfo;
+    if (clientToken && !dedup) {
+      // Idempotent on the bill token: create only if this token is unused.
+      tinfo = db.prepare(
+        `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status, client_token)
+         SELECT ?,?,0,'',1,?,?,'pending',?
+         WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE client_token=?)`
+      ).run(zone.store_id, zoneId, lineUserId, label, clientToken, clientToken);
+      if (tinfo.changes === 0) return { idempotent: true };   // token already used → return existing (below)
+    } else if (dedup) {
+      // LINE customer may hold only one open order: insert only if they have NO active order.
+      tinfo = db.prepare(
+        `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status, client_token)
+         SELECT ?,?,0,'',1,?,?,'pending',?
+         WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE zone_id=? AND line_user_id=? AND status IN ('pending','waiting','called'))`
+      ).run(zone.store_id, zoneId, lineUserId, label, clientToken, zoneId, lineUserId);
+      if (tinfo.changes === 0) {                 // a race lost: an active order already exists
+        const ex = findActiveTicket(zoneId, lineUserId);
+        const e = new Error('already_in_queue');
+        e.ticketId = ex?.id; e.code = ex?.code;
+        throw e;
+      }
+    } else {
+      tinfo = db.prepare(
+        `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status, client_token)
+         VALUES (?,?,?,?,?,?,?,'pending',?)`
+      ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label, clientToken);
     }
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id) VALUES (?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId);
@@ -1367,6 +1385,11 @@ export function createOrder(zoneId, items, opts = {}) {
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
   const r = tx();
+  if (r.idempotent && !r.ticket) {   // token race lost inside the tx → return the winning order
+    const ex = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
+    const o = ex ? db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ex.id) : null;
+    return { ticket: ex, total: o?.total ?? 0, idempotent: true };
+  }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
   // extra write doesn't add a remote round-trip to the order response).
@@ -1406,6 +1429,12 @@ export function setOrderPaid(ticketId, opts = {}) {
   const { actorId = null, method = null, skipLoyalty = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
+  // Idempotent: an already-paid order returns its existing result unchanged, so a retried
+  // combined create+pay never double-deducts stock, double-awards loyalty, or resets paid_at.
+  if (order.payment_status === 'paid') {
+    const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+    return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
+  }
   db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
     .run(actorId, method, order.id);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });

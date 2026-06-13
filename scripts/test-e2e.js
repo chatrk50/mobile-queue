@@ -91,6 +91,19 @@ ok(nb.id === 2 && nb.zones === 1, 'createBranch → id 2 with a default zone');
 Q.setFinanceSettings({ rent: 9999 }, 2);
 ok(Q.getFinanceSettings(2).rent === 9999 && Q.getFinanceSettings(1).rent !== 9999, 'per-branch finance isolated from global');
 
+// ---- Idempotency: a retried create (+pay) with the same token must NOT duplicate the order ----
+console.log('\n== Idempotency (client_token) ==');
+const tok = 'tok-idem-001';
+const i1 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { clientToken: tok });
+const i2 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { clientToken: tok });
+ok(i1.ticket.id === i2.ticket.id && i2.idempotent === true, `INVARIANT same token → same order, no dup (${i1.ticket.id}==${i2.ticket.id}, idempotent=${i2.idempotent})`);
+ok(db.prepare('SELECT COUNT(*) n FROM tickets WHERE client_token=?').get(tok).n === 1, 'INVARIANT exactly 1 ticket exists for the token');
+const i3 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { clientToken: 'tok-idem-002' });
+ok(i3.ticket.id !== i1.ticket.id && !i3.idempotent, 'a different token → a new order');
+const pay1 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
+const pay2 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
+ok(pay1.code === pay2.code && pay2.alreadyPaid === true, `INVARIANT setOrderPaid idempotent — pay twice, one charge (code ${pay1.code}, alreadyPaid=${pay2.alreadyPaid})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

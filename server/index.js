@@ -784,14 +784,17 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const actorId = req.staff?.id || null;
-    const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId, channelId: req.body?.channelId ? Number(req.body.channelId) : null });
+    const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId,
+      channelId: req.body?.channelId ? Number(req.body.channelId) : null,
+      clientToken: req.body?.clientToken ? String(req.body.clientToken).slice(0, 64) : null });
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
-    // the order as a normal pending bill in "รอชำระเงิน".
+    // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid
+    // are idempotent, so a retried request returns the same order — never a duplicate or double-charge.
     let paid = null;
     if (req.body?.pay) { try { paid = Q.setOrderPaid(r.ticket.id, { actorId, method: String(req.body.pay) }); } catch { /* stays pending */ } }
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
-    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, paid: !!paid, number: paid?.number || 0 });
+    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
   } catch (e) {
     const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
     res.status(map[e.message] || 400).json({ error: e.message });

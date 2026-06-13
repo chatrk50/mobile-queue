@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   rating       INTEGER,
   status       TEXT NOT NULL DEFAULT 'waiting',
   notified_soon INTEGER NOT NULL DEFAULT 0,
+  client_token TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   called_at    TEXT,
   closed_at    TEXT
@@ -443,9 +444,14 @@ for (const stmt of [
   // 'plan' is a libSQL reserved token (returns key as 'PLAN'); rename any already-created
   // column. Throws (and is ignored) on fresh DBs where the column is already plan_name.
   `ALTER TABLE tenants RENAME COLUMN plan TO plan_name`,
+  // Idempotency key per bill: a retried create+pay with the same token returns the SAME
+  // order instead of creating a duplicate (lets the cashier UI auto-retry a lost request safely).
+  `ALTER TABLE tickets ADD COLUMN client_token TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
+// Index the idempotency token (created after the ALTER so it exists on migrated DBs too).
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_client_token ON tickets(client_token)'); } catch { /* ignore */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
