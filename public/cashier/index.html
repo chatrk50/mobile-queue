@@ -1255,31 +1255,50 @@ function renderBasket(){
 }
 window.cancelBasket=()=>{ if(!cart.length) return;
   if(!confirm('ล้างรายการทั้งหมดในบิล?')) return; cart=[]; renderBasketCount(); };
-// Shared: build the bill items + create the order. If payMethod is given, the server creates
-// AND pays it in one request (one round-trip). Returns the created ticket or null.
-async function _sendBill(payMethod){
-  if(!cart.length){ toast('ตะกร้าว่าง'); return null; }
-  const items=[];
-  cart.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
-  const body={items,channelId:orderChannel}; if(payMethod) body.pay=payMethod;
-  const r=await api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  cart=[]; hideOrder();
-  return r;
-}
+// Short confirmation beep (Web Audio) — instant audio feedback the moment a bill is sent,
+// so the cashier feels "done" before the network round-trip finishes. Safe no-op if blocked.
+let _ac=null;
+function beep(freq){ try{ _ac=_ac||new (window.AudioContext||window.webkitAudioContext)();
+  const o=_ac.createOscillator(), g=_ac.createGain(); o.connect(g); g.connect(_ac.destination);
+  o.type='sine'; o.frequency.value=freq||880; g.gain.setValueAtTime(.13,_ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001,_ac.currentTime+.18); o.start(); o.stop(_ac.currentTime+.18); }catch(e){} }
+// Build the POST items from a cart snapshot (drink + sweetness + each topping line).
+function buildBillItems(entries){ const items=[];
+  entries.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
+  return items; }
+// Low-level send. payMethod given = server creates AND pays in one round-trip; omitted = park/hold.
+// Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
+// starts a new order while this one is still in flight. Does NOT touch the cart/UI.
+function postBill(entries,payMethod){ const body={items:buildBillItems(entries),channelId:orderChannel};
+  if(payMethod) body.pay=payMethod;
+  return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+// Put a snapshot bill back in front of the cashier (used when a background send fails — nothing lost).
+function restoreBill(snapshot){ cart=snapshot; $('dash').style.display='none'; $('orderCard').style.display='';
+  renderBasketCount(); openBasket(); }
 window.confirmBasket=async()=>{
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
-  // Pick the tender FIRST (popup shows instantly — no order created yet), then create+pay in a
-  // single request. Cancelling the picker creates nothing (no orphan pending order).
+  // Pick the tender FIRST (popup shows instantly — no order created yet).
   const total=cart.reduce((s,e)=>s+entryTotal(e),0);
   const method=await pickPayMethod(total); if(method===null) return;
-  try{ const r=await _sendBill(method); if(!r) return;
+  // OPTIMISTIC: clear the UI + beep INSTANTLY (0ms perceived) and return the cashier to the queue,
+  // then send in the background. The queue number lands ~0.5s later and updates the toast in place.
+  // On failure the bill is restored so a network blip never loses a sale.
+  const snapshot=cart.slice(); cart=[]; hideOrder(); beep();
+  toast('✅ รับออเดอร์แล้ว · กำลังออกคิว…');
+  try{ const r=await postBill(snapshot,method);
     toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+(method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ')+') · ฿'+r.total);
     if(CFG.printEnabled && r.ticketId) printKitchen(r.ticketId);
-  }catch(e){ toast(err(e)); } };
+  }catch(e){ if(!cart.length){ restoreBill(snapshot); toast('⚠️ ส่งไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน กดชำระอีกครั้งได้'); }
+    else { toast('⚠️ บิลก่อนหน้าส่งไม่สำเร็จ ('+err(e)+') กรุณาทำรายการนั้นใหม่'); } } };
 // Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
 window.holdBill=async()=>{
-  try{ const r=await _sendBill(); if(r) toast('🅿️ พักบิลไว้แล้ว · ออเดอร์ #'+r.ticketId+' อยู่ใน "รอชำระเงิน" — กดรับเงินภายหลังได้'); }
-  catch(e){ toast(err(e)); } };
+  if(!cart.length){ toast('ตะกร้าว่าง'); return; }
+  const snapshot=cart.slice(); cart=[]; hideOrder(); beep(660);
+  toast('🅿️ กำลังพักบิล…');
+  try{ const r=await postBill(snapshot);
+    toast('🅿️ พักบิลไว้แล้ว · ออเดอร์ #'+r.ticketId+' อยู่ใน "รอชำระเงิน" — กดรับเงินภายหลังได้'); }
+  catch(e){ if(!cart.length){ restoreBill(snapshot); toast('⚠️ พักบิลไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน'); }
+    else { toast('⚠️ พักบิลก่อนหน้าไม่สำเร็จ ('+err(e)+') กรุณาทำใหม่'); } } };
 
 async function boot(){
   try{ CFG=await (await fetch('/api/config')).json(); }catch(e){ CFG={}; }
