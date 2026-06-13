@@ -52,10 +52,11 @@
 
 6. **Optimistic UI ตอนกดจ่าย/พักบิล** (🟢 **LIVE บน prod แล้ว**): กดจ่าย→เคลียร์บิล+เสียง "ติ๊ง"+กลับหน้าคิว **ทันที (0ms)** แล้วยิง network เบื้องหลัง · เลขคิวเด้งอัปเดต toast เองตอน server ตอบ · network หลุด = **กู้บิลคืนอัตโนมัติ** (ไม่เสียออเดอร์) · server ยังเป็นเจ้าของเลขคิว (ไม่มีคิวชน)
 7. **เลขลำดับ (#) ทุกบรรทัดในรายงานละเอียด** + **ล็อก P&L ด้วย e2e invariants** (🟢 LIVE บน prod) — พิสูจน์สูตรกำไรถูกต้องทุกบรรทัด กันสูตรพังในอนาคต
+8. **Idempotency (client_token) + auto-retry** (🟡 อยู่บน **UAT** — รอเจ้าของลองก่อนขึ้น prod): ทุกบิลมี token; `createOrder` insert แบบ `WHERE NOT EXISTS(token)` → retry ส่งซ้ำได้ออเดอร์เดิม **ไม่มีทางซ้ำ/ชาร์จซ้ำ** · `setOrderPaid` idempotent (จ่ายซ้ำ = no-op) · cashier retry อัตโนมัติ 3 ครั้งตอนเน็ตกระตุก โดยใช้ token เดิม · e2e ยืนยัน same-token→1 order
+9. **PWA add-to-home** (🟢 พร้อม): `manifest.webmanifest` + head tags ครบทั้ง cashier/liff → เพิ่มลงจอโฮม iPad เปิดเต็มจอเหมือนแอป (ไม่มี service worker — กัน cache ค้างบนเครื่องขาย)
 
-**ยังไม่ทำ (ถ้าอยากเร็วกว่านี้):**
-- **Outbox + auto-retry เต็มรูป** — ตอนนี้ network fail = กู้บิลให้กดใหม่ (manual) · ขั้นถัดไป = retry อัตโนมัติ
-- **Batch DB writes** (รวบ ~12 round-trips → ~3-4) — ต้องทดสอบกับ libsql จริงก่อน (UAT เป็น node:sqlite ทดสอบ path นี้ตรงๆ ไม่ได้)
+**ยังไม่ทำ — รอ benchmark/decision:**
+- **Batch DB writes** (รวบ create+pay ให้ commit/sync รอบเดียว) — *กันไว้ ไม่ ship อัตโนมัติ*: วัดผลจริงบน UAT ไม่ได้ (UAT=node:sqlite, prod=libsql) ต้อง benchmark บน Turso test DB ทิ้งก่อน · อนึ่ง Optimistic UI (#6) ทำให้ "รู้สึกเร็ว" ครอบคลุมแล้ว ความเร่งด่วนลดลง
 
 ---
 
