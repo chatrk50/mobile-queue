@@ -1307,6 +1307,7 @@ window.confirmBasket=async()=>{
   try{ const r=await sendBillRetry(snapshot,method,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'));
     toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+(method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ')+') · ฿'+r.total);
     if(CFG.printEnabled && r.ticketId) printKitchen(r.ticketId);
+    loadTodayStats();   // refresh the pulse strip with the new sale (no-op for cashiers)
   }catch(e){ if(!cart.length){ restoreBill(snapshot,token); toast('⚠️ ส่งไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน กดชำระอีกครั้งได้'); }
     else { toast('⚠️ บิลก่อนหน้าส่งไม่สำเร็จ ('+err(e)+') กรุณาทำรายการนั้นใหม่'); } } };
 // Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
@@ -1325,13 +1326,17 @@ async function boot(){
   try{ TENDERS=await (await fetch('/api/tenders')).json(); }catch(e){ TENDERS=[]; }
   const stores=await (await fetch('/api/stores')).json();
   STORE=stores[0]||null; renderStoreBtn();
-  zones=[]; let html='';
+  // "วันนี้ที่ร้าน" pulse strip — managers/owners see today's revenue/cups/queue at a glance
+  // without opening the report. Hidden for cashiers (revenue is owner-facing).
+  const mgr=(!ME||['owner','manager'].includes(ME.role));
+  zones=[]; let html = mgr ? '<div id="todayStrip" style="display:none;flex-wrap:wrap;gap:8px;margin:2px 2px 12px"></div>' : '';
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     html += `<h2 style="margin:20px 2px 2px;font-size:15px;color:var(--accent)">${esc(s.name)}</h2>`;
     for(const z of zs){ zones.push(z); html += zonePanel(z); }
   }
   $('dash').innerHTML = html;
+  if(mgr){ loadTodayStats(); if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
     const es=new EventSource('/api/zones/'+z.id+'/stream'+(PIN?('?pin='+encodeURIComponent(PIN)):''));
@@ -1348,6 +1353,24 @@ async function boot(){
   }, 5000);
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
+}
+// Today-at-a-glance pulse strip (manager/owner). Reads /api/report (dailyReport); silently
+// hides for cashiers or on error. Refreshed on boot, every 60s, and after each completed sale.
+async function loadTodayStats(){
+  const el=$('todayStrip'); if(!el) return;
+  try{
+    const r=await api('/api/report');
+    const chip=(label,val)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap">${label}</div>
+      <div style="font-size:18px;font-weight:800;color:var(--navy,#1e3a5f)">${val}</div></div>`;
+    el.innerHTML =
+      chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
+      chip('🥤 เสิร์ฟแล้ว', (r.cupsSold||0)+' แก้ว') +
+      chip('🎫 ออกคิว', r.issued||0) +
+      chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
+      chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
+    el.style.display='flex';
+  }catch(e){ el.style.display='none'; }
 }
 // Proactive low-stock alert on the dashboard (manager only) — so the owner notices ingredients
 // running out without opening the stock screen. Stock auto-deducts on sales, so this can change
