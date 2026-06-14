@@ -1,6 +1,6 @@
 # YO-DEE POS — สถานะโปรเจกต์ (Project Status)
 
-**อัปเดตล่าสุด:** 2026-06-14 · prod commit `66a54f5`
+**อัปเดตล่าสุด:** 2026-06-14 · prod commit `d412e3d`
 
 ไฟล์นี้คือ snapshot สถานะปัจจุบันของระบบ Mobile Queue → POS ของร้าน YO-DEE Yogurt
 (ดูประวัติฟีเจอร์เต็มได้จาก git log; ฉบับนี้สรุปสิ่งที่ "อยู่บนระบบจริง" ตอนนี้)
@@ -53,7 +53,8 @@
 6. **Optimistic UI ตอนกดจ่าย/พักบิล** (🟢 **LIVE บน prod แล้ว**): กดจ่าย→เคลียร์บิล+เสียง "ติ๊ง"+กลับหน้าคิว **ทันที (0ms)** แล้วยิง network เบื้องหลัง · เลขคิวเด้งอัปเดต toast เองตอน server ตอบ · network หลุด = **กู้บิลคืนอัตโนมัติ** (ไม่เสียออเดอร์) · server ยังเป็นเจ้าของเลขคิว (ไม่มีคิวชน)
 7. **เลขลำดับ (#) ทุกบรรทัดในรายงานละเอียด** + **ล็อก P&L ด้วย e2e invariants** (🟢 LIVE บน prod) — พิสูจน์สูตรกำไรถูกต้องทุกบรรทัด กันสูตรพังในอนาคต
 8. **Idempotency (client_token) + auto-retry** (🟢 **LIVE บน prod**): ทุกบิลมี token; `createOrder` insert แบบ `WHERE NOT EXISTS(token)` → retry ส่งซ้ำได้ออเดอร์เดิม **ไม่มีทางซ้ำ/ชาร์จซ้ำ** · `setOrderPaid` idempotent (จ่ายซ้ำ = no-op) · cashier retry อัตโนมัติ 3 ครั้งตอนเน็ตกระตุก โดยใช้ token เดิม · e2e ยืนยัน same-token→1 order
-10. **รายงาน Excel: เลขลำดับ # + แถวรวม TOTAL ทุก sheet** · **Pulse strip "วันนี้ที่ร้าน"** บนแดชบอร์ด (manager/owner) · **ค้นหาประวัติ**ด้วยเลขคิว/ชื่อ/เมนู (🟢 LIVE บน prod)
+10. **รายงาน Excel: เลขลำดับ # + แถวรวม TOTAL ทุก sheet** · **Pulse strip "วันนี้ที่ร้าน"** (กดพับได้ จำสถานะ default ซ่อน · + 🎯 เป้าวันนี้) · **ค้นหาประวัติ**ด้วยเลขคิว/ชื่อ/เมนู (🟢 LIVE บน prod)
+11. **🔴 แก้บั๊ก "ยอดวันนี้" ให้เป็นวันนี้จริง** (🟢 LIVE บน prod) — เดิม `dailyReport` ไม่ filter วันที่ + reset เที่ยงคืนพัง (FK error → rollback) ทำให้ยอด**สะสมข้ามวัน** · ตอนนี้ filter ทุก metric เป็นวัน BKK + reset ไม่ลบ orders (เก็บประวัติ) archive วันที่จบ + รีสตาร์ทเลขคิว + `doDailyReset` มี try/catch · e2e ยืนยันออเดอร์วันอื่นไม่นับวันนี้
 9. **PWA add-to-home** (🟢 พร้อม): `manifest.webmanifest` + head tags ครบทั้ง cashier/liff → เพิ่มลงจอโฮม iPad เปิดเต็มจอเหมือนแอป (ไม่มี service worker — กัน cache ค้างบนเครื่องขาย)
 
 **ยังไม่ทำ — รอ benchmark/decision:**
