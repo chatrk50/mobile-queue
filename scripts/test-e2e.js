@@ -104,6 +104,24 @@ const pay1 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
 const pay2 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
 ok(pay1.code === pay2.code && pay2.alreadyPaid === true, `INVARIANT setOrderPaid idempotent — pay twice, one charge (code ${pay1.code}, alreadyPaid=${pay2.alreadyPaid})`);
 
+// ---- "Today" is date-scoped: an order from another day must NOT count in today's revenue ----
+console.log('\n== Daily report is date-scoped (today only) ==');
+const todayRev = Q.dailyReport().revenue;
+const yo = Q.createOrder(1, [{ name: 'Drink', price: 70, qty: 1 }], {});
+Q.setOrderPaid(yo.ticket.id, { method: 'cash' });
+const yoOid = db.prepare('SELECT id FROM orders WHERE ticket_id=?').get(yo.ticket.id).id;
+ok(Q.dailyReport().revenue === todayRev + 70, `a fresh paid order counts today (+70 → ${Q.dailyReport().revenue})`);
+db.prepare("UPDATE orders SET paid_at = datetime('now','-2 days') WHERE id=?").run(yoOid);
+ok(Q.dailyReport().revenue === todayRev, `INVARIANT an older-day order is EXCLUDED from today's revenue (back to ${todayRev})`);
+
+// ---- Midnight reset must be safe (used to throw a FK error) and restart the queue counters ----
+console.log('\n== Midnight reset is safe + restarts queue numbers ==');
+const ordersBefore = db.prepare('SELECT COUNT(*) n FROM orders').get().n;
+let resetErr = null; try { Q.resetAllZones(); } catch (e) { resetErr = e.message; }
+ok(resetErr === null, `INVARIANT resetAllZones does NOT throw (was FK-failing) — got ${resetErr}`);
+ok(db.prepare('SELECT last_number FROM zones WHERE id=1').get().last_number === 0, 'INVARIANT queue counter restarts at 0 after reset');
+ok(db.prepare('SELECT COUNT(*) n FROM orders').get().n === ordersBefore, `orders persist across the reset (history kept — ${ordersBefore})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

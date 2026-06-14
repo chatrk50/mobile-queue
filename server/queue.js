@@ -242,12 +242,19 @@ export function customerInsights() {
   };
 }
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
-export function dailyReport(branchId = null) {
+export function dailyReport(branchId = null, dateStr = null) {
   const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards
+  // "Today" (or an explicit YYYY-MM-DD via dateStr) = a Bangkok calendar day. Every figure is
+  // date-filtered to that day so the report is always correct regardless of the midnight reset
+  // (orders/tickets persist for history). dateStr is internal-only (validated) — used to archive
+  // the day that just ended.
+  const validDay = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+  const TODAY = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
   const perZone = db.prepare(
-    `SELECT z.id, z.name, z.prefix, z.last_number AS issued,
-       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served')  AS served,
-       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show') AS no_shows
+    `SELECT z.id, z.name, z.prefix,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND date(t.created_at,'+7 hours')=${TODAY}) AS issued,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=${TODAY}) AS served,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=${TODAY}) AS no_shows
      FROM zones z WHERE (? IS NULL OR z.store_id=?) ORDER BY z.id`
   ).all(...B);
   const cupsSold = perZone.reduce((s, z) => s + z.served, 0);
@@ -255,10 +262,10 @@ export function dailyReport(branchId = null) {
   const noShows = perZone.reduce((s, z) => s + z.no_shows, 0);
   const wait = db.prepare(
     `SELECT AVG((julianday(called_at)-julianday(created_at))*86400) AS s
-     FROM tickets WHERE called_at IS NOT NULL AND (? IS NULL OR store_id=?)`
+     FROM tickets WHERE called_at IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?)`
   ).get(...B);
   const rating = db.prepare(
-    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL AND (? IS NULL OR store_id=?)`
+    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?)`
   ).get(...B);
   // Item sales tagged drink/topping via the menu (so we can split the P&L and count cups).
   const itemSales = db.prepare(
@@ -269,7 +276,7 @@ export function dailyReport(branchId = null) {
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN menu_items mi ON mi.name = oi.name
-     WHERE o.payment_status = 'paid' AND (? IS NULL OR o.branch_id=?)   -- SALES = paid only (pay-first); optional branch
+     WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)   -- SALES = paid TODAY only (pay-first); optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all(...B);
   const grossSales = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
@@ -279,19 +286,19 @@ export function dailyReport(branchId = null) {
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
   // Bill discounts on non-void orders reduce NET sales. revenue = gross − discounts
   // (defaults to gross since discounts are 0 until used — no behavior change).
-  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status = 'paid' AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
+  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
   const revenue = Math.round((grossSales - discounts) * 100) / 100;
 
   // Cancelled / refunded / wasted orders — all excluded from sales above, reported separately.
   const vAgg = db.prepare(
     `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount
-     FROM orders o WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
+     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`
   ).get(...B);
   const vCups = db.prepare(
     `SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0) AS cups
      FROM order_items oi JOIN orders o ON o.id=oi.order_id
      LEFT JOIN menu_items mi ON mi.name=oi.name
-     WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)`
+     WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`
   ).get(...B);
   // Break the voids down by kind so the report shows: cancelled (neutral, no money),
   // refunded (money returned), waste (made-but-binned → a COST with no revenue).
@@ -299,7 +306,7 @@ export function dailyReport(branchId = null) {
     `SELECT COALESCE(o.void_kind,'void') AS kind, COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount,
             COALESCE(SUM((SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0)
                           FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name WHERE oi.order_id=o.id)),0) AS cups
-     FROM orders o WHERE o.payment_status='void' AND (? IS NULL OR o.branch_id=?)
+     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)
      GROUP BY COALESCE(o.void_kind,'void')`
   ).all(...B);
   const byKind = { void:{orders:0,amount:0,cups:0}, refund:{orders:0,amount:0,cups:0}, waste:{orders:0,amount:0,cups:0} };
@@ -372,13 +379,15 @@ export function orderHistory(limit = 100) {
 
 /** Archive today's sales totals into sales_history (idempotent per date). Run at the
  *  daily reset (and callable on demand) so daily/monthly sell history accrues. */
-export function archiveTodaySales() {
-  const rep = dailyReport();
+export function archiveTodaySales(dateStr = null) {
+  const validDay = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+  const rep = dailyReport(null, validDay ? dateStr : null);
   if ((rep.issued || 0) === 0 && (rep.revenue || 0) === 0) return null; // nothing to save
+  const dayExpr = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
   db.prepare(
     `INSERT OR REPLACE INTO sales_history
        (date, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows)
-     VALUES (date('now','+7 hours'), ?,?,?,?,?,?,?,?,?,?)`
+     VALUES (${dayExpr}, ?,?,?,?,?,?,?,?,?,?)`
   ).run(rep.pnl.cups || 0, rep.revenue || 0, rep.pnl.grossProfit || 0, rep.pnl.netProfit || 0,
         rep.voided.orders || 0, rep.voided.cups || 0, rep.voided.amount || 0,
         rep.issued || 0, rep.cupsSold || 0, rep.noShows || 0);
@@ -524,19 +533,23 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
-  archiveTodaySales(); // save today's sales record before clearing
+  // Fires at 00:00 Bangkok, so the day that just ended is "yesterday". Archive its totals, then
+  // restart the queue counters. Tickets/orders are NOT deleted — they persist for history and
+  // every report is date-filtered. (The old code DELETEd tickets, which hit a FK error against
+  // orders and rolled the whole reset back, so numbers never restarted and "today" accumulated.)
+  const ended = db.prepare(`SELECT date('now','+7 hours','-1 day') AS d`).get().d;
+  archiveTodaySales(ended); // sales_history row for the day that just ended
   const tx = db.transaction(() => {
-    // Archive a per-zone daily summary (history) before clearing the tickets.
     db.prepare(
       `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)
-       SELECT date('now','+7 hours'), z.id, z.last_number,
-         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'),
-         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show'),
-         (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL),
-         (SELECT AVG(rating) FROM tickets t WHERE t.zone_id=z.id AND t.rating IS NOT NULL)
+       SELECT ?, z.id,
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND date(t.created_at,'+7 hours')=?),
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=?),
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=?),
+         (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL AND date(t.created_at,'+7 hours')=?),
+         (SELECT AVG(rating) FROM tickets t WHERE t.zone_id=z.id AND t.rating IS NOT NULL AND date(t.created_at,'+7 hours')=?)
        FROM zones z`
-    ).run();
-    db.exec(`DELETE FROM tickets`);
+    ).run(ended, ended, ended, ended, ended, ended);
     db.exec(`UPDATE zones SET last_number = 0, last_called = 0`);
   });
   tx();

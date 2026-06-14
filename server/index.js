@@ -817,9 +817,14 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
 
 // ---------- Daily queue reset at midnight (Asia/Bangkok, UTC+7) ----------
 function doDailyReset() {
-  const zoneIds = Q.resetAllZones();
-  for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
-  console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+  try {
+    const zoneIds = Q.resetAllZones();
+    for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+  } catch (e) {
+    // Never let a reset failure crash the process or stop the next night from being scheduled.
+    console.error('[reset] failed:', e && e.message);
+  }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();
