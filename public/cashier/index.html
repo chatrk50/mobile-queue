@@ -73,6 +73,7 @@
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
+      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
@@ -481,7 +482,7 @@ window.login=async()=>{
     $('loginErr').textContent='';
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
-    $('historyBtn').style.display=''; $('adminBtn').style.display=mgr?'':'none';
+    $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
@@ -1429,8 +1430,13 @@ function zonePanel(z){
   </div>`;
 }
 
-// Two-tone chime for a new LINE order (distinct from the single payment beep).
-function dingNewOrder(){ try{ beep(1046); setTimeout(()=>{ try{ beep(1318); }catch(e){} },130); }catch(e){} }
+// New-order sound on/off (cashier preference, remembered). Default on.
+function soundOn(){ try{ return localStorage.getItem('yodee_sound')!=='0'; }catch(e){ return true; } }
+function applySoundBtn(){ const b=$('soundBtn'); if(b) b.textContent = soundOn()?'🔔':'🔕'; }
+window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem('yodee_sound', next?'1':'0'); }catch(e){}
+  applySoundBtn(); toast(next?'🔔 เปิดเสียงเตือนออเดอร์ใหม่':'🔕 ปิดเสียงเตือนออเดอร์ใหม่'); if(next) beep(880); };
+// Two-tone chime for a new LINE order (distinct from the single payment beep). Respects the mute toggle.
+function dingNewOrder(){ if(!soundOn()) return; try{ beep(1046); setTimeout(()=>{ try{ beep(1318); }catch(e){} },130); }catch(e){} }
 // Alert when a NEW customer (LINE) order appears in a zone's pending list, so staff never miss an
 // online order. Skips the first render of each zone (no false ding on load); cashier-made orders
 // don't ding (the cashier already knows about those).
