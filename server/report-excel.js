@@ -115,15 +115,17 @@ export async function buildReportWorkbook(r, { store='YO-DEE Yogurt' } = {}){
 
 // ============ Detailed reports / Z-report workbook ============
 // Generic sheet: headers = [{t,w,fmt,align}], rows = array of arrays (cell values).
+// A leading "No" column numbers every line, matching the on-screen detailed report.
 function sheet(wb, name, title, headers, rows) {
+  const H = [{ t: 'No', w: 6, fmt: NUM, align: 'center' }, ...headers];
   const ws = wb.addWorksheet(name, { views: [{ showGridLines: false, state: 'frozen', ySplit: 4 }] });
-  ws.columns = headers.map((h) => ({ width: h.w || 14 }));
+  ws.columns = H.map((h) => ({ width: h.w || 14 }));
   C(ws, 'A1', title, { bold: true, size: 15, color: NAVY });
-  headers.forEach((h, i) => hdr(ws, ws.getColumn(i + 1).letter + '4', h.t));
+  H.forEach((h, i) => hdr(ws, ws.getColumn(i + 1).letter + '4', h.t));
   rows.forEach((r, ri) => {
     const row = 5 + ri;
-    r.forEach((v, ci) => {
-      const h = headers[ci];
+    [ri + 1, ...r].forEach((v, ci) => {
+      const h = H[ci];
       C(ws, ws.getColumn(ci + 1).letter + row, v == null ? '' : v, { numFmt: h.fmt, align: h.align, size: 9, bd: true });
     });
   });
