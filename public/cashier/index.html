@@ -1338,14 +1338,18 @@ async function boot(){
   // "วันนี้ที่ร้าน" pulse strip — managers/owners see today's revenue/cups/queue at a glance
   // without opening the report. Hidden for cashiers (revenue is owner-facing).
   const mgr=(!ME||['owner','manager'].includes(ME.role));
-  zones=[]; let html = mgr ? '<div id="todayStrip" style="display:none;flex-wrap:wrap;gap:8px;margin:2px 2px 12px"></div>' : '';
+  zones=[]; let html = mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
+    + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">📊 สรุปวันนี้ ▾</button>'
+    + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     html += `<h2 style="margin:20px 2px 2px;font-size:15px;color:var(--accent)">${esc(s.name)}</h2>`;
     for(const z of zs){ zones.push(z); html += zonePanel(z); }
   }
   $('dash').innerHTML = html;
-  if(mgr){ loadTodayStats(); if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }
+  if(mgr){ let open=false; try{ open=localStorage.getItem('yodee_today_open')==='1'; }catch(e){}
+    if(open){ $('todayChips').style.display='flex'; $('todayToggle').textContent='📊 สรุปวันนี้ ▴'; loadTodayStats(); }
+    if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }  // self-skips when collapsed
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
     const es=new EventSource('/api/zones/'+z.id+'/stream'+(PIN?('?pin='+encodeURIComponent(PIN)):''));
@@ -1365,8 +1369,14 @@ async function boot(){
 }
 // Today-at-a-glance pulse strip (manager/owner). Reads /api/report (dailyReport); silently
 // hides for cashiers or on error. Refreshed on boot, every 60s, and after each completed sale.
+// Toggle the pulse strip open/closed (manager preference, remembered). Collapsed by default.
+window.toggleToday=()=>{ const c=$('todayChips'), b=$('todayToggle'); if(!c) return;
+  const open=c.style.display==='none'; c.style.display=open?'flex':'none';
+  if(b) b.textContent='📊 สรุปวันนี้ '+(open?'▴':'▾');
+  try{ localStorage.setItem('yodee_today_open', open?'1':'0'); }catch(e){}
+  if(open) loadTodayStats(); };
 async function loadTodayStats(){
-  const el=$('todayStrip'); if(!el) return;
+  const el=$('todayChips'); if(!el || el.style.display==='none') return;   // only fetch when expanded
   try{
     const r=await api('/api/report');
     const chip=(label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
@@ -1383,8 +1393,7 @@ async function loadTodayStats(){
     if(tgt&&tgt>0){ const pct=Math.round(((r.revenue||0)/tgt)*100);
       chips += chip('🎯 เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
     el.innerHTML = chips;
-    el.style.display='flex';
-  }catch(e){ el.style.display='none'; }
+  }catch(e){ /* leave the strip as-is on a transient error; the toggle controls visibility */ }
 }
 // Proactive low-stock alert on the dashboard (manager only) — so the owner notices ingredients
 // running out without opening the stock screen. Stock auto-deducts on sales, so this can change
