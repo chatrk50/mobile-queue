@@ -127,6 +127,7 @@
       <div><h1>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
     </div>
+    <input id="histSearch" oninput="filterHistory()" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู" autocomplete="off" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);background:#fff;box-sizing:border-box">
     <div id="historyBody" style="margin-top:14px"></div>
   </div>
 
@@ -500,11 +501,19 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('salesBtn').style.display='none'; $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
-window.showHistory=async()=>{ try{ const list=await api('/api/history'); renderHistory(list);
+let HIST=[];
+// Filter today's history client-side by queue code, customer name, or any item name.
+window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCase();
+  if(!q){ renderHistory(HIST); return; }
+  const f=HIST.filter(t=> (t.code||'').toLowerCase().includes(q)
+    || (t.customer_name||'').toLowerCase().includes(q)
+    || (t.lines||[]).some(l=>(l.name||'').toLowerCase().includes(q)) );
+  renderHistory(f, q); };
+window.showHistory=async()=>{ try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
-function renderHistory(list){
-  if(!list||!list.length){ $('historyBody').innerHTML='<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
+function renderHistory(list, q){
+  if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
   const stMap={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon']};
   const payMap={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
   $('historyBody').innerHTML=list.map(t=>{
