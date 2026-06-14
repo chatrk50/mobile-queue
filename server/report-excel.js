@@ -129,6 +129,22 @@ function sheet(wb, name, title, headers, rows) {
       C(ws, ws.getColumn(ci + 1).letter + row, v == null ? '' : v, { numFmt: h.fmt, align: h.align, size: 9, bd: true });
     });
   });
+  // TOTAL row: SUM each column flagged sum:true, with a "TOTAL" label in the first real column.
+  if (rows.length && H.some((h) => h.sum)) {
+    const tr = 5 + rows.length;
+    C(ws, 'A' + tr, '', { fill: NAVY });
+    C(ws, ws.getColumn(2).letter + tr, 'TOTAL', { bold: true, fill: NAVY, color: WHITE });
+    H.forEach((h, i) => {
+      if (i <= 1) return;                                   // No column + the label column
+      const col = ws.getColumn(i + 1).letter;
+      if (h.sum) {
+        const result = rows.reduce((a, r) => a + (Number(r[i - 1]) || 0), 0);
+        C(ws, col + tr, { formula: `SUM(${col}5:${col}${tr - 1})`, result }, { bold: true, fill: NAVY, color: WHITE, numFmt: h.fmt, align: h.align });
+      } else {
+        C(ws, col + tr, '', { fill: NAVY });
+      }
+    });
+  }
   return ws;
 }
 
@@ -152,31 +168,31 @@ export async function buildDetailedWorkbook(d, { store = 'YO-DEE Yogurt', date }
   if (d.channelTotals) { kv('Channel gross', d.channelTotals.gross || 0); kv('Platform commission', d.channelTotals.commission || 0); kv('Net after commission', d.channelTotals.net || 0); }
 
   sheet(wb, 'Transactions', store + ' — Transactions ' + day,
-    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Items', w: 40 }, { t: 'Total', w: 12, fmt: BAHT, align: 'right' }, { t: 'Discount', w: 11, fmt: BAHT, align: 'right' }, { t: 'Status', w: 12 }, { t: 'Method', w: 12 }, { t: 'By', w: 14 }],
+    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Items', w: 40 }, { t: 'Total', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Discount', w: 11, fmt: BAHT, align: 'right', sum: true }, { t: 'Status', w: 12 }, { t: 'Method', w: 12 }, { t: 'By', w: 14 }],
     (d.transactions || []).map((t) => [(t.paid_at || t.created_at || '').slice(11, 16), t.code, t.items || '', t.total || 0, t.discount || 0, t.payment_status || '', t.payment_method || '', t.paid_by || t.created_by || '']));
 
   sheet(wb, 'Payments', store + ' — Payments by method ' + day,
-    [{ t: 'Method', w: 18 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right' }, { t: 'Amount', w: 14, fmt: BAHT, align: 'right' }],
+    [{ t: 'Method', w: 18 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Amount', w: 14, fmt: BAHT, align: 'right', sum: true }],
     (d.payments || []).map((p) => [p.method, p.orders || 0, p.amount || 0]));
 
   sheet(wb, 'Channels', store + ' — Sales by channel ' + day,
-    [{ t: 'Channel', w: 18 }, { t: 'Comm %', w: 9, fmt: '0', align: 'right' }, { t: 'Orders', w: 9, fmt: NUM, align: 'right' }, { t: 'Gross', w: 13, fmt: BAHT, align: 'right' }, { t: 'Commission', w: 13, fmt: BAHT, align: 'right' }, { t: 'Net', w: 13, fmt: BAHT, align: 'right' }],
+    [{ t: 'Channel', w: 18 }, { t: 'Comm %', w: 9, fmt: '0', align: 'right' }, { t: 'Orders', w: 9, fmt: NUM, align: 'right', sum: true }, { t: 'Gross', w: 13, fmt: BAHT, align: 'right', sum: true }, { t: 'Commission', w: 13, fmt: BAHT, align: 'right', sum: true }, { t: 'Net', w: 13, fmt: BAHT, align: 'right', sum: true }],
     (d.channels || []).map((c) => [c.channel, c.commission_pct || 0, c.orders || 0, c.gross || 0, c.commission || 0, c.net || 0]));
 
   sheet(wb, 'Discounts', store + ' — Discounts ' + day,
-    [{ t: 'Code', w: 8 }, { t: 'Discount', w: 12, fmt: BAHT, align: 'right' }, { t: 'From total', w: 12, fmt: BAHT, align: 'right' }, { t: 'Reason', w: 24 }, { t: 'By', w: 14 }],
+    [{ t: 'Code', w: 8 }, { t: 'Discount', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'From total', w: 12, fmt: BAHT, align: 'right' }, { t: 'Reason', w: 24 }, { t: 'By', w: 14 }],
     (d.discounts || []).map((x) => [x.code, x.amount || 0, x.total || 0, x.reason || '', x.by_name || '']));
 
   sheet(wb, 'Voids+Refunds', store + ' — Voids & Refunds ' + day,
-    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Kind', w: 10 }, { t: 'Amount', w: 12, fmt: BAHT, align: 'right' }, { t: 'Reason', w: 24 }, { t: 'By', w: 14 }],
+    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Kind', w: 10 }, { t: 'Amount', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Reason', w: 24 }, { t: 'By', w: 14 }],
     (d.voids || []).map((v) => [(v.voided_at || '').slice(11, 16), v.code, v.void_kind || 'void', v.total || 0, v.void_reason || '', v.by_name || '']));
 
   sheet(wb, 'Addons', store + ' — Add-ons ' + day,
-    [{ t: 'Topping', w: 24 }, { t: 'Qty', w: 10, fmt: NUM, align: 'right' }, { t: 'Revenue', w: 13, fmt: BAHT, align: 'right' }],
+    [{ t: 'Topping', w: 24 }, { t: 'Qty', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Revenue', w: 13, fmt: BAHT, align: 'right', sum: true }],
     (d.addons || []).map((a) => [a.name, a.qty || 0, a.revenue || 0]));
 
   sheet(wb, 'Hourly', store + ' — Hourly sales ' + day,
-    [{ t: 'Hour', w: 10 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right' }, { t: 'Revenue', w: 13, fmt: BAHT, align: 'right' }],
+    [{ t: 'Hour', w: 10 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Revenue', w: 13, fmt: BAHT, align: 'right', sum: true }],
     (d.hourly || []).map((h) => [(h.hr || '') + ':00', h.orders || 0, h.revenue || 0]));
 
   return await wb.xlsx.writeBuffer();
