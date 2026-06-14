@@ -1429,10 +1429,25 @@ function zonePanel(z){
   </div>`;
 }
 
+// Two-tone chime for a new LINE order (distinct from the single payment beep).
+function dingNewOrder(){ try{ beep(1046); setTimeout(()=>{ try{ beep(1318); }catch(e){} },130); }catch(e){} }
+// Alert when a NEW customer (LINE) order appears in a zone's pending list, so staff never miss an
+// online order. Skips the first render of each zone (no false ding on load); cashier-made orders
+// don't ding (the cashier already knows about those).
+function detectNewLineOrders(zoneId, pending){
+  window._seenPending = window._seenPending || {};
+  const prev = window._seenPending[zoneId];
+  if(prev){
+    const fresh = pending.filter(t => t.order_source==='customer' && !prev.has(t.id));
+    if(fresh.length){ dingNewOrder(); toast('🔔 ออเดอร์ใหม่จากไลน์ '+fresh.length+' รายการ'); }
+  }
+  window._seenPending[zoneId] = new Set(pending.map(t=>t.id));
+}
 function renderZone(snap){
   if(!snap||!snap.zone) return;
   const z=snap.zone, id=z.id, open=z.is_open===1;
   zoneOpenState[id]=open;
+  detectNewLineOrders(id, snap.pending||[]);
   const set=(eid,v)=>{const el=$(eid); if(el) el.textContent=v;};
   set('zt-'+id,z.name); set('zc-'+id,snap.waitingCount);
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
