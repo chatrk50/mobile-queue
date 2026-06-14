@@ -1369,15 +1369,20 @@ async function loadTodayStats(){
   const el=$('todayStrip'); if(!el) return;
   try{
     const r=await api('/api/report');
-    const chip=(label,val)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
+    const chip=(label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
       <div style="font-size:11px;color:var(--muted);white-space:nowrap">${label}</div>
-      <div style="font-size:18px;font-weight:800;color:var(--navy,#1e3a5f)">${val}</div></div>`;
-    el.innerHTML =
+      <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
+    let chips =
       chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
       chip('🥤 เสิร์ฟแล้ว', (r.cupsSold||0)+' แก้ว') +
       chip('🎫 ออกคิว', r.issued||0) +
       chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
       chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
+    // Target progress — only when the owner has set a daily target (FIN_TARGET_REVENUE).
+    const tgt=r.pnl&&r.pnl.targetDaily;
+    if(tgt&&tgt>0){ const pct=Math.round(((r.revenue||0)/tgt)*100);
+      chips += chip('🎯 เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
+    el.innerHTML = chips;
     el.style.display='flex';
   }catch(e){ el.style.display='none'; }
 }
