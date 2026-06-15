@@ -1,6 +1,8 @@
 # YO-DEE POS — สถานะโปรเจกต์ (Project Status)
 
-**อัปเดตล่าสุด:** 2026-06-14 · prod commit `5edc742`
+**อัปเดตล่าสุด:** 2026-06-15 · prod commit `0285834`
+
+> **โค้ด queue-first + ระบบยกเลิก อยู่บน prod แล้ว แต่ปิดไว้** (`queueFirst:false`) — prod ยังเป็น pay-first จนเจ้าของกด toggle ⚙→"🎫 เข้าคิวทันที" เอง
 
 ไฟล์นี้คือ snapshot สถานะปัจจุบันของระบบ Mobile Queue → POS ของร้าน YO-DEE Yogurt
 (ดูประวัติฟีเจอร์เต็มได้จาก git log; ฉบับนี้สรุปสิ่งที่ "อยู่บนระบบจริง" ตอนนี้)
