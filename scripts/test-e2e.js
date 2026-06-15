@@ -122,6 +122,14 @@ ok(resetErr === null, `INVARIANT resetAllZones does NOT throw (was FK-failing) �
 ok(db.prepare('SELECT last_number FROM zones WHERE id=1').get().last_number === 0, 'INVARIANT queue counter restarts at 0 after reset');
 ok(db.prepare('SELECT COUNT(*) n FROM orders').get().n === ordersBefore, `orders persist across the reset (history kept — ${ordersBefore})`);
 
+// ---- End-of-day archive must summarize the day exactly (sales_history ties to dailyReport) ----
+console.log('\n== End-of-day archive ties out ==');
+const eod = Q.dailyReport();
+Q.archiveTodaySales();
+const arow = db.prepare("SELECT * FROM sales_history WHERE date = date('now','+7 hours')").get();
+ok(!!arow && near(arow.revenue, eod.revenue), `INVARIANT sales_history.revenue == dailyReport.revenue (${arow && arow.revenue} == ${eod.revenue})`);
+ok(!!arow && arow.cups === eod.pnl.cups && near(arow.void_amount, eod.voided.amount), `archived cups + void amount tie out (cups ${arow && arow.cups}, void ${arow && arow.void_amount})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
