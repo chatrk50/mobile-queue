@@ -129,6 +129,14 @@ const mc = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 2 }], {});
 Q.setOrderPaid(mc.ticket.id, { method: 'cash' });
 ok(Q.dailyReport().pnl.cups === cupsBefore + 2, `INVARIANT a 2-drink order adds 2 cups to P&L, not 1 (${cupsBefore} -> ${Q.dailyReport().pnl.cups})`);
 
+// ---- "issued" = queue numbers actually issued (paid), not just tickets created ----
+console.log('\n== issued counts paid queue numbers, not pending/cancelled ==');
+const issuedBefore = Q.dailyReport().issued;
+const pend = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});   // created, unpaid → no queue number yet
+ok(Q.dailyReport().issued === issuedBefore, `INVARIANT a pending (unpaid) order does NOT count as issued (${issuedBefore})`);
+Q.setOrderPaid(pend.ticket.id, { method: 'cash' });
+ok(Q.dailyReport().issued === issuedBefore + 1, `INVARIANT paying issues a queue number → issued +1 (${Q.dailyReport().issued})`);
+
 // ---- End-of-day archive must summarize the day exactly (sales_history ties to dailyReport) ----
 console.log('\n== End-of-day archive ties out ==');
 const eod = Q.dailyReport();

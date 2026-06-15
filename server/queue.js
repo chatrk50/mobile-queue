@@ -252,7 +252,8 @@ export function dailyReport(branchId = null, dateStr = null) {
   const TODAY = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
   const perZone = db.prepare(
     `SELECT z.id, z.name, z.prefix,
-       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND date(t.created_at,'+7 hours')=${TODAY}) AS issued,
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0
+          AND EXISTS(SELECT 1 FROM orders o WHERE o.ticket_id=t.id AND date(o.paid_at,'+7 hours')=${TODAY})) AS issued,  -- queue numbers actually issued today (paid), not just created
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=${TODAY}) AS served,
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=${TODAY}) AS no_shows
      FROM zones z WHERE (? IS NULL OR z.store_id=?) ORDER BY z.id`
@@ -543,7 +544,7 @@ export function resetAllZones() {
     db.prepare(
       `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)
        SELECT ?, z.id,
-         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND date(t.created_at,'+7 hours')=?),
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0 AND EXISTS(SELECT 1 FROM orders o WHERE o.ticket_id=t.id AND date(o.paid_at,'+7 hours')=?)),
          (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=?),
          (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=?),
          (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL AND date(t.created_at,'+7 hours')=?),
