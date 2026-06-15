@@ -1385,7 +1385,8 @@ async function loadTodayStats(){
       <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
     let chips =
       chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
-      chip('🥤 เสิร์ฟแล้ว', (r.cupsSold||0)+' แก้ว') +
+      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' แก้ว') +   // cups SOLD (drink units) — matches the P&L report
+      chip('🍦 เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
       chip('🎫 ออกคิว', r.issued||0) +
       chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
       chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');

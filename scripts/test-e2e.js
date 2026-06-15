@@ -122,6 +122,13 @@ ok(resetErr === null, `INVARIANT resetAllZones does NOT throw (was FK-failing) â
 ok(db.prepare('SELECT last_number FROM zones WHERE id=1').get().last_number === 0, 'INVARIANT queue counter restarts at 0 after reset');
 ok(db.prepare('SELECT COUNT(*) n FROM orders').get().n === ordersBefore, `orders persist across the reset (history kept â€” ${ordersBefore})`);
 
+// ---- "cups" means drink UNITS sold (sum qty), never order/ticket count ----
+console.log('\n== Cups = drink units, not orders ==');
+const cupsBefore = Q.dailyReport().pnl.cups;
+const mc = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 2 }], {});
+Q.setOrderPaid(mc.ticket.id, { method: 'cash' });
+ok(Q.dailyReport().pnl.cups === cupsBefore + 2, `INVARIANT a 2-drink order adds 2 cups to P&L, not 1 (${cupsBefore} -> ${Q.dailyReport().pnl.cups})`);
+
 // ---- End-of-day archive must summarize the day exactly (sales_history ties to dailyReport) ----
 console.log('\n== End-of-day archive ties out ==');
 const eod = Q.dailyReport();
