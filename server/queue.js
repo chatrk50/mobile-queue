@@ -252,8 +252,7 @@ export function dailyReport(branchId = null, dateStr = null) {
   const TODAY = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
   const perZone = db.prepare(
     `SELECT z.id, z.name, z.prefix,
-       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0
-          AND EXISTS(SELECT 1 FROM orders o WHERE o.ticket_id=t.id AND date(o.paid_at,'+7 hours')=${TODAY})) AS issued,  -- queue numbers actually issued today (paid), not just created
+       (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0 AND date(t.numbered_at,'+7 hours')=${TODAY}) AS issued,  -- queue numbers actually issued today (numbered_at: at payment under pay-first, at creation under queue-first)
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=${TODAY}) AS served,
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=${TODAY}) AS no_shows
      FROM zones z WHERE (? IS NULL OR z.store_id=?) ORDER BY z.id`
@@ -544,7 +543,7 @@ export function resetAllZones() {
     db.prepare(
       `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)
        SELECT ?, z.id,
-         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0 AND EXISTS(SELECT 1 FROM orders o WHERE o.ticket_id=t.id AND date(o.paid_at,'+7 hours')=?)),
+         (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0 AND date(t.numbered_at,'+7 hours')=?),
          (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=?),
          (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=?),
          (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL AND date(t.created_at,'+7 hours')=?),
@@ -964,6 +963,11 @@ export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'
 // till. Default 30 min; 0 disables. Owner-configurable in ⚙ จัดการ.
 export function getPendingVoidMinutes() { return Math.max(0, Math.floor(Number(getSetting('pending:void_min', '30')) || 0)); }
 export function setPendingVoidMinutes(m) { const n = Math.max(0, Math.floor(Number(m) || 0)); setSetting('pending:void_min', String(n)); return { pendingVoidMinutes: n }; }
+/** Queue-first model: when ON, an order gets its queue number the moment it's placed (cashier or
+ *  LINE), so it joins the line immediately even before payment. OFF = pay-first (number at payment).
+ *  Payment is still required before an order can be SERVED in either mode. */
+export function getQueueFirst() { return getSetting('queue:first', '0') === '1'; }
+export function setQueueFirst(on) { setSetting('queue:first', on ? '1' : '0'); return { queueFirst: !!on }; }
 // Store opening hours → auto-close. Empty open/close = always open (no behaviour change).
 // days = CSV of open weekdays (0=Sun..6=Sat); empty = open every day. Times are "HH:MM" BKK.
 export function getStoreHours() {
@@ -1405,16 +1409,22 @@ export function createOrder(zoneId, items, opts = {}) {
     return { ticket: ex, total: o?.total ?? 0, idempotent: true };
   }
 
+  // Queue-first: issue the queue number now (at order creation) so it joins the line immediately —
+  // even before payment. Pay-first leaves it 'pending' until payment confirms the number.
+  if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
+    try { r.ticket = assignQueueNumber(r.ticket.id); } catch { /* lost a race → stays pending, harmless */ }
+  }
+
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
   // extra write doesn't add a remote round-trip to the order response).
   if (source === 'customer' && lineUserId) setImmediate(() => { try { recordCustomerOrder(lineUserId, customerName); } catch { /* best-effort */ } });
 
-  // Self-order: remind to pay (the queue number is pushed later, at payment confirmation).
+  // Self-order LINE notice — queue-first already has a number, otherwise pay-to-get-number.
   if (source === 'customer' && lineUserId) {
-    pushQueue(lineUserId,
-      `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\n` +
-      `กรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`,
-      queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
+    const msg = (r.ticket && r.ticket.number > 0)
+      ? `🎫 รับออเดอร์ + รับคิวแล้ว!\nหมายเลขคิวของคุณ: ${r.ticket.code}\nยอด ฿${r.total} — กรุณาชำระเงินก่อนรับเครื่องดื่มนะคะ 🙏`
+      : `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\nกรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`;
+    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
   }
   return r;
 }
@@ -1430,7 +1440,7 @@ export function assignQueueNumber(ticketId) {
     const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(t.zone_id);
     const next = cur.last_number + 1;
     db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, t.zone_id);
-    db.prepare("UPDATE tickets SET number=?, code=?, status='waiting' WHERE id=? AND number=0")
+    db.prepare("UPDATE tickets SET number=?, code=?, status='waiting', numbered_at=datetime('now') WHERE id=? AND number=0")
       .run(next, code(cur.prefix, next), ticketId);
     return db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   })();
@@ -1683,7 +1693,7 @@ export function sweepStalePending({ actorId = null } = {}) {
     `SELECT t.id, t.zone_id, t.line_user_id, o.id AS order_id, o.branch_id, o.total
        FROM tickets t
        JOIN orders o ON o.id = (SELECT id FROM orders WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1)
-      WHERE t.status='pending' AND o.payment_status NOT IN ('paid','void')
+      WHERE t.status IN ('pending','waiting') AND o.payment_status NOT IN ('paid','void')
         AND t.created_at <= datetime('now', ?)`
   ).all(`-${mins} minutes`);
   if (!rows.length) return { voided: 0, zones: [] };

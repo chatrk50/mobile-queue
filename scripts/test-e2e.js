@@ -137,6 +137,24 @@ ok(Q.dailyReport().issued === issuedBefore, `INVARIANT a pending (unpaid) order 
 Q.setOrderPaid(pend.ticket.id, { method: 'cash' });
 ok(Q.dailyReport().issued === issuedBefore + 1, `INVARIANT paying issues a queue number → issued +1 (${Q.dailyReport().issued})`);
 
+// ---- Queue-first: a number is issued at order creation; pay is still required before serving ----
+console.log('\n== Queue-first model ==');
+Q.setQueueFirst(true);
+const qf = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
+ok(qf.ticket.number > 0 && qf.ticket.status === 'waiting', `INVARIANT queue number issued at creation (number ${qf.ticket.number}, status ${qf.ticket.status})`);
+let qfServed = false; try { Q.setStatus(qf.ticket.id, 'served'); qfServed = true; } catch (e) { /* order_unpaid */ }
+ok(!qfServed, 'INVARIANT an unpaid queued order canNOT be served (pay-before-serve preserved)');
+Q.setOrderPaid(qf.ticket.id, { method: 'cash' });
+Q.setStatus(qf.ticket.id, 'served');
+ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(qf.ticket.id).status === 'served', 'after paying, the queued order can be served');
+// stale unpaid WAITING order is auto-voided by the sweep (queue-first)
+const stale = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
+db.prepare("UPDATE tickets SET created_at=datetime('now','-60 minutes') WHERE id=?").run(stale.ticket.id);
+Q.setPendingVoidMinutes(30);
+const swept = Q.sweepStalePending({});
+ok(swept.voided >= 1 && db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'cancelled', `INVARIANT stale unpaid WAITING order auto-voids (swept ${swept.voided})`);
+Q.setPendingVoidMinutes(0); Q.setQueueFirst(false);   // restore pay-first default for the archive checks
+
 // ---- End-of-day archive must summarize the day exactly (sales_history ties to dailyReport) ----
 console.log('\n== End-of-day archive ties out ==');
 const eod = Q.dailyReport();

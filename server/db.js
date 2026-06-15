@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   status       TEXT NOT NULL DEFAULT 'waiting',
   notified_soon INTEGER NOT NULL DEFAULT 0,
   client_token TEXT,
+  numbered_at  TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   called_at    TEXT,
   closed_at    TEXT
@@ -447,6 +448,9 @@ for (const stmt of [
   // Idempotency key per bill: a retried create+pay with the same token returns the SAME
   // order instead of creating a duplicate (lets the cashier UI auto-retry a lost request safely).
   `ALTER TABLE tickets ADD COLUMN client_token TEXT`,
+  // Queue-first model: timestamp when a queue number was actually issued (at payment under
+  // pay-first, at order creation under queue-first) → accurate "issued today" reporting.
+  `ALTER TABLE tickets ADD COLUMN numbered_at TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -561,6 +565,9 @@ try {
 try {
   const have = (k) => db.prepare('SELECT COUNT(*) c FROM settings WHERE key=?').get(k).c > 0;
   if (!have('loyalty:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:enabled','0')`).run();
+  // Queue model: '0' = pay-first (number issued at payment) — the safe default so a prod cutover
+  // keeps the current behavior; '1' = queue-first (number at order creation). UAT turns it on at boot.
+  if (!have('queue:first')) db.prepare(`INSERT INTO settings(key,value) VALUES('queue:first','0')`).run();
   if (!have('loyalty:stamps_per_reward')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:stamps_per_reward','10')`).run();
   if (!have('loyalty:welcome_bonus')) db.prepare(`INSERT INTO settings(key,value) VALUES('loyalty:welcome_bonus','2')`).run();
   // SlipOK auto-verify + receipt printing: both prepared but OFF by default (owner enables later).

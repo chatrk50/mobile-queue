@@ -119,7 +119,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward() });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst() });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -250,7 +250,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -260,6 +260,7 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
     if (req.body?.ownerLineId != null) Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId));
     if (req.body?.pendingVoidMinutes != null) Object.assign(out, Q.setPendingVoidMinutes(req.body.pendingVoidMinutes));
+    if (req.body?.queueFirst != null) Object.assign(out, Q.setQueueFirst(!!req.body.queueFirst));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -857,6 +858,9 @@ if (!DURABLE) {
     // Loyalty rewards are exercised on the UAT sandbox only; prod stays OFF until the owner
     // flips it on in ⚙ จัดการ (seed default is '0', so a prod cutover never auto-enables it).
     Q.setLoyaltyEnabled(true);
+    // Queue-first model is exercised on UAT only; prod stays pay-first (seed '0') until the owner
+    // flips it on in ⚙ จัดการ after testing here.
+    Q.setQueueFirst(true);
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
 

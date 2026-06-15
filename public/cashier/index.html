@@ -1648,6 +1648,7 @@ window.showFeatures=async()=>{
       <button class="${on?'ok':'ghost'}" ${disabled?'disabled style="opacity:.5"':''} style="padding:8px 14px;min-width:64px" onclick="toggleFeature('${key}',${on?0:1})">${on?'เปิด':'ปิด'}</button>
     </div>`;
   $('featuresBody').innerHTML=
+    row('queueFirst', f.queueFirst, '🎫 เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
     row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
     row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
     `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
