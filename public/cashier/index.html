@@ -1550,7 +1550,7 @@ function renderZone(snap){
   const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
-    `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`
+    `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
       <div class="qitem" style="background:${isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'}"><div>${tsTop(t)}<div>
         <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
