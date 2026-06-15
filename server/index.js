@@ -423,13 +423,36 @@ const ownsTicket = (req) => {
   if (!t) return false;
   return !!t.line_user_id && t.line_user_id === (req.body?.lineUserId || null);
 };
+// Customer self-cancel = a REQUEST the cashier confirms (it stays on the board, loud). Allowed only
+// while the order is unpaid AND not yet being made; rejected once making/paid (the cashier handles it).
 app.post('/api/tickets/:ticketId/cancel', (req, res) => {
-  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
-    const t = Q.setStatus(req.params.ticketId, 'cancelled', THRESHOLD);
-    emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
-    res.json({ ok: true });
+    Q.customerRequestCancel(req.params.ticketId, req.body?.lineUserId || null);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json({ ok: true, requested: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: commit to making a queued order → locks the customer's self-cancel.
+app.post('/api/tickets/:ticketId/start-making', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const t = Q.startMaking(req.params.ticketId, { actorId: req.staff?.id || null });
+    emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal })); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: nudge the LINE customer to pay before the kitchen makes it (queue-first waste guard).
+app.post('/api/tickets/:ticketId/ask-pay', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.askToPay(req.params.ticketId)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: keep the order despite a customer cancel request (clears the sticky flag).
+app.post('/api/tickets/:ticketId/dismiss-cancel', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { Q.dismissCancelRequest(req.params.ticketId);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal })); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer rating (no PIN) — defined before the generic /:action route so it isn't captured.
 app.post('/api/tickets/:ticketId/rate', (req, res) => {

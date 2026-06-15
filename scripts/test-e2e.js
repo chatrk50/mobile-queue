@@ -155,6 +155,22 @@ const swept = Q.sweepStalePending({});
 ok(swept.voided >= 1 && db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'cancelled', `INVARIANT stale unpaid WAITING order auto-voids (swept ${swept.voided})`);
 Q.setPendingVoidMinutes(0); Q.setQueueFirst(false);   // restore pay-first default for the archive checks
 
+// ---- Customer cancel = sticky request; locks once the cashier starts making ----
+console.log('\n== Customer cancel request + making lock ==');
+Q.setQueueFirst(true);
+const lc = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: 'Uowner1' });
+Q.customerRequestCancel(lc.ticket.id, 'Uowner1');
+ok(db.prepare('SELECT cancel_requested FROM tickets WHERE id=?').get(lc.ticket.id).cancel_requested != null, 'INVARIANT customer cancel raises a sticky request (does NOT auto-void)');
+ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(lc.ticket.id).status === 'waiting', 'order stays in the queue until the cashier confirms');
+Q.dismissCancelRequest(lc.ticket.id);
+ok(db.prepare('SELECT cancel_requested FROM tickets WHERE id=?').get(lc.ticket.id).cancel_requested == null, 'cashier "keep" clears the cancel request');
+Q.startMaking(lc.ticket.id, {});
+let madeLock = false; try { Q.customerRequestCancel(lc.ticket.id, 'Uowner1'); } catch (e) { madeLock = (e.message === 'already_making'); }
+ok(madeLock, 'INVARIANT customer cannot cancel once the cashier started making');
+let notMine = false; try { Q.customerRequestCancel(lc.ticket.id, 'Usomeone'); } catch (e) { notMine = ['not_your_order', 'already_making'].includes(e.message); }
+ok(notMine, 'a different LINE user cannot cancel someone else’s order');
+Q.setQueueFirst(false);
+
 // ---- End-of-day archive must summarize the day exactly (sales_history ties to dailyReport) ----
 console.log('\n== End-of-day archive ties out ==');
 const eod = Q.dailyReport();

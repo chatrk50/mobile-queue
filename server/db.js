@@ -157,6 +157,8 @@ CREATE TABLE IF NOT EXISTS tickets (
   notified_soon INTEGER NOT NULL DEFAULT 0,
   client_token TEXT,
   numbered_at  TEXT,
+  making_at    TEXT,
+  cancel_requested TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   called_at    TEXT,
   closed_at    TEXT
@@ -451,6 +453,10 @@ for (const stmt of [
   // Queue-first model: timestamp when a queue number was actually issued (at payment under
   // pay-first, at order creation under queue-first) → accurate "issued today" reporting.
   `ALTER TABLE tickets ADD COLUMN numbered_at TEXT`,
+  // Queue-first cancellation flow: making_at = when the cashier committed to making it (locks the
+  // customer's self-cancel); cancel_requested = a LINE customer asked to cancel (sticky on the board).
+  `ALTER TABLE tickets ADD COLUMN making_at TEXT`,
+  `ALTER TABLE tickets ADD COLUMN cancel_requested TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

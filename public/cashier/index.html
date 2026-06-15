@@ -1450,11 +1450,25 @@ function detectNewLineOrders(zoneId, pending){
   }
   window._seenPending[zoneId] = new Set(pending.map(t=>t.id));
 }
+// Urgent triple-chime + toast when a NEW customer cancel request lands (respects the mute toggle).
+function detectCancelRequests(zoneId, tickets){
+  window._seenCancel = window._seenCancel || {};
+  const cur = (tickets||[]).filter(t=>t.cancel_requested).map(t=>t.id);
+  const prev = window._seenCancel[zoneId];
+  if(prev){ const fresh=cur.filter(id=>!prev.has(id));
+    if(fresh.length){ if(soundOn()){ beep(1200); setTimeout(()=>beep(1200),150); setTimeout(()=>beep(1200),300); }
+      toast('🚫 ลูกค้าขอยกเลิก '+fresh.length+' รายการ — ตรวจสอบ'); } }
+  window._seenCancel[zoneId] = new Set(cur);
+}
+window.startMaking=async(tid)=>{ try{ await api('/api/tickets/'+tid+'/start-making',{method:'POST'}); toast('🍳 เริ่มทำ — ลูกค้ายกเลิกเองไม่ได้แล้ว'); }catch(e){ toast(err(e)); } };
+window.askPay=async(tid)=>{ try{ const r=await api('/api/tickets/'+tid+'/ask-pay',{method:'POST'}); toast(r.ok?'📣 ส่งข้อความขอให้ลูกค้าชำระแล้ว':'ออเดอร์นี้ไม่ใช่ลูกค้าไลน์'); }catch(e){ toast(err(e)); } };
+window.keepOrder=async(tid)=>{ try{ await api('/api/tickets/'+tid+'/dismiss-cancel',{method:'POST'}); toast('เก็บออเดอร์ไว้ — ทำต่อได้'); }catch(e){ toast(err(e)); } };
 function renderZone(snap){
   if(!snap||!snap.zone) return;
   const z=snap.zone, id=z.id, open=z.is_open===1;
   zoneOpenState[id]=open;
   detectNewLineOrders(id, snap.pending||[]);
+  detectCancelRequests(id, [...(snap.waiting||[]), ...(snap.pending||[])]);
   const set=(eid,v)=>{const el=$(eid); if(el) el.textContent=v;};
   set('zt-'+id,z.name); set('zc-'+id,snap.waitingCount);
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
@@ -1496,6 +1510,19 @@ function renderZone(snap){
   const waitMin=(t)=>{ const c=t.order_created_at; if(!c) return 0; const ms=Date.now()-Date.parse(c.replace(' ','T')+'Z'); return ms>0?Math.floor(ms/60000):0; };
   const isStale=(t)=>{ const lim=CFG.pendingVoidMinutes||0; return lim>0 && waitMin(t)>=lim; };
   const agePill=(t)=>{ const m=waitMin(t), lim=CFG.pendingVoidMinutes||0; const warn=lim>0&&m>=Math.max(1,lim-5); return `<span class="pill" style="background:${warn?'rgba(229,91,107,.16)':'rgba(92,113,135,.12)'};color:${warn?'#c0394a':'#5c7187'};font-size:11px;margin-left:6px">⏳ รอ ${m} นาที</span>`; };
+  // 🚫 Customer asked to cancel — loud sticky banner; stays until the cashier confirms or keeps it.
+  const cancelBanner=(t)=> t.cancel_requested
+    ? `<div style="background:rgba(220,38,38,.12);border:1px solid var(--danger);border-radius:10px;padding:8px 10px;margin:0 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b style="color:var(--danger)">🚫 ลูกค้าขอยกเลิกออเดอร์นี้</b>
+        <button class="ghost danger" style="padding:6px 12px;font-size:13px;margin-left:auto" onclick="voidTicket(${t.id})">ยืนยันยกเลิก</button>
+        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="keepOrder(${t.id})">เก็บไว้ / ทำต่อ</button></div>`
+    : '';
+  const makingPill=(t)=> t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '';
+  // Queue-first: an unpaid order not yet being made → start-making (locks the customer cancel) + nudge to pay.
+  const makeBtns=(t)=> (CFG.queueFirst && t.order_total!=null && t.payment_status!=='paid' && !t.making_at)
+    ? `<button class="ghost" style="padding:8px 10px" onclick="startMaking(${t.id})">🍳 เริ่มทำ</button>`+
+      (t.order_source==='customer'?`<button class="ghost" style="padding:8px 10px" onclick="askPay(${t.id})">📣 ขอให้จ่ายก่อน</button>`:'')
+    : '';
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">${IC.qr}QR</button>` : '';
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
@@ -1531,10 +1558,10 @@ function renderZone(snap){
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
-  const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`
-    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}
+  const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
+    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px;flex-wrap:wrap">${makeBtns(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`

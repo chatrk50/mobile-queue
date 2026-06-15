@@ -968,6 +968,42 @@ export function setPendingVoidMinutes(m) { const n = Math.max(0, Math.floor(Numb
  *  Payment is still required before an order can be SERVED in either mode. */
 export function getQueueFirst() { return getSetting('queue:first', '0') === '1'; }
 export function setQueueFirst(on) { setSetting('queue:first', on ? '1' : '0'); return { queueFirst: !!on }; }
+
+/** Cashier commits to making a queued order → locks the customer's self-cancel (idempotent). */
+export function startMaking(ticketId, { actorId = null } = {}) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (!t.making_at) db.prepare("UPDATE tickets SET making_at=datetime('now'), cancel_requested=NULL WHERE id=?").run(ticketId);
+  return db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+}
+/** A LINE customer asks to cancel their own order. Allowed only while it's unpaid, NOT being made,
+ *  and still open — otherwise rejected. Does NOT void; raises a sticky request for the cashier. */
+export function customerRequestCancel(ticketId, lineUserId) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (!lineUserId || t.line_user_id !== lineUserId) throw new Error('not_your_order');
+  if (!['pending', 'waiting'].includes(t.status)) throw new Error('too_late');
+  if (t.making_at) throw new Error('already_making');
+  const o = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (o && o.payment_status === 'paid') throw new Error('already_paid');
+  db.prepare("UPDATE tickets SET cancel_requested=datetime('now') WHERE id=?").run(ticketId);
+  return { ok: true };
+}
+/** Cashier keeps the order despite the customer's cancel request (clears the sticky flag). */
+export function dismissCancelRequest(ticketId) {
+  db.prepare('UPDATE tickets SET cancel_requested=NULL WHERE id=?').run(ticketId);
+  return { ok: true };
+}
+/** Cashier nudges the LINE customer to pay before the kitchen makes it (queue-first waste guard). */
+export function askToPay(ticketId) {
+  const t = db.prepare('SELECT line_user_id, code, zone_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (!t.line_user_id) return { ok: false, reason: 'no_line' };
+  const o = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const amt = o ? (o.total - (o.discount || 0)) : 0;
+  pushQueue(t.line_user_id, `🙏 รบกวนชำระเงินก่อนนะคะ ยอด ฿${amt}\nคิว ${t.code} — ชำระแล้วทางร้านจะเริ่มทำเครื่องดื่มให้เลยค่ะ`, queueLink(t.zone_id), 'ชำระเงิน');
+  return { ok: true };
+}
 // Store opening hours → auto-close. Empty open/close = always open (no behaviour change).
 // days = CSV of open weekdays (0=Sun..6=Sat); empty = open every day. Times are "HH:MM" BKK.
 export function getStoreHours() {
@@ -1746,7 +1782,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, notified_soon FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   const recentCalled = db.prepare(
@@ -1756,7 +1792,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
   const pending = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, created_at FROM tickets
+    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested FROM tickets
      WHERE zone_id=? AND status='pending' ORDER BY id ASC`
   ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
@@ -1805,6 +1841,9 @@ export function ticketView(ticketId) {
   }
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
+    // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
+    canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
+    cancelRequested: !!t.cancel_requested, making: !!t.making_at,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
