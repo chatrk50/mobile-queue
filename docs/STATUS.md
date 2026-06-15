@@ -1,6 +1,6 @@
 # YO-DEE POS — สถานะโปรเจกต์ (Project Status)
 
-**อัปเดตล่าสุด:** 2026-06-14 · prod commit `d412e3d`
+**อัปเดตล่าสุด:** 2026-06-14 · prod commit `5edc742`
 
 ไฟล์นี้คือ snapshot สถานะปัจจุบันของระบบ Mobile Queue → POS ของร้าน YO-DEE Yogurt
 (ดูประวัติฟีเจอร์เต็มได้จาก git log; ฉบับนี้สรุปสิ่งที่ "อยู่บนระบบจริง" ตอนนี้)
@@ -55,6 +55,8 @@
 8. **Idempotency (client_token) + auto-retry** (🟢 **LIVE บน prod**): ทุกบิลมี token; `createOrder` insert แบบ `WHERE NOT EXISTS(token)` → retry ส่งซ้ำได้ออเดอร์เดิม **ไม่มีทางซ้ำ/ชาร์จซ้ำ** · `setOrderPaid` idempotent (จ่ายซ้ำ = no-op) · cashier retry อัตโนมัติ 3 ครั้งตอนเน็ตกระตุก โดยใช้ token เดิม · e2e ยืนยัน same-token→1 order
 10. **รายงาน Excel: เลขลำดับ # + แถวรวม TOTAL ทุก sheet** · **Pulse strip "วันนี้ที่ร้าน"** (กดพับได้ จำสถานะ default ซ่อน · + 🎯 เป้าวันนี้) · **ค้นหาประวัติ**ด้วยเลขคิว/ชื่อ/เมนู (🟢 LIVE บน prod)
 11. **🔴 แก้บั๊ก "ยอดวันนี้" ให้เป็นวันนี้จริง** (🟢 LIVE บน prod) — เดิม `dailyReport` ไม่ filter วันที่ + reset เที่ยงคืนพัง (FK error → rollback) ทำให้ยอด**สะสมข้ามวัน** · ตอนนี้ filter ทุก metric เป็นวัน BKK + reset ไม่ลบ orders (เก็บประวัติ) archive วันที่จบ + รีสตาร์ทเลขคิว + `doDailyReset` มี try/catch · e2e ยืนยันออเดอร์วันอื่นไม่นับวันนี้
+12. **🔔 เสียงเตือนออเดอร์ใหม่จาก LINE** (+ ปุ่มปิดเสียง 🔔/🔕) (🟢 LIVE บน prod)
+13. **แก้รายงาน 2 จุด (เจ้าของพบจากใช้จริง)** (🟢 LIVE บน prod): (ก) หน้าแรก "🥤 ขายแล้ว N แก้ว" = แก้วจริง (pnl.cups) **ตรง P&L** + แยก "🍦 เสิร์ฟแล้ว N ออเดอร์" · (ข) "ออกคิว (issued)" นับเฉพาะเลขคิวที่ออกจริง (จ่ายแล้ว) ไม่นับค้างชำระ/ยกเลิกก่อนจ่าย · ตรวจครบทุกฟิลด์ reconcile แล้ว + e2e guards (cups=units, issued=paid)
 9. **PWA add-to-home** (🟢 พร้อม): `manifest.webmanifest` + head tags ครบทั้ง cashier/liff → เพิ่มลงจอโฮม iPad เปิดเต็มจอเหมือนแอป (ไม่มี service worker — กัน cache ค้างบนเครื่องขาย)
 
 **ยังไม่ทำ — รอ benchmark/decision:**
