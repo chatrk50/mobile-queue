@@ -457,6 +457,13 @@ for (const stmt of [
   // customer's self-cancel); cancel_requested = a LINE customer asked to cancel (sticky on the board).
   `ALTER TABLE tickets ADD COLUMN making_at TEXT`,
   `ALTER TABLE tickets ADD COLUMN cancel_requested TEXT`,
+  // Historical P&L: snapshot the cost breakdown per archived day so past-day / monthly / yearly
+  // P&L is exact (not reconstructed from today's settings, which may have changed since).
+  `ALTER TABLE sales_history ADD COLUMN drink_sales REAL`,
+  `ALTER TABLE sales_history ADD COLUMN topping_sales REAL`,
+  `ALTER TABLE sales_history ADD COLUMN cogs REAL`,
+  `ALTER TABLE sales_history ADD COLUMN opex REAL`,
+  `ALTER TABLE sales_history ADD COLUMN waste_cost REAL`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

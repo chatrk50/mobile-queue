@@ -386,24 +386,32 @@ export function archiveTodaySales(dateStr = null) {
   const dayExpr = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
   db.prepare(
     `INSERT OR REPLACE INTO sales_history
-       (date, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows)
-     VALUES (${dayExpr}, ?,?,?,?,?,?,?,?,?,?)`
+       (date, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows,
+        drink_sales, topping_sales, cogs, opex, waste_cost)
+     VALUES (${dayExpr}, ?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?)`
   ).run(rep.pnl.cups || 0, rep.revenue || 0, rep.pnl.grossProfit || 0, rep.pnl.netProfit || 0,
         rep.voided.orders || 0, rep.voided.cups || 0, rep.voided.amount || 0,
-        rep.issued || 0, rep.cupsSold || 0, rep.noShows || 0);
+        rep.issued || 0, rep.cupsSold || 0, rep.noShows || 0,
+        rep.pnl.drinkSales || 0, rep.pnl.toppingSales || 0, rep.pnl.cogs || 0, rep.pnl.opexDaily || 0, rep.pnl.wasteCost || 0);
   return rep;
 }
 
-/** Daily/monthly sell report from the archive. */
+/** P&L history from the archive — daily rows + monthly + yearly rollups, each with the full
+ *  revenue → COGS → gross profit → opex/waste → net profit chain (cost lines available for days
+ *  archived after the breakdown columns shipped; revenue/gross/net are present for all). */
 export function salesHistory() {
   const daily = db.prepare('SELECT * FROM sales_history ORDER BY date DESC LIMIT 90').all();
-  const monthly = db.prepare(
-    `SELECT substr(date,1,7) AS month,
-            SUM(cups) AS cups, SUM(revenue) AS revenue, SUM(net) AS net,
-            SUM(void_cups) AS void_cups, SUM(void_amount) AS void_amount, COUNT(*) AS days
-     FROM sales_history GROUP BY month ORDER BY month DESC LIMIT 12`
-  ).all();
-  return { daily, monthly };
+  const roll = (groupExpr, limit) => db.prepare(
+    `SELECT ${groupExpr} AS period, COUNT(*) AS days,
+            SUM(cups) AS cups, SUM(revenue) AS revenue, SUM(gross) AS gross, SUM(net) AS net,
+            SUM(COALESCE(drink_sales,0)) AS drink_sales, SUM(COALESCE(topping_sales,0)) AS topping_sales,
+            SUM(COALESCE(cogs,0)) AS cogs, SUM(COALESCE(opex,0)) AS opex, SUM(COALESCE(waste_cost,0)) AS waste_cost,
+            SUM(void_cups) AS void_cups, SUM(void_amount) AS void_amount
+       FROM sales_history GROUP BY period ORDER BY period DESC LIMIT ?`
+  ).all(limit);
+  const monthly = roll('substr(date,1,7)', 24);   // YYYY-MM
+  const yearly = roll('substr(date,1,4)', 10);     // YYYY
+  return { daily, monthly, yearly };
 }
 
 // ---------- Detailed read-only reports (transaction log / payment / void-refund /

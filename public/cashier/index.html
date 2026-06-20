@@ -135,7 +135,7 @@
   <!-- SELL HISTORY (daily / monthly) -->
   <div id="salesCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>ยอดขายย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
+      <div><h1>ยอดขาย & กำไร (P&L) ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()">ปิด</button>
@@ -144,6 +144,7 @@
     <div class="row" style="gap:6px;margin-top:12px">
       <button id="salesTabDaily" class="ok" style="padding:6px 14px;font-size:13px" onclick="salesTab('daily')">รายวัน</button>
       <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
+      <button id="salesTabYearly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('yearly')">รายปี</button>
     </div>
     <div id="salesBody" style="margin-top:14px"></div>
   </div>
@@ -574,40 +575,45 @@ window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
 window.salesTab=(v)=>{ salesView=v;
   $('salesTabDaily').className=v==='daily'?'ok':'ghost';
   $('salesTabMonthly').className=v==='monthly'?'ok':'ghost';
+  $('salesTabYearly').className=v==='yearly'?'ok':'ghost';
   renderSales(); };
 window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'POST'});
   toast(r.saved?'บันทึกยอดวันนี้แล้ว':'วันนี้ยังไม่มียอดขาย');
   SALES=await api('/api/sales-history'); renderSales();
 }catch(e){ toast(err(e)); } };
 function baht(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
+function pctf2(n,d){ return (d?Math.round((n/d)*1000)/10:0)+'%'; }
 function renderSales(){
   if(!SALES){ return; }
   const box=$('salesBody');
-  if(salesView==='daily'){
-    const rows=SALES.daily||[];
-    if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีประวัติยอดขาย — กด “บันทึกวันนี้” เพื่อบันทึกยอดของวันนี้ หรือระบบจะบันทึกอัตโนมัติตอนรีเซ็ตเที่ยงคืน</p>'; return; }
-    box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
-        <th style="padding:6px 4px">วันที่</th><th style="text-align:right">แก้ว</th><th style="text-align:right">ยอดขาย</th><th style="text-align:right">กำไรสุทธิ</th><th style="text-align:right">ยกเลิก</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
-        <td style="padding:6px 4px">${r.date}</td>
-        <td style="text-align:right">${r.cups}</td>
-        <td style="text-align:right"><b>${baht(r.revenue)}</b></td>
-        <td style="text-align:right;color:${r.net>=0?'var(--ok,#16a34a)':'var(--danger)'}">${baht(r.net)}</td>
-        <td style="text-align:right;color:var(--muted)">${r.void_cups||0} (${baht(r.void_amount)})</td></tr>`).join('')}</tbody></table>`;
-  } else {
-    const rows=SALES.monthly||[];
-    if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีข้อมูลรายเดือน</p>'; return; }
-    box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
-        <th style="padding:6px 4px">เดือน</th><th style="text-align:right">วัน</th><th style="text-align:right">แก้ว</th><th style="text-align:right">ยอดขาย</th><th style="text-align:right">กำไรสุทธิ</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
-        <td style="padding:6px 4px">${r.month}</td>
-        <td style="text-align:right">${r.days}</td>
-        <td style="text-align:right">${r.cups}</td>
-        <td style="text-align:right"><b>${baht(r.revenue)}</b></td>
-        <td style="text-align:right;color:${r.net>=0?'var(--ok,#16a34a)':'var(--danger)'}">${baht(r.net)}</td></tr>`).join('')}</tbody></table>`;
-  }
+  const rows = salesView==='daily'?(SALES.daily||[]) : salesView==='monthly'?(SALES.monthly||[]) : (SALES.yearly||[]);
+  const lab = salesView==='daily'?'วันที่' : salesView==='monthly'?'เดือน':'ปี';
+  const keyOf=(r)=> salesView==='daily'? r.date : r.period;
+  if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีข้อมูล — กด “บันทึกวันนี้” หรือรอระบบบันทึกอัตโนมัติตอนเที่ยงคืน</p>'; return; }
+  // P&L summary across the visible period (cost lines show for days archived after the breakdown shipped).
+  const T=rows.reduce((a,r)=>({revenue:a.revenue+(r.revenue||0),gross:a.gross+(r.gross||0),net:a.net+(r.net||0),
+    cogs:a.cogs+(r.cogs||0),opex:a.opex+(r.opex||0),waste:a.waste+(r.waste_cost||0),cups:a.cups+(r.cups||0)}),
+    {revenue:0,gross:0,net:0,cogs:0,opex:0,waste:0,cups:0});
+  const line=(l,v,o={})=>`<div class="row between" style="padding:5px 0;${o.bd?'border-top:1px solid var(--line)':''}">
+    <span style="${o.muted?'color:var(--muted);font-size:12px':''}">${l}</span>
+    <span style="${o.neg?'color:var(--danger)':''};font-weight:${o.bold?800:600}">${o.neg?'−':''}${baht(v)}</span></div>`;
+  const summary=`<div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+    <div class="row between" style="margin-bottom:4px"><b>สรุป P&L · ${rows.length} ${lab}</b><span class="muted" style="font-size:12px">${T.cups.toLocaleString('en-US')} แก้ว</span></div>
+    ${line('ยอดขาย', T.revenue)}
+    ${T.cogs?line('− วัตถุดิบ + แพ็กเกจ', T.cogs, {neg:true,muted:true}):''}
+    ${line('กำไรขั้นต้น', T.gross, {bd:true,bold:true})}
+    ${T.opex?line('− ค่าใช้จ่ายดำเนินงาน', T.opex, {neg:true,muted:true}):''}
+    ${T.waste?line('− ของเสีย', T.waste, {neg:true,muted:true}):''}
+    <div class="row between" style="padding:7px 0 0;border-top:2px solid var(--line);font-weight:800;font-size:15px"><span>กำไรสุทธิ</span><span style="color:${T.net>=0?'#16876f':'var(--danger)'}">${baht(T.net)} <span style="font-size:12px;font-weight:600;color:var(--muted)">(${pctf2(T.net,T.revenue)})</span></span></div></div>`;
+  const table=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
+      <th style="padding:6px 4px">${lab}</th><th style="text-align:right">ยอดขาย</th><th style="text-align:right">ขั้นต้น</th><th style="text-align:right">สุทธิ</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:6px 4px">${keyOf(r)}${salesView!=='daily'?` <span class="muted" style="font-size:11px">(${r.days} วัน)</span>`:''}</td>
+      <td style="text-align:right"><b>${baht(r.revenue)}</b></td>
+      <td style="text-align:right;color:var(--muted)">${baht(r.gross)}</td>
+      <td style="text-align:right;color:${r.net>=0?'#16876f':'var(--danger)'}">${baht(r.net)} <span style="font-size:10px;color:var(--muted)">${pctf2(r.net,r.revenue)}</span></td></tr>`).join('')}</tbody></table>`;
+  box.innerHTML = summary + table;
 }
 
 // ---------- Staff management (owner) ----------
