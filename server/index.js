@@ -458,7 +458,7 @@ app.post('/billing/omise/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 app.post('/api/admin/brand', (req, res) => {
-  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });   // brand identity = owner only
   if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
   try { updateTenantBrand(req.tenantId, req.body || {}); res.json({ ok: true, ...brandFor(req) }); }
   catch (e) { res.status(400).json({ error: e.message }); }
@@ -479,7 +479,7 @@ app.get('/api/admin/line-config', (req, res) => {
   });
 });
 app.post('/api/admin/line-config', (req, res) => {
-  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });   // integration tokens = owner only
   if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
   const b = req.body || {};
   if (b.token !== undefined) setSetting('line:token', String(b.token || '').trim());

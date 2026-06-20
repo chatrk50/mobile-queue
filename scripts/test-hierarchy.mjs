@@ -63,6 +63,8 @@ async function brand(name, pkg, pin) {
   ok((await M('GET', `/b/${A.slug}/api/report`)).status === 200, 'manager CAN see reports');
   ok((await M('POST', `/b/${A.slug}/api/branches`, { name: 'X' })).status === 403, 'manager CANNOT add a branch (ownerOK)');
   ok((await M('POST', `/b/${A.slug}/api/staff`, { name: 'Y', pin: '9977', role: 'cashier' })).status === 403, 'manager CANNOT create staff');
+  ok((await M('POST', `/b/${A.slug}/api/admin/brand`, { name: 'mgr-rebrand' })).status === 403, 'manager CANNOT edit brand (owner-only customization)');
+  ok((await M('POST', `/b/${A.slug}/api/admin/line-config`, { liffId: 'mgr' })).status === 403, 'manager CANNOT change LINE integration (owner-only)');
 
   // ===== CRITICAL: legacy global-PIN backdoor must be CLOSED in SaaS =====
   sec('Global-PIN backdoor (must be closed)');
