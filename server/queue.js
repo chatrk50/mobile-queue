@@ -1,6 +1,10 @@
 import { db, getSetting, setSetting } from './db.js';
 import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
+import { currentTenantId } from './tenant.js';
+// Tenant scoping: every cross-row LIST / aggregate is filtered to the active tenant, and every
+// create stamps it. Tenant 1 (single-tenant / YO-DEE) owns all legacy rows, so this is a no-op.
+const TID = () => currentTenantId();
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
@@ -37,7 +41,10 @@ const queueLink = (zoneId) =>
   LIFF_ID ? `https://liff.line.me/${LIFF_ID}?zone=${zoneId}` : null;
 
 export function getZone(zoneId) {
-  return db.prepare('SELECT * FROM zones WHERE id = ?').get(zoneId);
+  // Tenant-scoped: a zone is only visible to the tenant that owns its store. This is the main
+  // boundary guard — createOrder/snapshot/QR all resolve the zone through here, so a cross-tenant
+  // zone id simply doesn't exist for this request. (Tenant 1 owns all legacy zones → no-op.)
+  return db.prepare('SELECT z.* FROM zones z JOIN stores s ON s.id=z.store_id WHERE z.id=? AND s.tenant_id=?').get(zoneId, TID());
 }
 
 /** A customer's still-active ticket in a zone, so re-opening the LIFF resumes it
@@ -233,11 +240,11 @@ export function setFinanceSettings(patch = {}, branchId = null) {
 /** Customer satisfaction (star distribution) + repeat-buyer stats (returning LINE customers). */
 export function customerInsights() {
   const stars = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; let total = 0, sum = 0;
-  for (const r of db.prepare('SELECT rating, COUNT(*) n FROM tickets WHERE rating IS NOT NULL GROUP BY rating').all()) {
+  for (const r of db.prepare(`SELECT t.rating, COUNT(*) n FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.rating IS NOT NULL AND s.tenant_id=? GROUP BY t.rating`).all(TID())) {
     if (stars[r.rating] != null) { stars[r.rating] = r.n; total += r.n; sum += r.rating * r.n; }
   }
-  const c = db.prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN order_count>=2 THEN 1 ELSE 0 END),0) repeat FROM customers').get();
-  const top = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE order_count>=2 ORDER BY order_count DESC, last_order_at DESC LIMIT 10').all();
+  const c = db.prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN order_count>=2 THEN 1 ELSE 0 END),0) repeat FROM customers WHERE tenant_id=?').get(TID());
+  const top = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE order_count>=2 AND tenant_id=? ORDER BY order_count DESC, last_order_at DESC LIMIT 10').all(TID());
   return {
     satisfaction: { avg: total ? Math.round((sum / total) * 10) / 10 : null, total, stars },
     customers: { total: c.total || 0, repeat: c.repeat || 0, repeatPct: c.total ? Math.round((c.repeat / c.total) * 100) : 0, top },
@@ -246,6 +253,9 @@ export function customerInsights() {
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport(branchId = null, dateStr = null) {
   const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards
+  // Tenant isolation: every branch/store filter is ALSO constrained to this tenant's stores, so
+  // a null branchId ("all my branches") never aggregates another tenant's data. tid is an int.
+  const tid = TID();
   // "Today" (or an explicit YYYY-MM-DD via dateStr) = a Bangkok calendar day. Every figure is
   // date-filtered to that day so the report is always correct regardless of the midnight reset
   // (orders/tickets persist for history). dateStr is internal-only (validated) — used to archive
@@ -257,17 +267,17 @@ export function dailyReport(branchId = null, dateStr = null) {
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.number>0 AND date(t.numbered_at,'+7 hours')=${TODAY}) AS issued,  -- queue numbers actually issued today (numbered_at: at payment under pay-first, at creation under queue-first)
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='served'  AND date(t.closed_at,'+7 hours')=${TODAY}) AS served,
        (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=${TODAY}) AS no_shows
-     FROM zones z WHERE (? IS NULL OR z.store_id=?) ORDER BY z.id`
+     FROM zones z WHERE (? IS NULL OR z.store_id=?) AND z.store_id IN (SELECT id FROM stores WHERE tenant_id=${tid}) ORDER BY z.id`
   ).all(...B);
   const cupsSold = perZone.reduce((s, z) => s + z.served, 0);
   const issued = perZone.reduce((s, z) => s + z.issued, 0);
   const noShows = perZone.reduce((s, z) => s + z.no_shows, 0);
   const wait = db.prepare(
     `SELECT AVG((julianday(called_at)-julianday(created_at))*86400) AS s
-     FROM tickets WHERE called_at IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?)`
+     FROM tickets WHERE called_at IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?) AND store_id IN (SELECT id FROM stores WHERE tenant_id=${tid})`
   ).get(...B);
   const rating = db.prepare(
-    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?)`
+    `SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL AND date(created_at,'+7 hours')=${TODAY} AND (? IS NULL OR store_id=?) AND store_id IN (SELECT id FROM stores WHERE tenant_id=${tid})`
   ).get(...B);
   // Item sales tagged drink/topping via the menu (so we can split the P&L and count cups).
   const itemSales = db.prepare(
@@ -277,8 +287,8 @@ export function dailyReport(branchId = null, dateStr = null) {
             SUM(oi.qty*oi.price) AS revenue
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
-     WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)   -- SALES = paid TODAY only (pay-first); optional branch
+     LEFT JOIN menu_items mi ON mi.name = oi.name AND mi.tenant_id=${tid}
+     WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?) AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=${tid})   -- SALES = paid TODAY only (pay-first); optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all(...B);
   const grossSales = itemSales.reduce((s, i) => s + (i.revenue || 0), 0);
@@ -288,27 +298,27 @@ export function dailyReport(branchId = null, dateStr = null) {
   const cups = itemSales.filter((i) => i.category !== 'topping').reduce((s, i) => s + i.qty, 0);
   // Bill discounts on non-void orders reduce NET sales. revenue = gross − discounts
   // (defaults to gross since discounts are 0 until used — no behavior change).
-  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`).get(...B).d || 0;
+  const discounts = db.prepare(`SELECT COALESCE(SUM(o.discount),0) AS d FROM orders o WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?) AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=${tid})`).get(...B).d || 0;
   const revenue = Math.round((grossSales - discounts) * 100) / 100;
 
   // Cancelled / refunded / wasted orders — all excluded from sales above, reported separately.
   const vAgg = db.prepare(
     `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount
-     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`
+     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?) AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=${tid})`
   ).get(...B);
   const vCups = db.prepare(
     `SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0) AS cups
      FROM order_items oi JOIN orders o ON o.id=oi.order_id
-     LEFT JOIN menu_items mi ON mi.name=oi.name
-     WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)`
+     LEFT JOIN menu_items mi ON mi.name=oi.name AND mi.tenant_id=${tid}
+     WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?) AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=${tid})`
   ).get(...B);
   // Break the voids down by kind so the report shows: cancelled (neutral, no money),
   // refunded (money returned), waste (made-but-binned → a COST with no revenue).
   const vByKind = db.prepare(
     `SELECT COALESCE(o.void_kind,'void') AS kind, COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(o.total),0) AS amount,
             COALESCE(SUM((SELECT COALESCE(SUM(CASE WHEN COALESCE(mi.category,'drink')!='topping' THEN oi.qty ELSE 0 END),0)
-                          FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name WHERE oi.order_id=o.id)),0) AS cups
-     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)
+                          FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name AND mi.tenant_id=${tid} WHERE oi.order_id=o.id)),0) AS cups
+     FROM orders o WHERE o.payment_status='void' AND date(o.voided_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?) AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=${tid})
      GROUP BY COALESCE(o.void_kind,'void')`
   ).all(...B);
   const byKind = { void:{orders:0,amount:0,cups:0}, refund:{orders:0,amount:0,cups:0}, waste:{orders:0,amount:0,cups:0} };
@@ -331,7 +341,7 @@ export function dailyReport(branchId = null, dateStr = null) {
   const netProfit = grossProfit - dailyOpex - wasteCost;
   // Break-even: how many cups/day cover the prorated fixed costs, using the menu's
   // average drink price (so it's meaningful even before the first sale of the day).
-  const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1").get().a || 0;
+  const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1 AND tenant_id=?").get(TID()).a || 0;
   const contribPerCup = refAvg * (1 - f.ingredientPct) - f.packagingPerCup;
   const breakEvenCups = contribPerCup > 0 ? Math.ceil(dailyOpex / contribPerCup) : null;
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
@@ -573,12 +583,13 @@ export function setZoneOpen(zoneId, isOpen) {
 
 // ---------- Store open/closed (master switch for operating hours) ----------
 export function firstStore() {
-  return db.prepare('SELECT * FROM stores ORDER BY id LIMIT 1').get();
+  return db.prepare('SELECT * FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(TID());
 }
 /** Open/close the whole store: flips the store flag AND every one of its zones,
  *  so the customer LIFF shows "closed" everywhere. Returns affected zone ids. */
 export function setStoreOpen(storeId, isOpen) {
   const v = isOpen ? 1 : 0;
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(storeId, TID())) throw new Error('store_not_found');
   db.prepare('UPDATE stores SET is_open=? WHERE id=?').run(v, storeId);
   db.prepare('UPDATE zones SET is_open=? WHERE store_id=?').run(v, storeId);
   return db.prepare('SELECT id FROM zones WHERE store_id=?').all(storeId).map((z) => z.id);
@@ -595,7 +606,7 @@ export function isStoreOpenRow(s) {
 }
 /** All branches with their profile + zone count + computed open_now (manual toggle AND hours). */
 export function listStores() {
-  return db.prepare('SELECT * FROM stores ORDER BY id').all().map((s) => ({
+  return db.prepare('SELECT * FROM stores WHERE tenant_id=? ORDER BY id').all(TID()).map((s) => ({
     ...s,
     zones: db.prepare('SELECT COUNT(*) c FROM zones WHERE store_id=?').get(s.id).c,
     open_now: (s.is_open === 1) && isStoreOpenRow(s),
@@ -603,7 +614,7 @@ export function listStores() {
 }
 /** Edit a branch's profile + hours. `isOpen` (manual temp open/close) handled via setStoreOpen. */
 export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen, hoursClose, hoursDays } = {}) {
-  const cur = db.prepare('SELECT * FROM stores WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM stores WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('store_not_found');
   const opt = (x, col, max) => x != null ? (x === '' ? null : x.toString().slice(0, max)) : cur[col];
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
@@ -620,7 +631,7 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
+  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items WHERE tenant_id=? ORDER BY sort, id').all(TID());
   // Per-branch overrides: drop items this branch disabled; apply the branch's soldout.
   if (branchId) {
     const ov = new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]));
@@ -644,15 +655,15 @@ export function listMenu(channelId = null, branchId = null) {
 }
 
 // ---------- Branches (Phase 2): a tenant's shops ----------
-export function listBranches(tenantId = null) {
-  const rows = db.prepare(`SELECT id, name, code, is_open, address, phone, hours_open, hours_close, hours_days FROM stores WHERE (? IS NULL OR tenant_id=?) ORDER BY id`).all(tenantId, tenantId);
+export function listBranches(tenantId = TID()) {
+  const rows = db.prepare(`SELECT id, name, code, is_open, address, phone, hours_open, hours_close, hours_days FROM stores WHERE tenant_id=? ORDER BY id`).all(tenantId);
   return rows.map((b) => ({
     ...b,
     zones: db.prepare('SELECT name FROM zones WHERE store_id=? ORDER BY id').all(b.id).map((z) => z.name),
     open_now: (b.is_open === 1) && isStoreOpenRow(b),
   }));
 }
-export function createBranch({ name, code = null, tenantId = 1 } = {}) {
+export function createBranch({ name, code = null, tenantId = TID() } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
   const info = db.prepare('INSERT INTO stores (name, code, tenant_id) VALUES (?,?,?)').run(n, code ? code.toString().slice(0, 20) : null, tenantId);
@@ -662,7 +673,7 @@ export function createBranch({ name, code = null, tenantId = 1 } = {}) {
   return { id, name: n, code, zones: 1 };
 }
 export function renameBranch(id, { name, code }) {
-  const cur = db.prepare('SELECT * FROM stores WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM stores WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('branch_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const c = code !== undefined ? (code ? code.toString().slice(0, 20) : null) : cur.code;
@@ -693,7 +704,7 @@ export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride
 // ---------- Inventory: raw materials + stock movements ----------
 const round2i = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
 export function listIngredients() {
-  const rows = db.prepare('SELECT * FROM ingredients WHERE active=1 ORDER BY name').all();
+  const rows = db.prepare('SELECT * FROM ingredients WHERE active=1 AND tenant_id=? ORDER BY name').all(TID());
   return rows.map((r) => ({ ...r, low: r.stock_qty <= r.low_threshold, value: round2i(r.stock_qty * r.avg_cost) }));
 }
 export function inventorySummary() {
@@ -708,8 +719,8 @@ export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
   // costPrice = purchase price per unit (สfor costing). Stock starts at 0 — fill in later.
-  const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, avg_cost, branch_id) VALUES (?,?,?,?,?)')
-    .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), branchId);
+  const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, avg_cost, branch_id, tenant_id) VALUES (?,?,?,?,?,?)')
+    .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), branchId, TID());
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateIngredient(id, { name, unit, lowThreshold, active, costPrice }) {
@@ -779,8 +790,8 @@ export function setRecipe(menuItemId, rows = []) {
  *  recipe. Returns Map(menuItemId → makeable count) ONLY for items that have a recipe. */
 export function menuMakeable() {
   const rows = db.prepare(
-    `SELECT r.menu_item_id AS mid, r.qty, i.stock_qty FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.qty>0`
-  ).all();
+    `SELECT r.menu_item_id AS mid, r.qty, i.stock_qty FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.qty>0 AND i.tenant_id=?`
+  ).all(TID());
   const byMenu = new Map();
   for (const r of rows) {
     const can = Math.floor((Number(r.stock_qty) || 0) / r.qty);
@@ -796,7 +807,7 @@ function deductStockForOrder(order) {
     const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
     for (const it of items) {
       const base = String(it.name).split(' · ')[0];   // strip the " · หวาน X%" suffix
-      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
+      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? AND tenant_id=? LIMIT 1').get(base, TID());
       if (!mi) continue;
       const recipe = db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id);
       for (const r of recipe) {
@@ -819,15 +830,16 @@ const branchIdsOf = (staffId) =>
   db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staffId).map((r) => r.branch_id);
 
 export function listStaff() {
-  const rows = db.prepare('SELECT id, name, role, active FROM staff ORDER BY role, name').all();
+  const rows = db.prepare('SELECT id, name, role, active FROM staff WHERE tenant_id=? ORDER BY role, name').all(TID());
   return rows.map((s) => ({ ...s, branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id) }));
 }
-// True if `pin` already belongs to another active staffer (PINs identify the user at login).
+// True if `pin` already belongs to another active staffer IN THIS TENANT (PINs identify the
+// user at login; the same PIN may safely exist at a different brand).
 function pinTaken(pin, exceptId = null) {
-  return db.prepare('SELECT id, pin_hash FROM staff WHERE active=1').all()
+  return db.prepare('SELECT id, pin_hash FROM staff WHERE active=1 AND tenant_id=?').all(TID())
     .some((s) => s.id !== Number(exceptId) && verifyPin(pin, s.pin_hash));
 }
-export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenantId = 1 }) {
+export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenantId = TID() }) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
   const p = (pin || '').toString().trim();
@@ -849,7 +861,7 @@ export function updateStaff(id, { name, role, active, pin, branchIds }) {
   const a = active != null ? (active ? 1 : 0) : cur.active;
   // Never deactivate or demote the last active owner (lock-out guard).
   if ((cur.role === 'owner') && (r !== 'owner' || !a)) {
-    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1").get().c;
+    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1 AND tenant_id=?").get(TID()).c;
     if (owners <= 1) throw new Error('cannot_remove_last_owner');
   }
   let pinHash = cur.pin_hash;
@@ -870,7 +882,7 @@ export function deactivateStaff(id) {
   const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
   if (!cur) throw new Error('staff_not_found');
   if (cur.role === 'owner') {
-    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1").get().c;
+    const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1 AND tenant_id=?").get(TID()).c;
     if (owners <= 1) throw new Error('cannot_remove_last_owner');
   }
   db.prepare('UPDATE staff SET active=0 WHERE id=?').run(id);
@@ -879,10 +891,10 @@ export function deactivateStaff(id) {
 
 // ---------- Price tiers & sales channels (multi-price per product) ----------
 export function listPriceTiers() {
-  return db.prepare('SELECT * FROM price_tiers ORDER BY sort, id').all();
+  return db.prepare('SELECT * FROM price_tiers WHERE tenant_id=? ORDER BY sort, id').all(TID());
 }
 export function listChannels() {
-  return db.prepare('SELECT * FROM channels ORDER BY sort, id').all();
+  return db.prepare('SELECT * FROM channels WHERE tenant_id=? ORDER BY sort, id').all(TID());
 }
 /** Owner edits a price tier's default markup % over base (and optionally its name). */
 export function updatePriceTier(id, { markup_pct, name }) {
@@ -1226,13 +1238,13 @@ export function awardPoints(orderId) {
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {
-  return db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active=1'} ORDER BY sort, cost_points, id`).all();
+  return db.prepare(`SELECT * FROM rewards WHERE tenant_id=? ${all ? '' : 'AND active=1'} ORDER BY sort, cost_points, id`).all(TID());
 }
 export function addReward({ name, cost_points, image = null } = {}) {
   const nm = (name || '').toString().trim().slice(0, 60);
   const cost = Math.max(1, Math.round(Number(cost_points) || 0));
   if (!nm) throw new Error('name_required');
-  const info = db.prepare('INSERT INTO rewards (name, cost_points, image) VALUES (?,?,?)').run(nm, cost, image ? image.toString() : null);
+  const info = db.prepare('INSERT INTO rewards (name, cost_points, image, tenant_id) VALUES (?,?,?,?)').run(nm, cost, image ? image.toString() : null, TID());
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateReward(id, { name, cost_points, active, image } = {}) {
@@ -1325,13 +1337,13 @@ export function addMenuItem({ name, name_en, price, image, category }) {
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
   const cat = category === 'topping' ? 'topping' : 'drink';
-  const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
-  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)')
-    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s);
+  const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items WHERE tenant_id=?').get(TID()).s;
+  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort, tenant_id) VALUES (?,?,?,?,?,?,?)')
+    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, TID());
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category }) {
-  const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM menu_items WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
   const en = name_en != null ? (name_en.toString().slice(0, 80) || null) : cur.name_en;

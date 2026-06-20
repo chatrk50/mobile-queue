@@ -458,6 +458,9 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN brand_unit TEXT`,
   `ALTER TABLE tenants ADD COLUMN brand_logo TEXT`,
   `ALTER TABLE tenants ADD COLUMN package TEXT NOT NULL DEFAULT 'line'`,
+  // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
+  `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   // Idempotency key per bill: a retried create+pay with the same token returns the SAME
   // order instead of creating a duplicate (lets the cashier UI auto-retry a lost request safely).
   `ALTER TABLE tickets ADD COLUMN client_token TEXT`,

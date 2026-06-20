@@ -3,9 +3,10 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE } from './db.js';
+import { db, getSetting, DURABLE, getTenant, getTenantBySlug, tenantBrand } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
+import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
@@ -36,6 +37,10 @@ const BRAND = {
 };
 // Package-1 (POS-only) hides every customer-facing LINE feature regardless of token presence.
 const POS_ONLY = BRAND.package === 'pos';
+// Brand + package per request. Single-tenant uses the env BRAND (identical to before); the SaaS
+// deployment resolves them from the request's tenant row.
+const brandFor = (req) => SAAS ? tenantBrand(req.tenantId, BRAND) : BRAND;
+const posOnlyFor = (req) => SAAS ? (brandFor(req).package === 'pos') : POS_ONLY;
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
@@ -81,6 +86,27 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
 
 app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
 
+// ---- Tenant resolution (SaaS). In single-tenant mode every request is tenant 1 and this is a
+// near no-op. In SaaS mode (SAAS=1) a request under /b/<slug>/… is mapped to that tenant: we
+// strip the prefix so all existing routes work unchanged, set req.tenantId, and run the rest of
+// the request inside that tenant's AsyncLocalStorage context so the data layer scopes itself. ----
+app.use((req, res, next) => {
+  let tenantId = DEFAULT_TENANT;
+  if (SAAS) {
+    const m = req.url.match(/^\/b\/([a-z0-9-]{1,40})(\/|$|\?)/i);
+    if (m) {
+      const t = getTenantBySlug(m[1]);
+      if (!t) return res.status(404).send('ไม่พบแบรนด์นี้');
+      if (!t.active) return res.status(403).send('บัญชีนี้ถูกระงับการใช้งาน');
+      tenantId = t.id;
+      req.url = req.url.slice(('/b/' + m[1]).length) || '/';   // strip /b/<slug>
+      if (req.url[0] !== '/') req.url = '/' + req.url;
+    }
+  }
+  req.tenantId = tenantId;
+  runWithTenant(tenantId, () => next());
+});
+
 // ---- Staff session: a valid signed 'sess' cookie attaches req.staff (Phase 1). This
 // runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
 app.use((req, res, next) => {
@@ -89,10 +115,30 @@ app.use((req, res, next) => {
     const p = tok ? verifySession(tok) : null;
     if (p && p.staffId) {
       const s = db.prepare('SELECT id, name, role, tenant_id, active FROM staff WHERE id=?').get(p.staffId);
-      if (s && s.active) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
+      // A session is only valid within its own tenant — a cookie from brand A can't drive brand B.
+      if (s && s.active && s.tenant_id === req.tenantId) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
     }
   } catch { /* ignore bad cookie */ }
   next();
+});
+
+// ---- Tenant boundary guards: a :zoneId / :ticketId in the URL must belong to the request's
+// tenant, else 404 (so a guessed id from another brand is invisible). SaaS-only — in
+// single-tenant mode tenant 1 owns everything, so these are pure pass-throughs. ----
+app.param('zoneId', (req, res, next, zoneId) => {
+  if (!SAAS) return next();
+  const ok = db.prepare('SELECT 1 FROM zones z JOIN stores s ON s.id=z.store_id WHERE z.id=? AND s.tenant_id=?').get(zoneId, req.tenantId);
+  return ok ? next() : res.status(404).json({ error: 'not_found' });
+});
+app.param('ticketId', (req, res, next, ticketId) => {
+  if (!SAAS) return next();
+  const ok = db.prepare('SELECT 1 FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.id=? AND s.tenant_id=?').get(ticketId, req.tenantId);
+  return ok ? next() : res.status(404).json({ error: 'not_found' });
+});
+app.param('storeId', (req, res, next, storeId) => {
+  if (!SAAS) return next();
+  const ok = db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(storeId, req.tenantId);
+  return ok ? next() : res.status(404).json({ error: 'not_found' });
 });
 
 // ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
@@ -119,14 +165,15 @@ app.use((req, res, next) => {
 // PWA manifest built from the brand config (so the home-screen app name/icon/colour follow the
 // brand). Registered before express.static so it wins over the static file.
 app.get('/manifest.webmanifest', (req, res) => {
+  const b = brandFor(req);
   res.type('application/manifest+json').json({
-    name: BRAND.name, short_name: BRAND.short, description: `${BRAND.name}`,
+    name: b.name, short_name: b.short, description: `${b.name}`,
     start_url: '/cashier/', scope: '/', display: 'standalone', orientation: 'any',
-    background_color: '#ffffff', theme_color: BRAND.theme, lang: 'th',
+    background_color: '#ffffff', theme_color: b.theme, lang: 'th',
     icons: [
-      { src: BRAND.logo, sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: BRAND.logo, sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: BRAND.logo, sizes: 'any', type: 'image/png', purpose: 'maskable' },
+      { src: b.logo, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: b.logo, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: b.logo, sizes: 'any', type: 'image/png', purpose: 'maskable' },
     ],
   });
 });
@@ -147,10 +194,11 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
+  const posOnly = posOnlyFor(req);
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly, lineFeatures: !posOnly, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: posOnly ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !posOnly, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !posOnly, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: brandFor(req) });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
-app.get('/api/brand', (req, res) => res.json(BRAND));
+app.get('/api/brand', (req, res) => res.json(brandFor(req)));
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {
@@ -173,7 +221,8 @@ app.post('/api/staff/login', (req, res) => {
   if (pinLocked(ip)) return res.status(429).json({ error: 'too_many_attempts' });
   const pin = (req.body?.pin || '').toString();
   if (!pin) return res.status(400).json({ error: 'pin_required' });
-  const staff = db.prepare('SELECT * FROM staff WHERE active=1').all().find((s) => verifyPin(pin, s.pin_hash));
+  // Match only staff of THIS tenant — the same PIN at another brand is a different person.
+  const staff = db.prepare('SELECT * FROM staff WHERE active=1 AND tenant_id=?').all(req.tenantId).find((s) => verifyPin(pin, s.pin_hash));
   if (!staff) { countPinFail(ip); return res.status(401).json({ error: 'bad_pin' }); }
   pinFails.delete(ip);
   const branchIds = staff.role === 'owner' ? []
@@ -421,7 +470,7 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 // Customer self-order (no PIN) — from the LINE app: build a cart, get a queue
 // number, then pay at the counter. Order is tagged source='customer', unpaid.
 app.post('/api/zones/:zoneId/order', (req, res) => {
-  if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
+  if (posOnlyFor(req) || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',
