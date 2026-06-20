@@ -469,6 +469,9 @@ function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>'
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+// HH:MM in Bangkok time. Timestamps are stored UTC, so slicing the raw string showed times 7h off.
+function fmtTime(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
+  return d.toLocaleTimeString('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}); }
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
 window.toggleAdmin=(e)=>{ if(e) e.stopPropagation(); const m=$('adminMenu'); m.style.display=(m.style.display==='flex')?'none':'flex'; };
 window.closeAdmin=()=>{ const m=$('adminMenu'); if(m) m.style.display='none'; };
@@ -709,7 +712,7 @@ function renderDetail(){
     const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
     const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
     box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=(r.paid_at||r.created_at||'').slice(11,16);
+      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=fmtTime(r.paid_at||r.created_at);
         return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
@@ -732,7 +735,7 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     const vlabel=(k)=> k==='refund'?'คืนเงิน':k==='waste'?'ของเสีย':'ยกเลิก';
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)}) · 🗑️ ของเสีย ${vt.waste?.count||0} (${baht2(vt.waste?.amount||0)})</div>`+
-      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${fmtTime(v.voided_at)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
   } else if(t==='chan'){
     const rows=(DET.channels||[]); const ct=DET.channelTotals||{gross:0,commission:0,net:0};
     box.innerHTML=`<div style="margin-bottom:10px">ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
