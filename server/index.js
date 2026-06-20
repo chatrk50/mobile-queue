@@ -1114,7 +1114,7 @@ if ((process.env.SEED || '').toLowerCase() === 'blank') {
 // Ephemeral (non-durable) deploys — the UAT sandbox — start with an empty DB on every boot.
 // Auto-seed the demo store/menu so the app is immediately usable. No-op when durable (prod:
 // Turso keeps the real data) or when a store already exists.
-else if (!DURABLE) {
+else if (!DURABLE && !SAAS) {   // SaaS never auto-seeds the YO-DEE demo — tenants self-register
   try {
     const r = seedDemo();
     if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);

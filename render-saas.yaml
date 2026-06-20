@@ -1,0 +1,38 @@
+# Render Blueprint for the MULTI-TENANT SaaS deployment.
+# This is SEPARATE from the single-shop service (render.yaml / branch main). Brands self-register
+# at /signup and live at /b/<slug>/ (or their own custom domain).
+#
+# Deploy: Render Dashboard -> New -> Blueprint -> connect this repo -> pick this file.
+# Keep the single-shop service (YO-DEE) untouched on its own deployment.
+services:
+  - type: web
+    name: mobile-queue-saas
+    runtime: node
+    plan: free                 # free spins down after 15 min idle (cold starts). Use 'starter'
+    region: singapore          #   for always-on once you have paying brands.
+    branch: saas               # the multi-tenant branch (NOT main)
+    buildCommand: npm install
+    startCommand: npm start     # NO demo seed — tenants create their own data via /signup
+    healthCheckPath: /signup/
+    envVars:
+      - key: NODE_VERSION
+        value: "22.17.0"
+      - key: SAAS
+        value: "1"              # turns on /signup, /b/<slug>/ routing, custom domains, isolation
+      - key: SAAS_ADMIN_PIN
+        sync: false             # platform-admin console (/admin) — long + random, set in Render UI
+      - key: SESSION_SECRET
+        sync: false             # signs staff sessions — long + random
+      - key: PUBLIC_BASE_URL
+        sync: false             # e.g. https://mobile-queue-saas.onrender.com (used in links/webhooks)
+      # --- DURABLE STORAGE (REQUIRED for SaaS — brands' data must survive restarts) ---
+      - key: TURSO_DATABASE_URL
+        sync: false             # from a Turso DB (turso.tech). Required.
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: NOTIFY_THRESHOLD
+        value: "2"
+      - key: WAIT_PER_GROUP_MIN
+        value: "4"
+      # NOTE: no LINE / LIFF / CASHIER_PIN here — those are PER TENANT (each brand pastes its own
+      # LINE tokens in ตั้งค่าระบบ, and each brand's owner PIN is set at signup).
