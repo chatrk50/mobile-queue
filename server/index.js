@@ -3,13 +3,13 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
 import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -41,6 +41,10 @@ const POS_ONLY = BRAND.package === 'pos';
 // deployment resolves them from the request's tenant row.
 const brandFor = (req) => SAAS ? tenantBrand(req.tenantId, BRAND) : BRAND;
 const posOnlyFor = (req) => SAAS ? (brandFor(req).package === 'pos') : POS_ONLY;
+// LINE config per request: env in single-tenant; the tenant's own pasted tokens/LIFF in SaaS.
+const lineCfgFor = (req) => SAAS
+  ? { liffId: getSetting('liff:id', '') || '', lineEnabled: lineConfigured(), addFriendUrl: getSetting('line:add_friend_url', '') || '' }
+  : { liffId: LIFF_ID, lineEnabled: LINE_ENABLED, addFriendUrl: ADD_FRIEND_URL };
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
@@ -69,22 +73,8 @@ const MERCHANT_QR_DYNAMIC = Boolean(MERCHANT_QR);
 if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — dynamic amount ON (${isInjectable(MERCHANT_QR) ? 'standard PromptPay P2P' : 'merchant/bill-payment rail; KBank app may not accept the injected amount'}).`);
 const PROMPTPAY_DYNAMIC = PAY_ONLINE && (MERCHANT_QR_DYNAMIC || (!MERCHANT_QR && Boolean(PROMPTPAY_ID)));
 
-// ---- LINE webhook ----
-// line.middleware() reads the raw body, validates the x-line-signature, and
-// populates req.body.events itself. Do NOT add express.json() here: a second
-// body parser on the already-consumed stream throws -> 500 on LINE's Verify.
-app.post('/line/webhook', lineMiddleware, async (req, res) => {
-  const events = req.body?.events || [];
-  for (const ev of events) {
-    if (ev.type === 'follow') {
-      await replyText(ev.replyToken,
-        'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
-    }
-  }
-  res.sendStatus(200);
-});
-
-app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
+// Capture the raw body so the LINE webhook can verify the per-tenant HMAC signature.
+app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { req.rawBody = buf; } })); // room for uploaded menu photos (base64 data URLs)
 
 // ---- Tenant resolution (SaaS). In single-tenant mode every request is tenant 1 and this is a
 // near no-op. In SaaS mode (SAAS=1) a request under /b/<slug>/… is mapped to that tenant: we
@@ -105,6 +95,18 @@ app.use((req, res, next) => {
   }
   req.tenantId = tenantId;
   runWithTenant(tenantId, () => next());
+});
+
+// ---- LINE webhook (after tenant resolution, so /b/<slug>/line/webhook validates with THAT
+// tenant's channel secret). Body is already parsed + rawBody captured by express.json above. ----
+app.post('/line/webhook', lineMiddleware, async (req, res) => {
+  const events = req.body?.events || [];
+  for (const ev of events) {
+    if (ev.type === 'follow') {
+      await replyText(ev.replyToken, 'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
+    }
+  }
+  res.sendStatus(200);
 });
 
 // ---- Staff session: a valid signed 'sess' cookie attaches req.staff (Phase 1). This
@@ -195,7 +197,8 @@ const pinOK = (req) => {
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
   const posOnly = posOnlyFor(req);
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly, lineFeatures: !posOnly, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: posOnly ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !posOnly, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !posOnly, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: brandFor(req) });
+  const lc = lineCfgFor(req);
+  res.json({ liffId: lc.liffId, lineEnabled: lc.lineEnabled, posOnly, lineFeatures: !posOnly, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: posOnly ? '' : lc.addFriendUrl, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !posOnly, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !posOnly, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), saas: SAAS, brand: brandFor(req) });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(brandFor(req)));
@@ -395,6 +398,31 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.welcomeBonus != null) Object.assign(out, Q.setWelcomeBonus(req.body.welcomeBonus));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// ---- Per-tenant LINE connect (Phase C). A Pkg-2 brand owner pastes their own Messaging API
+// token/secret + LIFF id; stored in the tenant's settings. Secrets are write-only (never echoed).
+// SaaS-only — single-tenant uses env. ----
+app.get('/api/admin/line-config', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({
+    saas: SAAS,
+    configured: SAAS ? lineConfigured() : LINE_ENABLED,
+    liffId: getSetting('liff:id', '') || '',
+    addFriendUrl: getSetting('line:add_friend_url', '') || '',
+    hasToken: !!(getSetting('line:token', '')),
+    hasSecret: !!(getSetting('line:secret', '')),
+    webhookUrl: `${PUBLIC_BASE_URL}/b/${(brandFor(req).slug || '')}/line/webhook`,
+  });
+});
+app.post('/api/admin/line-config', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
+  const b = req.body || {};
+  if (b.token !== undefined) setSetting('line:token', String(b.token || '').trim());
+  if (b.secret !== undefined) setSetting('line:secret', String(b.secret || '').trim());
+  if (b.liffId !== undefined) setSetting('liff:id', String(b.liffId || '').trim());
+  if (b.addFriendUrl !== undefined) setSetting('line:add_friend_url', String(b.addFriendUrl || '').trim());
+  res.json({ ok: true, configured: lineConfigured(), liffId: getSetting('liff:id', '') || '' });
 });
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {

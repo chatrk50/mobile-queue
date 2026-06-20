@@ -1744,6 +1744,7 @@ window.printKitchen=async(tid)=>{
 window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
+  let lc=null; if(CFG.saas && CFG.lineFeatures){ try{ lc=await api('/api/admin/line-config'); }catch(e){} }
   const row=(key,on,title,desc,disabled)=>`
     <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
       <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
@@ -1766,6 +1767,16 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
+    (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">วาง Channel access token + secret + LIFF ID ของแบรนด์คุณ (จาก LINE Developers) ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
+      <input id="lineTokenInp" type="password" autocomplete="off" placeholder="${lc.hasToken?'•••• มีอยู่แล้ว — กรอกเพื่อเปลี่ยน':'Channel access token'}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <input id="lineSecretInp" type="password" autocomplete="off" placeholder="${lc.hasSecret?'•••• มีอยู่แล้ว':'Channel secret'}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <input id="lineLiffInp" placeholder="LIFF ID (เช่น 1234567-abcdef)" value="${esc(lc.liffId||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <input id="lineAddFriendInp" placeholder="ลิงก์เพิ่มเพื่อน OA (ไม่บังคับ)" value="${esc(lc.addFriendUrl||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
+      <button class="ok" style="width:100%" onclick="saveLineConfig()">บันทึกการเชื่อมต่อ LINE</button>
+      <div class="muted" style="font-size:11px;margin-top:8px">ตั้ง Webhook URL ใน LINE Developers เป็น:<br><code style="word-break:break-all">${esc(lc.webhookUrl||'')}</code></div>
+    </div>` : '')+
     `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
     `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
       <b style="color:var(--danger)">🧹 ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
@@ -1785,6 +1796,13 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
+// Per-tenant LINE connect (SaaS Pkg 2): only send token/secret if typed (blank keeps existing).
+window.saveLineConfig=async()=>{
+  const body={ liffId:$('lineLiffInp').value.trim(), addFriendUrl:$('lineAddFriendInp').value.trim() };
+  const tk=$('lineTokenInp').value.trim(), sc=$('lineSecretInp').value.trim();
+  if(tk) body.token=tk; if(sc) body.secret=sc;
+  try{ const d=await api('/api/admin/line-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast(d.configured?'เชื่อมต่อ LINE แล้ว ✓':'บันทึกแล้ว'); }catch(e){ toast(err(e)); } };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
 window.sweepPending=async()=>{ if(!confirm('ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?')) return;
