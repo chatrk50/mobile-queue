@@ -690,6 +690,21 @@ export function seedTenantDefaults(tenantId) {
   }
 }
 
+/** Edit a tenant's brand (name/short/theme/unit/logo). Logo is a data: URL or /path. Only the
+ *  fields provided are changed. Returns the refreshed brand. */
+export function updateTenantBrand(tenantId, { name, short, theme, unit, logo } = {}) {
+  const t = getTenant(tenantId);
+  if (!t) throw new Error('tenant_not_found');
+  const sets = [], vals = [];
+  if (name !== undefined) { sets.push('brand_name=?'); vals.push(String(name || '').slice(0, 80) || t.name); }
+  if (short !== undefined) { sets.push('brand_short=?'); vals.push(String(short || '').slice(0, 24) || null); }
+  if (theme !== undefined) { sets.push('brand_theme=?'); vals.push(/^#[0-9a-fA-F]{6}$/.test(theme || '') ? theme : null); }
+  if (unit !== undefined) { sets.push('brand_unit=?'); vals.push(String(unit || '').slice(0, 16) || null); }
+  if (logo !== undefined) { sets.push('brand_logo=?'); vals.push(logo ? String(logo).slice(0, 400000) : null); } // data URL ok
+  if (sets.length) { vals.push(tenantId); db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id=?`).run(...vals); }
+  return getTenant(tenantId);
+}
+
 /** Brand config for a tenant (DB row → falls back to env defaults for tenant 1). */
 export function tenantBrand(id, envDefaults = {}) {
   const t = getTenant(id);

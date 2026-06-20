@@ -1748,6 +1748,7 @@ window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
   let lc=null; if(CFG.saas && CFG.lineFeatures){ try{ lc=await api('/api/admin/line-config'); }catch(e){} }
+  let br=null; if(CFG.saas){ try{ br=await api('/api/admin/brand'); }catch(e){} } _brandLogo=null;
   const row=(key,on,title,desc,disabled)=>`
     <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
       <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
@@ -1770,6 +1771,21 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
+    (br ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>🎨 แบรนด์ของร้าน</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ชื่อ · สี · หน่วยนับ · โลโก้ — เปลี่ยนแล้วมีผลทุกหน้าทันที</div>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+        <img id="brandLogoPrev" src="${esc(br.logo||'/assets/logo.png')}" onerror="this.style.visibility='hidden'" style="width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:#fff">
+        <label class="btn ghost" style="padding:8px 12px;font-size:13px;cursor:pointer">อัปโหลดโลโก้<input id="brandLogoFile" type="file" accept="image/*" style="display:none" onchange="onLogoFile(event)"></label>
+      </div>
+      <input id="brandNameInp" placeholder="ชื่อร้าน" value="${esc(br.name||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <input id="brandShortInp" placeholder="ชื่อย่อ" value="${esc(br.short||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <div class="row" style="gap:8px;margin-bottom:8px">
+        <input id="brandUnitInp" placeholder="หน่วย (แก้ว/จาน)" value="${esc(br.unit||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <input id="brandThemeInp" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(br.theme||'')?br.theme:'#1e3a5f'}" style="width:52px;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px">
+      </div>
+      <button class="ok" style="width:100%" onclick="saveBrandConfig()">บันทึกแบรนด์</button>
+    </div>` : '')+
     (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">วาง Channel access token + secret + LIFF ID ของแบรนด์คุณ (จาก LINE Developers) ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
@@ -1799,6 +1815,16 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
+// Per-tenant brand editor (SaaS): logo uploaded as a resized data URL; name/short/unit/theme.
+let _brandLogo=null;
+window.onLogoFile=async(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;
+  try{ _brandLogo=await resizeImage(f,256); $('brandLogoPrev').src=_brandLogo; $('brandLogoPrev').style.visibility='visible'; }
+  catch(err2){ toast('อัปโหลดไม่สำเร็จ'); } };
+window.saveBrandConfig=async()=>{
+  const body={ name:$('brandNameInp').value.trim(), short:$('brandShortInp').value.trim(), unit:$('brandUnitInp').value.trim(), theme:$('brandThemeInp').value };
+  if(_brandLogo) body.logo=_brandLogo;
+  try{ await api('/api/admin/brand',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('บันทึกแบรนด์แล้ว ✓'); applyBrand(); }catch(e){ toast(err(e)); } };
 // Per-tenant LINE connect (SaaS Pkg 2): only send token/secret if typed (blank keeps existing).
 window.saveLineConfig=async()=>{
   const body={ liffId:$('lineLiffInp').value.trim(), addFriendUrl:$('lineAddFriendInp').value.trim() };

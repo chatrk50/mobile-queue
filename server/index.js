@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -398,6 +398,18 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.welcomeBonus != null) Object.assign(out, Q.setWelcomeBonus(req.body.welcomeBonus));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// ---- Per-tenant brand editor (Phase E.3). Owner edits their brand name/short/theme/unit and
+// uploads a logo (stored as a data URL in the tenant row). SaaS-only — single-tenant uses env. ----
+app.get('/api/admin/brand', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ saas: SAAS, ...brandFor(req) });
+});
+app.post('/api/admin/brand', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
+  try { updateTenantBrand(req.tenantId, req.body || {}); res.json({ ok: true, ...brandFor(req) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---- Per-tenant LINE connect (Phase C). A Pkg-2 brand owner pastes their own Messaging API
 // token/secret + LIFF id; stored in the tenant's settings. Secrets are write-only (never echoed).
