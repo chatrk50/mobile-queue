@@ -181,8 +181,9 @@ ok(!!arow && arow.cups === eod.pnl.cups && near(arow.void_amount, eod.voided.amo
 // Historical P&L: the archive also snapshots the cost breakdown, and salesHistory rolls up by year.
 ok(!!arow && near(arow.cogs, eod.pnl.cogs) && near(arow.opex, eod.pnl.opexDaily), `archive snapshots the P&L breakdown (cogs ${arow && arow.cogs}, opex ${arow && arow.opex})`);
 const sh = Q.salesHistory();
-ok(sh.daily.length >= 1 && Array.isArray(sh.monthly) && Array.isArray(sh.yearly), 'salesHistory returns daily + monthly + yearly');
+ok(sh.daily.length >= 1 && Array.isArray(sh.weekly) && Array.isArray(sh.monthly) && Array.isArray(sh.yearly), 'salesHistory returns daily + weekly + monthly + yearly');
 ok(sh.yearly.length >= 1 && near(sh.yearly[0].net, sh.daily.reduce((s, d) => s + (d.net || 0), 0)), 'INVARIANT yearly net rolls up the daily nets');
+ok(sh.weekly.length >= 1 && near(sh.weekly.reduce((s, w) => s + (w.net || 0), 0), sh.daily.reduce((s, d) => s + (d.net || 0), 0)), 'INVARIANT weekly nets sum to the daily nets');
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
