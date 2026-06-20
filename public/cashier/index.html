@@ -104,7 +104,7 @@
       <button class="pinkey" onclick="pinKey('7')">7</button><button class="pinkey" onclick="pinKey('8')">8</button><button class="pinkey" onclick="pinKey('9')">9</button>
       <button class="pinkey" style="color:var(--danger)" onclick="pinKey('C')">C</button><button class="pinkey" onclick="pinKey('0')">0</button><button class="pinkey" onclick="pinKey('back')">⌫</button>
     </div>
-    <button style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
+    <button id="loginBtn" style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
     <p id="loginErr" style="color:var(--danger);min-height:18px;margin-top:10px"></p>
   </div>
 
@@ -330,7 +330,7 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <h1 id="topPopTitle">ท็อปปิ้ง</h1>
+    <div class="row between"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
     <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
@@ -343,7 +343,7 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <h1 id="sweetTitle">ความหวาน</h1>
+    <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
     <p class="muted">เลือกระดับความหวาน</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
@@ -377,7 +377,26 @@
   <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center">
     <h1 style="margin:0 0 4px">รับชำระเงิน</h1>
     <div style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:14px">ยอด ฿<span id="payMethodAmt">0</span></div>
-    <div id="payMethodBtns" style="display:grid;gap:8px"></div>
+    <div id="payMethodBtns" style="display:grid;gap:12px"></div>
+  </div>
+</div>
+
+<!-- CASH: amount received → change (or exact) -->
+<div id="cashPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:360px;width:100%;margin:0">
+    <div class="row between"><h1 style="margin:0">💵 เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
+    <div style="text-align:center;margin:10px 0 6px"><div class="muted" style="font-size:13px">ยอดที่ต้องชำระ</div>
+      <div style="font-size:24px;font-weight:800;color:var(--navy)">฿<span id="cashDue">0</span></div></div>
+    <label class="muted" style="font-size:13px">รับเงินมา (เว้นว่าง = รับพอดี)</label>
+    <input id="cashRecv" type="number" inputmode="numeric" min="0" oninput="calcChange()" placeholder="จำนวนเงินที่รับ" style="width:100%;padding:14px;font-size:20px;text-align:center;border:1px solid var(--line);border-radius:10px;margin:4px 0 10px;box-sizing:border-box">
+    <div id="cashQuick" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div style="text-align:center;background:var(--surface,#f1f5f9);border-radius:10px;padding:12px;margin-bottom:12px">
+      <span class="muted" style="font-size:13px">เงินทอน</span>
+      <div id="cashChange" style="font-size:24px;font-weight:800;color:#16876f">฿0</div></div>
+    <div class="row" style="gap:8px">
+      <button class="ghost" style="flex:1" onclick="cashBack()">ย้อนกลับ</button>
+      <button class="ok" id="cashConfirmBtn" style="flex:2" onclick="confirmCash()">ยืนยันรับเงิน</button>
+    </div>
   </div>
 </div>
 
@@ -465,8 +484,12 @@ document.addEventListener('keydown',(e)=>{
   else if(e.key==='Backspace'){ pinKey('back'); e.preventDefault(); }
   else if(/^[0-9]$/.test(e.key)){ pinKey(e.key); e.preventDefault(); }
 });
+let _loggingIn=false;
 window.login=async()=>{
-  const pin=$('pin').value.trim(); if(!pin) return;
+  if(_loggingIn) return;                                  // ignore double-taps while a login is in flight
+  const pin=$('pin').value.trim(); if(!pin){ $('loginErr').textContent='กรอก PIN ก่อน'; return; }
+  _loggingIn=true; const lb=$('loginBtn');
+  if(lb){ lb.disabled=true; lb.style.opacity=.7; lb.textContent='กำลังเข้าสู่ระบบ…'; }   // instant feedback on slow networks
   try{
     // Per-staff login FIRST: each staffer signs in with their own PIN and gets a signed
     // session cookie; all requests then ride that cookie (PIN stays null). Actions are
@@ -488,6 +511,7 @@ window.login=async()=>{
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
+  finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
@@ -1208,6 +1232,9 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null
   renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
 
+// Back out of the drink builder entirely (customer changed their mind) — clears the in-progress
+// drink + closes the topping/sweet popups, returning to the menu without adding anything.
+window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
   $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
@@ -1592,13 +1619,30 @@ function renderPayButtons(){
   const box=$('payMethodBtns'); if(!box) return;
   let list=(TENDERS||[]).filter(t=>t.kind==='counter'&&t.active!==0);
   if(!list.length) list=[{code:'cash',label:'เงินสด'},{code:'promptpay',label:'พร้อมเพย์ / โอน'}];
-  box.innerHTML=list.map(t=>`<button class="ok" style="padding:12px;text-align:left" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
-    +`<button class="ghost" style="padding:12px;text-align:left" onclick="choosePayMethod('other')">อื่น ๆ</button>`
-    +`<button class="ghost" style="padding:8px;text-align:left;color:var(--muted)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
+  // One full-width tap target per tender (big, well-spaced) so a fast tap can't hit the wrong one.
+  box.innerHTML=list.map(t=>`<button class="ok" style="padding:16px 18px;text-align:left;font-size:16px;font-weight:700;min-height:56px" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
+    +`<button class="ghost" style="padding:16px 18px;text-align:left;font-size:15px;min-height:52px" onclick="choosePayMethod('other')">💳 อื่น ๆ</button>`
+    +`<button class="ghost" style="padding:12px;text-align:center;color:var(--muted);margin-top:8px;border-top:1px solid var(--line)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
 }
-function pickPayMethod(amount){ $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
+let _payAmt=0;
+function pickPayMethod(amount){ _payAmt=Number(amount)||0; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
   return new Promise(res=>{ _payRes=res; }); }
-window.choosePayMethod=(m)=>{ $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
+window.choosePayMethod=(m)=>{
+  if(m==='cash'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
+  $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
+// Cash received → change calculator (or leave blank for exact). Resolves the pay picker with 'cash'.
+function openCashPop(){
+  $('cashDue').textContent=_payAmt; $('cashRecv').value='';
+  $('cashQuick').innerHTML=`<button class="ghost" style="flex:1;min-width:66px;padding:10px;font-weight:700" onclick="setCash(${_payAmt})">พอดี</button>`+
+    [100,500,1000].filter(v=>v>_payAmt).map(v=>`<button class="ghost" style="flex:1;min-width:66px;padding:10px" onclick="setCash(${v})">฿${v}</button>`).join('');
+  calcChange(); $('cashPop').style.display='flex';
+  setTimeout(()=>{ try{ $('cashRecv').focus(); }catch(e){} },60); }
+window.setCash=(v)=>{ $('cashRecv').value=v; calcChange(); };
+window.calcChange=()=>{ const due=_payAmt, raw=$('cashRecv').value, recv=Number(raw)||0, box=$('cashChange'), btn=$('cashConfirmBtn');
+  if(raw && recv<due){ box.textContent='ขาด ฿'+(due-recv); box.style.color='var(--danger)'; if(btn){btn.disabled=true;btn.style.opacity=.5;} }
+  else { box.textContent='฿'+(raw?(recv-due):0); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
+window.confirmCash=()=>{ $('cashPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r('cash'); };
+window.cashBack=()=>{ $('cashPop').style.display='none'; $('payMethodPop').style.display='flex'; };   // back to tender picker
 window.markPaid=async(tid,status,amount)=>{
   // For a customer-declared PromptPay payment, force the staff to verify the money
   // actually arrived in the bank app before confirming — a tap is not proof of payment.
