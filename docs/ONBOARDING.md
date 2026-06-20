@@ -50,6 +50,34 @@ This system is white-label: one brand = one instance (own Render service + Turso
 - `SEED=demo` → loads the YO-DEE sample menu (for trying the system out).
 - unset → demo on an ephemeral DB (UAT), nothing forced on a durable DB (prod).
 
+## Running the multi-tenant SaaS (self-service signup)
+
+Instead of one instance per brand, you can run ONE multi-tenant deployment where brands
+register themselves. Deploy this repo as a **separate** service (keep any single-tenant shop
+on its own deployment) with:
+
+```
+SAAS=1                      # turns on /signup, /b/<slug>/ routing, per-tenant isolation
+SAAS_ADMIN_PIN=<long random># platform-admin console at /admin
+TURSO_DATABASE_URL=...      # durable DB (required)
+TURSO_AUTH_TOKEN=...
+PUBLIC_BASE_URL=https://<your-saas-host>
+```
+
+Then:
+- **Brands self-register** at `https://<host>/signup` → pick name / package (pos|line) / unit /
+  colour / owner PIN → instantly live at `https://<host>/b/<slug>/cashier/` (Pkg 1 fully usable;
+  Pkg 2 = POS now + connect LINE next).
+- **Pkg 2 brands connect LINE** themselves: cashier → ⚙ ตั้งค่าระบบ → "เชื่อมต่อ LINE" → paste
+  their Channel token/secret + LIFF ID, then set their LINE webhook to the URL shown
+  (`/b/<slug>/line/webhook`).
+- **You manage everything** at `https://<host>/admin` (enter `SAAS_ADMIN_PIN`): list brands,
+  suspend / reactivate, reset a locked-out owner's PIN.
+
+Isolation is enforced at the data layer (every query scoped to the tenant) + boundary checks;
+proven by `npm run test:isolation`. Each brand's data, staff PINs, settings, loyalty, brand
+theme and LINE channel are fully separate. See **SAAS-ADMIN-PLAN.md** for roles/auth detail.
+
 ## Switching package later
 Change `PACKAGE` and redeploy — it only flips feature visibility, data is untouched. Going
 `line → pos` hides the LINE/customer UI; `pos → line` reveals it (then do the LINE setup).
