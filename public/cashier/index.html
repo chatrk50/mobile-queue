@@ -1768,6 +1768,7 @@ window.showFeatures=async()=>{
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
   let lc=null; if(CFG.saas && CFG.lineFeatures){ try{ lc=await api('/api/admin/line-config'); }catch(e){} }
   let br=null; if(CFG.saas){ try{ br=await api('/api/admin/brand'); }catch(e){} } _brandLogo=null;
+  let bill=null; if(CFG.saas){ try{ bill=await api('/api/billing/status'); }catch(e){} } _bill=bill;
   const row=(key,on,title,desc,disabled)=>`
     <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
       <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
@@ -1790,6 +1791,15 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
+    (bill ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>💳 แพ็กเกจการใช้งาน</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">แพลน: <b style="color:${bill.plan==='pro'?'#7c3aed':'var(--navy)'}">${bill.plan==='pro'?'Pro':'Free'}</b>${bill.plan==='pro'&&bill.planUntil?` · ถึง ${esc(bill.planUntil.slice(0,10))}${bill.autoRenew?' · ต่ออายุอัตโนมัติ ✓':' · จะหมดอายุ (ยกเลิกแล้ว)'}`:' · จำกัด 1 สาขา / 500 ออเดอร์ต่อเดือน'}</div>
+      ${bill.configured
+        ? (bill.plan==='pro'
+            ? (bill.autoRenew?`<button class="ghost danger" style="width:100%" onclick="cancelSub()">ยกเลิกต่ออายุอัตโนมัติ</button>`:`<button class="ok" style="width:100%" onclick="upgradePro()">เปิดต่ออายุอีกครั้ง</button>`)
+            : `<button class="ok" style="width:100%" onclick="upgradePro()">⬆️ อัปเกรดเป็น Pro · ฿${Math.round(bill.amount/100)}/เดือน</button>`)
+        : `<div class="muted" style="font-size:12px">การชำระเงินออนไลน์ยังไม่เปิดบนระบบนี้ — ติดต่อผู้ดูแลเพื่ออัปเกรด</div>`}
+    </div>` : '')+
     (br ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>🎨 แบรนด์ของร้าน</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ชื่อ · สี · หน่วยนับ · โลโก้ — เปลี่ยนแล้วมีผลทุกหน้าทันที</div>
@@ -1834,6 +1844,16 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
+// Self-service billing (SaaS): Omise hosted card popup → token → subscribe. Card never touches us.
+let _bill=null;
+function loadOmise(cb){ if(window.OmiseCard) return cb(); const s=document.createElement('script'); s.src='https://cdn.omise.co/omise.js'; s.onload=cb; s.onerror=()=>toast('โหลดหน้าชำระเงินไม่ได้'); document.head.appendChild(s); }
+window.upgradePro=()=>{ if(!_bill||!_bill.publicKey){ toast('ยังไม่เปิดการชำระเงิน'); return; }
+  loadOmise(()=>{ try{ OmiseCard.configure({ publicKey:_bill.publicKey, currency:_bill.currency });
+    OmiseCard.open({ amount:_bill.amount, currency:_bill.currency, frameLabel:'อัปเกรด Pro', submitLabel:'จ่าย ฿'+Math.round(_bill.amount/100)+'/เดือน', buttonLabel:'อัปเกรด Pro',
+      onCreateTokenSuccess: async (token)=>{ try{ await api('/api/billing/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}); toast('🎉 อัปเกรด Pro แล้ว!'); showFeatures(); }catch(e){ toast(err(e)); } } });
+  }catch(e){ toast('เปิดหน้าชำระเงินไม่ได้'); } }); };
+window.cancelSub=async()=>{ if(!confirm('ยกเลิกต่ออายุอัตโนมัติ?\n(ยังใช้ Pro ได้จนหมดรอบที่จ่ายไว้ แล้วค่อยกลับเป็น Free)')) return;
+  try{ await api('/api/billing/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); toast('ยกเลิกต่ออายุแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 // Per-tenant brand editor (SaaS): logo uploaded as a resized data URL; name/short/unit/theme.
 let _brandLogo=null;
 window.onLogoFile=async(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;

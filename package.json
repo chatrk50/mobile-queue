@@ -14,7 +14,8 @@
     "backup": "node scripts/backup-dump.js",
     "test:tenant": "node --experimental-sqlite scripts/test-tenant.mjs",
     "test:isolation": "node --experimental-sqlite scripts/test-isolation.mjs",
-    "dryrun": "node scripts/dryrun.mjs"
+    "dryrun": "node scripts/dryrun.mjs",
+    "test:billing": "node --experimental-sqlite scripts/test-billing.mjs"
   },
   "engines": {
     "node": ">=22.5.0"

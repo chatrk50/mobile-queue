@@ -13,8 +13,11 @@ const PLANS = {
 };
 export function listPlans() { return PLANS; }
 export function tenantPlan(tenantId = TID()) {
-  const row = db.prepare('SELECT plan_name FROM tenants WHERE id=?').get(tenantId);
-  const name = row && PLANS[row.plan_name] ? row.plan_name : 'free';
+  const row = db.prepare('SELECT plan_name, plan_until FROM tenants WHERE id=?').get(tenantId);
+  let name = row && PLANS[row.plan_name] ? row.plan_name : 'free';
+  // A paid plan lapses to free once its paid-through date passes (3-day grace for renewal retries),
+  // so enforcement is correct even if the renewal sweep hasn't run yet.
+  if (name !== 'free' && row.plan_until && new Date(row.plan_until).getTime() + 3 * 24 * 3600 * 1000 < Date.now()) name = 'free';
   return { name, ...PLANS[name] };
 }
 export function setTenantPlan(tenantId, plan) {

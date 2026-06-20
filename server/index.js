@@ -11,6 +11,7 @@ import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
+import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook } from './billing.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
@@ -429,6 +430,27 @@ app.get('/api/admin/brand', (req, res) => {
 app.get('/api/admin/usage', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ saas: SAAS, ...Q.tenantUsage() });
+});
+// ---- Self-service billing (Omise subscription) ----
+app.get('/api/billing/status', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(billingStatus(req.tenantId));
+});
+app.post('/api/billing/subscribe', async (req, res) => {       // body: { token (from Omise.js), email }
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await subscribeTenant(req.tenantId, req.body?.token, req.body?.email || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/billing/cancel', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(cancelSubscription(req.tenantId));
+});
+// Omise account-level webhook (one URL for the whole platform). Authenticity is verified by
+// re-fetching the event from Omise inside billingWebhook; the tenant is found via the charge's
+// customer, so no per-tenant routing is needed.
+app.post('/billing/omise/webhook', async (req, res) => {
+  try { await billingWebhook(req.body?.id); } catch { /* never error back to Omise */ }
+  res.sendStatus(200);
 });
 app.post('/api/admin/brand', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1101,6 +1123,10 @@ setInterval(() => {
     if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
+
+// Billing: recurring-charge sweep — renews pro tenants whose paid-through has passed (and
+// downgrades after the grace window). Tenant-agnostic; only active when Omise is configured.
+if (BILLING_ON) setInterval(() => { renewDue().catch(() => {}); }, 6 * 3600 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
 // (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:

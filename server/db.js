@@ -459,6 +459,10 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN brand_logo TEXT`,
   `ALTER TABLE tenants ADD COLUMN package TEXT NOT NULL DEFAULT 'line'`,
   `ALTER TABLE tenants ADD COLUMN domain TEXT`,   // optional custom domain → serves the brand at root
+  // --- Self-service billing (Omise subscription) ---
+  `ALTER TABLE tenants ADD COLUMN omise_customer_id TEXT`,  // saved card → recurring charge
+  `ALTER TABLE tenants ADD COLUMN plan_until TEXT`,         // pro paid through this datetime (UTC)
+  `ALTER TABLE tenants ADD COLUMN auto_renew INTEGER NOT NULL DEFAULT 0`,
   // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
   `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

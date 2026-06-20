@@ -37,12 +37,23 @@ For a brand that wants `shop.theirbrand.com`:
    → the brand now serves at the root of its own domain (no `/b/<slug>/`).
 
 ## 5. Plans & billing
-- New brands default to **free** (1 branch, 500 orders/month). Upgrade a brand to **pro**
-  (unlimited) from **/admin** (plan dropdown). This is **manual billing** — collect payment
-  out-of-band for now.
-- To automate payment later, wire a provider (e.g. Stripe Checkout) to call
-  `setTenantPlan(tenantId, 'pro')` on success and downgrade on cancellation. The quota
-  enforcement (`branch_limit` / `order_limit`) is already in place.
+- New brands default to **free** (1 branch, 500 orders/month). **pro** = unlimited.
+
+**Option A — manual:** leave Omise env blank. Upgrade a brand to pro from **/admin** (plan
+dropdown). Collect payment out-of-band.
+
+**Option B — self-service (Omise, monthly subscription):** set `OMISE_SECRET_KEY` +
+`OMISE_PUBLIC_KEY` (+ optional `OMISE_PRO_AMOUNT` in satang, `OMISE_CURRENCY`) from
+[dashboard.omise.co](https://dashboard.omise.co). Then:
+- A brand owner opens ⚙ ตั้งค่าระบบ → **💳 แพ็กเกจการใช้งาน → อัปเกรด Pro** → pays by card in the
+  Omise popup (card data goes straight to Omise — never our server) → instantly Pro for 1 month.
+- The server saves the card on an Omise customer and **auto-renews monthly** (a 6-hourly sweep
+  charges due tenants; lapses to free after a 3-day grace if a charge fails). Owners can cancel
+  auto-renew anytime (Pro stays until the paid-through date).
+- Point your Omise **webhook** at `PUBLIC_BASE_URL/billing/omise/webhook` (used to downgrade on
+  refunds; events are re-verified against the Omise API).
+- Test first with Omise **test keys** (`skey_test_…` / `pkey_test_…`) + a test card before going
+  live. Quota enforcement (`branch_limit` / `order_limit`) is already in place.
 
 ## Operating notes
 - **Free plan spins down** after 15 min idle (cold start ~30s). Switch the service to `starter`
