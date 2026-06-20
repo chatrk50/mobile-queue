@@ -165,7 +165,10 @@ function countPinFail(ip) {
 }
 // A logged-in staff session counts as having the cashier PIN, so every existing
 // PIN-gated route accepts session auth without changing each call site.
-const pinPresent = (req) => req.get('x-cashier-pin') || req.query.pin || req.body?.pin || (req.staff ? CASHIER_PIN : null);
+// IN SAAS MODE the legacy global PIN is DISABLED — it isn't tenant-scoped, so honouring a raw
+// x-cashier-pin would be a cross-tenant backdoor. Only the per-tenant staff session authenticates.
+const pinPresent = (req) => req.staff ? CASHIER_PIN
+  : (SAAS ? null : (req.get('x-cashier-pin') || req.query.pin || req.body?.pin || null));
 // Silent check (no fail-counting) — used to decide whether to reveal names.
 const pinValueOK = (req) => pinPresent(req) === CASHIER_PIN;
 // Block PIN-bearing requests from a locked IP before they hit any handler.
@@ -302,7 +305,9 @@ app.post('/api/auth', (req, res) => {
 // ---------- Staff auth & roles (Phase 1) ----------
 // The legacy admin PIN supplied DIRECTLY (header/query/body) — NOT via a session.
 // (pinValueOK is true for any logged-in staff, so it must not gate owner actions.)
-const legacyAdminPin = (req) => (req.get('x-cashier-pin') || req.query.pin || req.body?.pin) === CASHIER_PIN;
+// Single-tenant only: the shop's own global PIN grants owner/manager. DISABLED in SaaS (would be
+// a cross-tenant backdoor) — there, role comes solely from the per-tenant session.
+const legacyAdminPin = (req) => !SAAS && (req.get('x-cashier-pin') || req.query.pin || req.body?.pin) === CASHIER_PIN;
 // Owner-level access = a logged-in OWNER session OR the legacy admin CASHIER_PIN.
 const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
 // Manager-level = owner/manager session OR legacy admin PIN (reports, finance).
