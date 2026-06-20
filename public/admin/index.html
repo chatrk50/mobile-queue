@@ -57,7 +57,7 @@ window.load=async()=>{ $('err').textContent='';
   try{ const d=await api('/admin/api/tenants'); const ts=d.tenants||[]; const plans=Object.keys(d.plans||{free:1,pro:1});
     $('count').textContent='('+ts.length+')';
     $('rows').innerHTML=ts.map(t=>`<tr>
-      <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/</div></td>
+      <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/${t.domain?` · 🌐 ${esc(t.domain)}`:''}</div></td>
       <td><span class="pill pkg">${t.package==='pos'?'POS':'+LINE'}</span></td>
       <td><select onchange="setPlan(${t.id},this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
         ${plans.map(p=>`<option value="${p}" ${t.plan===p?'selected':''}>${p}</option>`).join('')}</select></td>
@@ -67,10 +67,14 @@ window.load=async()=>{ $('err').textContent='';
         ${t.id!==1?(t.active
           ? `<button class="btn ghost danger" onclick="suspend(${t.id})">ระงับ</button>`
           : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
+        <button class="btn ghost" onclick="setDomain(${t.id},'${esc(t.domain||'')}')">โดเมน</button>
         <button class="btn ghost" onclick="resetPin(${t.id},'${esc(t.name)}')">รีเซ็ต PIN</button>
       </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
   }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
 window.setPlan=async(id,plan)=>{ try{ await api('/admin/api/tenants/'+id+'/plan',{method:'POST',body:JSON.stringify({plan})}); load(); }catch(e){ $('err').textContent=e.message; } };
+window.setDomain=async(id,cur)=>{ const d=prompt('โดเมนของแบรนด์ (เช่น shop.brand.com) — ว่าง = ลบ\nอย่าลืมชี้ DNS (CNAME) มาที่โฮสต์นี้ + เพิ่มโดเมนใน Render',cur); if(d===null) return;
+  try{ const r=await api('/admin/api/tenants/'+id+'/domain',{method:'POST',body:JSON.stringify({domain:d})}); $('err').textContent=''; load(); }
+  catch(e){ $('err').textContent = e.message==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(e.message==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':e.message); } };
 window.suspend=async(id)=>{ if(!confirm('ระงับแบรนด์นี้? ร้านจะเข้าใช้งานไม่ได้')) return;
   try{ await api('/admin/api/tenants/'+id+'/suspend',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
 window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };

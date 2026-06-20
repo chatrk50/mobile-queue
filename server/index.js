@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -83,14 +83,22 @@ app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { req.rawBody = 
 app.use((req, res, next) => {
   let tenantId = DEFAULT_TENANT;
   if (SAAS) {
-    const m = req.url.match(/^\/b\/([a-z0-9-]{1,40})(\/|$|\?)/i);
-    if (m) {
-      const t = getTenantBySlug(m[1]);
-      if (!t) return res.status(404).send('ไม่พบแบรนด์นี้');
-      if (!t.active) return res.status(403).send('บัญชีนี้ถูกระงับการใช้งาน');
-      tenantId = t.id;
-      req.url = req.url.slice(('/b/' + m[1]).length) || '/';   // strip /b/<slug>
-      if (req.url[0] !== '/') req.url = '/' + req.url;
+    // 1) Custom domain → serve that brand at the ROOT (no /b/<slug> prefix needed).
+    const byDomain = getTenantByDomain(req.hostname);
+    if (byDomain) {
+      if (!byDomain.active) return res.status(403).send('บัญชีนี้ถูกระงับการใช้งาน');
+      tenantId = byDomain.id;
+    } else {
+      // 2) Path-based /b/<slug>/… on the shared SaaS host.
+      const m = req.url.match(/^\/b\/([a-z0-9-]{1,40})(\/|$|\?)/i);
+      if (m) {
+        const t = getTenantBySlug(m[1]);
+        if (!t) return res.status(404).send('ไม่พบแบรนด์นี้');
+        if (!t.active) return res.status(403).send('บัญชีนี้ถูกระงับการใช้งาน');
+        tenantId = t.id;
+        req.url = req.url.slice(('/b/' + m[1]).length) || '/';   // strip /b/<slug>
+        if (req.url[0] !== '/') req.url = '/' + req.url;
+      }
     }
   }
   req.tenantId = tenantId;
@@ -257,6 +265,11 @@ app.get('/admin/api/tenants', adminGate, (req, res) => {
 // Admin sets a tenant's plan (manual billing — automated payment provider plugs in later).
 app.post('/admin/api/tenants/:id/plan', adminGate, (req, res) => {
   try { res.json({ ok: true, plan: Q.setTenantPlan(Number(req.params.id), String(req.body?.plan || '')) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Map a custom domain to a tenant (the owner points DNS + the host adds the cert separately).
+app.post('/admin/api/tenants/:id/domain', adminGate, (req, res) => {
+  try { const t = setTenantDomain(Number(req.params.id), req.body?.domain || ''); res.json({ ok: true, domain: t.domain || null }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/admin/api/tenants/:id/suspend', adminGate, (req, res) => {

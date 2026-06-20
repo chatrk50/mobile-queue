@@ -458,6 +458,7 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN brand_unit TEXT`,
   `ALTER TABLE tenants ADD COLUMN brand_logo TEXT`,
   `ALTER TABLE tenants ADD COLUMN package TEXT NOT NULL DEFAULT 'line'`,
+  `ALTER TABLE tenants ADD COLUMN domain TEXT`,   // optional custom domain → serves the brand at root
   // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
   `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -649,6 +650,18 @@ export function getTenant(id) {
 }
 export function getTenantBySlug(slug) {
   return db.prepare('SELECT * FROM tenants WHERE slug=?').get(String(slug || '').toLowerCase()) || null;
+}
+export function getTenantByDomain(host) {
+  const h = String(host || '').toLowerCase().trim();
+  return h ? (db.prepare('SELECT * FROM tenants WHERE domain=?').get(h) || null) : null;
+}
+/** Map (or clear) a tenant's custom domain. Pass '' to remove. Validated + unique. */
+export function setTenantDomain(tenantId, domain) {
+  const d = String(domain || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (d && !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) throw new Error('bad_domain');
+  if (d) { const ex = db.prepare('SELECT id FROM tenants WHERE domain=? AND id<>?').get(d, tenantId); if (ex) throw new Error('domain_taken'); }
+  db.prepare('UPDATE tenants SET domain=? WHERE id=?').run(d || null, tenantId);
+  return getTenant(tenantId);
 }
 export function listTenants() {
   return db.prepare('SELECT id, name, slug, owner_email, package, plan_name, active, created_at FROM tenants ORDER BY id').all();
