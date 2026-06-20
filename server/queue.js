@@ -409,9 +409,10 @@ export function salesHistory() {
             SUM(void_cups) AS void_cups, SUM(void_amount) AS void_amount
        FROM sales_history GROUP BY period ORDER BY period DESC LIMIT ?`
   ).all(limit);
+  const weekly = roll("strftime('%Y-W%W', date)", 26);   // YYYY-Www (Mon-based ISO-ish week)
   const monthly = roll('substr(date,1,7)', 24);   // YYYY-MM
   const yearly = roll('substr(date,1,4)', 10);     // YYYY
-  return { daily, monthly, yearly };
+  return { daily, weekly, monthly, yearly };
 }
 
 // ---------- Detailed read-only reports (transaction log / payment / void-refund /
