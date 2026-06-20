@@ -17,6 +17,8 @@
 // One "Customer · <zone>" button per zone (inserted before Print), so every zone is reachable.
 (async()=>{
   const ic='<svg class="ic" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>';
+  // Package 1 (POS only): no customer LINE ordering / QR poster — hide those entry points.
+  try{ const b=await (await fetch('/api/brand')).json(); if(b&&b.package==='pos'){ const pb=document.getElementById('printBtn'); if(pb) pb.style.display='none'; return; } }catch(e){}
   try{
     const stores=await (await fetch('/api/stores')).json();
     const sid=(stores[0]&&stores[0].id)||1;

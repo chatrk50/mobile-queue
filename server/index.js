@@ -30,7 +30,12 @@ const BRAND = {
   theme: process.env.BRAND_THEME || '#1e3a5f',
   logo: process.env.BRAND_LOGO || '/assets/logo.png',
   unit: process.env.BRAND_UNIT || 'แก้ว',
+  // White-label package: 'line' (full — customer LINE self-order + loyalty + online pay)
+  // or 'pos' (mobile POS only — staff ring orders, queue + counter pay, NO customer LINE UI).
+  package: (process.env.PACKAGE || 'line').toLowerCase() === 'pos' ? 'pos' : 'line',
 };
+// Package-1 (POS-only) hides every customer-facing LINE feature regardless of token presence.
+const POS_ONLY = BRAND.package === 'pos';
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
@@ -142,7 +147,7 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -416,6 +421,7 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 // Customer self-order (no PIN) — from the LINE app: build a cart, get a queue
 // number, then pay at the counter. Order is tagged source='customer', unpaid.
 app.post('/api/zones/:zoneId/order', (req, res) => {
+  if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',

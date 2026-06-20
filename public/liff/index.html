@@ -247,6 +247,8 @@ function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));s
 
 async function initLiff(){
   cfg = await api('/api/config');
+  // Package 1 (POS only): customer LINE ordering is disabled — show a clean notice, don't render the order UI.
+  if (cfg.posOnly){ err('ระบบนี้ไม่เปิดสั่งผ่านไลน์ · กรุณาสั่งที่เคาน์เตอร์'); return; }
   if (cfg.liffId && window.liff){
     try{
       await liff.init({ liffId: cfg.liffId });
