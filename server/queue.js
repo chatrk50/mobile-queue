@@ -4,6 +4,8 @@ import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
+// White-label: product unit label in owner/customer LINE messages (แก้ว / ถ้วย / ชิ้น / จาน …).
+const UNIT = process.env.BRAND_UNIT || 'แก้ว';
 
 /** Append to the immutable sale_events audit trail — DEFERRED off the request path. These rows
  *  are pure audit (never read for reports/correctness), but writing them synchronously inside the
@@ -1043,10 +1045,10 @@ export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text)
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
   const lines = [
-    '📊 สรุปยอดวันนี้ — YO-DEE Yogurt',
-    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} แก้ว)`,
+    `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
-    `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} แก้ว`,
+    `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
   return lines.join('\n');
@@ -1530,8 +1532,8 @@ export function setOrderPaid(ticketId, opts = {}) {
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
       msg += free >= 1
-        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับเครื่องดื่มฟรีได้เลยในออเดอร์ถัดไป`
-        : `\n🥤 อีก ${per - bal} แก้ว ได้ฟรี 1 แก้ว!`;
+        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
+        : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`;
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }

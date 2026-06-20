@@ -201,10 +201,10 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-weight:700"><input id="loyEnabledInp" type="checkbox"> เปิดใช้งานสะสมแก้ว</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:700"><input id="loyEnabledInp" type="checkbox"> เปิดใช้งานสะสม<span data-unit>แก้ว</span></label>
       <span style="margin-left:8px">สะสมครบ</span>
       <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
-      <span>แก้ว = ฟรี 1 แก้ว (ไม่เกิน 49฿)</span>
+      <span><span data-unit>แก้ว</span> = ฟรี 1 <span data-unit>แก้ว</span> (ไม่เกิน 49฿)</span>
     </div>
     <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span>🎁 สั่งผ่านไลน์ครั้งแรก แถมฟรี</span>
@@ -212,13 +212,13 @@
       <span>ดวง (0 = ปิด)</span>
       <button class="ok" style="padding:8px 16px;margin-left:auto" onclick="saveLoyaltySettings()">บันทึก</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/แก้ว (เฉพาะสั่งผ่านไลน์ — หน้าร้านไม่ได้ดวง เป็นแรงจูงใจให้ย้ายมาสั่งไลน์) · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> (เฉพาะสั่งผ่านไลน์ — หน้าร้านไม่ได้ดวง เป็นแรงจูงใจให้ย้ายมาสั่งไลน์) · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
       <div id="rewardsBody"></div>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" data-unit-ph="กี่" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="rwImg" placeholder="ลิงก์รูป (ไม่บังคับ)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
       </div>
@@ -412,7 +412,7 @@
 <div id="recipePop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('recipePop').style.display='none'">✕</button></div>
-    <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 แก้ว — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 <span data-unit>แก้ว</span> — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
     <div id="recipeRows" style="display:grid;gap:8px"></div>
     <button class="ok" style="width:100%;margin-top:12px" onclick="saveRecipe()">บันทึกสูตร</button>
   </div>
@@ -455,10 +455,16 @@ async function applyBrand(){
     if(b.logo) document.querySelectorAll('img.logo,[data-brand-logo]').forEach(el=>{ el.src=b.logo; });
     document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=b.name);
     document.querySelectorAll('[data-brand-short]').forEach(el=>el.textContent=b.short);
+    if(b.unit && b.unit!=='แก้ว'){
+      document.querySelectorAll('[data-unit]').forEach(el=>el.textContent=b.unit);
+      document.querySelectorAll('[data-unit-ph]').forEach(el=>el.placeholder=el.getAttribute('data-unit-ph')+b.unit);
+    }
     if(b.name) document.title=document.title.replace(/YO-DEE Yogurt/g,b.name).replace(/YO-DEE/g,b.short||b.name);
   }catch(e){}
 }
 applyBrand();
+// Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
+function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
@@ -610,7 +616,7 @@ function renderSales(){
     <span style="${o.muted?'color:var(--muted);font-size:12px':''}">${l}</span>
     <span style="${o.neg?'color:var(--danger)':''};font-weight:${o.bold?800:600}">${o.neg?'−':''}${baht(v)}</span></div>`;
   const summary=`<div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:12px 14px;margin-bottom:14px">
-    <div class="row between" style="margin-bottom:4px"><b>สรุป P&L · ${rows.length} ${lab}</b><span class="muted" style="font-size:12px">${T.cups.toLocaleString('en-US')} แก้ว</span></div>
+    <div class="row between" style="margin-bottom:4px"><b>สรุป P&L · ${rows.length} ${lab}</b><span class="muted" style="font-size:12px">${T.cups.toLocaleString('en-US')} ${unit()}</span></div>
     ${line('ยอดขาย', T.revenue)}
     ${T.cogs?line('− วัตถุดิบ + แพ็กเกจ', T.cogs, {neg:true,muted:true}):''}
     ${line('กำไรขั้นต้น', T.gross, {bd:true,bold:true})}
@@ -805,11 +811,11 @@ window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); R
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
     const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
-    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
+    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} ${unit()})</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
@@ -996,7 +1002,7 @@ async function renderCharts(){
   $('chartsBody').innerHTML =
     card('📈 ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
-      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' แก้ว'))+
+      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
       card('💳 ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
     `</div>`+
     card('🕐 ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v));
@@ -1015,11 +1021,11 @@ window.showReport=async()=>{
       </div>`).join('');
     $('reportBody').innerHTML =
       `<div class="row" style="gap:8px;background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
-        kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi('แก้ว',(p.cups||0))+
+        kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi(unit(),(p.cups||0))+
       `</div>`+
       `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
-        <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> แก้ว · รวม <b>${money(r.revenue)}</b></span>
-        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> แก้ว</span>
+        <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> ${unit()} · รวม <b>${money(r.revenue)}</b></span>
+        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> ${unit()}</span>
       </div>`+
       `<h2>กำไร–ขาดทุน (วันนี้)</h2><div class="queue-list" style="gap:4px">`+
         pl('ยอดเครื่องดื่ม',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
@@ -1033,7 +1039,7 @@ window.showReport=async()=>{
         pl('กำไรสุทธิ',p.netProfit,{bold:true,navy:true,pct:p.netMargin})+
       `</div>`+
       (p.breakEvenCups!=null?`<div class="row between" style="font-size:12px;margin-top:8px;background:var(--surface);border-radius:10px;padding:8px 12px">
-        <span class="muted">จุดคุ้มทุน ~<b style="color:var(--navy)">${p.breakEvenCups}</b> แก้ว/วัน เพื่อครอบคลุมต้นทุน</span>
+        <span class="muted">จุดคุ้มทุน ~<b style="color:var(--navy)">${p.breakEvenCups}</b> ${unit()}/วัน เพื่อครอบคลุมต้นทุน</span>
         <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">ขายแล้ว ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· เหลืออีก '+(p.breakEvenCups-(p.cups||0))}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">เป้าหมายวันนี้ ${money(p.targetDaily)} · ส่วนต่าง <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
       `<div style="margin-top:10px;background:#eef7fb;border:1px solid var(--line);border-radius:12px;padding:12px">
@@ -1084,7 +1090,7 @@ function renderFinance(){
   $('financeBox').innerHTML=`<div class="row between"><b>สมมติฐานต้นทุน</b><span class="muted" style="font-size:11px">ใช้คำนวณกำไร–ขาดทุน</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
       ${f('ingredientPct','วัตถุดิบ % (0.32 = 32%)','0.01')}
-      ${f('packagingPerCup','แพ็กเกจ ฿/แก้ว','0.5')}
+      ${f('packagingPerCup','แพ็กเกจ ฿/'+unit(),'0.5')}
       ${f('daysPerMonth','วันขาย / เดือน','1')}
       ${f('targetRevenue','เป้ายอดขาย/เดือน ฿ (0=ปิด)','1000')}
       ${f('rent','ค่าเช่า / เดือน ฿')}
@@ -1104,9 +1110,9 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
   const m=Math.max(0,Math.min(0.95,(Number($('goalMargin').value)||0)/100));
   const denom=GOAL.refAvg*(1-GOAL.ing-m)-GOAL.pack;
   if(!(GOAL.refAvg>0)){ out.innerHTML='<span class="muted">เพิ่มราคาเมนูก่อนเพื่อคำนวณ</span>'; return; }
-  if(denom<=0){ out.innerHTML=`<span style="color:#c43a4b">ทำไม่ได้ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)}/แก้ว — ต้องขึ้นราคาหรือลดต้นทุน</span>`; return; }
+  if(denom<=0){ out.innerHTML=`<span style="color:#c43a4b">ทำไม่ได้ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)}/${unit()} — ต้องขึ้นราคาหรือลดต้นทุน</span>`; return; }
   const perDay=Math.ceil(GOAL.opexDaily/denom), perMonth=Math.ceil(perDay*GOAL.days);
-  out.innerHTML=`ต้องขายประมาณ <b style="color:var(--navy);font-size:16px">${perDay}</b> แก้ว/วัน (~<b>${perMonth.toLocaleString()}</b>/เดือน) ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)} จึงได้กำไรสุทธิ <b>${(m*100).toFixed(0)}%</b>`;
+  out.innerHTML=`ต้องขายประมาณ <b style="color:var(--navy);font-size:16px">${perDay}</b> ${unit()}/วัน (~<b>${perMonth.toLocaleString()}</b>/เดือน) ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)} จึงได้กำไรสุทธิ <b>${(m*100).toFixed(0)}%</b>`;
 };
 
 // ---------- Menu management ----------
@@ -1231,7 +1237,7 @@ function renderOrderMenu(){
   // (still sells at the counter), unlike the customer; only manual soldout disables it here.
   const mk=(m)=>{ if(m.makeable==null) return '';
     if(m.stockSoldout) return `<div class="men" style="color:var(--danger);font-weight:700">วัตถุดิบหมด · ขายต่อได้</div>`;
-    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} แก้ว</div>`; };
+    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} ${unit()}</div>`; };
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:38px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
@@ -1430,7 +1436,7 @@ async function loadTodayStats(){
       <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
     let chips =
       chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
-      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' แก้ว') +   // cups SOLD (drink units) — matches the P&L report
+      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +   // cups SOLD (drink units) — matches the P&L report
       chip('🍦 เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
       chip('🎫 ออกคิว', r.issued||0) +
       chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
@@ -1835,7 +1841,7 @@ window.discountTicket=async(tid,total)=>{
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
   const reason=(prompt('เหตุผลส่วนลด (ไม่บังคับ) เช่น สมาชิก, โปรโมชั่น')||'').trim();
   try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
-window.redeemOrder=async(tid)=>{ if(!confirm('ใช้แต้มลูกค้าแลกเครื่องดื่มฟรี 1 แก้ว?\n(หักดวง + ลดราคาออเดอร์นี้)')) return;
+window.redeemOrder=async(tid)=>{ if(!confirm('ใช้แต้มลูกค้าแลกของรางวัลฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)')) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',
