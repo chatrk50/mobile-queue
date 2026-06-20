@@ -11,7 +11,8 @@
     "qr": "node --experimental-sqlite scripts/gen-qr.js",
     "test": "node --experimental-sqlite scripts/test-flow.js",
     "test:e2e": "node --experimental-sqlite scripts/test-e2e.js",
-    "backup": "node scripts/backup-dump.js"
+    "backup": "node scripts/backup-dump.js",
+    "test:tenant": "node --experimental-sqlite scripts/test-tenant.mjs"
   },
   "engines": {
     "node": ">=22.5.0"

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
 import { hashPin, verifyPin } from './auth.js';
+import { currentTenantId, slugify } from './tenant.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.QUEUE_DATA_DIR || join(__dirname, '..', 'data');
@@ -448,6 +449,15 @@ for (const stmt of [
   // 'plan' is a libSQL reserved token (returns key as 'PLAN'); rename any already-created
   // column. Throws (and is ignored) on fresh DBs where the column is already plan_name.
   `ALTER TABLE tenants RENAME COLUMN plan TO plan_name`,
+  // --- SaaS self-registration: a tenant carries its routing slug + brand config + package ---
+  `ALTER TABLE tenants ADD COLUMN slug TEXT`,
+  `ALTER TABLE tenants ADD COLUMN owner_email TEXT`,
+  `ALTER TABLE tenants ADD COLUMN brand_name TEXT`,
+  `ALTER TABLE tenants ADD COLUMN brand_short TEXT`,
+  `ALTER TABLE tenants ADD COLUMN brand_theme TEXT`,
+  `ALTER TABLE tenants ADD COLUMN brand_unit TEXT`,
+  `ALTER TABLE tenants ADD COLUMN brand_logo TEXT`,
+  `ALTER TABLE tenants ADD COLUMN package TEXT NOT NULL DEFAULT 'line'`,
   // Idempotency key per bill: a retried create+pay with the same token returns the SAME
   // order instead of creating a duplicate (lets the cashier UI auto-retry a lost request safely).
   `ALTER TABLE tickets ADD COLUMN client_token TEXT`,
@@ -511,6 +521,10 @@ try {
     db.prepare(`INSERT INTO tenants (name, plan_name) VALUES (?, 'free')`).run('YO-DEE Yogurt');
     console.log('[db] Seeded tenant 1.');
   }
+  // Tenant 1 keeps a stable slug; brand fields stay NULL so it falls back to env (no change).
+  db.prepare(`UPDATE tenants SET slug='main' WHERE id=1 AND (slug IS NULL OR slug='')`).run();
+  // Slugs are the per-tenant routing key in SaaS mode → must be unique.
+  db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)').run();
 } catch (e) { console.error('[db] tenant seed skipped:', e.message); }
 
 // ---- Seed a bootstrap OWNER staff so the new login works and you can't get locked out.
@@ -610,11 +624,61 @@ try {
   }
 } catch (e) { console.error('[db] loyalty seed skipped:', e.message); }
 
-export function getSetting(key, fallback = null) {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+// Settings are per-tenant. To avoid a risky PK migration on the live settings table, tenant 1
+// (the original business) keeps BARE keys exactly as before, and other tenants are namespaced
+// with a "t<id>:" prefix. So single-tenant behaviour is byte-for-byte unchanged.
+function settingKey(key, tenantId) {
+  const t = tenantId || currentTenantId();
+  return t === 1 ? key : `t${t}:${key}`;
+}
+export function getSetting(key, fallback = null, tenantId) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(settingKey(key, tenantId));
   return row ? row.value : fallback;
 }
-export function setSetting(key, value) {
+export function setSetting(key, value, tenantId) {
   db.prepare(`INSERT INTO settings(key,value) VALUES(?,?)
-              ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(key, String(value));
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(settingKey(key, tenantId), String(value));
+}
+
+// ---------- Tenant registry (SaaS) ----------
+export function getTenant(id) {
+  return db.prepare('SELECT * FROM tenants WHERE id=?').get(Number(id) || 0) || null;
+}
+export function getTenantBySlug(slug) {
+  return db.prepare('SELECT * FROM tenants WHERE slug=?').get(String(slug || '').toLowerCase()) || null;
+}
+export function listTenants() {
+  return db.prepare('SELECT id, name, slug, owner_email, package, plan_name, active, created_at FROM tenants ORDER BY id').all();
+}
+/** Resolve a free slug derived from the desired name (adds -2, -3… on collision). */
+function uniqueSlug(desired) {
+  let base = slugify(desired), s = base, n = 1;
+  while (db.prepare('SELECT 1 FROM tenants WHERE slug=?').get(s)) { n += 1; s = `${base}-${n}`; }
+  return s;
+}
+/** Create a tenant (a new brand). Returns the row. Brand fields drive the white-label theming. */
+export function createTenant({ name, ownerEmail = null, pkg = 'line', slug = null, brandShort = null, brandTheme = null, brandUnit = null, brandLogo = null } = {}) {
+  const nm = String(name || '').trim().slice(0, 80);
+  if (!nm) throw new Error('name_required');
+  const s = uniqueSlug(slug || nm);
+  const pack = pkg === 'pos' ? 'pos' : 'line';
+  const r = db.prepare(
+    `INSERT INTO tenants (name, plan_name, active, slug, owner_email, brand_name, brand_short, brand_theme, brand_unit, brand_logo, package)
+     VALUES (?, 'free', 1, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(nm, s, ownerEmail, nm, brandShort, brandTheme, brandUnit, brandLogo, pack);
+  return getTenant(r.lastInsertRowid);
+}
+/** Brand config for a tenant (DB row → falls back to env defaults for tenant 1). */
+export function tenantBrand(id, envDefaults = {}) {
+  const t = getTenant(id);
+  if (!t) return envDefaults;
+  return {
+    name: t.brand_name || envDefaults.name,
+    short: t.brand_short || envDefaults.short,
+    theme: t.brand_theme || envDefaults.theme,
+    logo: t.brand_logo || envDefaults.logo,
+    unit: t.brand_unit || envDefaults.unit,
+    package: t.package || envDefaults.package || 'line',
+    slug: t.slug,
+  };
 }
