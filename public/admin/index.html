@@ -1,0 +1,80 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Platform Admin — Tenants</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .wrap{max-width:920px;margin:0 auto;padding:18px}
+  h1{color:var(--navy)}
+  .gate{max-width:340px;margin:40px auto;text-align:center}
+  .gate input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;text-align:center;margin:10px 0;box-sizing:border-box}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:14px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:12px;font-weight:700}
+  td .slug{color:var(--muted);font-size:12px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .pill.live{background:rgba(47,194,166,.16);color:#178a72}
+  .pill.susp{background:rgba(229,91,107,.16);color:#c0394a}
+  .pill.pkg{background:rgba(0,181,216,.14);color:#0b7d96}
+  .act button{font-size:12px;padding:5px 9px;margin-left:4px}
+  .err{color:#c0394a;font-size:13px;min-height:18px}
+  .bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+</style>
+</head><body>
+<div class="wrap">
+  <div id="gate" class="gate card">
+    <h1>Platform Admin</h1>
+    <p class="muted">จัดการแบรนด์ลูกค้าทั้งหมด</p>
+    <input id="pin" type="password" placeholder="Admin PIN" autocomplete="off">
+    <div class="err" id="gerr"></div>
+    <button class="btn" style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div class="bar">
+      <h1>Tenants <span class="muted" id="count" style="font-size:14px;font-weight:400"></span></h1>
+      <button class="btn ghost" style="padding:6px 12px" onclick="load()">↻ รีเฟรช</button>
+    </div>
+    <div class="err" id="err"></div>
+    <table>
+      <thead><tr><th>ร้าน</th><th>แพ็กเกจ</th><th>สาขา</th><th>ออเดอร์</th><th>สถานะ</th><th>สร้างเมื่อ</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+let PIN='';
+async function api(path,opts={}){ opts.headers=Object.assign({'Content-Type':'application/json','x-admin-pin':PIN},opts.headers||{});
+  const r=await fetch(path,opts); if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.error||r.status); } return r.json(); }
+window.login=async()=>{ PIN=$('pin').value.trim(); $('gerr').textContent='';
+  try{ const d=await api('/admin/api/login',{method:'POST',body:JSON.stringify({})});
+    if(!d.ok){ $('gerr').textContent='PIN ไม่ถูกต้อง'; return; }
+    $('gate').style.display='none'; $('panel').style.display=''; load();
+  }catch(e){ $('gerr').textContent='เข้าไม่ได้: '+e.message; } };
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+window.load=async()=>{ $('err').textContent='';
+  try{ const d=await api('/admin/api/tenants'); const ts=d.tenants||[];
+    $('count').textContent='('+ts.length+')';
+    $('rows').innerHTML=ts.map(t=>`<tr>
+      <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/</div></td>
+      <td><span class="pill pkg">${t.package==='pos'?'POS':'+LINE'}</span></td>
+      <td>${t.stores}</td><td>${t.orders}</td>
+      <td><span class="pill ${t.active?'live':'susp'}">${t.active?'ใช้งาน':'ระงับ'}</span></td>
+      <td class="muted">${esc((t.created_at||'').slice(0,10))}</td>
+      <td class="act">
+        ${t.id!==1?(t.active
+          ? `<button class="btn ghost danger" onclick="suspend(${t.id})">ระงับ</button>`
+          : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
+        <button class="btn ghost" onclick="resetPin(${t.id},'${esc(t.name)}')">รีเซ็ต PIN</button>
+      </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
+  }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
+window.suspend=async(id)=>{ if(!confirm('ระงับแบรนด์นี้? ร้านจะเข้าใช้งานไม่ได้')) return;
+  try{ await api('/admin/api/tenants/'+id+'/suspend',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
+window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
+window.resetPin=async(id,name)=>{ if(!confirm('รีเซ็ต PIN เจ้าของร้าน "'+name+'"?')) return;
+  try{ const d=await api('/admin/api/tenants/'+id+'/reset-pin',{method:'POST',body:'{}'});
+    alert('PIN ใหม่ของ "'+name+'": '+d.pin+'\nแจ้งเจ้าของร้านและให้เปลี่ยนทันที'); }catch(e){ $('err').textContent=e.message; } };
+$('pin').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
+</script>
+</body></html>

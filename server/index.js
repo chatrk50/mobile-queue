@@ -7,7 +7,7 @@ import { db, getSetting, DURABLE, getTenant, getTenantBySlug, listTenants, creat
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
-import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
+import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
@@ -231,6 +231,43 @@ app.post('/api/signup', (req, res) => {
     rec.count += 1; signupHits.set(ip, rec);
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/` });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ---------- Platform admin (Phase D) — manage ALL tenants. NOT tenant-scoped. ----------
+// Gated by SAAS_ADMIN_PIN (env, SaaS service only). Header x-admin-pin or body.adminPin.
+const SAAS_ADMIN_PIN = (process.env.SAAS_ADMIN_PIN || '').trim();
+const adminOK = (req) => SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
+const adminGate = (req, res, next) => adminOK(req) ? next() : res.status(401).json({ error: 'admin_auth' });
+// Verify the admin PIN (for the console login screen).
+app.post('/admin/api/login', (req, res) => res.json({ ok: adminOK(req) }));
+// All tenants + a few counts for the console.
+app.get('/admin/api/tenants', adminGate, (req, res) => {
+  const rows = listTenants().map((t) => ({
+    ...t,
+    stores: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(t.id).c,
+    orders: db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c,
+  }));
+  res.json({ tenants: rows });
+});
+app.post('/admin/api/tenants/:id/suspend', adminGate, (req, res) => {
+  if (Number(req.params.id) === 1) return res.status(400).json({ error: 'cannot_suspend_primary' });
+  db.prepare('UPDATE tenants SET active=0 WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+app.post('/admin/api/tenants/:id/activate', adminGate, (req, res) => {
+  db.prepare('UPDATE tenants SET active=1 WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+// Reset a locked-out brand owner's PIN to a fresh random one (returned once to the admin).
+app.post('/admin/api/tenants/:id/reset-pin', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  const t = getTenant(id);
+  if (!t) return res.status(404).json({ error: 'not_found' });
+  const newPin = String(Math.floor(1000 + Math.random() * 9000));
+  const owner = db.prepare("SELECT id FROM staff WHERE tenant_id=? AND role='owner' AND active=1 ORDER BY id LIMIT 1").get(id);
+  if (!owner) return res.status(404).json({ error: 'no_owner' });
+  db.prepare('UPDATE staff SET pin_hash=? WHERE id=?').run(hashPin(newPin), owner.id);
+  res.json({ ok: true, pin: newPin });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
