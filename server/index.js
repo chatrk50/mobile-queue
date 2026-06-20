@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE, getTenant, getTenantBySlug, tenantBrand } from './db.js';
+import { db, getSetting, DURABLE, getTenant, getTenantBySlug, listTenants, createTenant, seedTenantDefaults, tenantBrand } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -199,6 +199,39 @@ app.get('/api/config', (req, res) => {
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(brandFor(req)));
+
+// ---------- SaaS self-registration (Phase B) ----------
+// Public signup → creates a tenant (unique slug + brand), seeds a usable shop (store + Zone A,
+// default tiers/channels) and an OWNER staff with the chosen PIN, then returns the live link.
+// SaaS-only; rate-limited per IP. The owner logs in at /b/<slug>/cashier/ with their PIN.
+const signupHits = new Map(); // ip -> { count, until }
+const SIGNUP_MAX = 5, SIGNUP_WINDOW = 60 * 60 * 1000;
+app.post('/api/signup', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const ip = ipOf(req), now = Date.now();
+  const h = signupHits.get(ip);
+  if (h && h.until > now && h.count >= SIGNUP_MAX) return res.status(429).json({ error: 'too_many_signups' });
+  const name = (req.body?.name || '').toString().trim().slice(0, 80);
+  const email = (req.body?.email || '').toString().trim().slice(0, 120);
+  const pkg = req.body?.package === 'pos' ? 'pos' : 'line';
+  const pin = (req.body?.pin || '').toString().trim();
+  const unit = (req.body?.unit || '').toString().trim().slice(0, 16) || null;
+  const theme = /^#[0-9a-fA-F]{6}$/.test(req.body?.theme || '') ? req.body.theme : null;
+  if (!name) return res.status(400).json({ error: 'name_required' });
+  if (!/^\d{4,8}$/.test(pin)) return res.status(400).json({ error: 'pin_must_be_4_8_digits' });
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
+  try {
+    const t = createTenant({ name, ownerEmail: email || null, pkg, brandShort: name.slice(0, 20), brandTheme: theme, brandUnit: unit });
+    runWithTenant(t.id, () => {
+      seedTenantDefaults(t.id);
+      Q.createBranch({ name });                                  // store + Zone A
+      Q.createStaff({ name: 'เจ้าของร้าน', pin, role: 'owner' }); // owner login = the chosen PIN
+    });
+    const rec = signupHits.get(ip) && signupHits.get(ip).until > now ? signupHits.get(ip) : { count: 0, until: now + SIGNUP_WINDOW };
+    rec.count += 1; signupHits.set(ip, rec);
+    res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/` });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {

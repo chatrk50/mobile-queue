@@ -1,0 +1,107 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>เปิดร้านใหม่ — สมัครใช้งาน POS</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .wrap{max-width:560px;margin:0 auto;padding:18px}
+  .hero{text-align:center;margin:10px 0 18px}
+  .hero h1{margin:6px 0 2px;color:var(--navy)}
+  .hero p{color:var(--muted);margin:0}
+  .card{background:var(--surface,#fff);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(30,58,95,.06)}
+  label{display:block;font-weight:700;font-size:14px;margin:12px 0 4px;color:var(--ink)}
+  .hint{font-weight:400;color:var(--muted);font-size:12px}
+  input[type=text],input[type=email],input[type=tel]{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:15px;box-sizing:border-box}
+  .pkg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .pkg .opt{border:2px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:center}
+  .pkg .opt.sel{border-color:var(--navy);background:rgba(30,58,95,.05)}
+  .pkg .opt b{display:block;color:var(--navy)}
+  .pkg .opt span{font-size:12px;color:var(--muted)}
+  .row2{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+  button.go{width:100%;margin-top:18px;font-size:16px;padding:13px}
+  button.go:disabled{opacity:.5}
+  .ok{background:rgba(47,194,166,.12);border:1px solid #2fc2a6;border-radius:14px;padding:18px;text-align:center}
+  .ok a.btn{display:inline-block;margin-top:10px}
+  .err{color:#c0394a;font-size:13px;margin-top:8px;min-height:18px}
+  .colorpick{width:52px;height:44px;padding:2px;border:1px solid var(--line);border-radius:10px;background:#fff}
+</style>
+</head><body>
+<div class="wrap">
+  <div class="hero">
+    <h1>เปิดร้านใหม่ของคุณ</h1>
+    <p>สร้างระบบ POS + คิว ของแบรนด์คุณ ใช้ได้ใน 1 นาที</p>
+  </div>
+
+  <div class="card" id="form">
+    <label>ชื่อร้าน / แบรนด์ <span class="hint">— แสดงบนหัวจอ รายงาน และแอป</span></label>
+    <input id="name" type="text" placeholder="เช่น Bean House Coffee" maxlength="80" autocomplete="organization">
+
+    <label>อีเมลเจ้าของ <span class="hint">(ไม่บังคับ — ไว้ติดต่อ/กู้คืน)</span></label>
+    <input id="email" type="email" placeholder="you@email.com" maxlength="120" autocomplete="email">
+
+    <label>แพ็กเกจ</label>
+    <div class="pkg" id="pkg">
+      <div class="opt sel" data-pkg="pos"><b>Mobile POS</b><span>ขายหน้าร้าน + คิว + จ่ายที่เคาน์เตอร์</span></div>
+      <div class="opt" data-pkg="line"><b>+ LINE</b><span>ลูกค้าสั่งผ่านไลน์ + สะสมแต้ม + จ่ายออนไลน์</span></div>
+    </div>
+
+    <div class="row2">
+      <div style="flex:1">
+        <label>หน่วยนับสินค้า <span class="hint">(แก้ว / ถ้วย / จาน / ชิ้น)</span></label>
+        <input id="unit" type="text" placeholder="แก้ว" maxlength="16" value="แก้ว">
+      </div>
+      <div>
+        <label>สีหลัก</label>
+        <input id="theme" type="color" class="colorpick" value="#1e3a5f">
+      </div>
+    </div>
+
+    <label>ตั้งรหัส PIN เจ้าของ <span class="hint">— 4–8 หลัก ไว้เข้าหน้าแคชเชียร์</span></label>
+    <input id="pin" type="tel" inputmode="numeric" placeholder="เช่น 1234" maxlength="8" autocomplete="off">
+
+    <div class="err" id="err"></div>
+    <button class="btn go" id="go" onclick="submitSignup()">สร้างร้าน →</button>
+  </div>
+
+  <div class="card ok" id="done" style="display:none">
+    <div style="font-size:34px">🎉</div>
+    <h2 style="margin:6px 0;color:var(--navy)">สร้างร้านเรียบร้อย!</h2>
+    <p class="hint" id="doneMsg"></p>
+    <a class="btn ok" id="goShop" href="#">เข้าหน้าแคชเชียร์ →</a>
+    <p class="hint" style="margin-top:12px">บันทึกลิงก์นี้ไว้: <code id="shopUrl"></code></p>
+  </div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+let pkg='pos';
+$('pkg').addEventListener('click',(e)=>{ const o=e.target.closest('.opt'); if(!o) return;
+  document.querySelectorAll('#pkg .opt').forEach(x=>x.classList.remove('sel')); o.classList.add('sel'); pkg=o.dataset.pkg; });
+window.submitSignup=async()=>{
+  const name=$('name').value.trim(), email=$('email').value.trim();
+  const pin=$('pin').value.trim(), unit=$('unit').value.trim()||'แก้ว', theme=$('theme').value;
+  $('err').textContent='';
+  if(!name){ $('err').textContent='กรุณากรอกชื่อร้าน'; return; }
+  if(!/^\d{4,8}$/.test(pin)){ $('err').textContent='PIN ต้องเป็นตัวเลข 4–8 หลัก'; return; }
+  $('go').disabled=true; $('go').textContent='กำลังสร้าง…';
+  try{
+    const r=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,email,package:pkg,pin,unit,theme})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'signup_failed');
+    const url=d.url; const abs=location.origin+url;
+    $('form').style.display='none'; $('done').style.display='';
+    $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · เข้าด้วย PIN ที่ตั้งไว้';
+    $('goShop').href=url; $('shopUrl').textContent=abs;
+    setTimeout(()=>{ location.href=url; }, 4000);
+  }catch(e){
+    const m=String(e.message);
+    $('err').textContent = m==='too_many_signups'?'สมัครบ่อยเกินไป ลองใหม่ภายหลัง'
+      : m==='pin_must_be_4_8_digits'?'PIN ต้องเป็นตัวเลข 4–8 หลัก'
+      : m==='bad_email'?'อีเมลไม่ถูกต้อง'
+      : m==='not_available'?'ระบบสมัครยังไม่เปิดบนเซิร์ฟเวอร์นี้'
+      : ('สร้างไม่สำเร็จ: '+m);
+    $('go').disabled=false; $('go').textContent='สร้างร้าน →';
+  }
+};
+</script>
+</body></html>

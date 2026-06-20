@@ -671,6 +671,25 @@ export function createTenant({ name, ownerEmail = null, pkg = 'line', slug = nul
   ).run(nm, s, ownerEmail, nm, brandShort, brandTheme, brandUnit, brandLogo, pack);
   return getTenant(r.lastInsertRowid);
 }
+/** Seed the per-tenant defaults a brand-new tenant needs to be usable: price tiers + sales
+ *  channels (tenders are shared globally). Idempotent. Settings use fallbacks so need no seed. */
+export function seedTenantDefaults(tenantId) {
+  const t = Number(tenantId) || 0;
+  if (!t) return;
+  if (!db.prepare('SELECT COUNT(*) c FROM price_tiers WHERE tenant_id=?').get(t).c) {
+    db.prepare(`INSERT INTO price_tiers (name, is_default, markup_pct, sort, tenant_id) VALUES ('หน้าร้าน', 1, 0, 0, ?)`).run(t);
+    db.prepare(`INSERT INTO price_tiers (name, is_default, markup_pct, sort, tenant_id) VALUES ('เดลิเวอรี่', 0, 0, 1, ?)`).run(t);
+  }
+  if (!db.prepare('SELECT COUNT(*) c FROM channels WHERE tenant_id=?').get(t).c) {
+    const storefront = db.prepare(`SELECT id FROM price_tiers WHERE is_default=1 AND tenant_id=? LIMIT 1`).get(t)?.id;
+    const delivery = db.prepare(`SELECT id FROM price_tiers WHERE is_default=0 AND tenant_id=? ORDER BY sort LIMIT 1`).get(t)?.id;
+    db.prepare(`INSERT INTO channels (name, tier_id, commission_pct, active, sort, tenant_id) VALUES ('หน้าร้าน', ?, 0, 1, 0, ?)`).run(storefront, t);
+    for (const [n, c] of [['Grab', 30], ['LINE MAN', 30], ['Shopee Food', 30]]) {
+      db.prepare(`INSERT INTO channels (name, tier_id, commission_pct, active, sort, tenant_id) VALUES (?, ?, ?, 1, 1, ?)`).run(n, delivery, c, t);
+    }
+  }
+}
+
 /** Brand config for a tenant (DB row → falls back to env defaults for tenant 1). */
 export function tenantBrand(id, envDefaults = {}) {
   const t = getTenant(id);
