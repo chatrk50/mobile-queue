@@ -425,7 +425,7 @@ async function loadReferral(){
     $('referralBody').innerHTML = html; show('referralCard', true);
   }catch(e){ /* never block ordering */ }
 }
-window.shareRef=(code)=>{ const msg='มาสะสมแก้วฟรีกับ YO-DEE Yogurt! 🥤 ใช้โค้ด '+code+' ครั้งแรก รับดวงฟรีทั้งคู่';
+window.shareRef=(code)=>{ const bn=(window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt'; const msg='มาสะสมแก้วฟรีกับ '+bn+'! 🥤 ใช้โค้ด '+code+' ครั้งแรก รับดวงฟรีทั้งคู่';
   try{ if(window.liff && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')){ liff.shareTargetPicker([{type:'text',text:msg}]).catch(()=>copyRef(msg)); return; } }catch(e){}
   copyRef(msg); };
 function copyRef(msg){ try{ navigator.clipboard.writeText(msg); if(window.toast) toast('คัดลอกข้อความชวนเพื่อนแล้ว ✅'); }catch(e){ if(window.toast) toast('คัดลอกไม่ได้ — ลองจดโค้ดส่งเพื่อน'); } }

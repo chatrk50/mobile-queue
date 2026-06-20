@@ -111,6 +111,20 @@ app.use((req, res, next) => {
   if (pinPresent(req) && pinLocked(ipOf(req))) return res.status(429).json({ error: 'too_many_attempts' });
   next();
 });
+// PWA manifest built from the brand config (so the home-screen app name/icon/colour follow the
+// brand). Registered before express.static so it wins over the static file.
+app.get('/manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').json({
+    name: BRAND.name, short_name: BRAND.short, description: `${BRAND.name}`,
+    start_url: '/cashier/', scope: '/', display: 'standalone', orientation: 'any',
+    background_color: '#ffffff', theme_color: BRAND.theme, lang: 'th',
+    icons: [
+      { src: BRAND.logo, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: BRAND.logo, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: BRAND.logo, sizes: 'any', type: 'image/png', purpose: 'maskable' },
+    ],
+  });
+});
 app.use(express.static(join(__dirname, '..', 'public')));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.
