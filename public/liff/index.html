@@ -31,12 +31,12 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
-  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
     <h1>เพิ่มเพื่อนใน LINE 💬</h1>
-    <p class="muted" style="margin-top:8px">กรุณาเพิ่ม <b>YO-DEE Yogurt</b> เป็นเพื่อนใน LINE เพื่อรับหมายเลขคิวและรับแจ้งเตือนเมื่อถึงคิวของคุณ</p>
+    <p class="muted" style="margin-top:8px">กรุณาเพิ่ม <b data-brand-name>YO-DEE Yogurt</b> เป็นเพื่อนใน LINE เพื่อรับหมายเลขคิวและรับแจ้งเตือนเมื่อถึงคิวของคุณ</p>
     <button style="width:100%;margin-top:16px" onclick="addFriend()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>เพิ่มเพื่อน LINE</button>
     <button class="ghost" style="width:100%;margin-top:10px" onclick="recheckFriend()">เพิ่มแล้ว — ดำเนินการต่อ</button>
   </div>
@@ -228,6 +228,16 @@ let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = nul
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// White-label: apply brand name/theme/logo (defaults to YO-DEE server-side → no-op for this shop).
+async function applyBrand(){
+  try{ const b=await (await fetch('/api/brand')).json(); window.BRAND=b;
+    if(b.theme){ document.documentElement.style.setProperty('--navy', b.theme); document.querySelector('meta[name=theme-color]')?.setAttribute('content', b.theme); }
+    if(b.logo) document.querySelectorAll('img.logo,[data-brand-logo]').forEach(el=>{ el.src=b.logo; });
+    document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=b.name);
+    if(b.name) document.title=document.title.replace(/YO-DEE Yogurt/g,b.name).replace(/YO-DEE/g,b.short||b.name);
+  }catch(e){}
+}
+applyBrand();
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
 function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=msg;}

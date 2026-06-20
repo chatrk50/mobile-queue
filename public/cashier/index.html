@@ -447,6 +447,18 @@ window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
 window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
+// Defaults to YO-DEE server-side, so this is a no-op for the existing shop.
+async function applyBrand(){
+  try{ const b=await (await fetch('/api/brand')).json(); window.BRAND=b;
+    if(b.theme){ document.documentElement.style.setProperty('--navy', b.theme); document.querySelector('meta[name=theme-color]')?.setAttribute('content', b.theme); }
+    if(b.logo) document.querySelectorAll('img.logo,[data-brand-logo]').forEach(el=>{ el.src=b.logo; });
+    document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=b.name);
+    document.querySelectorAll('[data-brand-short]').forEach(el=>el.textContent=b.short);
+    if(b.name) document.title=document.title.replace(/YO-DEE Yogurt/g,b.name).replace(/YO-DEE/g,b.short||b.name);
+  }catch(e){}
+}
+applyBrand();
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';

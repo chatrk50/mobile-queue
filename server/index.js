@@ -22,6 +22,15 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
 const WAIT_PER_GROUP = Number(process.env.WAIT_PER_GROUP_MIN || 4); // est. minutes per group ahead
+// White-label brand config — defaults to YO-DEE so existing deploys are unchanged; a new brand just
+// sets these env vars (+ drops its own /assets/logo.png). The frontends read it from /api/brand.
+const BRAND = {
+  name: process.env.BRAND_NAME || 'YO-DEE Yogurt',
+  short: process.env.BRAND_SHORT || 'YO-DEE',
+  theme: process.env.BRAND_THEME || '#1e3a5f',
+  logo: process.env.BRAND_LOGO || '/assets/logo.png',
+  unit: process.env.BRAND_UNIT || 'แก้ว',
+};
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
@@ -119,8 +128,10 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst() });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
 });
+// White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
+app.get('/api/brand', (req, res) => res.json(BRAND));
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {
@@ -538,7 +549,7 @@ app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
   if (order.payment_status === 'paid') return res.json({ ok: true, already: true });
   try {
     const confirmUrl = `${PUBLIC_BASE_URL}/api/linepay/confirm?ticketId=${encodeURIComponent(ticketId)}`;
-    const r = await linepayReserve({ amount: order.total, orderId: order.id, productName: 'YO-DEE order', confirmUrl, cancelUrl: `${PUBLIC_BASE_URL}/liff/` });
+    const r = await linepayReserve({ amount: order.total, orderId: order.id, productName: `${BRAND.short} order`, confirmUrl, cancelUrl: `${PUBLIC_BASE_URL}/liff/` });
     if (!r.ok) return res.status(400).json({ error: 'linepay_reserve_failed', code: r.code, message: r.message });
     res.json({ ok: true, paymentUrl: r.paymentUrl });
   } catch (e) { res.status(502).json({ error: 'linepay_unreachable', detail: e.message }); }
@@ -763,7 +774,7 @@ app.get('/api/report.xlsx', async (req, res) => {
   try {
     const { buildReportWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
-    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || 'YO-DEE Yogurt' });
+    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || BRAND.name });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
@@ -778,7 +789,7 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
     const { buildDetailedWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
     const data = Q.detailedReports({ date, branchId });
-    const buf = await buildDetailedWorkbook(data, { store: stores?.name || 'YO-DEE Yogurt', date: date || new Date().toISOString().slice(0, 10) });
+    const buf = await buildDetailedWorkbook(data, { store: stores?.name || BRAND.name, date: date || new Date().toISOString().slice(0, 10) });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="YO-DEE_Detailed_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
