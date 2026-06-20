@@ -6,6 +6,8 @@ const NAVY='FF1E3A5F', ACCENT='FF1AB3CE', GREY='FF5C7187', WHITE='FFFFFFFF', BLA
 const BAHT='"฿"#,##0;("฿"#,##0);"-"', BAHT2='"฿"#,##0.00', PCT='0.0%', NUM='#,##0;(#,##0);"-"';
 const F='Arial';
 const thin={style:'thin',color:{argb:'FFD0D8DF'}};
+// HH:MM in Bangkok time. DB timestamps are UTC, so a raw slice showed times 7h off.
+const bkkTime=(s)=>{ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?'':d.toLocaleTimeString('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}); };
 
 function C(ws,addr,value,{bold,color,size=10,numFmt,fill,align,bd,italic}={}){
   const c=ws.getCell(addr);
@@ -169,7 +171,7 @@ export async function buildDetailedWorkbook(d, { store = 'YO-DEE Yogurt', date }
 
   sheet(wb, 'Transactions', store + ' — Transactions ' + day,
     [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Items', w: 40 }, { t: 'Total', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Discount', w: 11, fmt: BAHT, align: 'right', sum: true }, { t: 'Status', w: 12 }, { t: 'Method', w: 12 }, { t: 'By', w: 14 }],
-    (d.transactions || []).map((t) => [(t.paid_at || t.created_at || '').slice(11, 16), t.code, t.items || '', t.total || 0, t.discount || 0, t.payment_status || '', t.payment_method || '', t.paid_by || t.created_by || '']));
+    (d.transactions || []).map((t) => [bkkTime(t.paid_at || t.created_at), t.code, t.items || '', t.total || 0, t.discount || 0, t.payment_status || '', t.payment_method || '', t.paid_by || t.created_by || '']));
 
   sheet(wb, 'Payments', store + ' — Payments by method ' + day,
     [{ t: 'Method', w: 18 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Amount', w: 14, fmt: BAHT, align: 'right', sum: true }],
@@ -185,7 +187,7 @@ export async function buildDetailedWorkbook(d, { store = 'YO-DEE Yogurt', date }
 
   sheet(wb, 'Voids+Refunds', store + ' — Voids & Refunds ' + day,
     [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Kind', w: 10 }, { t: 'Amount', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Reason', w: 24 }, { t: 'By', w: 14 }],
-    (d.voids || []).map((v) => [(v.voided_at || '').slice(11, 16), v.code, v.void_kind || 'void', v.total || 0, v.void_reason || '', v.by_name || '']));
+    (d.voids || []).map((v) => [bkkTime(v.voided_at), v.code, v.void_kind || 'void', v.total || 0, v.void_reason || '', v.by_name || '']));
 
   sheet(wb, 'Addons', store + ' — Add-ons ' + day,
     [{ t: 'Topping', w: 24 }, { t: 'Qty', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Revenue', w: 13, fmt: BAHT, align: 'right', sum: true }],
