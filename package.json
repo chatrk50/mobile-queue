@@ -13,7 +13,8 @@
     "test:e2e": "node --experimental-sqlite scripts/test-e2e.js",
     "backup": "node scripts/backup-dump.js",
     "test:tenant": "node --experimental-sqlite scripts/test-tenant.mjs",
-    "test:isolation": "node --experimental-sqlite scripts/test-isolation.mjs"
+    "test:isolation": "node --experimental-sqlite scripts/test-isolation.mjs",
+    "dryrun": "node scripts/dryrun.mjs"
   },
   "engines": {
     "node": ">=22.5.0"
