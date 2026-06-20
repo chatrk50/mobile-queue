@@ -1093,6 +1093,43 @@ export function loyaltyBalance(key) {
   const lifetime = c ? (c.lifetime_points || 0) : 0;
   return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
+// ---- Phone-keyed loyalty (Package 1 — no LINE) ----
+// A walk-in customer is identified by phone; the loyalty key is 'tel:<digits>'. The cashier
+// attaches it to the pending ticket BEFORE payment so awardPoints earns under that key.
+/** Normalise a Thai phone to digits; returns null if it isn't 9–10 digits. */
+export function normalizePhone(s) {
+  const d = String(s || '').replace(/\D/g, '');
+  return (d.length === 9 || d.length === 10) ? d : null;
+}
+/** Look up a phone customer's stamp balance (no side effects). */
+export function loyaltyByPhone(phone) {
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  const key = 'tel:' + d;
+  const b = loyaltyBalance(key);
+  return { ...b, phone: d, history: loyaltyHistory(key, 10) };
+}
+/** Attach a phone (loyalty key) + optional name to a pending ticket, creating the customer row.
+ *  Returns the balance so the till can show it. Rejected once the order is paid. */
+export function attachCustomerToTicket(ticketId, phone, name = null) {
+  if (!loyaltyEnabled()) throw new Error('loyalty_off');
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_line_customer');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const key = 'tel:' + d;
+  const nm = (name || '').toString().trim().slice(0, 80) || null;
+  db.transaction(() => {
+    db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm);
+    db.prepare('UPDATE tickets SET customer_key=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
+  })();
+  const b = loyaltyBalance(key);
+  return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
+}
+
 /** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
  *  and when that friend completes their FIRST paid order both sides get bonus stamps. */
 export function getReferralBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:referral_bonus', '5')) || 0)); }
@@ -1139,8 +1176,10 @@ export function awardPoints(orderId) {
   if (!loyaltyEnabled()) return null;
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
   if (!order) return null;
-  const t = db.prepare('SELECT line_user_id, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
-  if (!t || !t.line_user_id) return null;
+  const t = db.prepare('SELECT line_user_id, customer_key, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
+  // Loyalty key = LINE userId (Pkg 2) OR a phone key 'tel:…' attached at the counter (Pkg 1).
+  const loyKey = t && (t.line_user_id || t.customer_key);
+  if (!t || !loyKey) return null;
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
   // 1 stamp per drink cup (non-topping lines); sweetened drink names don't match the menu
   // catalog so they COALESCE to 'drink' — counted, which is correct.
@@ -1149,7 +1188,7 @@ export function awardPoints(orderId) {
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
   ).get(orderId).c;
   if (pts <= 0) return null;
-  const key = t.line_user_id;
+  const key = loyKey;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
   // First-ever LINE order for this customer? Grant a one-time welcome head-start.
   const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
@@ -1600,14 +1639,15 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
  *  already carries the customer's line_user_id, so no QR/id handshake is needed at the counter —
  *  the cashier just taps "แลกฟรี" on the customer's order. One redemption per order. */
 export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
-  const t = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ticketId);
-  if (!t || !t.line_user_id) throw new Error('not_line_order');
+  const t = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(ticketId);
+  const loyKey = t && (t.line_user_id || t.customer_key);
+  if (!t || !loyKey) throw new Error('no_customer');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') throw new Error('order_already_paid');
   if (order.payment_status === 'void') throw new Error('order_void');
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='redeem'").get(order.id)) throw new Error('already_redeemed');
-  const key = t.line_user_id;
+  const key = loyKey;
   const reward = rewardId
     ? db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId)
     : db.prepare('SELECT * FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get();
@@ -1821,10 +1861,12 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
     }
-    // Cashier-only: attach the LINE customer's stamp balance so staff can redeem on the spot.
+    // Cashier-only: attach the customer's stamp balance (LINE userId or a phone key) so staff
+    // can redeem on the spot.
     if (reveal && loyaltyEnabled()) {
-      const li = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(t.id)?.line_user_id;
-      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; }
+      const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
+      const li = r && (r.line_user_id || r.customer_key);
+      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
     }
     return t;
   };

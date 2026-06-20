@@ -604,6 +604,22 @@ app.post('/api/tickets/:ticketId/discount', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Phone-keyed loyalty (Package 1 — no LINE): attach a phone to a pending ticket so it earns
+// stamps on payment, and look up a phone's balance. Cashier-gated; before the /:action route.
+app.post('/api/tickets/:ticketId/customer', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.attachCustomerToTicket(req.params.ticketId, req.body?.phone, req.body?.name || null);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/loyalty/phone/:phone', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.loyaltyByPhone(req.params.phone)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
 app.post('/api/tickets/:ticketId/redeem', (req, res) => {

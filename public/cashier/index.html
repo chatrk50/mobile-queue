@@ -197,7 +197,7 @@
   <!-- LOYALTY POINTS & REWARDS (owner/manager) -->
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้แต้มอัตโนมัติ</p></div>
+      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -212,7 +212,7 @@
       <span>ดวง (0 = ปิด)</span>
       <button class="ok" style="padding:8px 16px;margin-left:auto" onclick="saveLoyaltySettings()">บันทึก</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> (เฉพาะสั่งผ่านไลน์ — หน้าร้านไม่ได้ดวง เป็นแรงจูงใจให้ย้ายมาสั่งไลน์) · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> — ลูกค้าหน้าร้านผูกเบอร์ที่เคาน์เตอร์ (ปุ่ม 📱 แต้ม) ก่อนรับเงิน · ลูกค้าสั่งผ่านไลน์ได้อัตโนมัติ · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
       <div id="rewardsBody"></div>
@@ -526,7 +526,7 @@ window.login=async()=>{
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=(mgr&&CFG.lineFeatures!==false)?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
@@ -1584,8 +1584,12 @@ function renderZone(snap){
   // Loyalty redeem: shown only when this LINE customer has enough stamps for a free drink.
   const redeemBtn=(t)=> (t.loy_points!=null && t.loy_points>=(CFG.loyaltyStamps||10) && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
-  const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
+  // Phone-keyed loyalty (Pkg 1, no LINE): attach a phone to a walk-in ticket so it earns stamps
+  // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
+  const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
+    ? (t.loy_phone
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">📱 ${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">📱 แต้ม</button>`) : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
@@ -1608,14 +1612,14 @@ function renderZone(snap){
       <div class="qitem" style="${t.cancel_requested?cancelCardStyle(t):('background:'+(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'))}"><div>${tsTop(t)}<div>
         <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}
+        <div class="row" style="gap:6px">${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div class="qitem" style="${cancelCardStyle(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap">${makeBtns(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px;flex-wrap:wrap">${makeBtns(t)}${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
@@ -1841,6 +1845,12 @@ window.discountTicket=async(tid,total)=>{
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
   const reason=(prompt('เหตุผลส่วนลด (ไม่บังคับ) เช่น สมาชิก, โปรโมชั่น')||'').trim();
   try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
+// Phone-keyed loyalty: ask for the customer's phone, attach it to the ticket so this order earns
+// stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
+window.attachPhone=async(tid)=>{ const phone=prompt('เบอร์โทรลูกค้า (สะสมแต้ม):'); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+  try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
+    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')); }
+  catch(e){ const m=err(e); toast(m==='loyalty_off'?'ยังไม่เปิดสะสมแต้ม':(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m))); } };
 window.redeemOrder=async(tid)=>{ if(!confirm('ใช้แต้มลูกค้าแลกของรางวัลฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)')) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };
