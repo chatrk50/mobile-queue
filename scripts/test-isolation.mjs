@@ -60,5 +60,33 @@ ok(aStaff.length === 1 && aStaff[0].name === 'Owner ' + A.id, 'A sees only its o
 const t1Stores = runWithTenant(1, () => Q.listStores());
 ok(!t1Stores.some(s => s.id === a.storeId || s.id === b.storeId), 'tenant 1 does not see A/B stores');
 
+// --- Phase E.1: SAME phone at two brands = two separate loyalty customers ---
+const PHONE = '0812345678';
+function earnByPhone(t, zoneId, price) {
+  return runWithTenant(t.id, () => {
+    Q.setLoyaltyEnabled(true);
+    const r = Q.createOrder(zoneId, [{ name: 'X', price, qty: 1 }], { source: 'cashier' });
+    Q.attachCustomerToTicket(r.ticket.id, PHONE);
+    Q.setOrderPaid(r.ticket.id, { method: 'cash' });
+    return Q.loyaltyByPhone(PHONE).points;
+  });
+}
+const aPts1 = earnByPhone(A, a.zoneId, 40);          // A: 1 order
+earnByPhone(B, b.zoneId, 40); earnByPhone(B, b.zoneId, 40); // B: 2 orders, same phone
+const aPts = runWithTenant(A.id, () => Q.loyaltyByPhone(PHONE).points);
+const bPts = runWithTenant(B.id, () => Q.loyaltyByPhone(PHONE).points);
+ok(aPts >= 1 && bPts >= 1 && bPts > aPts, `same phone, independent balances (A=${aPts}, B=${bPts})`);
+ok(aPts === aPts1, 'A balance unchanged by B earning on the same phone (no shared row)');
+
+// --- Phase E.2: a tenant cannot mutate another tenant's records by id ---
+const bReward = runWithTenant(B.id, () => Q.addReward({ name: 'B Reward', cost_points: 5 }));
+let guard = false;
+runWithTenant(A.id, () => { try { Q.updateReward(bReward.id, { name: 'hacked' }); } catch (e) { guard = e.message === 'reward_not_found'; } });
+ok(guard, 'A cannot update B\'s reward by id (reward_not_found)');
+const bIng = runWithTenant(B.id, () => Q.addIngredient({ name: 'B Milk' }));
+let guard2 = false;
+runWithTenant(A.id, () => { try { Q.updateIngredient(bIng.id, { name: 'hacked' }); } catch (e) { guard2 = e.message === 'ingredient_not_found'; } });
+ok(guard2, 'A cannot update B\'s ingredient by id (ingredient_not_found)');
+
 console.log(`\n${fail ? '❌' : '✅'} isolation: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

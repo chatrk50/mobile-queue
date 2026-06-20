@@ -5,6 +5,10 @@ import { currentTenantId } from './tenant.js';
 // Tenant scoping: every cross-row LIST / aggregate is filtered to the active tenant, and every
 // create stamps it. Tenant 1 (single-tenant / YO-DEE) owns all legacy rows, so this is a no-op.
 const TID = () => currentTenantId();
+// Namespace a brand-agnostic customer key (a phone 'tel:…') per tenant so the SAME phone at two
+// brands is two separate loyalty customers. Tenant 1 keeps the bare key (no migration). LINE
+// userIds need no namespacing — each tenant has its own LINE channel, so they're already unique.
+const tenantKey = (raw) => { const t = TID(); return t === 1 ? raw : `t${t}:${raw}`; };
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
@@ -724,7 +728,7 @@ export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateIngredient(id, { name, unit, lowThreshold, active, costPrice }) {
-  const cur = db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM ingredients WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('ingredient_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const u = unit != null ? (unit.toString().slice(0, 20) || cur.unit) : cur.unit;
@@ -737,7 +741,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
 /** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;
  *  use/waste=qty out; adjust=set on-hand to qty (stock count). */
 export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null } = {}) {
-  const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
+  const ing = db.prepare('SELECT * FROM ingredients WHERE id=? AND tenant_id=?').get(ingredientId, TID());
   if (!ing) throw new Error('ingredient_not_found');
   let q = Number(qty) || 0;
   let newStock, moveQty, newAvg = ing.avg_cost;
@@ -775,6 +779,7 @@ export function getRecipe(menuItemId) {
 }
 /** Replace a menu item's recipe with the given {ingredientId, qty} rows (qty>0 kept). */
 export function setRecipe(menuItemId, rows = []) {
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(menuItemId, TID())) throw new Error('item_not_found');
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(menuItemId);
     const ins = db.prepare('INSERT INTO recipes(menu_item_id, ingredient_id, qty) VALUES(?,?,?)');
@@ -853,7 +858,7 @@ export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenan
   return { id: Number(id), name: n, role, branchIds: role === 'owner' ? [] : branchIds };
 }
 export function updateStaff(id, { name, role, active, pin, branchIds }) {
-  const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM staff WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('staff_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const r = role != null ? role : cur.role;
@@ -879,7 +884,7 @@ export function updateStaff(id, { name, role, active, pin, branchIds }) {
   return { id: Number(id), name: n, role: r, active: a, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
 }
 export function deactivateStaff(id) {
-  const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM staff WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('staff_not_found');
   if (cur.role === 'owner') {
     const owners = db.prepare("SELECT COUNT(*) c FROM staff WHERE role='owner' AND active=1 AND tenant_id=?").get(TID()).c;
@@ -898,7 +903,7 @@ export function listChannels() {
 }
 /** Owner edits a price tier's default markup % over base (and optionally its name). */
 export function updatePriceTier(id, { markup_pct, name }) {
-  const cur = db.prepare('SELECT * FROM price_tiers WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM price_tiers WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('tier_not_found');
   const mk = markup_pct != null ? Math.max(0, Math.min(1000, Number(markup_pct) || 0)) : cur.markup_pct;
   const nm = name != null ? (name.toString().trim().slice(0, 40) || cur.name) : cur.name;
@@ -907,7 +912,7 @@ export function updatePriceTier(id, { markup_pct, name }) {
 }
 /** Owner edits a channel's platform commission % (and active/name). */
 export function updateChannel(id, { commission_pct, active, name }) {
-  const cur = db.prepare('SELECT * FROM channels WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM channels WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('channel_not_found');
   const c = commission_pct != null ? Math.max(0, Math.min(100, Number(commission_pct) || 0)) : cur.commission_pct;
   const a = active != null ? (active ? 1 : 0) : cur.active;
@@ -1117,7 +1122,7 @@ export function normalizePhone(s) {
 export function loyaltyByPhone(phone) {
   const d = normalizePhone(phone);
   if (!d) throw new Error('bad_phone');
-  const key = 'tel:' + d;
+  const key = tenantKey('tel:' + d);
   const b = loyaltyBalance(key);
   return { ...b, phone: d, history: loyaltyHistory(key, 10) };
 }
@@ -1132,10 +1137,10 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   if (t.line_user_id) throw new Error('already_line_customer');
   const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
-  const key = 'tel:' + d;
+  const key = tenantKey('tel:' + d);   // stored on both the customer row and the ticket (storage form)
   const nm = (name || '').toString().trim().slice(0, 80) || null;
   db.transaction(() => {
-    db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm);
+    db.prepare(`INSERT INTO customers (line_user_id, name, tenant_id) VALUES (?,?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm, TID());
     db.prepare('UPDATE tickets SET customer_key=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
   })();
   const b = loyaltyBalance(key);
@@ -1248,7 +1253,7 @@ export function addReward({ name, cost_points, image = null } = {}) {
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateReward(id, { name, cost_points, active, image } = {}) {
-  const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
+  const cur = db.prepare('SELECT * FROM rewards WHERE id=? AND tenant_id=?').get(id, TID());
   if (!cur) throw new Error('reward_not_found');
   const nm = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const cost = cost_points != null ? Math.max(1, Math.round(Number(cost_points) || 0)) : cur.cost_points;
@@ -1260,7 +1265,7 @@ export function updateReward(id, { name, cost_points, active, image } = {}) {
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
 export function redeemReward(key, rewardId, actorId = null) {
   if (!key) throw new Error('customer_required');
-  const r = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId);
+  const r = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1 AND tenant_id=?').get(rewardId, TID());
   if (!r) throw new Error('reward_not_found');
   const bal = loyaltyBalance(key).points;
   if (bal < r.cost_points) throw new Error('insufficient_points');
@@ -1661,8 +1666,8 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='redeem'").get(order.id)) throw new Error('already_redeemed');
   const key = loyKey;
   const reward = rewardId
-    ? db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId)
-    : db.prepare('SELECT * FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get();
+    ? db.prepare('SELECT * FROM rewards WHERE id=? AND active=1 AND tenant_id=?').get(rewardId, TID())
+    : db.prepare('SELECT * FROM rewards WHERE active=1 AND tenant_id=? ORDER BY cost_points, id LIMIT 1').get(TID());
   if (!reward) throw new Error('reward_not_found');
   const bal = loyaltyBalance(key).points;
   if (bal < reward.cost_points) throw new Error('insufficient_points');
