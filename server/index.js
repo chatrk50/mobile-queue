@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting, DURABLE } from './db.js';
-import { seedDemo } from '../scripts/seed.js';
+import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
@@ -902,10 +902,19 @@ setInterval(() => {
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
 
+// White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
+// (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:
+// only fires when explicitly set, so YO-DEE (no SEED) is untouched.
+if ((process.env.SEED || '').toLowerCase() === 'blank') {
+  try {
+    const r = seedBlank();
+    if (r.seeded) console.log(`[seed] Blank brand boot — created store "${r.store}" + 1 zone (no menu).`);
+  } catch (e) { console.error('[seed] blank seed skipped:', e.message); }
+}
 // Ephemeral (non-durable) deploys — the UAT sandbox — start with an empty DB on every boot.
 // Auto-seed the demo store/menu so the app is immediately usable. No-op when durable (prod:
 // Turso keeps the real data) or when a store already exists.
-if (!DURABLE) {
+else if (!DURABLE) {
   try {
     const r = seedDemo();
     if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);
