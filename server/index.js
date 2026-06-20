@@ -249,8 +249,15 @@ app.get('/admin/api/tenants', adminGate, (req, res) => {
     ...t,
     stores: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(t.id).c,
     orders: db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c,
+    plan: Q.tenantPlan(t.id).name,
+    ordersThisMonth: Q.monthOrderCount(t.id),
   }));
-  res.json({ tenants: rows });
+  res.json({ tenants: rows, plans: Q.listPlans() });
+});
+// Admin sets a tenant's plan (manual billing — automated payment provider plugs in later).
+app.post('/admin/api/tenants/:id/plan', adminGate, (req, res) => {
+  try { res.json({ ok: true, plan: Q.setTenantPlan(Number(req.params.id), String(req.body?.plan || '')) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/admin/api/tenants/:id/suspend', adminGate, (req, res) => {
   if (Number(req.params.id) === 1) return res.status(400).json({ error: 'cannot_suspend_primary' });
@@ -404,6 +411,11 @@ app.post('/api/loyalty/settings', (req, res) => {
 app.get('/api/admin/brand', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ saas: SAAS, ...brandFor(req) });
+});
+// Owner sees their plan + this-month usage (quota).
+app.get('/api/admin/usage', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ saas: SAAS, ...Q.tenantUsage() });
 });
 app.post('/api/admin/brand', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

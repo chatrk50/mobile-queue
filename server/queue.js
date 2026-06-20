@@ -1,10 +1,42 @@
 import { db, getSetting, setSetting } from './db.js';
 import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
-import { currentTenantId } from './tenant.js';
+import { currentTenantId, SAAS } from './tenant.js';
 // Tenant scoping: every cross-row LIST / aggregate is filtered to the active tenant, and every
 // create stamps it. Tenant 1 (single-tenant / YO-DEE) owns all legacy rows, so this is a no-op.
 const TID = () => currentTenantId();
+
+// ---- SaaS plans + quotas. Limits apply ONLY in SaaS mode; single-tenant is always unlimited. ----
+const PLANS = {
+  free: { label: 'Free', maxBranches: 1, maxOrdersPerMonth: 500 },
+  pro:  { label: 'Pro',  maxBranches: null, maxOrdersPerMonth: null }, // null = unlimited
+};
+export function listPlans() { return PLANS; }
+export function tenantPlan(tenantId = TID()) {
+  const row = db.prepare('SELECT plan_name FROM tenants WHERE id=?').get(tenantId);
+  const name = row && PLANS[row.plan_name] ? row.plan_name : 'free';
+  return { name, ...PLANS[name] };
+}
+export function setTenantPlan(tenantId, plan) {
+  if (!PLANS[plan]) throw new Error('bad_plan');
+  db.prepare('UPDATE tenants SET plan_name=? WHERE id=?').run(plan, tenantId);
+  return tenantPlan(tenantId);
+}
+// Orders created this Bangkok calendar month, for the tenant's stores (the metered usage).
+export function monthOrderCount(tenantId = TID()) {
+  return db.prepare(`SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id
+    WHERE s.tenant_id=? AND strftime('%Y-%m', o.created_at, '+7 hours')=strftime('%Y-%m','now','+7 hours')`).get(tenantId).c;
+}
+export function tenantUsage(tenantId = TID()) {
+  const plan = tenantPlan(tenantId);
+  return {
+    plan: plan.name, planLabel: plan.label,
+    branches: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(tenantId).c,
+    maxBranches: plan.maxBranches,
+    ordersThisMonth: monthOrderCount(tenantId),
+    maxOrdersPerMonth: plan.maxOrdersPerMonth,
+  };
+}
 // Namespace a brand-agnostic customer key (a phone 'tel:…') per tenant so the SAME phone at two
 // brands is two separate loyalty customers. Tenant 1 keeps the bare key (no migration). LINE
 // userIds need no namespacing — each tenant has its own LINE channel, so they're already unique.
@@ -670,6 +702,11 @@ export function listBranches(tenantId = TID()) {
 export function createBranch({ name, code = null, tenantId = TID() } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
+  // Plan quota (SaaS only): cap branches per the tenant's plan.
+  if (SAAS) {
+    const plan = tenantPlan(tenantId);
+    if (plan.maxBranches != null && db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(tenantId).c >= plan.maxBranches) throw new Error('branch_limit');
+  }
   const info = db.prepare('INSERT INTO stores (name, code, tenant_id) VALUES (?,?,?)').run(n, code ? code.toString().slice(0, 20) : null, tenantId);
   const id = Number(info.lastInsertRowid);
   // A branch needs at least one zone to issue queue numbers / take orders.
@@ -1437,6 +1474,12 @@ export function createOrder(zoneId, items, opts = {}) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+  // Plan quota (SaaS only): cap orders per month. Idempotent retries (same clientToken) are
+  // exempt so a retried-but-already-created order never trips the limit.
+  if (SAAS && !(opts.clientToken && db.prepare('SELECT 1 FROM tickets WHERE client_token=?').get(opts.clientToken))) {
+    const plan = tenantPlan();
+    if (plan.maxOrdersPerMonth != null && monthOrderCount() >= plan.maxOrdersPerMonth) throw new Error('order_limit');
+  }
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.
