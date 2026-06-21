@@ -64,6 +64,7 @@ ok(refund && refund.count === 1 && near(refund.amount, 50), 'S4 recorded as a re
 console.log('\n== P&L formulas ==');
 const p = rep.pnl, f = rep.settings;
 ok(near(p.cups, 3), `P&L cups == 3 paid drinks (S4 voided, excluded) — got ${p.cups}`);
+ok(near(det.cups, p.cups), `INVARIANT detailedReports.cups == P&L cups (header summary) — got ${det.cups}`);
 ok(near(p.ingredient, f.ingredientPct * rep.revenue), `INVARIANT P&L ingredient == pct×revenue (${f.ingredientPct}×${rep.revenue}=${p.ingredient})`);
 ok(near(p.packaging, f.packagingPerCup * p.cups), `INVARIANT P&L packaging == perCup×cups (${f.packagingPerCup}×${p.cups}=${p.packaging})`);
 ok(near(p.cogs, p.ingredient + p.packaging), `INVARIANT P&L COGS == ingredient+packaging (${p.cogs})`);
