@@ -386,20 +386,31 @@
 </div>
 
 <!-- CASH: amount received → change (or exact) -->
+<style>
+  .cashk{padding:15px 0;font-size:21px;font-weight:700;background:#fff;border:1px solid var(--line);border-radius:11px;color:var(--navy);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .cashk:active{background:var(--surface,#f1f5f9);transform:translateY(1px)}
+  .cashq{padding:15px 0;font-size:16px;font-weight:800;background:#e9f8fb;border:1px solid #bfe3ec;border-radius:11px;color:#0e6b7e;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .cashq:active{background:#d4f0f6;transform:translateY(1px)}
+</style>
 <div id="cashPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:360px;width:100%;margin:0">
-    <div class="row between"><h1 style="margin:0">💵 เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
-    <div style="text-align:center;margin:10px 0 6px"><div class="muted" style="font-size:13px">ยอดที่ต้องชำระ</div>
-      <div style="font-size:24px;font-weight:800;color:var(--navy)">฿<span id="cashDue">0</span></div></div>
-    <label class="muted" style="font-size:13px">รับเงินมา (เว้นว่าง = รับพอดี)</label>
-    <input id="cashRecv" type="number" inputmode="numeric" min="0" oninput="calcChange()" placeholder="จำนวนเงินที่รับ" style="width:100%;padding:14px;font-size:20px;text-align:center;border:1px solid var(--line);border-radius:10px;margin:4px 0 10px;box-sizing:border-box">
-    <div id="cashQuick" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
-    <div style="text-align:center;background:var(--surface,#f1f5f9);border-radius:10px;padding:12px;margin-bottom:12px">
-      <span class="muted" style="font-size:13px">เงินทอน</span>
+  <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0">💵 รับเงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
+    <div class="row between" style="font-size:13px;margin:10px 2px 6px"><span class="muted">ยอดที่ต้องชำระ</span><b style="color:var(--navy);font-size:17px">฿<span id="cashDue">0</span></b></div>
+    <div style="background:var(--navy,#1e3a5f);color:#fff;border-radius:12px;padding:12px 18px;text-align:right;margin-bottom:10px">
+      <div style="font-size:11px;opacity:.7">รับเงินมา</div>
+      <div style="font-size:30px;font-weight:800;line-height:1.1">฿<span id="cashRecvDisp">0</span></div></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+      <button class="cashk" onclick="cashKey('7')">7</button><button class="cashk" onclick="cashKey('8')">8</button><button class="cashk" onclick="cashKey('9')">9</button><button class="cashq" onclick="setCash(10)">฿10</button>
+      <button class="cashk" onclick="cashKey('4')">4</button><button class="cashk" onclick="cashKey('5')">5</button><button class="cashk" onclick="cashKey('6')">6</button><button class="cashq" onclick="setCash(20)">฿20</button>
+      <button class="cashk" onclick="cashKey('1')">1</button><button class="cashk" onclick="cashKey('2')">2</button><button class="cashk" onclick="cashKey('3')">3</button><button class="cashq" onclick="setCash(50)">฿50</button>
+      <button class="cashk" onclick="cashClear()" style="color:var(--danger)">C</button><button class="cashk" onclick="cashKey('0')">0</button><button class="cashk" onclick="cashKey('.')">.</button><button class="cashq" onclick="cashExact()" style="font-size:15px">พอดี</button>
+    </div>
+    <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin:12px 0">
+      <span class="muted" style="font-size:14px">เงินทอน</span>
       <div id="cashChange" style="font-size:24px;font-weight:800;color:#16876f">฿0</div></div>
     <div class="row" style="gap:8px">
       <button class="ghost" style="flex:1" onclick="cashBack()">ย้อนกลับ</button>
-      <button class="ok" id="cashConfirmBtn" style="flex:2" onclick="confirmCash()">ยืนยันรับเงิน</button>
+      <button class="ok" id="cashConfirmBtn" style="flex:2;min-height:52px" onclick="confirmCash()">ยืนยันรับเงิน</button>
     </div>
   </div>
 </div>
@@ -1718,16 +1729,22 @@ window.choosePayMethod=(m)=>{
   if(m==='cash'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
   $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
 // Cash received → change calculator (or leave blank for exact). Resolves the pay picker with 'cash'.
-function openCashPop(){
-  $('cashDue').textContent=_payAmt; $('cashRecv').value='';
-  $('cashQuick').innerHTML=`<button class="ghost" style="flex:1;min-width:66px;padding:10px;font-weight:700" onclick="setCash(${_payAmt})">พอดี</button>`+
-    [100,500,1000].filter(v=>v>_payAmt).map(v=>`<button class="ghost" style="flex:1;min-width:66px;padding:10px" onclick="setCash(${v})">฿${v}</button>`).join('');
-  calcChange(); $('cashPop').style.display='flex';
-  setTimeout(()=>{ try{ $('cashRecv').focus(); }catch(e){} },60); }
-window.setCash=(v)=>{ $('cashRecv').value=v; calcChange(); };
-window.calcChange=()=>{ const due=_payAmt, raw=$('cashRecv').value, recv=Number(raw)||0, box=$('cashChange'), btn=$('cashConfirmBtn');
-  if(raw && recv<due){ box.textContent='ขาด ฿'+(due-recv); box.style.color='var(--danger)'; if(btn){btn.disabled=true;btn.style.opacity=.5;} }
-  else { box.textContent='฿'+(raw?(recv-due):0); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
+// Keypad-driven cash entry. _cashRecv is the typed string ('' = treat as exact).
+let _cashRecv='';
+const fmt0=(n)=>(Number(n)||0).toLocaleString('en-US');
+function openCashPop(){ _cashRecv=''; $('cashDue').textContent=fmt0(_payAmt); calcChange(); $('cashPop').style.display='flex'; }
+window.cashKey=(d)=>{
+  if(d==='.'){ if(_cashRecv.includes('.')) return; if(_cashRecv==='') _cashRecv='0'; }
+  if(_cashRecv.replace('.','').length>=9) return;            // sane cap
+  _cashRecv = (_cashRecv==='0' && d!=='.') ? d : (_cashRecv + d);
+  calcChange(); };
+window.cashClear=()=>{ _cashRecv=''; calcChange(); };
+window.setCash=(v)=>{ _cashRecv=String(v); calcChange(); };  // quick denomination (฿10/20/50)
+window.cashExact=()=>{ _cashRecv=String(_payAmt); calcChange(); };
+window.calcChange=()=>{ const due=_payAmt, recv=_cashRecv===''?due:(Number(_cashRecv)||0), box=$('cashChange'), btn=$('cashConfirmBtn');
+  $('cashRecvDisp').textContent = _cashRecv==='' ? fmt0(due) : (_cashRecv==='.' ? '0.' : _cashRecv);
+  if(_cashRecv!=='' && recv<due){ box.textContent='ขาด ฿'+fmt0(due-recv); box.style.color='var(--danger)'; if(btn){btn.disabled=true;btn.style.opacity=.5;} }
+  else { box.textContent='฿'+fmt0(recv-due); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
 window.confirmCash=()=>{ $('cashPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r('cash'); };
 window.cashBack=()=>{ $('cashPop').style.display='none'; $('payMethodPop').style.display='flex'; };   // back to tender picker
 window.markPaid=async(tid,status,amount)=>{
