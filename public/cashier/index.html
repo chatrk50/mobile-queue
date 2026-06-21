@@ -422,6 +422,21 @@
     <button class="ok" style="padding:9px 18px;min-height:46px" onclick="payMerge()">💵 รับเงินรวม → ออกคิว</button>
   </div>
 </div>
+<!-- แยกจ่ายตามรายการ: pick menu items → their subtotal is taken as a partial payment -->
+<div id="itemSplitPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:420px;width:100%;margin:0;max-height:92vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0">🧾 แยกจ่ายตามรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemSplit()">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:8px 0 10px">เลือกเมนูที่จะจ่ายงวดนี้ — ที่เหลือเก็บภายหลังได้</p>
+    <div id="splitItemList" style="display:grid;gap:6px"></div>
+    <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin:12px 0">
+      <span class="muted" style="font-size:14px">รวมที่เลือก</span>
+      <div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="splitSubtotal">0</span></div></div>
+    <div class="row" style="gap:8px">
+      <button class="ghost" style="flex:1" onclick="closeItemSplit()">ยกเลิก</button>
+      <button class="ok" style="flex:2;min-height:50px" onclick="paySplitItems()">รับเงินที่เลือก</button>
+    </div>
+  </div>
+</div>
 
 <div id="voidPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;text-align:center">
@@ -1691,6 +1706,9 @@ function renderZone(snap){
     ? ` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800">จ่ายแล้ว ฿${t.order_paid} · เหลือ ฿${remainOf(t)}</span>` : '';
   const partBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">✂️ บางส่วน</button>` : '';
+  // แยกตามรายการ: only for a multi-line bill — pick items, pay their subtotal as a partial.
+  const splitBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && (t.order_lines||[]).length>=2)
+    ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">🧾 แยกรายการ</button>` : '';
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
@@ -1700,7 +1718,7 @@ function renderZone(snap){
       <div class="qitem" style="${t.cancel_requested?cancelCardStyle(t):('background:'+(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'))}"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap">${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}
+        <div class="row" style="gap:6px;flex-wrap:wrap">${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}${splitBtn(t)}
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
@@ -1803,6 +1821,30 @@ window.payPartialStart=async(tid, remain)=>{
   try{ const r=await api('/api/tickets/'+tid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:amt,method})});
     if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')+(r.change>0?(' · ทอน ฿'+r.change):'')); if(CFG.printEnabled) printKitchen(tid); }
     else toast('💵 รับบางส่วน ฿'+amt+' · เหลืออีก ฿'+r.remaining);
+  }catch(e){ toast(err(e)); } };
+// ---------- แยกจ่ายตามรายการ: pick menu lines → their subtotal becomes a partial payment ----------
+let _splitTid=null, _splitLines=[], _splitSel=new Set();
+const lineAmt=(l)=> Math.round((((l.price||0)*(l.qty||1))+((l.toppings||[]).reduce((s,tp)=>s+(tp.price||0)*(tp.qty||1),0)))*100)/100;
+window.openItemSplit=async(tid)=>{
+  try{ const v=await api('/api/tickets/'+tid); _splitLines=(v.order&&v.order.lines)||[]; }catch(e){ toast(err(e)); return; }
+  if(!_splitLines.length){ toast('ไม่พบรายการ'); return; }
+  _splitTid=tid; _splitSel=new Set(); renderSplitList(); $('itemSplitPop').style.display='flex'; };
+function renderSplitList(){
+  $('splitItemList').innerHTML=_splitLines.map((l,i)=>`<label class="row between" style="padding:9px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer;gap:8px;${_splitSel.has(i)?'background:#e9f8fb':''}">
+    <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" style="width:18px;height:18px" ${_splitSel.has(i)?'checked':''} onchange="toggleSplitItem(${i})"><span>${l.qty}× ${esc(l.name)}${(l.toppings||[]).length?(' <span class="muted" style="font-size:12px">+'+l.toppings.map(tp=>esc(tp.name)).join(', ')+'</span>'):''}</span></span>
+    <b>฿${lineAmt(l)}</b></label>`).join('');
+  const sub=[..._splitSel].reduce((s,i)=>s+lineAmt(_splitLines[i]),0);
+  $('splitSubtotal').textContent=sub.toLocaleString('en-US'); }
+window.toggleSplitItem=(i)=>{ if(_splitSel.has(i)) _splitSel.delete(i); else _splitSel.add(i); renderSplitList(); };
+window.closeItemSplit=()=>{ $('itemSplitPop').style.display='none'; };
+window.paySplitItems=async()=>{
+  const sub=[..._splitSel].reduce((s,i)=>s+lineAmt(_splitLines[i]),0);
+  if(sub<=0){ toast('เลือกอย่างน้อย 1 รายการ'); return; }
+  $('itemSplitPop').style.display='none';
+  const method=await pickPayMethod(sub); if(method===null) return;   // reuses the cash keypad
+  try{ const r=await api('/api/tickets/'+_splitTid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:sub,method})});
+    if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')); if(CFG.printEnabled) printKitchen(_splitTid); }
+    else toast('🧾 รับตามรายการ ฿'+sub+' · เหลืออีก ฿'+r.remaining);
   }catch(e){ toast(err(e)); } };
 // Receipt printing (prepared; only active when the owner enables it + a printer is wired).
 // Renders an 80mm-style slip into #printArea and calls the browser print (works with any
