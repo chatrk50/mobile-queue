@@ -126,6 +126,24 @@ export const db = {
   },
 };
 
+// Re-establish the libSQL connection after a dropped Hrana stream. The embedded
+// replica's write stream to the Turso primary can expire while the free instance
+// idles — surfaced as `stream not found` / 404 (seen at the midnight reset). A fresh
+// client gets a new stream; the prepared-statement cache is bound to the OLD handle,
+// so it must be cleared. Best-effort, and a no-op in local (node:sqlite) mode.
+export function reconnectDb() {
+  if (!(USE_TURSO && Database)) return false;
+  try {
+    const next = new Database(dbPath, { syncUrl: TURSO_URL, authToken: TURSO_TOKEN });
+    try { next.sync(); } catch (e) { console.error('[db] reconnect sync warn:', e.message); }
+    raw = next;
+    _stmtCache.clear(); _wrapCache.clear();
+    try { raw.exec('PRAGMA foreign_keys = ON'); } catch { /* ignore */ }
+    console.log('[db] reconnected to Turso (fresh client)');
+    return true;
+  } catch (e) { console.error('[db] reconnect failed:', e.message); return false; }
+}
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS stores (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

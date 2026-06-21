@@ -181,6 +181,13 @@ ok(!!arow && near(arow.revenue, eod.revenue), `INVARIANT sales_history.revenue =
 ok(!!arow && arow.cups === eod.pnl.cups && near(arow.void_amount, eod.voided.amount), `archived cups + void amount tie out (cups ${arow && arow.cups}, void ${arow && arow.void_amount})`);
 // Historical P&L: the archive also snapshots the cost breakdown, and salesHistory rolls up by year.
 ok(!!arow && near(arow.cogs, eod.pnl.cogs) && near(arow.opex, eod.pnl.opexDaily), `archive snapshots the P&L breakdown (cogs ${arow && arow.cogs}, opex ${arow && arow.opex})`);
+// Recovery path: backfilling by EXPLICIT date (the manual "บันทึกย้อนหลัง" + reconnect-retry that
+// recover a night whose midnight auto-archive failed on a stale Turso stream).
+const todayBkk = db.prepare("SELECT date('now','+7 hours') AS d").get().d;
+const byDate = Q.archiveTodaySales(todayBkk);     // explicit-date path must equal the no-arg path
+ok(byDate && near(byDate.revenue, eod.revenue), `archiveTodaySales(explicitDate) writes that day's row (${byDate && byDate.revenue} == ${eod.revenue})`);
+const emptyRet = Q.archiveTodaySales('2020-01-02'); // a day with no sales → nothing saved, must not throw
+ok(emptyRet === null && !db.prepare("SELECT 1 FROM sales_history WHERE date='2020-01-02'").get(), 'archiveTodaySales(emptyPastDate) saves nothing + does not throw');
 const sh = Q.salesHistory();
 ok(sh.daily.length >= 1 && Array.isArray(sh.weekly) && Array.isArray(sh.monthly) && Array.isArray(sh.yearly), 'salesHistory returns daily + weekly + monthly + yearly');
 ok(sh.yearly.length >= 1 && near(sh.yearly[0].net, sh.daily.reduce((s, d) => s + (d.net || 0), 0)), 'INVARIANT yearly net rolls up the daily nets');
