@@ -273,6 +273,7 @@
       <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
       <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
+    <div id="detailSummary" style="margin-top:14px"></div>
     <div id="detailBody" style="margin-top:14px"></div>
   </div>
 
@@ -695,8 +696,37 @@ window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.n
   await loadDetail(); };
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
-  renderDetail(); }catch(e){ toast(err(e)); } };
+  renderDetailSummary(); renderDetail(); }catch(e){ toast(err(e)); } };
 window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab '+(b.dataset.t===v?'ok':'ghost')); renderDetail(); };
+// Date-scoped header summary (varies with the selected date) — the day at a glance above the tabs.
+function renderDetailSummary(){
+  const box=$('detailSummary'); if(!box) return;
+  if(!DET){ box.innerHTML=''; return; }
+  const tx=DET.transactions||[];
+  const paidN=tx.filter(t=>t.payment_status==='paid').length;
+  const pendN=tx.filter(t=>t.payment_status==='unpaid'||t.payment_status==='claimed').length;
+  const vt=DET.voidTotals||{};
+  const cancelN=(vt.void?.count||0)+(vt.refund?.count||0);
+  const cancelAmt=(vt.void?.amount||0)+(vt.refund?.amount||0);
+  const wasteN=vt.waste?.count||0;
+  const cups=DET.cups||0, rev=DET.paidTotal||0;
+  const top=(DET.topItems||[])[0];
+  const cancelRate=tx.length?Math.round((cancelN/tx.length)*1000)/10:0;
+  const kpi=(v,l,c)=>`<div style="flex:1;min-width:78px;text-align:center"><div style="font-size:20px;font-weight:800;color:${c||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
+  box.innerHTML=`<div style="background:var(--surface,#f1f5f9);border-radius:14px;padding:12px 10px">
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      ${kpi(tx.length,'ออเดอร์')}
+      ${kpi(cups+' แก้ว','ขายได้')}
+      ${kpi(baht2(rev),'ยอดขาย','#16876f')}
+      ${kpi(cancelN,'ยกเลิก/คืน','#c43a4b')}
+    </div>
+    <div class="row between" style="font-size:12px;margin-top:8px;flex-wrap:wrap;gap:6px;color:var(--muted)">
+      <span>✅ ชำระแล้ว ${paidN} · ❌ ยกเลิก ${vt.void?.count||0} · ↩️ คืนเงิน ${vt.refund?.count||0}${wasteN?` · 🗑️ ของเสีย ${wasteN}`:''}${pendN?` · ⏳ ค้าง ${pendN}`:''}${cancelAmt?` <span style="color:#c43a4b">(${baht2(cancelAmt)})</span>`:''}</span>
+      ${top?`<span>🏆 ขายดี: <b style="color:var(--navy)">${esc(top.name)}</b> ${top.qty} แก้ว</span>`:''}
+    </div>
+    ${cancelRate>=15?`<div class="muted" style="font-size:11px;margin-top:6px">↳ อัตรายกเลิก ${cancelRate}% (ส่วนใหญ่มาจากการแก้ออเดอร์ — คีย์ใหม่)</div>`:''}
+  </div>`;
+}
 function baht2(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
 function detTable(head,rows){ return `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">${head.map(h=>`<th style="padding:6px 4px;${h.r?'text-align:right':''}">${h.t}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`; }
 // Leading row-number cell (ลำดับ) so every list line in the detailed report is numbered.
