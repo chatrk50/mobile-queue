@@ -1566,6 +1566,29 @@ export function payMulti(ticketIds, opts = {}) {
   return { ok: true, count: results.filter((r) => r.ok).length, codes, total, results };
 }
 
+/** แยกจ่ายตามเงิน: take a partial payment toward a bill. Accumulates orders.paid_amount; once it
+ *  covers the net (total − discount), settle in full via setOrderPaid (issue queue number etc.).
+ *  Returns the running paid + remaining so the cashier keeps collecting until the balance is 0. */
+export function payPartial(ticketId, amount, opts = {}) {
+  const { actorId = null, method = null } = opts;
+  const amt = Math.round((Number(amount) || 0) * 100) / 100;
+  if (amt <= 0) throw new Error('bad_amount');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') return { ok: true, settled: true, alreadyPaid: true, remaining: 0 };
+  if (order.payment_status === 'void') throw new Error('order_void');
+  const net = Math.round(((order.total || 0) - (order.discount || 0)) * 100) / 100;
+  const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
+  if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
+    db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
+    const r = setOrderPaid(ticketId, { actorId, method });
+    return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
+  }
+  db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'partial', amount: amt, actor: actorId, meta: { method: method || 'cash', paid: newPaid, net } });
+  return { ok: true, settled: false, paid: newPaid, remaining: Math.round((net - newPaid) * 100) / 100 };
+}
+
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
  *  order is flagged 'claimed' so the cashier knows to verify + confirm. */
 export function attachSlip(ticketId, imageData) {
@@ -1838,6 +1861,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_total = o.total;
       t.order_discount = o.discount || 0;
       t.order_net = Math.round((o.total - (o.discount || 0)) * 100) / 100;
+      t.order_paid = Math.round((o.paid_amount || 0) * 100) / 100; // partial payments so far (แยกตามเงิน)
       t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', ');
       t.order_lines = o.lines;               // grouped: drink + its toppings (dash sub-lines)
       t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'

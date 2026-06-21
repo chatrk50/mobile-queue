@@ -116,6 +116,19 @@ ok(db.prepare('SELECT COUNT(*) n FROM orders WHERE ticket_id IN (?,?) AND paymen
 const mre = Q.payMulti([m1.ticket.id, m2.ticket.id], { method: 'cash' }); // idempotent re-run
 ok(mre.results.every((r) => r.alreadyPaid), 'INVARIANT re-running payMulti is a no-op (idempotent)');
 
+// ---- แยกจ่ายตามเงิน (partial pay): accumulate payments until the bill is covered, THEN issue queue# ----
+console.log('\n== Partial pay (แยกตามเงิน) ==');
+const sp = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
+const p1r = Q.payPartial(sp.ticket.id, 40, { method: 'cash' });
+ok(p1r.settled === false && near(p1r.remaining, 60), `INVARIANT partial pay leaves a balance, no settle (paid ${p1r.paid}, remaining ${p1r.remaining})`);
+ok(db.prepare('SELECT payment_status FROM orders WHERE ticket_id=?').get(sp.ticket.id).payment_status === 'unpaid', 'INVARIANT order stays UNPAID (no queue number) until fully covered');
+const p2r = Q.payPartial(sp.ticket.id, 60, { method: 'cash' });
+ok(p2r.settled === true && p2r.code, `INVARIANT covering the balance settles + issues a queue number (${p2r.code})`);
+ok(db.prepare('SELECT payment_status FROM orders WHERE ticket_id=?').get(sp.ticket.id).payment_status === 'paid', 'order is now paid');
+const op = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+const opr = Q.payPartial(op.ticket.id, 100, { method: 'cash' });
+ok(opr.settled === true && near(opr.change, 50), `INVARIANT overpay on a partial settles + returns change (change ${opr.change})`);
+
 // ---- "Today" is date-scoped: an order from another day must NOT count in today's revenue ----
 console.log('\n== Daily report is date-scoped (today only) ==');
 const todayRev = Q.dailyReport().revenue;

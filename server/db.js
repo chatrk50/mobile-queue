@@ -435,6 +435,7 @@ for (const stmt of [
   `ALTER TABLE stores ADD COLUMN hours_days TEXT`,
   `ALTER TABLE orders ADD COLUMN branch_id INTEGER`,         // = tickets.store_id (denormalized)
   `ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE orders ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0`, // running total of partial payments (แยกจ่ายตามเงิน)
   `ALTER TABLE orders ADD COLUMN discount_reason TEXT`,
   `ALTER TABLE orders ADD COLUMN payment_method TEXT`,       // cash|promptpay|slip|other
   `ALTER TABLE orders ADD COLUMN void_kind TEXT`,            // void (unpaid) | refund (paid)
