@@ -109,6 +109,17 @@ async function brand(name, pkg, pin) {
   await adm('POST', `/admin/api/tenants/${aid}/plan`, { plan: 'pro' }, { 'x-admin-pin': ADMIN });
   ok((await A.c('POST', `/b/${A.slug}/api/branches`, { name: 'Branch 2' })).status === 200, 'after upgrade to pro: 2nd branch allowed');
 
+  // ===== Owner email login (two-layer auth) =====
+  sec('Owner email login');
+  const ec = client();
+  await ec('POST', '/api/signup', { name: 'Email Shop', email: 'me@shop.com', package: 'pos', pin: '7777', password: 'pw-secret-1' });
+  const lg = await anon()('POST', '/api/owner/login', { email: 'me@shop.com', password: 'pw-secret-1' });
+  ok(lg.status === 200 && /\/cashier\/$/.test(lg.data?.url || ''), 'owner logs in by email+password → shop url');
+  ok((await anon()('POST', '/api/owner/login', { email: 'me@shop.com', password: 'nope' })).status === 401, 'wrong owner password → 401');
+  const oc = (await anon()('GET', '/api/owner/config')).data;
+  ok(oc.googleClientId === null, 'owner/config: Google off (no GOOGLE_CLIENT_ID) → null');
+  ok((await anon()('POST', '/api/owner/google', { credential: 'x' })).status === 404, 'owner/google 404 when not configured');
+
   console.log(`\n${fail ? '❌ HIERARCHY CHECK FAILED' : '✅ HIERARCHY VERIFIED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('crashed:', e); process.exit(2); });

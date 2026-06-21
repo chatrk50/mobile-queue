@@ -3,7 +3,8 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId } from './db.js';
+import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -259,6 +260,8 @@ app.post('/api/signup', (req, res) => {
       Q.createBranch({ name });                                  // store + Zone A
       Q.createStaff({ name: 'เจ้าของร้าน', pin, role: 'owner' }); // owner login = the chosen PIN
     });
+    // Optional owner password → lets the owner sign in by email later (PIN still runs the till).
+    if (req.body?.password && email) { try { setOwnerPassword(t.id, String(req.body.password).slice(0, 100)); } catch { /* non-fatal */ } }
     // Every new shop starts on a full-Pro free trial; a referral code extends both sides.
     const TRIAL_DAYS = Math.max(0, parseInt(process.env.TRIAL_DAYS || '60', 10) || 60);
     const trialUntil = startTrial(t.id, TRIAL_DAYS);
@@ -267,6 +270,42 @@ app.post('/api/signup', (req, res) => {
     rec.count += 1; signupHits.set(ip, rec);
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ---------- Owner account login (email / Google) — "find my shop" without the slug URL ----------
+// Two-layer auth: this signs an OWNER session for the resolved shop; the till still uses PINs.
+const ownerHits = new Map();
+function issueOwnerSession(res, tenantId) {
+  const sid = ownerStaffId(tenantId);
+  if (!sid) return false;
+  const token = signSession({ staffId: sid, role: 'owner', tenantId, branchIds: [], exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  return true;
+}
+function ownerResult(res, matches, slug) {
+  if (!matches.length) return res.status(401).json({ error: 'no_match' });
+  const pick = slug ? matches.find((m) => m.slug === slug) : (matches.length === 1 ? matches[0] : null);
+  if (!pick) return res.json({ ok: true, choose: matches });        // multiple shops → let them pick
+  issueOwnerSession(res, pick.tenantId);
+  return res.json({ ok: true, url: `/b/${pick.slug}/cashier/`, tenant: pick });
+}
+app.get('/api/owner/config', (req, res) => res.json({ saas: SAAS, googleClientId: GOOGLE_ON ? GOOGLE_CLIENT_ID : null }));
+app.post('/api/owner/login', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const ip = ipOf(req), now = Date.now(); const h = ownerHits.get(ip);
+  if (h && h.until > now && h.count >= 10) return res.status(429).json({ error: 'too_many' });
+  const matches = ownerLoginMatches(req.body?.email, req.body?.password);
+  if (!matches.length) { const a = h && h.until > now ? h : { count: 0, until: now + 15 * 60000 }; a.count++; ownerHits.set(ip, a); }
+  return ownerResult(res, matches, req.body?.slug);
+});
+app.post('/api/owner/google', async (req, res) => {
+  if (!SAAS || !GOOGLE_ON) return res.status(404).json({ error: 'google_off' });
+  try {
+    const { email } = await verifyGoogleIdToken(req.body?.credential);
+    const matches = ownerTenantsByEmail(email);
+    if (!matches.length) return res.status(404).json({ error: 'no_shop', email });   // verified, but owns nothing → signup
+    return ownerResult(res, matches, req.body?.slug);
+  } catch (e) { res.status(401).json({ error: 'bad_google' }); }
 });
 
 // ---------- Platform admin (Phase D) — manage ALL tenants. NOT tenant-scoped. ----------

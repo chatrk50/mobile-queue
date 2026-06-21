@@ -468,6 +468,7 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN founder INTEGER NOT NULL DEFAULT 0`,   // first-N shops lock founder price
   `ALTER TABLE tenants ADD COLUMN referral_code TEXT`,                   // this tenant's own invite code
   `ALTER TABLE tenants ADD COLUMN referred_by TEXT`,                     // referral_code that invited them
+  `ALTER TABLE tenants ADD COLUMN owner_pass_hash TEXT`,                 // owner email-login password (scrypt; optional)
   // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
   `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -708,6 +709,29 @@ export function startTrial(tenantId, days = 60) {
 }
 export function getTenantByReferral(code) {
   return db.prepare('SELECT * FROM tenants WHERE referral_code=?').get(String(code || '').toUpperCase().trim()) || null;
+}
+// ---------- Owner account login (email / Google) — finds which shop(s) an email owns ----------
+export function setOwnerPassword(tenantId, password) {
+  if (!password) return; db.prepare('UPDATE tenants SET owner_pass_hash=? WHERE id=?').run(hashPin(String(password)), tenantId);
+}
+/** Email+password → the active shops that email owns with a matching password. */
+export function ownerLoginMatches(email, password) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e || !password) return [];
+  return db.prepare('SELECT id, slug, name, owner_pass_hash FROM tenants WHERE active=1 AND lower(owner_email)=?').all(e)
+    .filter((r) => r.owner_pass_hash && verifyPin(String(password), r.owner_pass_hash))
+    .map((r) => ({ tenantId: r.id, slug: r.slug, name: r.name }));
+}
+/** Verified email (e.g. via Google) → all active shops that email owns. */
+export function ownerTenantsByEmail(email) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e) return [];
+  return db.prepare('SELECT id, slug, name FROM tenants WHERE active=1 AND lower(owner_email)=?').all(e)
+    .map((r) => ({ tenantId: r.id, slug: r.slug, name: r.name }));
+}
+export function ownerStaffId(tenantId) {
+  const s = db.prepare("SELECT id FROM staff WHERE tenant_id=? AND role='owner' AND active=1 ORDER BY id LIMIT 1").get(tenantId);
+  return s ? s.id : null;
 }
 /** Apply a referral at signup: extend BOTH the new tenant and the referrer's paid-through by
  *  `days`. No self-referral, once only. Returns true if applied. */
