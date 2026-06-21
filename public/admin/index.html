@@ -53,32 +53,34 @@ window.login=async()=>{ PIN=$('pin').value.trim(); $('gerr').textContent='';
     $('gate').style.display='none'; $('panel').style.display=''; load();
   }catch(e){ $('gerr').textContent='เข้าไม่ได้: '+e.message; } };
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+let TENANTS=[];
 window.load=async()=>{ $('err').textContent='';
-  try{ const d=await api('/admin/api/tenants'); const ts=d.tenants||[]; const plans=Object.keys(d.plans||{free:1,pro:1});
+  try{ const d=await api('/admin/api/tenants'); const ts=d.tenants||[]; TENANTS=ts; const plans=Object.keys(d.plans||{free:1,pro:1});
     $('count').textContent='('+ts.length+')';
     $('rows').innerHTML=ts.map(t=>`<tr>
       <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/${t.domain?` · 🌐 ${esc(t.domain)}`:''}</div></td>
       <td><span class="pill pkg">${t.package==='pos'?'POS':'+LINE'}</span></td>
       <td><select onchange="setPlan(${t.id},this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-        ${plans.map(p=>`<option value="${p}" ${t.plan===p?'selected':''}>${p}</option>`).join('')}</select></td>
+        ${plans.map(p=>`<option value="${esc(p)}" ${t.plan===p?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
       <td>${t.stores}</td><td>${t.ordersThisMonth}</td>
       <td><span class="pill ${t.active?'live':'susp'}">${t.active?'ใช้งาน':'ระงับ'}</span></td>
       <td class="act">
         ${t.id!==1?(t.active
           ? `<button class="btn ghost danger" onclick="suspend(${t.id})">ระงับ</button>`
           : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
-        <button class="btn ghost" onclick="setDomain(${t.id},'${esc(t.domain||'')}')">โดเมน</button>
-        <button class="btn ghost" onclick="resetPin(${t.id},'${esc(t.name)}')">รีเซ็ต PIN</button>
+        <button class="btn ghost" onclick="setDomain(${t.id})">โดเมน</button>
+        <button class="btn ghost" onclick="resetPin(${t.id})">รีเซ็ต PIN</button>
       </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
   }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
+const tById=(id)=>TENANTS.find(t=>t.id===id)||{};
 window.setPlan=async(id,plan)=>{ try{ await api('/admin/api/tenants/'+id+'/plan',{method:'POST',body:JSON.stringify({plan})}); load(); }catch(e){ $('err').textContent=e.message; } };
-window.setDomain=async(id,cur)=>{ const d=prompt('โดเมนของแบรนด์ (เช่น shop.brand.com) — ว่าง = ลบ\nอย่าลืมชี้ DNS (CNAME) มาที่โฮสต์นี้ + เพิ่มโดเมนใน Render',cur); if(d===null) return;
+window.setDomain=async(id)=>{ const d=prompt('โดเมนของแบรนด์ (เช่น shop.brand.com) — ว่าง = ลบ\nอย่าลืมชี้ DNS (CNAME) มาที่โฮสต์นี้ + เพิ่มโดเมนใน Render', tById(id).domain||''); if(d===null) return;
   try{ const r=await api('/admin/api/tenants/'+id+'/domain',{method:'POST',body:JSON.stringify({domain:d})}); $('err').textContent=''; load(); }
   catch(e){ $('err').textContent = e.message==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(e.message==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':e.message); } };
 window.suspend=async(id)=>{ if(!confirm('ระงับแบรนด์นี้? ร้านจะเข้าใช้งานไม่ได้')) return;
   try{ await api('/admin/api/tenants/'+id+'/suspend',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
 window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
-window.resetPin=async(id,name)=>{ if(!confirm('รีเซ็ต PIN เจ้าของร้าน "'+name+'"?')) return;
+window.resetPin=async(id)=>{ const name=tById(id).name||('#'+id); if(!confirm('รีเซ็ต PIN เจ้าของร้าน "'+name+'"?')) return;
   try{ const d=await api('/admin/api/tenants/'+id+'/reset-pin',{method:'POST',body:'{}'});
     alert('PIN ใหม่ของ "'+name+'": '+d.pin+'\nแจ้งเจ้าของร้านและให้เปลี่ยนทันที'); }catch(e){ $('err').textContent=e.message; } };
 $('pin').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
