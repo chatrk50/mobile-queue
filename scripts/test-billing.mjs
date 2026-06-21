@@ -83,5 +83,12 @@ ok(okRef === true && DB.getTenant(refr.id).plan_until > before, 'referral extend
 ok(DB.getTenant(inv.id).referred_by === DB.getTenant(refr.id).referral_code, 'invitee records referred_by');
 ok(DB.applyTenantReferral(inv.id, DB.getTenant(refr.id).referral_code, 30) === false, 'referral cannot be applied twice');
 
+// Dunning: a paid plan ending soon with no auto-renew flags expiringSoon.
+const dn = DB.createTenant({ name: 'Dunning Co' });
+db.prepare("UPDATE tenants SET plan_name='pro', auto_renew=0, plan_until=? WHERE id=?").run(new Date(Date.now() + 3 * 86400000).toISOString(), dn.id);
+ok(B.billingStatus(dn.id).expiringSoon === true, 'expiringSoon flagged when ending ≤7d and not auto-renewing');
+db.prepare('UPDATE tenants SET plan_until=? WHERE id=?').run(new Date(Date.now() + 40 * 86400000).toISOString(), dn.id);
+ok(B.billingStatus(dn.id).expiringSoon === false, 'not expiringSoon when far from due');
+
 console.log(`\n${fail ? '❌' : '✅'} billing: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

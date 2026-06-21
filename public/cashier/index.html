@@ -1794,6 +1794,7 @@ window.showFeatures=async()=>{
     (bill ? (()=>{ const P=bill.prices||{pro:{},business:{}}; const b=(s)=>Math.round((s||0)/100).toLocaleString('en-US'); const lbl=(p)=>p==='business'?'Business':p==='pro'?'Pro':'Free';
       return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>💳 แพ็กเกจการใช้งาน</b>${bill.founder?' <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;font-size:11px">🔒 Founder</span>':''}
+      ${bill.expiringSoon?`<div style="background:rgba(229,91,107,.12);color:#c0394a;border-radius:8px;padding:8px;font-size:12px;font-weight:700;margin:6px 0">⚠️ แพ็กเกจจะหมดอายุใน ${bill.daysLeft} วัน — กดอัปเกรด/ต่ออายุเพื่อใช้ต่อ</div>`:''}
       <div class="muted" style="font-size:12px;margin:2px 0 8px">${bill.trial
         ? `🎁 ทดลองใช้ <b style="color:#7c3aed">${lbl(bill.plan)}</b> ฟรีถึง <b>${esc((bill.planUntil||'').slice(0,10))}</b> — กดอัปเกรดเพื่อใช้ต่อ`
         : `แพลน: <b style="color:${bill.plan!=='free'?'#7c3aed':'var(--navy)'}">${lbl(bill.plan)}</b>${bill.plan!=='free'&&bill.planUntil?` · ถึง ${esc(bill.planUntil.slice(0,10))}${bill.autoRenew?' · ต่ออายุอัตโนมัติ ✓':' · จะหมดอายุ (ยกเลิกแล้ว)'}`:' · จำกัด 1 สาขา / 500 ออเดอร์ต่อเดือน'}`}</div>
@@ -1823,6 +1824,15 @@ window.showFeatures=async()=>{
         <input id="brandThemeInp" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(br.theme||'')?br.theme:'#1e3a5f'}" style="width:52px;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px">
       </div>
       <button class="ok" style="width:100%" onclick="saveBrandConfig()">บันทึกแบรนด์</button>
+    </div>` : '')+
+    (CFG.saas ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>🔐 ข้อมูล & PDPA</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ส่งออกข้อมูลร้าน (พกพา) · ลบข้อมูลลูกค้ารายบุคคลตามคำขอ</div>
+      <div class="row" style="gap:8px">
+        <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">⬇️ ส่งออก (JSON)</button>
+        <button class="ghost danger" style="flex:1;padding:8px" onclick="forgetCust()">ลบข้อมูลลูกค้า</button>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:8px"><a href="/privacy/" target="_blank">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/" target="_blank">ข้อกำหนด</a></div>
     </div>` : '')+
     (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
@@ -1875,6 +1885,12 @@ window.saveBrandConfig=async()=>{
   if(_brandLogo) body.logo=_brandLogo;
   try{ await api('/api/admin/brand',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast('บันทึกแบรนด์แล้ว ✓'); applyBrand(); }catch(e){ toast(err(e)); } };
+// PDPA: export tenant data (blob download via the shimmed fetch) + erase one customer.
+window.exportData=async()=>{ try{ const r=await fetch('/api/admin/export'); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||r.status);
+  const blob=await r.blob(), u=URL.createObjectURL(blob), a=document.createElement('a'); a.href=u; a.download='data-export.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); toast('ส่งออกข้อมูลแล้ว'); }catch(e){ toast(err(e)); } };
+window.forgetCust=async()=>{ const phone=prompt('เบอร์โทรลูกค้าที่จะลบข้อมูล (PDPA):'); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+  if(!confirm('ลบข้อมูลส่วนตัวของลูกค้า '+p+'? (ลบแต้ม+ทำให้ออเดอร์ไม่ระบุตัวตน · ย้อนกลับไม่ได้)')) return;
+  try{ const d=await api('/api/admin/forget-customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})}); toast(d.found?'ลบข้อมูลลูกค้าแล้ว':'ไม่พบลูกค้า แต่เคลียร์เรียบร้อย'); }catch(e){ toast(err(e)); } };
 // Per-tenant LINE connect (SaaS Pkg 2): only send token/secret if typed (blank keeps existing).
 window.saveLineConfig=async()=>{
   const body={ liffId:$('lineLiffInp').value.trim(), addFriendUrl:$('lineAddFriendInp').value.trim() };

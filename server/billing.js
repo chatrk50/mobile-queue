@@ -55,8 +55,12 @@ export function billingStatus(tenantId) {
   const cfg = billingConfig();
   // Founders see their discounted Pro price. Trial = on a paid plan but no saved card yet.
   if (t.founder) cfg.prices = { ...cfg.prices, pro: FOUNDER };
-  return { ...cfg, plan, interval: t.plan_interval || 'month', planUntil: t.plan_until || null,
-    autoRenew: !!t.auto_renew, hasCard, trial: plan !== 'free' && !hasCard, founder: !!t.founder, referralCode: t.referral_code || null };
+  const trial = plan !== 'free' && !hasCard;
+  // Dunning nudge: paid plan ending within 7 days and won't auto-renew (trial ending / cancelled).
+  const daysLeft = t.plan_until ? Math.ceil((new Date(t.plan_until).getTime() - Date.now()) / 86400000) : null;
+  const expiringSoon = plan !== 'free' && daysLeft != null && daysLeft <= 7 && (trial || !t.auto_renew);
+  return { ...cfg, plan, interval: t.plan_interval || 'month', planUntil: t.plan_until || null, daysLeft,
+    autoRenew: !!t.auto_renew, hasCard, trial, expiringSoon, founder: !!t.founder, referralCode: t.referral_code || null };
 }
 
 /** Subscribe a tenant to a plan (pro|business) on an interval (month|year): save the card on an
