@@ -120,6 +120,17 @@ async function brand(name, pkg, pin) {
   ok(oc.googleClientId === null, 'owner/config: Google off (no GOOGLE_CLIENT_ID) → null');
   ok((await anon()('POST', '/api/owner/google', { credential: 'x' })).status === 404, 'owner/google 404 when not configured');
 
+  // ===== Security hardening =====
+  sec('Security hardening');
+  const hres = await fetch(BASE + '/signup/');
+  ok(hres.headers.get('x-frame-options') === 'SAMEORIGIN', 'clickjacking header (X-Frame-Options: SAMEORIGIN)');
+  ok(hres.headers.get('x-content-type-options') === 'nosniff', 'MIME-sniff header (X-Content-Type-Options: nosniff)');
+  ok((hres.headers.get('content-security-policy') || '').includes("frame-ancestors"), 'CSP frame-ancestors set');
+  ok(!hres.headers.get('x-powered-by'), 'X-Powered-By hidden');
+  const a = anon();
+  for (let i = 0; i < 6; i++) await a('POST', '/admin/api/login', { adminPin: 'WRONG' + i });
+  ok((await a('POST', '/admin/api/login', { adminPin: 'WRONG' })).status === 429, 'platform-admin PIN locks out after repeated failures (429)');
+
   console.log(`\n${fail ? '❌ HIERARCHY CHECK FAILED' : '✅ HIERARCHY VERIFIED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('crashed:', e); process.exit(2); });

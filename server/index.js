@@ -21,6 +21,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
 const PORT = process.env.PORT || 3000;
+app.disable('x-powered-by');   // don't advertise Express
+// Security headers on every response: block MIME-sniffing, clickjacking (frame-ancestors),
+// referrer leakage, and force HTTPS (HSTS) in SaaS. Sessions get the Secure flag in SaaS too.
+const COOKIE_SECURE = SAAS ? '; Secure' : '';
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (SAAS) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  next();
+});
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
@@ -279,7 +292,7 @@ function issueOwnerSession(res, tenantId) {
   const sid = ownerStaffId(tenantId);
   if (!sid) return false;
   const token = signSession({ staffId: sid, role: 'owner', tenantId, branchIds: [], exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
-  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${COOKIE_SECURE}`);
   return true;
 }
 function ownerResult(res, matches, slug) {
@@ -311,10 +324,26 @@ app.post('/api/owner/google', async (req, res) => {
 // ---------- Platform admin (Phase D) — manage ALL tenants. NOT tenant-scoped. ----------
 // Gated by SAAS_ADMIN_PIN (env, SaaS service only). Header x-admin-pin or body.adminPin.
 const SAAS_ADMIN_PIN = (process.env.SAAS_ADMIN_PIN || '').trim();
-const adminOK = (req) => SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
-const adminGate = (req, res, next) => adminOK(req) ? next() : res.status(401).json({ error: 'admin_auth' });
-// Verify the admin PIN (for the console login screen).
-app.post('/admin/api/login', (req, res) => res.json({ ok: adminOK(req) }));
+const adminFails = new Map(); // ip -> { count, until } — brute-force lockout on the platform PIN
+const adminLocked = (ip) => { const a = adminFails.get(ip); return !!(a && a.until > Date.now()); };
+function adminTry(req) {
+  const ok = SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
+  const ip = ipOf(req);
+  if (ok) { adminFails.delete(ip); return true; }
+  const a = adminFails.get(ip) || { count: 0, until: 0 };
+  a.count++; if (a.count >= 6) { a.until = Date.now() + 15 * 60000; a.count = 0; }
+  adminFails.set(ip, a);
+  return false;
+}
+const adminGate = (req, res, next) => {
+  if (adminLocked(ipOf(req))) return res.status(429).json({ error: 'too_many' });
+  return adminTry(req) ? next() : res.status(401).json({ error: 'admin_auth' });
+};
+// Verify the admin PIN (for the console login screen) — also rate-limited.
+app.post('/admin/api/login', (req, res) => {
+  if (adminLocked(ipOf(req))) return res.status(429).json({ ok: false, error: 'too_many' });
+  res.json({ ok: adminTry(req) });
+});
 // All tenants + a few counts for the console.
 app.get('/admin/api/tenants', adminGate, (req, res) => {
   const rows = listTenants().map((t) => ({
@@ -387,7 +416,7 @@ app.post('/api/staff/login', (req, res) => {
   const branchIds = staff.role === 'owner' ? []
     : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
   const token = signSession({ staffId: staff.id, role: staff.role, tenantId: staff.tenant_id, branchIds, exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
-  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${COOKIE_SECURE}`);
   res.json({ ok: true, staff: { id: staff.id, name: staff.name, role: staff.role } });
 });
 app.post('/api/staff/logout', (req, res) => {

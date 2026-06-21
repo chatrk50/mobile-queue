@@ -29,8 +29,14 @@ export function verifyPin(pin, stored) {
 }
 
 // ---- Session cookie (HMAC-signed, stateless) — wired into middleware in Phase 1 ----
+// SECURITY: a weak/known session secret lets anyone FORGE a session cookie for any owner. In SaaS
+// mode we therefore REFUSE TO START without a strong, explicit SESSION_SECRET (fail closed). The
+// dev fallback only applies to single-tenant/local use.
+if (String(process.env.SAAS ?? '0') === '1' && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.trim().length < 16)) {
+  throw new Error('SECURITY: SAAS mode requires SESSION_SECRET to be set to a strong value (>=16 chars).');
+}
 const SESSION_SECRET = process.env.SESSION_SECRET
-  || process.env.CASHIER_PIN  // dev fallback so local works without extra config
+  || process.env.CASHIER_PIN  // dev fallback so local works without extra config (single-tenant only)
   || 'dev-insecure-session-secret-change-me';
 
 /** Sign a small JSON payload into "<b64url(json)>.<b64url(hmac)>". */
