@@ -168,9 +168,17 @@ trust** — not the model. Win the niche, collect proof (YO-DEE + founders), exp
 - **Phase 3 — expand:** delivery integration · e-Tax · optional hardware (ESC/POS printer) ·
   advanced analytics · owner mobile app.
 
-### Build backlog implied (code TODO)
-- [ ] Business tier + annual SKUs in `billing.js` / plans
-- [ ] 60-day trial state (trial_until) + founder/referral codes
-- [ ] Dunning emails + subscription receipts (e-Tax)
-- [ ] PDPA: data export/delete endpoint + policy pages
-- [ ] Always-on hosting cutover for the paid service
+### Build backlog (status)
+- [x] Business tier + annual SKUs in `billing.js` / plans (Free/Pro/Business × month/year)
+- [x] 60-day trial (auto-lapse to Free) + founder lock-in (first 50) + referral (?ref → +month both)
+- [x] PDPA: data export + customer erasure endpoints + /privacy + /terms pages + owner UI
+- [x] In-app dunning (expiringSoon banner ≤7d)
+- [x] Path-based browser routing fix (fetch/SSE shim) + global-PIN backdoor fix
+- [ ] **Email dunning** — needs an email provider (owner decision)
+- [ ] **e-Tax-compliant subscription invoices** — needs a tax-invoice provider (owner decision)
+- [ ] **Always-on hosting cutover** for the paid service (owner: Render Starter)
+- [ ] **Live Omise verification** with the owner's test keys (card charge end-to-end)
+
+### Verification status (controls)
+`npm run` → test:e2e ✅ · test:tenant 11/11 · test:isolation 15/15 · test:billing 24/24 ·
+test:hierarchy 34/34 · dryrun 32/32. (~120 automated checks.)
