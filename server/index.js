@@ -2,8 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral } from './db.js';
+import { existsSync, readFileSync } from 'fs';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -97,6 +97,7 @@ app.use((req, res, next) => {
         if (!t) return res.status(404).send('ไม่พบแบรนด์นี้');
         if (!t.active) return res.status(403).send('บัญชีนี้ถูกระงับการใช้งาน');
         tenantId = t.id;
+        req.tenantBase = '/b/' + m[1];                           // for the HTML fetch shim below
         req.url = req.url.slice(('/b/' + m[1]).length) || '/';   // strip /b/<slug>
         if (req.url[0] !== '/') req.url = '/' + req.url;
       }
@@ -104,6 +105,22 @@ app.use((req, res, next) => {
   }
   req.tenantId = tenantId;
   runWithTenant(tenantId, () => next());
+});
+
+// Path-based routing only: the app's HTML uses absolute /api & SSE paths, which a browser at
+// /b/<slug>/cashier/ would send to ROOT (tenant 1). For HTML pages under /b/<slug>/ we inject a
+// tiny shim that prefixes /api & /line & the manifest + EventSource with the tenant base, so the
+// page talks to ITS tenant. (Custom-domain routing needs no shim — the Host already resolves it.)
+app.use((req, res, next) => {
+  if (!req.tenantBase) return next();
+  const p = req.path;
+  if (!(p.endsWith('/') || p.endsWith('.html'))) return next();   // only HTML pages; assets/api pass through
+  const file = join(__dirname, '..', 'public', p.endsWith('/') ? p + 'index.html' : p);
+  if (!existsSync(file)) return next();
+  let html; try { html = readFileSync(file, 'utf8'); } catch { return next(); }
+  const b = JSON.stringify(req.tenantBase);
+  const shim = `<script>(function(){var b=${b};var pfx=function(u){return (typeof u==='string'&&(u.indexOf('/api/')===0||u.indexOf('/line/')===0||u==='/manifest.webmanifest'))?b+u:u;};var f=window.fetch;window.fetch=function(u,o){return f.call(this,pfx(u),o);};if(window.EventSource){var E=window.EventSource;var W=function(u,o){return new E(pfx(u),o);};W.prototype=E.prototype;W.CONNECTING=0;W.OPEN=1;W.CLOSED=2;window.EventSource=W;}})();</script>`;
+  res.type('html').send(html.includes('</head>') ? html.replace('</head>', shim + '</head>') : shim + html);
 });
 
 // ---- LINE webhook (after tenant resolution, so /b/<slug>/line/webhook validates with THAT
@@ -439,6 +456,17 @@ app.get('/api/admin/brand', (req, res) => {
 app.get('/api/admin/usage', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ saas: SAAS, ...Q.tenantUsage() });
+});
+// ---- PDPA: data portability + erasure (owner only) ----
+app.get('/api/admin/export', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.setHeader('Content-Disposition', `attachment; filename="data-export-${brandFor(req).slug || req.tenantId}.json"`);
+  res.json(exportTenant(req.tenantId));
+});
+app.post('/api/admin/forget-customer', (req, res) => {       // body: { phone } or { key } — PDPA erasure
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(forgetCustomer(req.tenantId, { phone: req.body?.phone || null, key: req.body?.key || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---- Self-service billing (Omise subscription) ----
 app.get('/api/billing/status', (req, res) => {

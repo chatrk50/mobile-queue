@@ -722,6 +722,40 @@ export function applyTenantReferral(newTenantId, code, days = 30) {
   db.prepare('UPDATE tenants SET referred_by=? WHERE id=?').run(ref.referral_code, newTenantId);
   return true;
 }
+// ---------- PDPA: data portability + erasure ----------
+/** Full export of a tenant's business data (data portability). Owner-gated at the route. */
+export function exportTenant(tenantId) {
+  const stores = db.prepare('SELECT * FROM stores WHERE tenant_id=?').all(tenantId);
+  const ids = stores.map((s) => s.id);
+  const inStores = ids.length ? `(${ids.join(',')})` : '(-1)';   // ids are ints → safe
+  return {
+    exportedAt: new Date().toISOString(),
+    tenant: getTenant(tenantId),
+    stores,
+    zones: db.prepare(`SELECT * FROM zones WHERE store_id IN ${inStores}`).all(),
+    menu: db.prepare('SELECT * FROM menu_items WHERE tenant_id=?').all(tenantId),
+    customers: db.prepare('SELECT * FROM customers WHERE tenant_id=?').all(tenantId),
+    ingredients: db.prepare('SELECT * FROM ingredients WHERE tenant_id=?').all(tenantId),
+    rewards: db.prepare('SELECT * FROM rewards WHERE tenant_id=?').all(tenantId),
+    tickets: db.prepare(`SELECT * FROM tickets WHERE zone_id IN (SELECT id FROM zones WHERE store_id IN ${inStores})`).all(),
+    orders: db.prepare(`SELECT * FROM orders WHERE branch_id IN ${inStores}`).all(),
+  };
+}
+/** PDPA erasure of ONE customer's personal data (right to be forgotten). Removes the customer +
+ *  loyalty rows and anonymises their tickets. Accepts a phone or a raw customer key. */
+export function forgetCustomer(tenantId, { phone = null, key = null } = {}) {
+  let k = key;
+  if (!k && phone) { const d = String(phone).replace(/\D/g, ''); if (d.length < 9 || d.length > 10) throw new Error('bad_phone'); k = (tenantId === 1 ? '' : `t${tenantId}:`) + 'tel:' + d; }
+  if (!k) throw new Error('phone_or_key_required');
+  const c = db.prepare('SELECT 1 FROM customers WHERE line_user_id=? AND tenant_id=?').get(k, tenantId);
+  db.transaction(() => {
+    db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(k);
+    db.prepare('DELETE FROM customers WHERE line_user_id=? AND tenant_id=?').run(k, tenantId);
+    db.prepare('UPDATE tickets SET customer_name=NULL, customer_key=NULL, line_user_id=NULL WHERE customer_key=? OR line_user_id=?').run(k, k);
+  })();
+  return { erased: true, found: !!c, key: k };
+}
+
 /** Seed the per-tenant defaults a brand-new tenant needs to be usable: price tiers + sales
  *  channels (tenders are shared globally). Idempotent. Settings use fallbacks so need no seed. */
 export function seedTenantDefaults(tenantId) {
