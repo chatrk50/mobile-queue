@@ -138,6 +138,7 @@
       <div><h1>ยอดขาย & กำไร (P&L) ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="archivePastDay()" title="บันทึกยอดของวันที่ผ่านมา (กู้คืนวันที่ระบบบันทึกอัตโนมัติพลาด)"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>บันทึกย้อนหลัง</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()">ปิด</button>
       </div>
     </div>
@@ -602,6 +603,15 @@ window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'
   toast(r.saved?'บันทึกยอดวันนี้แล้ว':'วันนี้ยังไม่มียอดขาย');
   SALES=await api('/api/sales-history'); renderSales();
 }catch(e){ toast(err(e)); } };
+// Backfill a past day's sales row (e.g. recover a night the auto-archive failed). Idempotent.
+window.archivePastDay=async()=>{
+  const y=new Date(Date.now()+7*3600*1000-86400*1000).toISOString().slice(0,10); // yesterday (BKK)
+  const d=prompt('บันทึกยอดของวันที่ (YYYY-MM-DD):', y); if(!d) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ toast('รูปแบบวันที่ไม่ถูกต้อง (เช่น 2026-06-21)'); return; }
+  try{ const r=await api('/api/archive-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:d.trim()})});
+    toast(r.saved?('บันทึกยอดวันที่ '+d.trim()+' แล้ว'):('วันที่ '+d.trim()+' ไม่มียอดขาย'));
+    SALES=await api('/api/sales-history'); renderSales();
+  }catch(e){ toast(err(e)); } };
 function baht(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
 function pctf2(n,d){ return (d?Math.round((n/d)*1000)/10:0)+'%'; }
 function shortPeriod(s){ s=String(s||'');

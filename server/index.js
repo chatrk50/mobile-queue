@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE } from './db.js';
+import { db, getSetting, DURABLE, reconnectDb } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
@@ -746,8 +746,21 @@ app.get('/api/sales-history', (req, res) => {
 // Manually save today's sales into the archive now — also runs automatically at the daily reset.
 app.post('/api/archive-now', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  const r = Q.archiveTodaySales();
-  res.json({ ok: true, saved: !!r });
+  // Optional `date` (YYYY-MM-DD) backfills a specific day — e.g. recovering a day whose
+  // midnight auto-archive failed. archiveTodaySales upserts (INSERT OR REPLACE), so safe to repeat.
+  const date = typeof req.body?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date) ? req.body.date : null;
+  const r = Q.archiveTodaySales(date);
+  res.json({ ok: true, saved: !!r, date: date || 'today' });
+});
+// Re-run the midnight close (archive yesterday + restart queue counters) on demand —
+// recovers a night the auto-reset failed (e.g. a dropped Turso stream). Manager-gated.
+app.post('/api/admin/run-daily-reset', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const zoneIds = resetAllZonesResilient();
+    for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+    res.json({ ok: true, zones: zoneIds.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Financial settings used by the P&L (manager/owner): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
@@ -887,9 +900,25 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
 });
 
 // ---------- Daily queue reset at midnight (Asia/Bangkok, UTC+7) ----------
+// A stale Turso/libSQL Hrana stream (the free instance idles → the write stream to
+// the primary expires) shows up here as "stream not found" / 404 and fails the reset.
+// Reconnect to a fresh stream and retry once before giving up.
+const STREAM_STALE = /stream not found|stream expired|hrana|stream_expired|not found|404/i;
+function resetAllZonesResilient() {
+  try { return Q.resetAllZones(); }
+  catch (e) {
+    const msg = String((e && e.message) || '');
+    if (DURABLE && STREAM_STALE.test(msg)) {
+      console.error('[reset] stale Turso stream — reconnecting + retrying once:', msg);
+      reconnectDb();
+      return Q.resetAllZones();
+    }
+    throw e;
+  }
+}
 function doDailyReset() {
   try {
-    const zoneIds = Q.resetAllZones();
+    const zoneIds = resetAllZonesResilient();
     for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
     console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
   } catch (e) {
