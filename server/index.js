@@ -663,6 +663,17 @@ app.post('/api/orders/pay-multi', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// แยกจ่ายตามเงิน: take a partial payment toward a bill (PIN). body: { amount, method }.
+app.post('/api/tickets/:ticketId/pay-partial', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.payPartial(req.params.ticketId, req.body?.amount, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    if (r.settled) notifyLoyalty(r);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier cancels/voids a ticket + its order (PIN). Before the generic /:action route.
 app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

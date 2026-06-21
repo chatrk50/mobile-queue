@@ -1685,6 +1685,12 @@ function renderZone(snap){
   const mergeChk=(t)=> ((snap.pending||[]).length>=2)
     ? `<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:12px;color:#946f00;cursor:pointer;vertical-align:middle"><input type="checkbox" class="mc" style="width:17px;height:17px;accent-color:#946f00" onchange="toggleMerge(${t.id},${netOf(t)})" ${_mergeSel.has(t.id)?'checked':''}>รวม</label>`
     : '';
+  // แยกจ่ายตามเงิน: remaining balance + a "บางส่วน" button + a paid-so-far pill.
+  const remainOf=(t)=> Math.round(((netOf(t))-(t.order_paid||0))*100)/100;
+  const paidPill=(t)=> ((t.order_paid||0)>0 && t.payment_status!=='paid')
+    ? ` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800">จ่ายแล้ว ฿${t.order_paid} · เหลือ ฿${remainOf(t)}</span>` : '';
+  const partBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">✂️ บางส่วน</button>` : '';
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
@@ -1692,10 +1698,10 @@ function renderZone(snap){
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
       <div class="qitem" style="${t.cancel_requested?cancelCardStyle(t):('background:'+(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'))}"><div>${tsTop(t)}<div>
-        ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
+        ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px">${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}
-          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
+        <div class="row" style="gap:6px;flex-wrap:wrap">${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}
+          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
@@ -1787,6 +1793,16 @@ window.payMerge=async()=>{
   try{ const r=await api('/api/orders/pay-multi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticketIds:ids,method})});
     toast('✅ รับเงินรวม '+r.count+' บิล · ฿'+r.total+(r.codes&&r.codes.length?(' · คิว '+r.codes.join(', ')):''));
     _mergeSel.clear(); renderMergeBar(); if(CFG.printEnabled) ids.forEach(printKitchen);
+  }catch(e){ toast(err(e)); } };
+// ---------- แยกจ่ายตามเงิน: take a partial payment toward a bill; repeat until balance = 0 ----------
+window.payPartialStart=async(tid, remain)=>{
+  const s=prompt('รับเงินงวดนี้กี่บาท? (ยอดคงเหลือ ฿'+remain+')', remain);
+  if(s===null) return; const amt=Math.round((Number(s)||0)*100)/100;
+  if(!(amt>0)){ toast('จำนวนเงินไม่ถูกต้อง'); return; }
+  const method=await pickPayMethod(amt); if(method===null) return;   // reuses the cash keypad for this slice
+  try{ const r=await api('/api/tickets/'+tid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:amt,method})});
+    if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')+(r.change>0?(' · ทอน ฿'+r.change):'')); if(CFG.printEnabled) printKitchen(tid); }
+    else toast('💵 รับบางส่วน ฿'+amt+' · เหลืออีก ฿'+r.remaining);
   }catch(e){ toast(err(e)); } };
 // Receipt printing (prepared; only active when the owner enables it + a printer is wired).
 // Renders an 80mm-style slip into #printArea and calls the browser print (works with any
