@@ -1,0 +1,105 @@
+# Project roadmap & readiness — LINE-first POS/Queue SaaS
+
+_Single source of truth for "what should we have, must-have first, in what order" across every
+perspective. Prioritised MoSCoW (Must / Should / Could / Won't-yet). Status as of the latest
+`saas` branch._
+
+---
+
+## 0. Status snapshot
+Built + verified on `saas` (YO-DEE prod on `main` untouched). ~130 automated checks green:
+`test:e2e` (financial invariants) · `test:tenant` 11 · `test:isolation` 15 · `test:billing` 24 ·
+`test:hierarchy` 43 (RBAC + backdoor + security headers + lockout) · `dryrun` 32.
+
+Working end-to-end: signup → 60-day trial → self-serve pay (Omise, Pro/Business, monthly/yearly,
+founder, referral) → onboard → multi-tenant isolation → per-tenant LINE + brand + custom domain →
+platform admin → owner email/Google login → PDPA export/erasure → security hardening.
+
+---
+
+## 1. SECURITY — protect customers from attackers (highest priority, ongoing)
+
+### Done ✅
+- Tenant data isolation (every query scoped) + boundary ownership guards — `test:isolation`.
+- RBAC: platform-admin / owner / manager / cashier, all enforced — `test:hierarchy`.
+- Closed 3 real bugs found by adversarial testing: **global-PIN cross-tenant backdoor**,
+  **path-routing leaking to tenant 1**, **forgeable sessions (known SESSION_SECRET default)**.
+- Fail-closed: SaaS won't boot without a strong `SESSION_SECRET`.
+- Security headers (nosniff, X-Frame-Options + CSP frame-ancestors, Referrer-Policy,
+  Permissions-Policy, HSTS), `x-powered-by` off, `Secure` session cookies (SaaS).
+- Brute-force lockout on staff + platform-admin PINs; signup/owner-login rate-limited.
+- Scrypt-hashed PINs/passwords; HMAC-signed sessions; parameterised SQL (tenant ids are ints).
+- No custody of merchant funds (avoids payment-licensing risk); card data never hits our server.
+- `npm audit`: HIGH (form-data CRLF) patched.
+
+### Must (before real customers) 🔴
+- [ ] **Strict CSP for scripts** (currently only frame-ancestors). Needs a nonce refactor of inline
+      scripts → blocks injected/XSS scripts. Biggest remaining XSS hardening.
+- [ ] **Stored-XSS audit** of every place user/tenant text is rendered (brand name, menu, customer
+      name, slug) — confirm `textContent`/escaping everywhere; add a test.
+- [ ] **2 moderate deps** (uuid via exceljs) — plan an exceljs upgrade path.
+- [ ] **Backups + restore drill** for the multi-tenant Turso DB (data-loss = all brands).
+- [ ] **Secrets hygiene**: confirm no secret in git; rotate any test keys before prod.
+
+### Should 🟠
+- [ ] Per-tenant audit log (who changed what) for owner + admin actions.
+- [ ] 2FA for the platform-admin console.
+- [ ] Account lockout/alerting on suspicious owner-login patterns.
+- [ ] Dependency + secret scanning in CI; periodic `npm audit` gate.
+- [ ] Pen-test / external security review before scaling.
+
+---
+
+## 2. Product / functionality
+**Must:** (all built) POS, queue, LINE order, loyalty, inventory/BOM, P&L, multi-branch, packages.
+**Should:**
+- [ ] Modernise the **cashier/LIFF UI** to the new theme (only signup/login done so far).
+- [ ] Owner **dashboard** (KPIs, trends) as the post-login home.
+- [ ] Receipt **printer** support (ESC/POS) — code prepared, needs hardware test.
+**Could:** delivery integration (Grab/LINEMAN), e-Tax invoices, owner mobile app, vouchers/promos.
+
+## 3. Billing / monetisation
+**Done:** Free/Pro/Business × monthly/yearly, 60-day trial, founder, referral, quota, dunning banner.
+**Must:** [ ] **Live Omise test** with real test keys (card charge end-to-end).
+**Should:** [ ] Email dunning + receipts/e-Tax (needs email + tax provider) · [ ] proration on
+upgrade · [ ] Stripe alternative for non-TH.
+
+## 4. Infra / reliability
+**Must:** [ ] **Always-on hosting** (Render Starter — free tier sleeps) · [ ] DB backups (§1) ·
+[ ] uptime monitor + status page · [ ] error tracking (Sentry-style).
+**Should:** [ ] staging for the SaaS branch · [ ] DB scaling plan (Turso paid tier triggers) ·
+[ ] CI running the test suite on every push.
+
+## 5. Legal / compliance (TH)
+**Done:** PDPA export/erasure + /privacy + /terms; no fund custody.
+**Must:** [ ] register a legal entity to invoice/collect · [ ] DPA template for tenants ·
+[ ] VAT registration trigger plan (>฿1.8M/yr).
+**Should:** [ ] cookie/consent notice · [ ] data-retention policy + auto-purge of closed accounts.
+
+## 6. GTM / growth
+**Done:** pricing, trial, founder, referral, landing/pricing mockup.
+**Must:** [ ] case study (YO-DEE) + 3–5 founder testimonials · [ ] LINE OA support channel.
+**Should:** [ ] vertical templates (yogurt/coffee/food) · [ ] FB/LINE community seeding ·
+[ ] onboarding wizard (first-menu) · [ ] referral tracking dashboard.
+
+## 7. Support / ops
+**Must:** [ ] LINE OA support + FAQ + short Thai videos · [ ] runbook (suspend, reset-PIN, refund).
+**Should:** [ ] in-app help/tours · [ ] admin "impersonate for support" (audited) · [ ] churn/usage view.
+
+---
+
+## 8. Phased plan (priority order)
+- **Phase A — security & reliability gate (do FIRST):** strict CSP + XSS audit + backups + always-on
+  + error tracking + secrets rotation. *Don't take real money until this passes.*
+- **Phase B — monetisation live:** Omise live test, receipts, entity/VAT, dunning email.
+- **Phase C — soft launch:** founders-50, YO-DEE case study, LINE OA support, onboarding wizard.
+- **Phase D — polish & scale:** cashier/LIFF modern UI, owner dashboard, delivery/e-Tax, CI,
+  pen-test, mobile app.
+
+## 9. "Must-have before charging real money" — the gate
+1. Strong `SESSION_SECRET` set (enforced) ✅ · 2. Always-on hosting · 3. DB backups + restore drill ·
+4. Live Omise verified · 5. Strict CSP + XSS audit · 6. Legal entity + ToS/PDPA live ·
+7. Support channel · 8. Uptime + error monitoring.
+
+> Verification is a control, not a one-off: re-run the full suite on every change; treat a new
+> feature as unshipped until `test:hierarchy` + `test:isolation` are green.
