@@ -105,6 +105,17 @@ const pay1 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
 const pay2 = Q.setOrderPaid(i1.ticket.id, { method: 'cash' });
 ok(pay1.code === pay2.code && pay2.alreadyPaid === true, `INVARIANT setOrderPaid idempotent — pay twice, one charge (code ${pay1.code}, alreadyPaid=${pay2.alreadyPaid})`);
 
+// ---- รวมบิล (merge pay): settle several pending bills in one tender; each keeps its queue number ----
+console.log('\n== Merge pay (รวมบิล) ==');
+const m1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], {});
+const m2 = Q.createOrder(1, [{ name: 'Drink', price: 60, qty: 1 }], {});
+const mres = Q.payMulti([m1.ticket.id, m2.ticket.id], { method: 'cash' });
+ok(mres.count === 2 && near(mres.total, 100), `INVARIANT payMulti settles all selected bills (count ${mres.count}, total ${mres.total})`);
+ok(mres.codes.length === 2 && mres.codes[0] !== mres.codes[1], `each merged bill keeps its OWN queue number (${mres.codes.join(',')})`);
+ok(db.prepare('SELECT COUNT(*) n FROM orders WHERE ticket_id IN (?,?) AND payment_status=?').get(m1.ticket.id, m2.ticket.id, 'paid').n === 2, 'both merged orders are now paid');
+const mre = Q.payMulti([m1.ticket.id, m2.ticket.id], { method: 'cash' }); // idempotent re-run
+ok(mre.results.every((r) => r.alreadyPaid), 'INVARIANT re-running payMulti is a no-op (idempotent)');
+
 // ---- "Today" is date-scoped: an order from another day must NOT count in today's revenue ----
 console.log('\n== Daily report is date-scoped (today only) ==');
 const todayRev = Q.dailyReport().revenue;

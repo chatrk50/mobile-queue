@@ -1551,6 +1551,21 @@ export function setOrderPaid(ticketId, opts = {}) {
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
+/** Merge-pay: settle several pending orders in ONE cashier action / tender (รวมบิล). Each order
+ *  keeps its own queue number — only the PAYMENT is combined. setOrderPaid is idempotent + already
+ *  handles queue number / stock / loyalty per order, so this just loops it and collects results. */
+export function payMulti(ticketIds, opts = {}) {
+  const ids = [...new Set((ticketIds || []).map(Number).filter(Boolean))];
+  const results = [];
+  for (const id of ids) {
+    try { results.push(setOrderPaid(id, opts)); }
+    catch (e) { results.push({ ticketId: id, error: e.message }); }
+  }
+  const codes = results.filter((r) => r.code).map((r) => r.code);
+  const total = results.reduce((s, r) => s + (r.total || 0), 0);
+  return { ok: true, count: results.filter((r) => r.ok).length, codes, total, results };
+}
+
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
  *  order is flagged 'claimed' so the cashier knows to verify + confirm. */
 export function attachSlip(ticketId, imageData) {

@@ -602,6 +602,20 @@ app.post('/api/tickets/:ticketId/paid', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Merge-pay: settle several pending bills in one tender (รวมบิล). body: { ticketIds:[], method }.
+app.post('/api/orders/pay-multi', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const ids = Array.isArray(req.body?.ticketIds) ? req.body.ticketIds : [];
+  if (ids.length < 2) return res.status(400).json({ error: 'need_two_or_more' });
+  try {
+    const r = Q.payMulti(ids, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const zones = new Set();
+    for (const id of ids) { const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(id); if (t) zones.add(t.zone_id); }
+    for (const z of zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
+    for (const one of r.results) notifyLoyalty(one);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier cancels/voids a ticket + its order (PIN). Before the generic /:action route.
 app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
