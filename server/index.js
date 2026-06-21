@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
@@ -242,9 +242,13 @@ app.post('/api/signup', (req, res) => {
       Q.createBranch({ name });                                  // store + Zone A
       Q.createStaff({ name: 'เจ้าของร้าน', pin, role: 'owner' }); // owner login = the chosen PIN
     });
+    // Every new shop starts on a full-Pro free trial; a referral code extends both sides.
+    const TRIAL_DAYS = Math.max(0, parseInt(process.env.TRIAL_DAYS || '60', 10) || 60);
+    const trialUntil = startTrial(t.id, TRIAL_DAYS);
+    const referred = req.body?.ref ? applyTenantReferral(t.id, req.body.ref) : false;
     const rec = signupHits.get(ip) && signupHits.get(ip).until > now ? signupHits.get(ip) : { count: 0, until: now + SIGNUP_WINDOW };
     rec.count += 1; signupHits.set(ip, rec);
-    res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/` });
+    res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

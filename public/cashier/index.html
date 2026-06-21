@@ -1793,8 +1793,10 @@ window.showFeatures=async()=>{
     </div>`+
     (bill ? (()=>{ const P=bill.prices||{pro:{},business:{}}; const b=(s)=>Math.round((s||0)/100).toLocaleString('en-US'); const lbl=(p)=>p==='business'?'Business':p==='pro'?'Pro':'Free';
       return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>💳 แพ็กเกจการใช้งาน</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">แพลน: <b style="color:${bill.plan!=='free'?'#7c3aed':'var(--navy)'}">${lbl(bill.plan)}</b>${bill.plan!=='free'&&bill.planUntil?` · ถึง ${esc(bill.planUntil.slice(0,10))}${bill.autoRenew?' · ต่ออายุอัตโนมัติ ✓':' · จะหมดอายุ (ยกเลิกแล้ว)'}`:' · จำกัด 1 สาขา / 500 ออเดอร์ต่อเดือน'}</div>
+      <b>💳 แพ็กเกจการใช้งาน</b>${bill.founder?' <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;font-size:11px">🔒 Founder</span>':''}
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">${bill.trial
+        ? `🎁 ทดลองใช้ <b style="color:#7c3aed">${lbl(bill.plan)}</b> ฟรีถึง <b>${esc((bill.planUntil||'').slice(0,10))}</b> — กดอัปเกรดเพื่อใช้ต่อ`
+        : `แพลน: <b style="color:${bill.plan!=='free'?'#7c3aed':'var(--navy)'}">${lbl(bill.plan)}</b>${bill.plan!=='free'&&bill.planUntil?` · ถึง ${esc(bill.planUntil.slice(0,10))}${bill.autoRenew?' · ต่ออายุอัตโนมัติ ✓':' · จะหมดอายุ (ยกเลิกแล้ว)'}`:' · จำกัด 1 สาขา / 500 ออเดอร์ต่อเดือน'}`}</div>
       ${bill.configured ? `
         <div class="muted" style="font-size:12px;margin-bottom:4px">เลือกอัปเกรด (ราคารวม VAT):</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -1805,6 +1807,7 @@ window.showFeatures=async()=>{
         </div>
         ${bill.plan!=='free'&&bill.autoRenew?`<button class="ghost danger" style="width:100%;margin-top:6px" onclick="cancelSub()">ยกเลิกต่ออายุอัตโนมัติ</button>`:''}`
         : `<div class="muted" style="font-size:12px">การชำระเงินออนไลน์ยังไม่เปิดบนระบบนี้ — ติดต่อผู้ดูแลเพื่ออัปเกรด</div>`}
+      ${bill.referralCode?`<div class="muted" style="font-size:11px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">🎁 แนะนำเพื่อน: โค้ด <b>${esc(bill.referralCode)}</b> — เพื่อนสมัครด้วยโค้ดนี้ รับฟรีคนละ 1 เดือน</div>`:''}
     </div>`; })() : '')+
     (br ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>🎨 แบรนด์ของร้าน</b>

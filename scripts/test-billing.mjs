@@ -66,5 +66,22 @@ ok(Q.tenantPlan(t.id).name === 'free', 'tenant is free after refund');
 // unrelated event = no-op
 ok(B.applyEvent({ key: 'charge.complete', data: {} }).action === 'none', 'unrelated event → no action');
 
+// --- Trial + founder + referral ---
+const tr = DB.createTenant({ name: 'Trial Co' });
+DB.startTrial(tr.id, 60);
+const ts = B.billingStatus(tr.id);
+ok(Q.tenantPlan(tr.id).name === 'pro', 'trial → effective Pro');
+ok(ts.trial === true && ts.hasCard === false, 'billingStatus marks trial (Pro, no card)');
+ok(ts.founder === true, 'early tenant flagged founder');
+ok(ts.prices.pro.month === 19900, 'founder sees founder Pro price (฿199)');
+ok(!!ts.referralCode, 'tenant has a referral code');
+const refr = DB.createTenant({ name: 'Referrer' }); DB.startTrial(refr.id, 10);
+const inv = DB.createTenant({ name: 'Invitee' }); DB.startTrial(inv.id, 10);
+const before = DB.getTenant(refr.id).plan_until;
+const okRef = DB.applyTenantReferral(inv.id, DB.getTenant(refr.id).referral_code, 30);
+ok(okRef === true && DB.getTenant(refr.id).plan_until > before, 'referral extends the referrer paid-through');
+ok(DB.getTenant(inv.id).referred_by === DB.getTenant(refr.id).referral_code, 'invitee records referred_by');
+ok(DB.applyTenantReferral(inv.id, DB.getTenant(refr.id).referral_code, 30) === false, 'referral cannot be applied twice');
+
 console.log(`\n${fail ? '❌' : '✅'} billing: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

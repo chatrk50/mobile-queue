@@ -48,7 +48,16 @@ services:
         value: "79900"          # Business / month, satang (฿799)
       - key: OMISE_BIZ_YEAR
         value: "799000"         # Business / year, satang (฿7,990)
+      - key: OMISE_FOUNDER_AMOUNT
+        value: "19900"          # Founder Pro / month, satang (฿199 — first shops, for life)
+      - key: OMISE_FOUNDER_YEAR
+        value: "199000"         # Founder Pro / year, satang (฿1,990)
       - key: OMISE_CURRENCY
         value: "thb"
+      # --- Growth knobs ---
+      - key: TRIAL_DAYS
+        value: "60"             # free full-Pro trial on signup
+      - key: FOUNDER_SLOTS
+        value: "50"             # first N shops lock the founder price
       # NOTE: no LINE / LIFF / CASHIER_PIN here — those are PER TENANT (each brand pastes its own
       # LINE tokens in ตั้งค่าระบบ, and each brand's owner PIN is set at signup).

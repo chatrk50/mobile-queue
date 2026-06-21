@@ -464,6 +464,10 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN plan_until TEXT`,         // pro paid through this datetime (UTC)
   `ALTER TABLE tenants ADD COLUMN auto_renew INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE tenants ADD COLUMN plan_interval TEXT NOT NULL DEFAULT 'month'`,  // 'month' | 'year' (renewal cadence)
+  // --- Growth: free trial + founder lock-in + referral ---
+  `ALTER TABLE tenants ADD COLUMN founder INTEGER NOT NULL DEFAULT 0`,   // first-N shops lock founder price
+  `ALTER TABLE tenants ADD COLUMN referral_code TEXT`,                   // this tenant's own invite code
+  `ALTER TABLE tenants ADD COLUMN referred_by TEXT`,                     // referral_code that invited them
   // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
   `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -683,11 +687,40 @@ export function createTenant({ name, ownerEmail = null, pkg = 'line', slug = nul
   if (!nm) throw new Error('name_required');
   const s = uniqueSlug(slug || nm);
   const pack = pkg === 'pos' ? 'pos' : 'line';
+  // First N real shops (id>1) lock the founder price for life.
+  const FOUNDER_SLOTS = Math.max(0, parseInt(process.env.FOUNDER_SLOTS || '50', 10) || 50);
+  const realSoFar = db.prepare('SELECT COUNT(*) c FROM tenants WHERE id>1').get().c;
+  const founder = realSoFar < FOUNDER_SLOTS ? 1 : 0;
   const r = db.prepare(
-    `INSERT INTO tenants (name, plan_name, active, slug, owner_email, brand_name, brand_short, brand_theme, brand_unit, brand_logo, package)
-     VALUES (?, 'free', 1, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(nm, s, ownerEmail, nm, brandShort, brandTheme, brandUnit, brandLogo, pack);
-  return getTenant(r.lastInsertRowid);
+    `INSERT INTO tenants (name, plan_name, active, slug, owner_email, brand_name, brand_short, brand_theme, brand_unit, brand_logo, package, founder)
+     VALUES (?, 'free', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(nm, s, ownerEmail, nm, brandShort, brandTheme, brandUnit, brandLogo, pack, founder);
+  const id = Number(r.lastInsertRowid);
+  // Each tenant gets a short invite code (e.g. R-3K).
+  db.prepare('UPDATE tenants SET referral_code=? WHERE id=?').run('R' + id.toString(36).toUpperCase(), id);
+  return getTenant(id);
+}
+/** Start a free trial: full Pro for `days` (no card). Auto-lapses to free via tenantPlan grace. */
+export function startTrial(tenantId, days = 60) {
+  const until = new Date(Date.now() + days * 86400000).toISOString();
+  db.prepare("UPDATE tenants SET plan_name='pro', plan_interval='month', plan_until=?, auto_renew=0 WHERE id=?").run(until, tenantId);
+  return until;
+}
+export function getTenantByReferral(code) {
+  return db.prepare('SELECT * FROM tenants WHERE referral_code=?').get(String(code || '').toUpperCase().trim()) || null;
+}
+/** Apply a referral at signup: extend BOTH the new tenant and the referrer's paid-through by
+ *  `days`. No self-referral, once only. Returns true if applied. */
+export function applyTenantReferral(newTenantId, code, days = 30) {
+  const ref = getTenantByReferral(code);
+  const me = getTenant(newTenantId);
+  if (!ref || !me || ref.id === newTenantId || me.referred_by) return false;
+  const ext = (t) => { const base = t.plan_until && t.plan_until > new Date().toISOString() ? t.plan_until : new Date().toISOString();
+    const until = new Date(new Date(base).getTime() + days * 86400000).toISOString();
+    db.prepare("UPDATE tenants SET plan_name=CASE WHEN plan_name='free' THEN 'pro' ELSE plan_name END, plan_until=? WHERE id=?").run(until, t.id); };
+  ext(me); ext(ref);
+  db.prepare('UPDATE tenants SET referred_by=? WHERE id=?').run(ref.referral_code, newTenantId);
+  return true;
 }
 /** Seed the per-tenant defaults a brand-new tenant needs to be usable: price tiers + sales
  *  channels (tenders are shared globally). Idempotent. Settings use fallbacks so need no seed. */

@@ -15,9 +15,15 @@ const PRICES = {
   pro:      { month: sat('OMISE_PRO_AMOUNT', 29900), year: sat('OMISE_PRO_YEAR', 299000) },
   business: { month: sat('OMISE_BIZ_AMOUNT', 79900), year: sat('OMISE_BIZ_YEAR', 799000) },
 };
+const FOUNDER = { month: sat('OMISE_FOUNDER_AMOUNT', 19900), year: sat('OMISE_FOUNDER_YEAR', 199000) }; // first-N lock-in (Pro)
 const normPlan = (p) => (p === 'business' ? 'business' : 'pro');
 const normInterval = (i) => (i === 'year' ? 'year' : 'month');
 function priceOf(plan, interval) { return PRICES[normPlan(plan)][normInterval(interval)]; }
+// Founders keep a discounted Pro price for life (Business is full price).
+function priceForTenant(tenantId, plan, interval) {
+  const t = db.prepare('SELECT founder FROM tenants WHERE id=?').get(tenantId);
+  return (t && t.founder && normPlan(plan) === 'pro') ? FOUNDER[normInterval(interval)] : priceOf(plan, interval);
+}
 
 export function billingConfig() { return { configured: BILLING_ON, publicKey: PUBLIC, currency: CURRENCY, prices: PRICES }; }
 
@@ -44,8 +50,13 @@ function setPlan(tenantId, plan, untilIso, interval, customerId) {
 }
 
 export function billingStatus(tenantId) {
-  const t = db.prepare('SELECT plan_name, plan_until, plan_interval, auto_renew, omise_customer_id FROM tenants WHERE id=?').get(tenantId) || {};
-  return { ...billingConfig(), plan: t.plan_name || 'free', interval: t.plan_interval || 'month', planUntil: t.plan_until || null, autoRenew: !!t.auto_renew, hasCard: !!t.omise_customer_id };
+  const t = db.prepare('SELECT plan_name, plan_until, plan_interval, auto_renew, omise_customer_id, founder, referral_code FROM tenants WHERE id=?').get(tenantId) || {};
+  const hasCard = !!t.omise_customer_id, plan = t.plan_name || 'free';
+  const cfg = billingConfig();
+  // Founders see their discounted Pro price. Trial = on a paid plan but no saved card yet.
+  if (t.founder) cfg.prices = { ...cfg.prices, pro: FOUNDER };
+  return { ...cfg, plan, interval: t.plan_interval || 'month', planUntil: t.plan_until || null,
+    autoRenew: !!t.auto_renew, hasCard, trial: plan !== 'free' && !hasCard, founder: !!t.founder, referralCode: t.referral_code || null };
 }
 
 /** Subscribe a tenant to a plan (pro|business) on an interval (month|year): save the card on an
@@ -55,7 +66,7 @@ export async function subscribeTenant(tenantId, token, { plan = 'pro', interval 
   if (!BILLING_ON) throw new Error('billing_off');
   if (!token) throw new Error('token_required');
   plan = normPlan(plan); interval = normInterval(interval);
-  const amount = priceOf(plan, interval);
+  const amount = priceForTenant(tenantId, plan, interval);
   const cur = db.prepare('SELECT omise_customer_id FROM tenants WHERE id=?').get(tenantId);
   let customerId = cur && cur.omise_customer_id;
   if (customerId) await omise('PATCH', `/customers/${customerId}`, { card: token });
@@ -83,7 +94,7 @@ export async function renewDue() {
   let charged = 0, failed = 0;
   for (const t of due) {
     try {
-      const amount = priceOf(t.plan_name, t.plan_interval);
+      const amount = priceForTenant(t.id, t.plan_name, t.plan_interval);
       const ch = await omise('POST', '/charges', { amount, currency: CURRENCY, customer: t.omise_customer_id, description: `${t.plan_name} renewal` });
       if (!ch.paid) throw new Error('not_paid');
       setPlan(t.id, t.plan_name, addPeriod(t.plan_until && t.plan_until > nowIso ? t.plan_until : nowIso, t.plan_interval), t.plan_interval, t.omise_customer_id);

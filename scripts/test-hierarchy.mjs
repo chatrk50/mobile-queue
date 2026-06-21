@@ -94,15 +94,20 @@ async function brand(name, pkg, pin) {
   ok(bCfg.posOnly === true && bCfg.selfOrder === false, 'POS package → posOnly, self-order off');
   ok((await anon()('POST', `/b/${B.slug}/api/zones/1/order`, { items: [{ name: 'x', price: 1 }] })).status === 404, 'POS package → customer self-order endpoint 404');
 
-  // ===== Plan / quota (free vs pro) =====
-  sec('Plan & quota');
+  // ===== Trial + plan / quota =====
+  sec('Trial, plan & quota');
+  const bs = (await A.c('GET', `/b/${A.slug}/api/billing/status`)).data;
+  ok(bs.trial === true && bs.plan === 'pro', 'new shop starts on a Pro trial');
+  ok(!!bs.referralCode && bs.founder === true, 'new shop gets a referral code + founder flag');
+  const adm = client();
+  const aid = (await adm('GET', '/admin/api/tenants', null, { 'x-admin-pin': ADMIN })).data.tenants.find(t => t.slug === A.slug).id;
+  // Simulate trial-ended → free, then verify the free cap, then upgrade to pro.
+  await adm('POST', `/admin/api/tenants/${aid}/plan`, { plan: 'free' }, { 'x-admin-pin': ADMIN });
   const usage = (await A.c('GET', `/b/${A.slug}/api/admin/usage`)).data;
   ok(usage.plan === 'free' && usage.maxBranches === 1, 'free plan: 1-branch cap reported');
   ok((await A.c('POST', `/b/${A.slug}/api/branches`, { name: 'Branch 2' })).data?.error === 'branch_limit', 'free plan: 2nd branch blocked (branch_limit)');
-  const adm = client();
-  const aid = (await adm('GET', '/admin/api/tenants', null, { 'x-admin-pin': ADMIN })).data.tenants.find(t => t.slug === A.slug).id;
   await adm('POST', `/admin/api/tenants/${aid}/plan`, { plan: 'pro' }, { 'x-admin-pin': ADMIN });
-  ok((await A.c('POST', `/b/${A.slug}/api/branches`, { name: 'Branch 2' })).status === 200, 'after admin upgrade to pro: 2nd branch allowed');
+  ok((await A.c('POST', `/b/${A.slug}/api/branches`, { name: 'Branch 2' })).status === 200, 'after upgrade to pro: 2nd branch allowed');
 
   console.log(`\n${fail ? '❌ HIERARCHY CHECK FAILED' : '✅ HIERARCHY VERIFIED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

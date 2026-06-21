@@ -84,13 +84,15 @@ window.submitSignup=async()=>{
   if(!/^\d{4,8}$/.test(pin)){ $('err').textContent='PIN ต้องเป็นตัวเลข 4–8 หลัก'; return; }
   $('go').disabled=true; $('go').textContent='กำลังสร้าง…';
   try{
+    const ref=new URLSearchParams(location.search).get('ref')||undefined;
     const r=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,email,package:pkg,pin,unit,theme})});
+      body:JSON.stringify({name,email,package:pkg,pin,unit,theme,ref})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'signup_failed');
     const url=d.url; const abs=location.origin+url;
     $('form').style.display='none'; $('done').style.display='';
-    $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · เข้าด้วย PIN ที่ตั้งไว้';
+    const til=(d.trialUntil||'').slice(0,10);
+    $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · '+(d.trialDays?('ทดลอง Pro ฟรี '+d.trialDays+' วัน ถึง '+til):'')+(d.referred?' · +1 เดือนจากโค้ดเพื่อน!':'')+(d.founder?' · ราคา Founder ล็อกแล้ว 🔒':'')+' · เข้าด้วย PIN ที่ตั้งไว้';
     $('goShop').href=url; $('shopUrl').textContent=abs;
     setTimeout(()=>{ location.href=url; }, 4000);
   }catch(e){
