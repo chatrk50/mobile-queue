@@ -1,0 +1,84 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>เข้าสู่ระบบ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0}
+  .wrap{max-width:400px;margin:0 auto;padding:42px 18px}
+  .hero{text-align:center;margin:0 0 22px}
+  .logo{width:46px;height:46px;border-radius:13px;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 12px;font-family:'Space Grotesk',sans-serif;font-weight:600}
+  .hero h1{margin:0;font-size:23px;font-weight:600;font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;letter-spacing:-.02em}
+  .hero p{color:var(--mut);margin:6px 0 0;font-size:14px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px}
+  label{display:block;font-weight:500;font-size:13px;margin:12px 0 5px}
+  input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit;background:#fff;color:var(--ink);transition:.15s}
+  input:focus{outline:none;border-color:var(--ind);box-shadow:0 0 0 3px var(--inds)}
+  button.go{width:100%;margin-top:18px;font-size:15px;font-weight:500;padding:13px;background:var(--ind);color:#fff;border:none;border-radius:12px;font-family:inherit;cursor:pointer}
+  button.go:hover{background:#5457e0}button.go:disabled{opacity:.5}
+  .divider{display:flex;align-items:center;gap:12px;color:var(--mut);font-size:12px;margin:18px 0}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line)}
+  .err{color:#dc2626;font-size:13px;margin-top:8px;min-height:18px;text-align:center}
+  .shop{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer}
+  .shop:hover{border-color:var(--ind);background:var(--inds)}
+  a{color:var(--ind)}
+</style>
+</head><body>
+<div class="wrap">
+  <div class="hero">
+    <div class="logo">P</div>
+    <h1>เข้าสู่ระบบ</h1>
+    <p>จัดการร้านของคุณ — เข้าจากที่ไหนก็ได้</p>
+  </div>
+
+  <div class="card" id="form">
+    <div id="gbtn-wrap" style="display:none">
+      <div id="gbtn" style="display:flex;justify-content:center"></div>
+      <div class="divider">หรือใช้อีเมล</div>
+    </div>
+    <label>อีเมล</label>
+    <input id="email" type="email" placeholder="you@email.com" autocomplete="email">
+    <label>รหัสผ่าน</label>
+    <input id="password" type="password" placeholder="รหัสผ่าน" autocomplete="current-password">
+    <div class="err" id="err"></div>
+    <button class="go" id="go" onclick="login()">เข้าสู่ระบบ</button>
+    <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--mut)">ยังไม่มีร้าน? <a href="/signup/">เปิดร้านใหม่</a></p>
+  </div>
+
+  <div class="card" id="chooser" style="display:none">
+    <p style="font-size:14px;font-weight:500;margin:0 0 12px">เลือกร้านที่จะเข้า</p>
+    <div id="shops"></div>
+  </div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+let _creds=null;
+function go(url){ location.href=url; }
+function handle(d){ if(d.url){ go(d.url); return; } if(d.choose){ showChooser(d.choose); } }
+function showChooser(list){ $('form').style.display='none'; $('chooser').style.display='';
+  $('shops').innerHTML=list.map(s=>`<div class="shop" onclick="pick('${s.slug}')"><span style="font-weight:500">${(s.name||'').replace(/[<>&]/g,'')}</span><span style="color:var(--mut)">/b/${s.slug}</span></div>`).join(''); }
+window.pick=async(slug)=>{ try{ const body=_creds.credential?{credential:_creds.credential,slug}:{email:_creds.email,password:_creds.password,slug};
+  const path=_creds.credential?'/api/owner/google':'/api/owner/login';
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const d=await r.json(); if(d.url) go(d.url); }catch(e){} };
+window.login=async()=>{ const email=$('email').value.trim(), password=$('password').value; $('err').textContent='';
+  if(!email||!password){ $('err').textContent='กรอกอีเมลและรหัสผ่าน'; return; }
+  $('go').disabled=true; $('go').textContent='กำลังเข้า…';
+  try{ const r=await fetch('/api/owner/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'login_failed'); _creds={email,password}; handle(d);
+  }catch(e){ $('err').textContent = e.message==='no_match'?'อีเมลหรือรหัสผ่านไม่ถูกต้อง':e.message==='too_many'?'พยายามบ่อยเกินไป ลองใหม่ภายหลัง':('เข้าไม่ได้: '+e.message); $('go').disabled=false; $('go').textContent='เข้าสู่ระบบ'; }
+  };
+$('password').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
+(async()=>{ try{ const c=await (await fetch('/api/owner/config')).json(); if(!c.googleClientId) return;
+  const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true;
+  s.onload=()=>{ try{ google.accounts.id.initialize({ client_id:c.googleClientId, callback:async(resp)=>{
+      try{ const r=await fetch('/api/owner/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
+        const d=await r.json(); if(r.ok){ _creds={credential:resp.credential}; handle(d); } else { $('err').textContent=d.error==='no_shop'?'อีเมลนี้ยังไม่มีร้าน — สมัครก่อน':'เข้าด้วย Google ไม่สำเร็จ'; }
+      }catch(e){ $('err').textContent='เข้าด้วย Google ไม่สำเร็จ'; } } });
+    google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'large',width:330,text:'signin_with',locale:'th'});
+    $('gbtn-wrap').style.display=''; }catch(e){} };
+  document.head.appendChild(s);
+}catch(e){} })();
+</script>
+</body></html>
