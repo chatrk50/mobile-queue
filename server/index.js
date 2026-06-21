@@ -29,7 +29,20 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  // Hardened CSP: allowlist the few real external origins (Google sign-in, Omise, LINE SDK, fonts)
+  // and block everything else — injected <script src=evil>, exfil fetch/form/img to other domains,
+  // plugins, and base-tag/clickjacking tricks. ('unsafe-inline' for script/style is kept because
+  // the app uses inline handlers; stored-XSS is defended at the source by output encoding.)
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.omise.co https://static.line-scdn.net https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+    "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' https://api.omise.co https://vault.omise.co https://accounts.google.com https://*.line.me https://*.line-scdn.net",
+    "frame-src 'self' https://accounts.google.com https://*.omise.co",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
+  ].join('; '));
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   if (SAAS) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   next();

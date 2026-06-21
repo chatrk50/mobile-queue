@@ -23,7 +23,8 @@
     const stores=await (await fetch('/api/stores')).json();
     const sid=(stores[0]&&stores[0].id)||1;
     const zones=await (await fetch('/api/stores/'+sid+'/zones')).json();
-    const html=zones.map(z=>`<a class="btn ghost" href="/liff/?zone=${z.id}">${ic}ลูกค้า · ${z.name}</a>`).join('');
+    const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const html=zones.map(z=>`<a class="btn ghost" href="/liff/?zone=${z.id}">${ic}ลูกค้า · ${esc(z.name)}</a>`).join('');
     document.getElementById('printBtn').insertAdjacentHTML('beforebegin', html);
   }catch(e){
     document.getElementById('printBtn').insertAdjacentHTML('beforebegin',`<a class="btn ghost" href="/liff/?zone=1">${ic}ลูกค้า (โซน 1)</a>`);

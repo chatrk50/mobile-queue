@@ -60,10 +60,11 @@ const zoneId=new URLSearchParams(location.search).get('zone');
   // Package 1 (POS only): no LINE-scan queue, so the QR poster doesn't apply.
   if(cfg.posOnly){ $('err').style.display=''; $('err').innerHTML='<b>โหมด POS เท่านั้น</b> — ไม่มีการสแกน QR รับคิวผ่านไลน์ในแพ็กเกจนี้'; return; }
   const stores=await (await fetch('/api/stores')).json();
+  const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const links=[];
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
-    zs.forEach(z=>links.push(`<a class="${String(z.id)===String(zoneId)?'active':''}" href="/print/?zone=${z.id}">${z.name}</a>`));
+    zs.forEach(z=>links.push(`<a class="${String(z.id)===String(zoneId)?'active':''}" href="/print/?zone=${z.id}">${esc(z.name)}</a>`));
   }
   $('zlinks').innerHTML=links.join('');
   $('printBtn').disabled=!zoneId;

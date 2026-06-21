@@ -32,13 +32,14 @@
 
 <script type="module">
 const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let zones=[], zoneId=null, es=null, soundOn=false, lastNow=null;
 
 async function boot(){
   const stores=await (await fetch('/api/stores')).json();
   for(const s of stores){ const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     zs.forEach(z=>zones.push({...z,store:s.name})); }
-  $('zoneSel').innerHTML=zones.map(z=>`<option value="${z.id}">${z.store} · ${z.name}</option>`).join('');
+  $('zoneSel').innerHTML=zones.map(z=>`<option value="${z.id}">${esc(z.store)} · ${esc(z.name)}</option>`).join('');
   if(zones.length){ zoneId=zones[0].id; connect(); }
 }
 window.switchZone=()=>{ zoneId=Number($('zoneSel').value); connect(); };

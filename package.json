@@ -16,7 +16,8 @@
     "test:isolation": "node --experimental-sqlite scripts/test-isolation.mjs",
     "dryrun": "node scripts/dryrun.mjs",
     "test:billing": "node --experimental-sqlite scripts/test-billing.mjs",
-    "test:hierarchy": "node scripts/test-hierarchy.mjs"
+    "test:hierarchy": "node scripts/test-hierarchy.mjs",
+    "test:restore": "node --experimental-sqlite scripts/test-restore.mjs"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -34,5 +35,8 @@
   },
   "optionalDependencies": {
     "libsql": "^0.5.29"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }
