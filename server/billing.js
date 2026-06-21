@@ -7,11 +7,19 @@ import { db } from './db.js';
 const SECRET = (process.env.OMISE_SECRET_KEY || '').trim();   // skey_… (server only, secret)
 const PUBLIC = (process.env.OMISE_PUBLIC_KEY || '').trim();   // pkey_… (client, not secret)
 export const BILLING_ON = Boolean(SECRET && PUBLIC);
-const AMOUNT = Math.max(2000, parseInt(process.env.OMISE_PRO_AMOUNT || '29900', 10) || 29900); // satang (default ฿299)
 const CURRENCY = (process.env.OMISE_CURRENCY || 'thb').toLowerCase();
 const GRACE_MS = 3 * 24 * 3600 * 1000;
+// Price per plan × interval, in satang. Defaults: Pro ฿299/mo · ฿2,990/yr · Business ฿799/mo · ฿7,990/yr.
+const sat = (env, def) => Math.max(2000, parseInt(process.env[env] || String(def), 10) || def);
+const PRICES = {
+  pro:      { month: sat('OMISE_PRO_AMOUNT', 29900), year: sat('OMISE_PRO_YEAR', 299000) },
+  business: { month: sat('OMISE_BIZ_AMOUNT', 79900), year: sat('OMISE_BIZ_YEAR', 799000) },
+};
+const normPlan = (p) => (p === 'business' ? 'business' : 'pro');
+const normInterval = (i) => (i === 'year' ? 'year' : 'month');
+function priceOf(plan, interval) { return PRICES[normPlan(plan)][normInterval(interval)]; }
 
-export function billingConfig() { return { configured: BILLING_ON, publicKey: PUBLIC, amount: AMOUNT, currency: CURRENCY }; }
+export function billingConfig() { return { configured: BILLING_ON, publicKey: PUBLIC, currency: CURRENCY, prices: PRICES }; }
 
 function form(obj) { const p = new URLSearchParams(); for (const [k, v] of Object.entries(obj)) if (v != null && v !== '') p.append(k, String(v)); return p.toString(); }
 async function omise(method, path, body) {
@@ -24,32 +32,39 @@ async function omise(method, path, body) {
   if (!res.ok || data.object === 'error') throw new Error('omise:' + (data.code || data.message || res.status));
   return data;
 }
-// add one calendar month to a UTC ISO datetime (or now). (Plain Date — server code, not a workflow.)
-function addMonth(fromIso) { const d = fromIso ? new Date(fromIso) : new Date(); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString(); }
-function setPro(tenantId, untilIso, customerId) {
-  db.prepare('UPDATE tenants SET plan_name=?, plan_until=?, auto_renew=1, omise_customer_id=COALESCE(?,omise_customer_id) WHERE id=?')
-    .run('pro', untilIso, customerId || null, tenantId);
+// add one billing period to a UTC ISO datetime (or now). (Plain Date — server code, not a workflow.)
+function addPeriod(fromIso, interval) {
+  const d = fromIso ? new Date(fromIso) : new Date();
+  if (normInterval(interval) === 'year') d.setUTCFullYear(d.getUTCFullYear() + 1); else d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString();
+}
+function setPlan(tenantId, plan, untilIso, interval, customerId) {
+  db.prepare('UPDATE tenants SET plan_name=?, plan_until=?, plan_interval=?, auto_renew=1, omise_customer_id=COALESCE(?,omise_customer_id) WHERE id=?')
+    .run(normPlan(plan), untilIso, normInterval(interval), customerId || null, tenantId);
 }
 
 export function billingStatus(tenantId) {
-  const t = db.prepare('SELECT plan_name, plan_until, auto_renew, omise_customer_id FROM tenants WHERE id=?').get(tenantId) || {};
-  return { ...billingConfig(), plan: t.plan_name || 'free', planUntil: t.plan_until || null, autoRenew: !!t.auto_renew, hasCard: !!t.omise_customer_id };
+  const t = db.prepare('SELECT plan_name, plan_until, plan_interval, auto_renew, omise_customer_id FROM tenants WHERE id=?').get(tenantId) || {};
+  return { ...billingConfig(), plan: t.plan_name || 'free', interval: t.plan_interval || 'month', planUntil: t.plan_until || null, autoRenew: !!t.auto_renew, hasCard: !!t.omise_customer_id };
 }
 
-/** Subscribe a tenant to Pro: save the card on an Omise customer, charge the first month now,
- *  and set plan=pro paid-through +1 month with auto-renew on. Throws on a declined card. */
-export async function subscribeTenant(tenantId, token, email = null) {
+/** Subscribe a tenant to a plan (pro|business) on an interval (month|year): save the card on an
+ *  Omise customer, charge the first period now, set plan paid-through with auto-renew. Throws on
+ *  a declined card. */
+export async function subscribeTenant(tenantId, token, { plan = 'pro', interval = 'month', email = null } = {}) {
   if (!BILLING_ON) throw new Error('billing_off');
   if (!token) throw new Error('token_required');
+  plan = normPlan(plan); interval = normInterval(interval);
+  const amount = priceOf(plan, interval);
   const cur = db.prepare('SELECT omise_customer_id FROM tenants WHERE id=?').get(tenantId);
   let customerId = cur && cur.omise_customer_id;
   if (customerId) await omise('PATCH', `/customers/${customerId}`, { card: token });
   else customerId = (await omise('POST', '/customers', { email, card: token })).id;
-  const charge = await omise('POST', '/charges', { amount: AMOUNT, currency: CURRENCY, customer: customerId, description: 'Pro subscription (1 month)' });
+  const charge = await omise('POST', '/charges', { amount, currency: CURRENCY, customer: customerId, description: `${plan} subscription (1 ${interval})` });
   if (!charge.paid) throw new Error('charge_failed');
-  const until = addMonth();
-  setPro(tenantId, until, customerId);
-  return { ok: true, planUntil: until };
+  const until = addPeriod(null, interval);
+  setPlan(tenantId, plan, until, interval, customerId);
+  return { ok: true, plan, interval, planUntil: until };
 }
 
 /** Cancel auto-renew. Pro stays active until plan_until, then lapses to free. */
@@ -63,14 +78,15 @@ export function cancelSubscription(tenantId) {
 export async function renewDue() {
   if (!BILLING_ON) return { charged: 0, failed: 0, skipped: 'billing_off' };
   const nowIso = new Date().toISOString();
-  const due = db.prepare(`SELECT id, omise_customer_id, plan_until FROM tenants
-    WHERE plan_name='pro' AND auto_renew=1 AND omise_customer_id IS NOT NULL AND (plan_until IS NULL OR plan_until <= ?)`).all(nowIso);
+  const due = db.prepare(`SELECT id, omise_customer_id, plan_name, plan_interval, plan_until FROM tenants
+    WHERE plan_name IN ('pro','business') AND auto_renew=1 AND omise_customer_id IS NOT NULL AND (plan_until IS NULL OR plan_until <= ?)`).all(nowIso);
   let charged = 0, failed = 0;
   for (const t of due) {
     try {
-      const ch = await omise('POST', '/charges', { amount: AMOUNT, currency: CURRENCY, customer: t.omise_customer_id, description: 'Pro renewal' });
+      const amount = priceOf(t.plan_name, t.plan_interval);
+      const ch = await omise('POST', '/charges', { amount, currency: CURRENCY, customer: t.omise_customer_id, description: `${t.plan_name} renewal` });
       if (!ch.paid) throw new Error('not_paid');
-      setPro(t.id, addMonth(t.plan_until && t.plan_until > nowIso ? t.plan_until : nowIso), t.omise_customer_id);
+      setPlan(t.id, t.plan_name, addPeriod(t.plan_until && t.plan_until > nowIso ? t.plan_until : nowIso, t.plan_interval), t.plan_interval, t.omise_customer_id);
       charged++;
     } catch (e) {
       failed++;

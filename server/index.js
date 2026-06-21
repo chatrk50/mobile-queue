@@ -441,9 +441,9 @@ app.get('/api/billing/status', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(billingStatus(req.tenantId));
 });
-app.post('/api/billing/subscribe', async (req, res) => {       // body: { token (from Omise.js), email }
+app.post('/api/billing/subscribe', async (req, res) => {       // body: { token, plan, interval, email }
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(await subscribeTenant(req.tenantId, req.body?.token, req.body?.email || null)); }
+  try { res.json(await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/billing/cancel', (req, res) => {

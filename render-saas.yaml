@@ -41,7 +41,13 @@ services:
       - key: OMISE_PUBLIC_KEY
         sync: false             # pkey_… (used client-side by Omise.js)
       - key: OMISE_PRO_AMOUNT
-        value: "29900"          # Pro price in satang (29900 = ฿299 / month)
+        value: "29900"          # Pro / month, satang (฿299)
+      - key: OMISE_PRO_YEAR
+        value: "299000"         # Pro / year, satang (฿2,990 — 2 months free)
+      - key: OMISE_BIZ_AMOUNT
+        value: "79900"          # Business / month, satang (฿799)
+      - key: OMISE_BIZ_YEAR
+        value: "799000"         # Business / year, satang (฿7,990)
       - key: OMISE_CURRENCY
         value: "thb"
       # NOTE: no LINE / LIFF / CASHIER_PIN here — those are PER TENANT (each brand pastes its own

@@ -12,6 +12,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  PASS:', m); } else { fail
 ok(B.BILLING_ON === false, 'BILLING_ON is false without Omise keys (graceful)');
 const st = B.billingStatus(1);
 ok(st.configured === false && st.plan === 'free', 'billingStatus: not configured, default free');
+ok(st.prices && st.prices.pro && st.prices.pro.month > 0 && st.prices.pro.year > 0 && st.prices.business && st.prices.business.month > 0, 'prices expose pro + business × month/year');
 
 // subscribe with no keys → billing_off
 let threw = false;
@@ -37,6 +38,17 @@ if (process.env.SAAS === '1') {
   let limited = false;
   runWithTenant(t.id, () => { try { Q.createBranch({ name: 'A' }); Q.createBranch({ name: 'B' }); } catch (e) { limited = e.message === 'branch_limit'; } });
   ok(limited, 'lapsed-pro tenant is quota-limited like free (branch_limit on 2nd branch)');
+  // Pro caps at 3 branches; Business is unlimited.
+  const pt = DB.createTenant({ name: 'Pro Co' });
+  db.prepare("UPDATE tenants SET plan_name='pro', plan_until=? WHERE id=?").run(future, pt.id);
+  let proCap = false;
+  runWithTenant(pt.id, () => { try { Q.createBranch({ name: 'b1' }); Q.createBranch({ name: 'b2' }); Q.createBranch({ name: 'b3' }); Q.createBranch({ name: 'b4' }); } catch (e) { proCap = e.message === 'branch_limit'; } });
+  ok(proCap && Q.tenantPlan(pt.id).maxBranches === 3, 'Pro caps at 3 branches (4th → branch_limit)');
+  const bt = DB.createTenant({ name: 'Biz Co' });
+  db.prepare("UPDATE tenants SET plan_name='business', plan_until=? WHERE id=?").run(future, bt.id);
+  let bizOk = true;
+  runWithTenant(bt.id, () => { try { for (let i = 0; i < 5; i++) Q.createBranch({ name: 'b' + i }); } catch (e) { bizOk = false; } });
+  ok(bizOk && Q.tenantPlan(bt.id).maxBranches === null, 'Business = unlimited branches');
 } else {
   console.log('  SKIP: quota assertion (run with SAAS=1 to exercise)');
 }

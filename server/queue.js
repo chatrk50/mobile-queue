@@ -8,8 +8,9 @@ const TID = () => currentTenantId();
 
 // ---- SaaS plans + quotas. Limits apply ONLY in SaaS mode; single-tenant is always unlimited. ----
 const PLANS = {
-  free: { label: 'Free', maxBranches: 1, maxOrdersPerMonth: 500 },
-  pro:  { label: 'Pro',  maxBranches: null, maxOrdersPerMonth: null }, // null = unlimited
+  free:     { label: 'Free',     maxBranches: 1,    maxOrdersPerMonth: 500,  customDomain: false },
+  pro:      { label: 'Pro',      maxBranches: 3,    maxOrdersPerMonth: null, customDomain: false },
+  business: { label: 'Business', maxBranches: null, maxOrdersPerMonth: null, customDomain: true }, // null = unlimited
 };
 export function listPlans() { return PLANS; }
 export function tenantPlan(tenantId = TID()) {

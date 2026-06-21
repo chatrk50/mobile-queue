@@ -463,6 +463,7 @@ for (const stmt of [
   `ALTER TABLE tenants ADD COLUMN omise_customer_id TEXT`,  // saved card → recurring charge
   `ALTER TABLE tenants ADD COLUMN plan_until TEXT`,         // pro paid through this datetime (UTC)
   `ALTER TABLE tenants ADD COLUMN auto_renew INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE tenants ADD COLUMN plan_interval TEXT NOT NULL DEFAULT 'month'`,  // 'month' | 'year' (renewal cadence)
   // Tenant-global config tables that were missing a tenant_id (default 1 = existing business).
   `ALTER TABLE ingredients ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE rewards ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
