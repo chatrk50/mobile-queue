@@ -73,7 +73,7 @@
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
-      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
+      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เปิด/ปิดเสียงเตือนออเดอร์ใหม่">🔔</button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
@@ -332,7 +332,7 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <div class="row between"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น" aria-label="ยกเลิกแก้วนี้">✕</button></div>
     <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
@@ -345,7 +345,7 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น" aria-label="ยกเลิกแก้วนี้">✕</button></div>
     <p class="muted">เลือกระดับความหวาน</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
@@ -354,7 +354,7 @@
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">ตรวจออเดอร์</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">ตรวจออเดอร์</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="basketList" class="queue-list" style="margin:12px 0"></div>
     <div class="row between" style="align-items:center;margin-bottom:12px"><div style="font-size:22px;font-weight:800;color:var(--navy)">รวม ฿<span id="basketTotal">0</span></div></div>
     <div class="row" style="gap:8px">
@@ -367,7 +367,7 @@
 <!-- PROMPTPAY QR (show to a customer paying at the counter) -->
 <div id="ppPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
-    <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="closePromptPay()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="closePromptPay()" aria-label="ปิด">✕</button></div>
     <img id="ppPopImg" alt="PromptPay QR" style="width:240px;max-height:300px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px auto 4px">
     <div style="font-size:22px;font-weight:800;color:var(--navy)">ยอด ฿<span id="ppPopAmt">0</span></div>
     <p id="ppPopNote" class="muted" style="font-size:12px">ลูกค้าสแกนด้วยแอปธนาคาร · ตรวจยอดในแอปธนาคารแล้วกด <b>ชำระแล้ว</b></p>
@@ -386,7 +386,7 @@
 <!-- CASH: amount received → change (or exact) -->
 <div id="cashPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:360px;width:100%;margin:0">
-    <div class="row between"><h1 style="margin:0">💵 เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">💵 เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()" aria-label="ปิด">✕</button></div>
     <div style="text-align:center;margin:10px 0 6px"><div class="muted" style="font-size:13px">ยอดที่ต้องชำระ</div>
       <div style="font-size:24px;font-weight:800;color:var(--navy)">฿<span id="cashDue">0</span></div></div>
     <label class="muted" style="font-size:13px">รับเงินมา (เว้นว่าง = รับพอดี)</label>
@@ -412,7 +412,7 @@
 
 <div id="recipePop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('recipePop').style.display='none'">✕</button></div>
+    <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('recipePop').style.display='none'" aria-label="ปิด">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 <span data-unit>แก้ว</span> — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
     <div id="recipeRows" style="display:grid;gap:8px"></div>
     <button class="ok" style="width:100%;margin-top:12px" onclick="saveRecipe()">บันทึกสูตร</button>
@@ -421,7 +421,7 @@
 
 <div id="featuresPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="position:sticky;top:0;background:var(--surface,#fff);z-index:1;padding-bottom:6px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between" style="position:sticky;top:0;background:var(--surface,#fff);z-index:1;padding-bottom:6px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'" aria-label="ปิด">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -429,7 +429,7 @@
 
 <div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
-    <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()" aria-label="ปิด">✕</button></div>
     <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:60vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
     <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
   </div>
@@ -827,7 +827,7 @@ let REWARDS=[];
 window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2); renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
-    const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
+    const thumb = r.image ? `<img src="${esc(r.image)}" alt="${esc(r.name||'')}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
     return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} ${unit()})</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
@@ -1163,7 +1163,7 @@ function renderMenuMgr(){
   if(!MENU.length){ renderTemplatePicker(); return; }
   const row=(m)=>`
     <div class="ms-item ${m.id===_selMenuId?'sel':''}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
-      <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
+      <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" alt="${esc(m.name||'')}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
       <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>
         <div class="muted" style="font-size:12px">฿${m.price}${m.soldout?' · หมด':''}${m.active?'':' · ซ่อน'}</div></div>
       <svg class="ic" viewBox="0 0 24 24" style="opacity:.35;margin:0"><path d="M9 18l6-6-6-6"/></svg>
@@ -1328,7 +1328,7 @@ function renderBill(){
       <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
       ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('')
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})" aria-label="ลบรายการนี้">✕</button></div>`).join('')
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
   const total=cart.reduce((s,e)=>s+entryTotal(e),0);
   const bt=$('billTotal'); if(bt) bt.textContent=total;
@@ -1348,7 +1348,7 @@ function renderBasket(){
       <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
       ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง — เพิ่มเครื่องดื่ม</p>';
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})" aria-label="ลบรายการนี้">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง — เพิ่มเครื่องดื่ม</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
 }
@@ -1552,7 +1552,7 @@ function zonePanel(z){
 
 // New-order sound on/off (cashier preference, remembered). Default on.
 function soundOn(){ try{ return localStorage.getItem('yodee_sound')!=='0'; }catch(e){ return true; } }
-function applySoundBtn(){ const b=$('soundBtn'); if(b) b.textContent = soundOn()?'🔔':'🔕'; }
+function applySoundBtn(){ const b=$('soundBtn'); if(b){ const on=soundOn(); b.textContent = on?'🔔':'🔕'; b.setAttribute('aria-label', (on?'ปิด':'เปิด')+'เสียงเตือนออเดอร์ใหม่'); b.setAttribute('aria-pressed', on?'true':'false'); } }
 window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem('yodee_sound', next?'1':'0'); }catch(e){}
   applySoundBtn(); toast(next?'🔔 เปิดเสียงเตือนออเดอร์ใหม่':'🔕 ปิดเสียงเตือนออเดอร์ใหม่'); if(next) beep(880); };
 // Two-tone chime for a new LINE order (distinct from the single payment beep). Respects the mute toggle.
@@ -1860,7 +1860,7 @@ window.showFeatures=async()=>{
       <b>🎨 แบรนด์ของร้าน</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ชื่อ · สี · หน่วยนับ · โลโก้ — เปลี่ยนแล้วมีผลทุกหน้าทันที</div>
       <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
-        <img id="brandLogoPrev" src="${esc(br.logo||'/assets/logo.png')}" onerror="this.style.visibility='hidden'" style="width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:#fff">
+        <img id="brandLogoPrev" src="${esc(br.logo||'/assets/logo.png')}" alt="ตัวอย่างโลโก้ร้าน" onerror="this.style.visibility='hidden'" style="width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:#fff">
         <label class="btn ghost" style="padding:8px 12px;font-size:13px;cursor:pointer">อัปโหลดโลโก้<input id="brandLogoFile" type="file" accept="image/*" style="display:none" onchange="onLogoFile(event)"></label>
       </div>
       <input id="brandNameInp" placeholder="ชื่อร้าน" value="${esc(br.name||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
