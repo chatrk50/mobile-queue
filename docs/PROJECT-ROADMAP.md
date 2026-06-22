@@ -82,10 +82,13 @@ upgrade · [ ] Stripe alternative for non-TH.
 [ ] CI running the test suite on every push.
 
 ## 5. Legal / compliance (TH)
-**Done:** PDPA export/erasure + /privacy + /terms; no fund custody.
+**Done:** PDPA customer export/erasure + /privacy + /terms; no fund custody. **Tenant-level**
+export + hard-erasure (admin-gated, slug-confirmed, audit-logged; verified zero-orphan across 25
+tables) — commit da7a4ca.
 **Must:** [ ] register a legal entity to invoice/collect · [ ] DPA template for tenants ·
 [ ] VAT registration trigger plan (>฿1.8M/yr).
-**Should:** [ ] cookie/consent notice · [ ] data-retention policy + auto-purge of closed accounts.
+**Should:** [ ] cookie/consent notice · [x] tenant erasure capability (manual admin-initiated;
+auto-purge-on-close still optional) · [ ] written data-retention policy doc.
 
 ## 6. GTM / growth
 **Done:** pricing, trial, founder, referral, landing/pricing mockup.
