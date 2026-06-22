@@ -3,14 +3,18 @@
 <title>เปิดร้านใหม่ — สมัครใช้งาน POS</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
-  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb}
+  @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb;--glass:rgba(255,255,255,.62);--glass-brd:rgba(255,255,255,.75)}
+  .topbar{max-width:480px;margin:0 auto;padding:14px 18px 0;display:flex;align-items:center;justify-content:space-between}
+  .logo{font-family:'Kanit',sans-serif;font-weight:700;font-size:19px;color:var(--ink);display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .logo small{font-size:11px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
   *{box-sizing:border-box}
   body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0}
-  .dsp{font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;letter-spacing:-.01em}
+  .dsp{font-family:'Kanit','IBM Plex Sans Thai',sans-serif;letter-spacing:-.01em}
   .wrap{max-width:480px;margin:0 auto;padding:28px 18px}
   .hero{text-align:center;margin:6px 0 22px}
-  .hero h1{margin:8px 0 4px;font-size:26px;font-weight:600;font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;letter-spacing:-.02em}
+  .hero h1{margin:8px 0 4px;font-size:26px;font-weight:600;font-family:'Kanit','IBM Plex Sans Thai',sans-serif;letter-spacing:-.02em}
   .hero p{color:var(--mut);margin:0;font-size:14px}
   .card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px}
   label{display:block;font-weight:500;font-size:13px;margin:14px 0 5px;color:var(--ink)}
@@ -36,10 +40,14 @@
   a{color:var(--ind)}
 </style>
 </head><body>
+<div class="topbar">
+  <a class="logo" href="/landing/"><span class="dot">ดี</span> ขายดี <small>KhaiDee</small></a>
+  <a href="/login/" style="font-size:14px">เข้าสู่ระบบ</a>
+</div>
 <div class="wrap">
   <div class="hero">
     <h1>เปิดร้านใหม่ของคุณ</h1>
-    <p>สร้างระบบ POS + คิว ของแบรนด์คุณ ใช้ได้ใน 1 นาที</p>
+    <p>ระบบคิว + POS + LINE ของแบรนด์คุณ — เริ่มฟรี เปิดเองใน 1 นาที ไม่หักค่าคอม</p>
   </div>
 
   <div class="card" id="form">
@@ -79,7 +87,7 @@
   </div>
 
   <div class="card ok" id="done" style="display:none">
-    <div style="font-size:34px">🎉</div>
+    <div style="width:54px;height:54px;border-radius:50%;background:var(--ind);display:flex;align-items:center;justify-content:center;margin:0 auto"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
     <h2 style="margin:6px 0;color:var(--navy)">สร้างร้านเรียบร้อย!</h2>
     <p class="hint" id="doneMsg"></p>
     <a class="btn ok" id="goShop" href="#">เข้าหน้าแคชเชียร์ →</a>
@@ -115,7 +123,7 @@ window.submitSignup=async()=>{
     const url=d.url; const abs=location.origin+url;
     $('form').style.display='none'; $('done').style.display='';
     const til=(d.trialUntil||'').slice(0,10);
-    $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · '+(d.trialDays?('ทดลอง Pro ฟรี '+d.trialDays+' วัน ถึง '+til):'')+(d.referred?' · +1 เดือนจากโค้ดเพื่อน!':'')+(d.founder?' · ราคา Founder ล็อกแล้ว 🔒':'')+' · เข้าด้วย PIN ที่ตั้งไว้';
+    $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · '+(d.trialDays?('ทดลอง Pro ฟรี '+d.trialDays+' วัน ถึง '+til):'')+(d.referred?' · +1 เดือนจากโค้ดเพื่อน!':'')+(d.founder?' · ราคา Founder ล็อกราคาแล้ว':'')+' · เข้าด้วย PIN ที่ตั้งไว้';
     $('goShop').href=url; $('shopUrl').textContent=abs;
     setTimeout(()=>{ location.href=url; }, 4000);
   }catch(e){
