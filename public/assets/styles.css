@@ -1,6 +1,6 @@
-/* Brand fonts: Poppins (EN headings), Nunito Sans (EN body), LINE Seed Sans TH (Thai) */
-@import url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/LINESeedSansTH/LINESeedSansTH.css');
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap');
+/* Brand fonts — unified product type system (matches signup / login / help):
+   Space Grotesk (display/headings) + IBM Plex Sans Thai (body, Thai-complete). */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap');
 :root{
   /* YO-DEE Yogurt brand palette */
   --bg1:#dcf1f6;          /* arctic mist */
@@ -20,11 +20,11 @@
 *{box-sizing:border-box}
 a{text-decoration:none}
 .ic{width:18px;height:18px;vertical-align:-4px;margin-right:6px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-body{margin:0;font-family:"Nunito Sans","LINE Seed Sans TH",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+body{margin:0;font-family:'IBM Plex Sans Thai',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
   background:radial-gradient(1200px 600px at 50% -10%,var(--bg1),var(--bg2));color:var(--ink);
   min-height:100vh;-webkit-font-smoothing:antialiased}
-/* Headings use Poppins (EN) with LINE Seed Sans TH for Thai glyphs */
-h1,h2,h3,.brand{font-family:"Poppins","LINE Seed Sans TH","Nunito Sans",sans-serif}
+/* Headings use Space Grotesk (display) with IBM Plex Sans Thai for Thai glyphs */
+h1,h2,h3,.brand{font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif}
 .wrap{max-width:480px;margin:0 auto;padding:20px}
 .wrap.wide{max-width:1100px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px;margin-bottom:6px;color:var(--navy)}
@@ -42,7 +42,7 @@ h2{font-size:16px;margin:.2em 0;color:var(--muted);font-weight:600}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row.between{justify-content:space-between}
 /* Form controls don't inherit the page font by default — force the brand font so menu
-   buttons, the keypad, inputs, etc. all use Nunito Sans / LINE Seed Sans TH. */
+   buttons, the keypad, inputs, etc. all use IBM Plex Sans Thai. */
 button,.btn,input,select,textarea{font-family:inherit}
 button,.btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;
   color:#fff;background:var(--accent);cursor:pointer;transition:transform .05s,filter .15s}
