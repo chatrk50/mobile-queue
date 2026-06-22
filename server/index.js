@@ -14,7 +14,7 @@ import { listTemplates, templateItems } from './menu-templates.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
-import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook } from './billing.js';
+import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook, billingConfig } from './billing.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
@@ -435,6 +435,34 @@ app.get('/admin/api/audit', adminGate, (req, res) => {
 });
 // Referral / growth overview (who invited whom, counts, headline metrics).
 app.get('/admin/api/referrals', adminGate, (req, res) => res.json(referralStats()));
+// Tenant health / churn signals: trials/plans expiring soon, inactive shops, plan mix, rough MRR.
+app.get('/admin/api/health', adminGate, (req, res) => {
+  const now = Date.now();
+  const prices = billingConfig().prices || {};
+  const monthlyBaht = (plan) => Math.round(((prices[plan] && prices[plan].month) || 0) / 100); // satang → ฿/mo
+  const rows = db.prepare('SELECT id, name, slug, plan_name, plan_until, auto_renew, active, created_at FROM tenants WHERE id>1 ORDER BY id').all()
+    .map((t) => ({
+      id: t.id, name: t.name, slug: t.slug, active: !!t.active,
+      plan: Q.tenantPlan(t.id).name,                                                  // effective (expiry-aware)
+      autoRenew: !!t.auto_renew,
+      daysLeft: t.plan_until ? Math.ceil((new Date(t.plan_until).getTime() - now) / 86400000) : null,
+      ordersThisMonth: Q.monthOrderCount(t.id),
+      createdAt: t.created_at,
+    }));
+  const planCounts = {};
+  for (const r of rows) planCounts[r.plan] = (planCounts[r.plan] || 0) + 1;
+  const paying = rows.filter((r) => r.active && (r.plan === 'pro' || r.plan === 'business') && r.autoRenew);
+  const mrrBaht = paying.reduce((s, r) => s + monthlyBaht(r.plan), 0);
+  const expiringSoon = rows.filter((r) => r.active && r.daysLeft != null && r.daysLeft >= 0 && r.daysLeft <= 7).sort((a, b) => a.daysLeft - b.daysLeft);
+  const inactive = rows.filter((r) => r.active && r.ordersThisMonth === 0);
+  res.json({
+    summary: {
+      total: rows.length, active: rows.filter((r) => r.active).length, suspended: rows.filter((r) => !r.active).length,
+      paying: paying.length, mrrBaht, planCounts, expiringSoonCount: expiringSoon.length, inactiveCount: inactive.length,
+    },
+    expiringSoon, inactive, rows,
+  });
+});
 // Export ALL of one tenant's data as JSON (PDPA portability / pre-deletion snapshot).
 app.get('/admin/api/tenants/:id/export', adminGate, (req, res) => {
   const id = Number(req.params.id);

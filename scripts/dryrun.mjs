@@ -166,6 +166,15 @@ async function setupBrand(name, pkg, unit, pin) {
   ok(yRow && yRow.referredByName === 'Referrer Co', 'admin referrals: referee shows who referred it');
   ok(refData.summary.viaReferral >= 1 && refData.summary.topReferrers.some((t) => t.name === 'Referrer Co'), 'referral summary metrics + top referrer');
 
+  // ===== Tenant health / churn =====
+  section('Tenant health / churn');
+  ok((await adm('GET', '/admin/api/health')).status === 401, 'health without admin PIN → 401');
+  const health = (await adm('GET', '/admin/api/health', null, { 'x-admin-pin': ADMIN })).data;
+  ok(health.summary && typeof health.summary.total === 'number' && health.summary.total >= 2, 'health summary: counts the brands');
+  ok(typeof health.summary.mrrBaht === 'number' && health.summary.planCounts, 'health summary: MRR estimate + plan mix');
+  ok(Array.isArray(health.inactive) && health.inactive.some((r) => r.slug === ry.slug), 'health: a brand with no orders this month shows as inactive');
+  ok(Array.isArray(health.rows) && health.rows.every((r) => r.id > 1), 'health: rows exclude the primary tenant');
+
   // ===== Tenant erasure (PDPA hard-delete / account close-out) =====
   section('Tenant erasure (PDPA)');
   const Z = await setupBrand('Zeta Mart', 'line', 'แก้ว', '7788');

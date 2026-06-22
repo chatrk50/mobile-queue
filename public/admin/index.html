@@ -33,7 +33,8 @@
   <div id="panel" style="display:none">
     <div class="bar">
       <h1>Tenants <span class="muted" id="count" style="font-size:14px;font-weight:400"></span></h1>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadHealth()">📊 สุขภาพร้าน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()">🎁 แนะนำเพื่อน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()">📜 บันทึกการใช้งาน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="load()">↻ รีเฟรช</button>
@@ -57,6 +58,14 @@
       <div id="refSummary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px"></div>
       <table><thead><tr><th>ร้าน</th><th>โค้ดเชิญ</th><th>มาจากการแนะนำของ</th><th>แนะนำสำเร็จ</th></tr></thead>
         <tbody id="refRows"></tbody></table>
+    </div>
+    <div id="healthPanel" style="display:none;margin-top:18px">
+      <div class="bar"><h1 style="font-size:18px">📊 สุขภาพร้าน (health / churn)</h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('healthPanel').style.display='none'">✕ ปิด</button></div>
+      <div id="healthSummary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px"></div>
+      <h2 style="font-size:14px;margin:10px 0 4px">⏳ ใกล้หมดอายุ (≤7 วัน) · ไม่มีออเดอร์เดือนนี้</h2>
+      <table><thead><tr><th>ร้าน</th><th>แพลน</th><th>เหลือ (วัน)</th><th>ต่ออัตโนมัติ</th><th>ออเดอร์/เดือน</th></tr></thead>
+        <tbody id="healthRows"></tbody></table>
     </div>
   </div>
 </div>
@@ -126,6 +135,22 @@ window.deleteTenant=async(id)=>{ const t=tById(id); const slug=t.slug||''; const
     $('err').textContent=''; alert('ลบ "'+name+'" แล้ว ('+rows+' แถวข้อมูล)'); load();
   }catch(e){ $('err').textContent = e.message==='confirm_mismatch'?'ยืนยันไม่ตรง':(e.message==='cannot_delete_primary'?'ลบร้านหลักไม่ได้':'ลบไม่ได้: '+e.message); } };
 const tName=(id)=>{ const t=tById(id); return t.name?esc(t.name):('#'+id); };
+// Tenant health / churn overview.
+window.loadHealth=async()=>{ try{ const d=await api('/admin/api/health'); const s=d.summary||{};
+  const chip=(label,val)=>`<div style="background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:96px"><div class="muted" style="font-size:12px">${label}</div><div style="font-size:20px;font-weight:700">${val}</div></div>`;
+  const planMix=Object.entries(s.planCounts||{}).map(([k,v])=>esc(k)+':'+v).join(' · ')||'—';
+  $('healthSummary').innerHTML = chip('ร้านทั้งหมด',s.total||0)+chip('ใช้งาน',s.active||0)+chip('ระงับ',s.suspended||0)
+    +chip('จ่ายเงิน',s.paying||0)+chip('MRR (โดยประมาณ)','฿'+(s.mrrBaht||0).toLocaleString())+chip('ใกล้หมดอายุ',s.expiringSoonCount||0)+chip('ไม่มีออเดอร์',s.inactiveCount||0)
+    +`<div style="background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div class="muted" style="font-size:12px">สัดส่วนแพลน</div><div style="font-size:14px;font-weight:600">${esc(planMix)}</div></div>`;
+  const watch=[...(d.expiringSoon||[]),...(d.inactive||[])]; const seen={};
+  const uniq=watch.filter(r=>{ if(seen[r.id]) return false; seen[r.id]=1; return true; });
+  $('healthRows').innerHTML = uniq.length ? uniq.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="slug">/b/${esc(r.slug)}</div></td>
+      <td>${esc(r.plan)}</td>
+      <td>${r.daysLeft==null?'<span class="muted">—</span>':(r.daysLeft<=3?('<b style="color:#c0392b">'+r.daysLeft+'</b>'):r.daysLeft)}</td>
+      <td>${r.autoRenew?'✓':'<span class="muted">✕</span>'}</td>
+      <td>${r.ordersThisMonth===0?'<b style="color:#c0392b">0</b>':r.ordersThisMonth}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px">ไม่มีร้านที่ต้องจับตา 🎉</td></tr>';
+  $('healthPanel').style.display=''; $('healthPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
 // Referral / growth overview.
 window.loadReferrals=async()=>{ try{ const d=await api('/admin/api/referrals'); const s=d.summary||{}; const rows=d.rows||[];
   const chip=(label,val)=>`<div style="background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:110px"><div class="muted" style="font-size:12px">${label}</div><div style="font-size:20px;font-weight:700">${val}</div></div>`;
