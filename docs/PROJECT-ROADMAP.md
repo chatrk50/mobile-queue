@@ -87,7 +87,9 @@ upgrade · [ ] Stripe alternative for non-TH.
 **Done:** pricing, trial, founder, referral, landing/pricing mockup.
 **Must:** [ ] case study (YO-DEE) + 3–5 founder testimonials · [ ] LINE OA support channel.
 **Should:** [ ] vertical templates (yogurt/coffee/food) · [ ] FB/LINE community seeding ·
-[ ] onboarding wizard (first-menu) · [ ] referral tracking dashboard.
+[x] onboarding wizard (first-menu) — first-run activation checklist in the cashier (add item →
+brand → LINE → open), owner-only, auto-hides once activated (commit fe5cc55) · [ ] referral
+tracking dashboard.
 
 ## 7. Support / ops
 **Must:** [ ] LINE OA support + FAQ + short Thai videos · [ ] runbook (suspend, reset-PIN, refund).
