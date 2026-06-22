@@ -1835,14 +1835,30 @@ window.showFeatures=async()=>{
       <div class="muted" style="font-size:11px;margin-top:8px"><a href="/privacy/" target="_blank">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/" target="_blank">ข้อกำหนด</a></div>
     </div>` : '')+
     (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">วาง Channel access token + secret + LIFF ID ของแบรนด์คุณ (จาก LINE Developers) ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
+        <a href="/help/line/" target="_blank" style="font-size:12px;white-space:nowrap">📖 คู่มือทีละขั้นตอน</a>
+      </div>
+      <div class="muted" style="font-size:12px;margin:4px 0 8px">ทำตามคู่มือเพื่อขอ <b>token · secret · LIFF ID</b> จาก LINE Developers แล้วกรอกด้านล่าง ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
+      <div style="background:var(--bg,#f7f7fb);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px">
+        <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 1</b> — ตั้ง Webhook URL นี้ใน LINE Developers (แท็บ Messaging API):</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <code id="lineWebhookUrl" style="flex:1;word-break:break-all;font-size:11px">${esc(lc.webhookUrl||'')}</code>
+          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyWebhook()">📋 ก๊อป</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 2</b> — วางค่าจาก LINE Developers:</div>
       <input id="lineTokenInp" type="password" autocomplete="off" placeholder="${lc.hasToken?'•••• มีอยู่แล้ว — กรอกเพื่อเปลี่ยน':'Channel access token'}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
       <input id="lineSecretInp" type="password" autocomplete="off" placeholder="${lc.hasSecret?'•••• มีอยู่แล้ว':'Channel secret'}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
-      <input id="lineLiffInp" placeholder="LIFF ID (เช่น 1234567-abcdef)" value="${esc(lc.liffId||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <input id="lineLiffInp" placeholder="LIFF ID — สำหรับ 'สั่งในไลน์' (ไม่บังคับ)" value="${esc(lc.liffId||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
       <input id="lineAddFriendInp" placeholder="ลิงก์เพิ่มเพื่อน OA (ไม่บังคับ)" value="${esc(lc.addFriendUrl||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
-      <button class="ok" style="width:100%" onclick="saveLineConfig()">บันทึกการเชื่อมต่อ LINE</button>
-      <div class="muted" style="font-size:11px;margin-top:8px">ตั้ง Webhook URL ใน LINE Developers เป็น:<br><code style="word-break:break-all">${esc(lc.webhookUrl||'')}</code></div>
+      <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 3</b> — ตรวจสอบ token ว่าถูกต้อง (เชื่อมกับ @ร้านคุณ) แล้วบันทึก:</div>
+      <div style="display:flex;gap:6px">
+        <button class="ghost" style="flex:1" onclick="verifyLine()">✓ ตรวจสอบ token</button>
+        <button class="ok" style="flex:2" onclick="saveLineConfig()">บันทึกการเชื่อมต่อ LINE</button>
+      </div>
+      <div id="lineVerifyMsg" style="font-size:12px;margin-top:8px"></div>
+      <div class="muted" style="font-size:11px;margin-top:8px;text-align:center">💡 ใส่แค่ <b>token + secret</b> ก็แจ้งคิว/แต้มทาง LINE ได้แล้ว · เพิ่ม <b>LIFF</b> ทีหลังเมื่ออยากให้ลูกค้าสั่งในไลน์ · ติดขัด? <a href="#" onclick="lineHelp();return false">ขอความช่วยเหลือ</a></div>
     </div>` : '')+
     `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
     `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
@@ -1898,6 +1914,21 @@ window.saveLineConfig=async()=>{
   if(tk) body.token=tk; if(sc) body.secret=sc;
   try{ const d=await api('/api/admin/line-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast(d.configured?'เชื่อมต่อ LINE แล้ว ✓':'บันทึกแล้ว'); }catch(e){ toast(err(e)); } };
+// LINE wizard helpers: copy webhook URL, live-verify a pasted token, request help.
+window.copyWebhook=async()=>{ const u=($('lineWebhookUrl')||{}).textContent||''; if(!u) return;
+  try{ await navigator.clipboard.writeText(u); toast('ก๊อป Webhook URL แล้ว ✓'); }
+  catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ — เลือกข้อความเอง'); } } };
+window.verifyLine=async()=>{ const m=$('lineVerifyMsg'); const tk=$('lineTokenInp').value.trim();
+  if(!tk){ m.innerHTML='<span style="color:var(--mut,#6b7280)">วาง Channel access token ในช่องด้านบนก่อน แล้วกดตรวจสอบ</span>'; return; }
+  m.innerHTML='<span style="color:var(--mut,#6b7280)">⏳ กำลังตรวจสอบกับ LINE…</span>';
+  try{ const d=await api('/api/admin/line-verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tk})});
+    if(d.ok){ m.innerHTML='<span style="color:#178a72;font-weight:700">✓ เชื่อมกับ '+esc(d.basicId||d.name||'OA ของคุณ')+(d.name?(' ('+esc(d.name)+')'):'')+' — token ถูกต้อง กดบันทึกได้เลย</span>'; }
+    else if(d.error==='invalid_token'){ m.innerHTML='<span style="color:var(--danger)">✗ token ไม่ถูกต้อง/หมดอายุ — ออก token ใหม่ที่ LINE Developers แท็บ Messaging API</span>'; }
+    else if(d.error==='network'){ m.innerHTML='<span style="color:var(--danger)">✗ เชื่อมต่อ LINE ไม่ได้ ลองใหม่อีกครั้ง</span>'; }
+    else{ m.innerHTML='<span style="color:var(--danger)">✗ ตรวจสอบไม่ผ่าน ('+esc(d.error||'unknown')+')</span>'; }
+  }catch(e){ m.innerHTML='<span style="color:var(--danger)">✗ '+esc(err(e))+'</span>'; } };
+window.lineHelp=async()=>{ let u=''; try{ u=(CFG&&CFG.supportUrl)||(await (await fetch('/api/config')).json()).supportUrl||''; }catch(e){}
+  window.open(u||'/help/line/','_blank'); };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
 window.sweepPending=async()=>{ if(!confirm('ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?')) return;
