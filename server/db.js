@@ -219,6 +219,18 @@ CREATE TABLE IF NOT EXISTS sales_history (
   no_shows    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (date, branch_id)
 );
+-- Append-only audit trail of sensitive admin/owner actions (suspend, plan change, reset-PIN,
+-- LINE-config change, PDPA export/erasure). For multi-tenant trust + incident forensics.
+-- Never stores secrets — only a short, non-sensitive detail context string.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  at        INTEGER NOT NULL,              -- epoch ms
+  tenant_id INTEGER NOT NULL DEFAULT 1,    -- the tenant the action targets
+  actor     TEXT NOT NULL DEFAULT '',      -- 'admin' | 'owner:<staffId>' | 'system'
+  action    TEXT NOT NULL,                 -- e.g. 'tenant.suspend', 'line.config'
+  detail    TEXT NOT NULL DEFAULT '',      -- short non-secret context
+  ip        TEXT NOT NULL DEFAULT ''
+);
 -- ============ Multi-branch POS foundation (Phase 0) ============
 -- A tenant = one restaurant business (the SaaS account). Every tenant-owned row
 -- carries tenant_id (default 1). YO-Dee = tenant 1. Enforcement arrives with the
@@ -675,6 +687,25 @@ export function setTenantDomain(tenantId, domain) {
 }
 export function listTenants() {
   return db.prepare('SELECT id, name, slug, owner_email, package, plan_name, active, created_at FROM tenants ORDER BY id').all();
+}
+/** Append a sensitive-action row to the audit trail. Best-effort: never throws into a request
+ *  path (a logging failure must not break the action it records). `detail` is truncated + must
+ *  never carry a secret (tokens/PINs/passwords). */
+export function logAudit({ tenantId = 1, actor = 'system', action, detail = '', ip = '' } = {}) {
+  try {
+    if (!action) return false;
+    const d = typeof detail === 'string' ? detail : JSON.stringify(detail);
+    db.prepare('INSERT INTO audit_log (at, tenant_id, actor, action, detail, ip) VALUES (?,?,?,?,?,?)')
+      .run(Date.now(), Number(tenantId) || 1, String(actor).slice(0, 60), String(action).slice(0, 60), String(d).slice(0, 300), String(ip).slice(0, 60));
+    return true;
+  } catch { return false; }
+}
+/** Recent audit events, newest first. Optionally scope to one tenant. */
+export function listAudit({ tenantId = null, limit = 200 } = {}) {
+  const lim = Math.min(1000, Math.max(1, Number(limit) || 200));
+  return tenantId
+    ? db.prepare('SELECT id, at, tenant_id, actor, action, detail, ip FROM audit_log WHERE tenant_id=? ORDER BY id DESC LIMIT ?').all(Number(tenantId), lim)
+    : db.prepare('SELECT id, at, tenant_id, actor, action, detail, ip FROM audit_log ORDER BY id DESC LIMIT ?').all(lim);
 }
 /** Resolve a free slug derived from the desired name (adds -2, -3… on collision). */
 function uniqueSlug(desired) {

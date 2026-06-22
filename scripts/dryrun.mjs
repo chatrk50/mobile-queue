@@ -124,6 +124,19 @@ async function setupBrand(name, pkg, unit, pin) {
   ok((await adm('POST', `/admin/api/tenants/1/suspend`, {}, { 'x-admin-pin': ADMIN })).status === 400, 'cannot suspend primary tenant 1');
   ok((await adm('GET', '/admin/api/tenants')).status === 401, 'admin API without PIN → 401');
 
+  // ===== Audit trail =====
+  section('Audit trail (sensitive-action forensics)');
+  ok((await adm('GET', '/admin/api/audit')).status === 401, 'audit without admin PIN → 401');
+  const audit = (await adm('GET', '/admin/api/audit', null, { 'x-admin-pin': ADMIN })).data.events || [];
+  const acts = new Set(audit.map(e => e.action));
+  ok(acts.has('tenant.suspend') && acts.has('tenant.activate') && acts.has('tenant.reset_pin'), 'admin actions (suspend/activate/reset_pin) recorded');
+  ok(audit.some(e => e.action === 'line.config' && e.tenant_id === bId), 'B owner line.config recorded under B');
+  const resetEv = audit.find(e => e.action === 'tenant.reset_pin');
+  ok(resetEv && !JSON.stringify(resetEv).includes(rp.pin), 'audit never stores the reset PIN');
+  ok(audit.every(e => !/[A-Z]TOKEN|[A-Z]SECRET/.test(JSON.stringify(e))), 'audit never stores LINE token/secret values');
+  const bOnly = (await adm('GET', `/admin/api/audit?tenantId=${bId}`, null, { 'x-admin-pin': ADMIN })).data.events || [];
+  ok(bOnly.length > 0 && bOnly.every(e => e.tenant_id === bId), 'audit ?tenantId scopes to that tenant only');
+
   console.log(`\n${fail ? '❌ DRY RUN FAILED' : '✅ DRY RUN PASSED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('dry-run crashed:', e); process.exit(2); });

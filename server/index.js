@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -372,21 +372,27 @@ app.get('/admin/api/tenants', adminGate, (req, res) => {
 });
 // Admin sets a tenant's plan (manual billing — automated payment provider plugs in later).
 app.post('/admin/api/tenants/:id/plan', adminGate, (req, res) => {
-  try { res.json({ ok: true, plan: Q.setTenantPlan(Number(req.params.id), String(req.body?.plan || '')) }); }
+  try { const plan = Q.setTenantPlan(Number(req.params.id), String(req.body?.plan || ''));
+    logAudit({ tenantId: Number(req.params.id), actor: 'admin', action: 'tenant.plan', detail: 'plan=' + plan, ip: ipOf(req) });
+    res.json({ ok: true, plan }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Map a custom domain to a tenant (the owner points DNS + the host adds the cert separately).
 app.post('/admin/api/tenants/:id/domain', adminGate, (req, res) => {
-  try { const t = setTenantDomain(Number(req.params.id), req.body?.domain || ''); res.json({ ok: true, domain: t.domain || null }); }
+  try { const t = setTenantDomain(Number(req.params.id), req.body?.domain || '');
+    logAudit({ tenantId: Number(req.params.id), actor: 'admin', action: 'tenant.domain', detail: 'domain=' + (t.domain || '(cleared)'), ip: ipOf(req) });
+    res.json({ ok: true, domain: t.domain || null }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/admin/api/tenants/:id/suspend', adminGate, (req, res) => {
   if (Number(req.params.id) === 1) return res.status(400).json({ error: 'cannot_suspend_primary' });
   db.prepare('UPDATE tenants SET active=0 WHERE id=?').run(Number(req.params.id));
+  logAudit({ tenantId: Number(req.params.id), actor: 'admin', action: 'tenant.suspend', ip: ipOf(req) });
   res.json({ ok: true });
 });
 app.post('/admin/api/tenants/:id/activate', adminGate, (req, res) => {
   db.prepare('UPDATE tenants SET active=1 WHERE id=?').run(Number(req.params.id));
+  logAudit({ tenantId: Number(req.params.id), actor: 'admin', action: 'tenant.activate', ip: ipOf(req) });
   res.json({ ok: true });
 });
 // Reset a locked-out brand owner's PIN to a fresh random one (returned once to the admin).
@@ -398,7 +404,13 @@ app.post('/admin/api/tenants/:id/reset-pin', adminGate, (req, res) => {
   const owner = db.prepare("SELECT id FROM staff WHERE tenant_id=? AND role='owner' AND active=1 ORDER BY id LIMIT 1").get(id);
   if (!owner) return res.status(404).json({ error: 'no_owner' });
   db.prepare('UPDATE staff SET pin_hash=? WHERE id=?').run(hashPin(newPin), owner.id);
+  logAudit({ tenantId: id, actor: 'admin', action: 'tenant.reset_pin', detail: 'owner_staff=' + owner.id, ip: ipOf(req) });   // never log the new PIN
   res.json({ ok: true, pin: newPin });
+});
+// Audit trail (platform admin): recent sensitive actions, optionally scoped ?tenantId=N.
+app.get('/admin/api/audit', adminGate, (req, res) => {
+  const tid = req.query.tenantId ? Number(req.query.tenantId) : null;
+  res.json({ events: listAudit({ tenantId: tid, limit: Number(req.query.limit) || 200 }) });
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
@@ -416,6 +428,8 @@ const legacyAdminPin = (req) => !SAAS && (req.get('x-cashier-pin') || req.query.
 const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
 // Manager-level = owner/manager session OR legacy admin PIN (reports, finance).
 const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || legacyAdminPin(req);
+// Audit-trail actor label for an owner/manager request (session staff id, else legacy 'owner').
+const ownerActor = (req) => (req.staff?.id ? 'owner:' + req.staff.id : 'owner');
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
@@ -544,11 +558,14 @@ app.get('/api/admin/usage', (req, res) => {
 app.get('/api/admin/export', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.setHeader('Content-Disposition', `attachment; filename="data-export-${brandFor(req).slug || req.tenantId}.json"`);
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'pdpa.export', ip: ipOf(req) });
   res.json(exportTenant(req.tenantId));
 });
 app.post('/api/admin/forget-customer', (req, res) => {       // body: { phone } or { key } — PDPA erasure
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(forgetCustomer(req.tenantId, { phone: req.body?.phone || null, key: req.body?.key || null })); }
+  try { const r = forgetCustomer(req.tenantId, { phone: req.body?.phone || null, key: req.body?.key || null });
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'pdpa.forget', detail: 'found=' + !!r.found, ip: ipOf(req) });   // never log the phone/key itself
+    res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---- Self-service billing (Omise subscription) ----
@@ -597,10 +614,12 @@ app.post('/api/admin/line-config', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });   // integration tokens = owner only
   if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
   const b = req.body || {};
-  if (b.token !== undefined) setSetting('line:token', String(b.token || '').trim());
-  if (b.secret !== undefined) setSetting('line:secret', String(b.secret || '').trim());
-  if (b.liffId !== undefined) setSetting('liff:id', String(b.liffId || '').trim());
-  if (b.addFriendUrl !== undefined) setSetting('line:add_friend_url', String(b.addFriendUrl || '').trim());
+  const changed = [];
+  if (b.token !== undefined) { setSetting('line:token', String(b.token || '').trim()); changed.push('token'); }
+  if (b.secret !== undefined) { setSetting('line:secret', String(b.secret || '').trim()); changed.push('secret'); }
+  if (b.liffId !== undefined) { setSetting('liff:id', String(b.liffId || '').trim()); changed.push('liff'); }
+  if (b.addFriendUrl !== undefined) { setSetting('line:add_friend_url', String(b.addFriendUrl || '').trim()); changed.push('addFriend'); }
+  if (changed.length) logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'line.config', detail: 'fields=' + changed.join(','), ip: ipOf(req) });   // log WHICH fields, never the values
   res.json({ ok: true, configured: lineConfigured(), liffId: getSetting('liff:id', '') || '' });
 });
 // Live-verify a pasted Messaging API token against LINE → confirms "connected to @yourshop" (the
