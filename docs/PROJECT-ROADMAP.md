@@ -54,7 +54,9 @@ platform admin → owner email/Google login → PDPA export/erasure → security
       (PIN + code → 8h admin session; PIN-alone rejected when on; brute-force lockout). Setup:
       scripts/admin-2fa-setup.mjs. Tests test:totp + test:2fa. (commit 6fc432d)
 - [ ] Alerting on suspicious owner-login patterns (lockout done; alerting needs a channel).
-- [ ] Dependency + secret scanning in CI; periodic `npm audit` gate.
+- [x] Dependency scanning + full test suite in CI on every push/PR (`npm audit --audit-level=high`
+      gate + e2e/tenant/isolation/billing/restore/totp/2fa/hierarchy/dryrun). `.github/workflows/ci.yml`
+      (commit 19bd6d8). [ ] secret scanning (e.g. gitleaks) still to add.
 - [ ] Pen-test / external security review before scaling.
 
 ---
