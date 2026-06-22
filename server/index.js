@@ -10,6 +10,7 @@ import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
 import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './auth.js';
 import { verifyTotp } from './totp.js';
+import { listTemplates, templateItems } from './menu-templates.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
@@ -267,7 +268,7 @@ app.get('/api/brand', (req, res) => res.json(brandFor(req)));
 // default tiers/channels) and an OWNER staff with the chosen PIN, then returns the live link.
 // SaaS-only; rate-limited per IP. The owner logs in at /b/<slug>/cashier/ with their PIN.
 const signupHits = new Map(); // ip -> { count, until }
-const SIGNUP_MAX = 5, SIGNUP_WINDOW = 60 * 60 * 1000;
+const SIGNUP_MAX = Math.max(1, parseInt(process.env.SIGNUP_MAX || '5', 10) || 5), SIGNUP_WINDOW = 60 * 60 * 1000;
 app.post('/api/signup', (req, res) => {
   if (!SAAS) return res.status(404).json({ error: 'not_available' });
   const ip = ipOf(req), now = Date.now();
@@ -1234,6 +1235,19 @@ app.post('/api/menu', (req, res) => {
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(item.id, req.body.priceDelivery);
     res.json(item); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Starter-menu templates: list the verticals, and one-tap pre-fill a sample menu (owner only).
+app.get('/api/menu-templates', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ templates: listTemplates() });
+});
+app.post('/api/admin/apply-template', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const items = templateItems(req.body?.template);
+  if (!items) return res.status(400).json({ error: 'unknown_template' });
+  let added = 0;
+  for (const it of items) { try { Q.addMenuItem(it); added += 1; } catch { /* skip a bad row, keep going */ } }
+  res.json({ ok: true, added });
 });
 app.post('/api/menu/:id', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

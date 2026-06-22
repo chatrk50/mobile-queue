@@ -137,6 +137,19 @@ async function setupBrand(name, pkg, unit, pin) {
   const bOnly = (await adm('GET', `/admin/api/audit?tenantId=${bId}`, null, { 'x-admin-pin': ADMIN })).data.events || [];
   ok(bOnly.length > 0 && bOnly.every(e => e.tenant_id === bId), 'audit ?tenantId scopes to that tenant only');
 
+  // ===== Starter-menu templates =====
+  section('Starter-menu templates');
+  const T = await setupBrand('Template Cafe', 'pos', 'แก้ว', '6161');
+  ok((await T.c('GET', `/b/${T.slug}/api/menu`)).data.length === 0, 'fresh shop starts with an empty menu');
+  const tpls = (await T.c('GET', `/b/${T.slug}/api/menu-templates`)).data.templates;
+  ok(Array.isArray(tpls) && tpls.some((x) => x.id === 'coffee'), 'templates list available (incl. coffee)');
+  ok((await T.c('POST', `/b/${T.slug}/api/admin/apply-template`, { template: 'nope' })).status === 400, 'unknown template → 400');
+  const ap = await T.c('POST', `/b/${T.slug}/api/admin/apply-template`, { template: 'coffee' });
+  ok(ap.status === 200 && ap.data.added >= 5, `apply coffee template → added ${ap.data?.added} items`);
+  const tMenu = (await T.c('GET', `/b/${T.slug}/api/menu`)).data;
+  ok(tMenu.some((m) => m.name === 'ลาเต้') && tMenu.some((m) => m.category === 'topping'), 'template populated drinks + toppings');
+  ok(!(await A.c('GET', `/b/${A.slug}/api/menu`)).data.some((m) => m.name === 'ลาเต้'), 'template items did NOT leak into tenant A');
+
   // ===== Referral tracking =====
   section('Referral tracking (growth)');
   const refX = client();

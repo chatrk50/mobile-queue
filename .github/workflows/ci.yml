@@ -20,6 +20,7 @@ jobs:
       # boot/tests need these present; real secrets live in the host env, never here.
       SESSION_SECRET: ci-test-session-secret-0123456789
       SAAS_ADMIN_PIN: adminsecret
+      SIGNUP_MAX: '1000'        # the dry-run/hierarchy suites sign up many brands from one IP
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
