@@ -46,9 +46,12 @@ platform admin → owner email/Google login → PDPA export/erasure → security
       now enforced/fail-closed). [ ] Nonce-strict CSP (large refactor — later hardening).
 
 ### Should 🟠
-- [ ] Per-tenant audit log (who changed what) for owner + admin actions.
+- [x] Per-tenant audit log (who changed what) for owner + admin actions — `audit_log` table +
+      logAudit/listAudit; admin/owner sensitive actions recorded (no secrets); `📜` admin panel +
+      `GET /admin/api/audit`. (commit 36b252c)
+- [x] Account lockout on owner-login (ownerHits, 10 fails → 429) — already in place; admin PIN too.
 - [ ] 2FA for the platform-admin console.
-- [ ] Account lockout/alerting on suspicious owner-login patterns.
+- [ ] Alerting on suspicious owner-login patterns (lockout done; alerting needs a channel).
 - [ ] Dependency + secret scanning in CI; periodic `npm audit` gate.
 - [ ] Pen-test / external security review before scaling.
 
