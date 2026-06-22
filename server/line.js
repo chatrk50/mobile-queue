@@ -131,3 +131,17 @@ export async function replyText(replyToken, text) {
     return false;
   }
 }
+
+/** Live-verify a Messaging API channel access token by asking LINE for the bot (OA) profile.
+ *  Returns { ok, name, basicId } so the wizard can confirm "connected to @yourshop". No side effects. */
+export async function verifyMessagingToken(token) {
+  const t = String(token || '').trim();
+  if (!t) return { ok: false, error: 'empty' };
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + t } });
+    if (res.status === 401 || res.status === 403) return { ok: false, error: 'invalid_token' };
+    if (!res.ok) return { ok: false, error: 'line_' + res.status };
+    const d = await res.json();
+    return { ok: true, name: d.displayName || null, basicId: d.basicId || null, pictureUrl: d.pictureUrl || null };
+  } catch (e) { return { ok: false, error: 'network' }; }
+}

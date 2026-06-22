@@ -10,7 +10,7 @@ import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
 import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook } from './billing.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
@@ -65,6 +65,8 @@ const BRAND = {
 };
 // Package-1 (POS-only) hides every customer-facing LINE feature regardless of token presence.
 const POS_ONLY = BRAND.package === 'pos';
+// Our own support channel (a LINE OA / chat link) — shown on help + "ขอความช่วยเหลือ" buttons.
+const SUPPORT_LINE_URL = (process.env.SUPPORT_LINE_URL || '').trim();
 // Brand + package per request. Single-tenant uses the env BRAND (identical to before); the SaaS
 // deployment resolves them from the request's tenant row.
 const brandFor = (req) => SAAS ? tenantBrand(req.tenantId, BRAND) : BRAND;
@@ -254,7 +256,7 @@ const pinOK = (req) => {
 app.get('/api/config', (req, res) => {
   const posOnly = posOnlyFor(req);
   const lc = lineCfgFor(req);
-  res.json({ liffId: lc.liffId, lineEnabled: lc.lineEnabled, posOnly, lineFeatures: !posOnly, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: posOnly ? '' : lc.addFriendUrl, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !posOnly, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !posOnly, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), saas: SAAS, brand: brandFor(req) });
+  res.json({ liffId: lc.liffId, lineEnabled: lc.lineEnabled, posOnly, lineFeatures: !posOnly, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: posOnly ? '' : lc.addFriendUrl, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !posOnly, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !posOnly, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), saas: SAAS, supportUrl: SUPPORT_LINE_URL || null, brand: brandFor(req) });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(brandFor(req)));
@@ -315,7 +317,7 @@ function ownerResult(res, matches, slug) {
   issueOwnerSession(res, pick.tenantId);
   return res.json({ ok: true, url: `/b/${pick.slug}/cashier/`, tenant: pick });
 }
-app.get('/api/owner/config', (req, res) => res.json({ saas: SAAS, googleClientId: GOOGLE_ON ? GOOGLE_CLIENT_ID : null }));
+app.get('/api/owner/config', (req, res) => res.json({ saas: SAAS, googleClientId: GOOGLE_ON ? GOOGLE_CLIENT_ID : null, supportUrl: SUPPORT_LINE_URL || null }));
 app.post('/api/owner/login', (req, res) => {
   if (!SAAS) return res.status(404).json({ error: 'not_available' });
   const ip = ipOf(req), now = Date.now(); const h = ownerHits.get(ip);
@@ -600,6 +602,12 @@ app.post('/api/admin/line-config', (req, res) => {
   if (b.liffId !== undefined) setSetting('liff:id', String(b.liffId || '').trim());
   if (b.addFriendUrl !== undefined) setSetting('line:add_friend_url', String(b.addFriendUrl || '').trim());
   res.json({ ok: true, configured: lineConfigured(), liffId: getSetting('liff:id', '') || '' });
+});
+// Live-verify a pasted Messaging API token against LINE → confirms "connected to @yourshop" (the
+// wizard's confidence signal). Owner-gated; no side effects.
+app.post('/api/admin/line-verify', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(await verifyMessagingToken(req.body?.token));
 });
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {

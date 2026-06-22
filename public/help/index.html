@@ -1,0 +1,47 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ศูนย์ช่วยเหลือ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb}
+  *{box-sizing:border-box}body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0;line-height:1.7}
+  .wrap{max-width:620px;margin:0 auto;padding:28px 18px 60px}
+  h1{font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 20px}
+  .card{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;text-decoration:none;color:var(--ink)}
+  .card:hover{border-color:var(--ind)}
+  .card .ic{width:36px;height:36px;border-radius:10px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .card b{font-size:15px;font-weight:500}.card span{font-size:13px;color:var(--mut);display:block}
+  details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}
+  summary{font-weight:500;font-size:14px;cursor:pointer}
+  details p{font-size:14px;color:var(--ink)}
+  .cta{display:inline-flex;align-items:center;gap:8px;background:var(--ind);color:#fff;border-radius:12px;padding:11px 18px;text-decoration:none;font-weight:500}
+  a{color:var(--ind)}
+</style>
+</head><body>
+<div class="wrap">
+  <h1>ศูนย์ช่วยเหลือ</h1>
+  <p class="sub">เริ่มต้นใช้งาน · เชื่อม LINE · การชำระเงิน — และติดต่อทีมงาน</p>
+
+  <a class="card" href="/help/line/"><span class="ic">🟢</span><div><b>เชื่อมต่อ LINE ทีละขั้นตอน</b><span>ขอ token / secret / LIFF จาก LINE Developers แล้วกรอกเอง</span></div></a>
+  <a class="card" href="/signup/"><span class="ic">🏪</span><div><b>เปิดร้านใหม่</b><span>สมัคร ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร</span></div></a>
+  <a class="card" href="/login/"><span class="ic">🔑</span><div><b>เข้าสู่ระบบ</b><span>อีเมล/รหัสผ่าน หรือ Google</span></div></a>
+
+  <h2 style="font-size:17px;margin:22px 0 10px;font-family:'Space Grotesk',sans-serif">คำถามที่พบบ่อย</h2>
+  <details><summary>ต้องมี LINE Official Account ไหม?</summary><p>ถ้าใช้แพ็กเกจที่มี LINE (สั่งในไลน์/แจ้งคิว/สะสมแต้ม) — ต้องมีทั้ง <b>LINE OA</b> และตั้งค่าใน <b>LINE Developers</b> · ถ้าใช้แค่ POS หน้าร้าน + คิว ไม่ต้องใช้ LINE เลย</p></details>
+  <details><summary>ทำเองได้ไหม ถ้าไม่ใช่สายเทค?</summary><p>ได้ — มี<a href="/help/line/">คู่มือทีละขั้นตอน</a> + ระบบมีปุ่ม "ตรวจสอบ" เช็คให้ทันทีว่าต่อถูกหรือไม่ · ถ้าติดขัดกดขอความช่วยเหลือ ทีมงานช่วยตั้งให้ได้ (Pro/Business)</p></details>
+  <details><summary>ข้อมูลบัตร/การจ่ายเงินปลอดภัยไหม?</summary><p>ชำระผ่าน Omise (มาตรฐานสากล) — ระบบเรา <b>ไม่เก็บเลขบัตร</b> · ยอดขายของร้านเข้าบัญชีร้านโดยตรง เราไม่ถือเงินแทน · ดู <a href="/privacy/">นโยบายความเป็นส่วนตัว</a></p></details>
+  <details><summary>ลืมรหัสผ่าน / เข้าระบบไม่ได้?</summary><p>เข้าหน้าแคชเชียร์ที่ลิงก์ร้าน <code>/b/&lt;ร้านคุณ&gt;/cashier/</code> ด้วย PIN ได้เสมอ · กรณีอื่นกดขอความช่วยเหลือด้านล่าง</p></details>
+  <details><summary>เปลี่ยน/ยกเลิกแพ็กเกจได้ไหม?</summary><p>ได้ทุกเมื่อ ในหน้า ⚙ ตั้งค่าระบบ → แพ็กเกจการใช้งาน · ยกเลิกแล้วใช้ได้จนสิ้นรอบที่จ่ายไว้</p></details>
+
+  <div style="text-align:center;margin-top:24px">
+    <p style="font-size:14px">ยังไม่เจอคำตอบ?</p>
+    <a class="cta" id="support" href="#" target="_blank">💬 แชตกับทีมงาน</a>
+    <p id="nosupport" style="display:none;font-size:13px;color:var(--mut)">ช่องทางช่วยเหลือจะแสดงเมื่อผู้ดูแลตั้งค่าแล้ว</p>
+  </div>
+</div>
+<script>
+(async()=>{ try{ const c=await (await fetch('/api/config')).json(); const a=document.getElementById('support');
+  if(c.supportUrl){ a.href=c.supportUrl; } else { a.style.display='none'; document.getElementById('nosupport').style.display=''; } }catch(e){} })();
+</script>
+</body></html>
