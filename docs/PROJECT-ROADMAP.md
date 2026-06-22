@@ -88,7 +88,7 @@ tables) — commit da7a4ca.
 **Must:** [ ] register a legal entity to invoice/collect · [ ] DPA template for tenants ·
 [ ] VAT registration trigger plan (>฿1.8M/yr).
 **Should:** [ ] cookie/consent notice · [x] tenant erasure capability (manual admin-initiated;
-auto-purge-on-close still optional) · [ ] written data-retention policy doc.
+auto-purge-on-close still optional) · [x] written data-retention policy doc — [`DATA-RETENTION.md`](DATA-RETENTION.md).
 
 ## 6. GTM / growth
 **Done:** pricing, trial, founder, referral, landing/pricing mockup.
@@ -102,7 +102,8 @@ tracking dashboard — 🎁 admin panel (invite code · referred-by · count + %
 referrers); GET /admin/api/referrals (commit f3f8d4d).
 
 ## 7. Support / ops
-**Must:** [ ] LINE OA support + FAQ + short Thai videos · [ ] runbook (suspend, reset-PIN, refund).
+**Must:** [ ] LINE OA support + FAQ + short Thai videos · [x] runbook (suspend, reset-PIN, refund,
+PDPA, 2FA, incident) — [`SUPPORT-RUNBOOK.md`](SUPPORT-RUNBOOK.md).
 **Should:** [ ] in-app help/tours · [ ] admin "impersonate for support" (audited) · [ ] churn/usage view.
 
 ---
