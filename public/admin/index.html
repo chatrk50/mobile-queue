@@ -22,6 +22,7 @@
   .err{color:#c0394a;font-size:13px;min-height:18px}
   .bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 </style>
+<script src="/assets/icons.js"></script>
 </head><body>
 <div class="wrap">
   <div id="gate" class="gate card">
@@ -37,10 +38,10 @@
     <div class="bar">
       <h1>Tenants <span class="muted" id="count" style="font-size:14px;font-weight:400"></span></h1>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn ghost" style="padding:6px 12px" onclick="loadHealth()">📊 สุขภาพร้าน</button>
-        <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()">🎁 แนะนำเพื่อน</button>
-        <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()">📜 บันทึกการใช้งาน</button>
-        <button class="btn ghost" style="padding:6px 12px" onclick="load()">↻ รีเฟรช</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadHealth()"><span data-ic="chart" data-sz="15"></span> สุขภาพร้าน</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()"><span data-ic="gift" data-sz="15"></span> แนะนำเพื่อน</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()"><span data-ic="doc" data-sz="15"></span> บันทึกการใช้งาน</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="load()"><span data-ic="refresh" data-sz="15"></span> รีเฟรช</button>
       </div>
     </div>
     <div class="err" id="err"></div>
@@ -49,24 +50,24 @@
       <tbody id="rows"></tbody>
     </table>
     <div id="auditPanel" style="display:none;margin-top:18px">
-      <div class="bar"><h1 style="font-size:18px">📜 บันทึกการใช้งาน (audit) <span class="muted" id="auditCount" style="font-size:13px;font-weight:400"></span></h1>
-        <button class="btn ghost" style="padding:6px 12px" onclick="$('auditPanel').style.display='none'">✕ ปิด</button></div>
+      <div class="bar"><h1 style="font-size:18px"><span data-ic="doc"></span> บันทึกการใช้งาน (audit) <span class="muted" id="auditCount" style="font-size:13px;font-weight:400"></span></h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('auditPanel').style.display='none'"><span data-ic="x" data-sz="15"></span> ปิด</button></div>
       <div class="muted" style="font-size:12px;margin-bottom:6px">การกระทำที่อ่อนไหว (ระงับ/เปลี่ยนแพลน/รีเซ็ต PIN/แก้ LINE/PDPA) — ไม่เก็บข้อมูลลับ (token/PIN ไม่ถูกบันทึก)</div>
       <table><thead><tr><th>เวลา</th><th>ร้าน</th><th>ผู้กระทำ</th><th>การกระทำ</th><th>รายละเอียด</th><th>IP</th></tr></thead>
         <tbody id="auditRows"></tbody></table>
     </div>
     <div id="refPanel" style="display:none;margin-top:18px">
-      <div class="bar"><h1 style="font-size:18px">🎁 แนะนำเพื่อน (referrals)</h1>
-        <button class="btn ghost" style="padding:6px 12px" onclick="$('refPanel').style.display='none'">✕ ปิด</button></div>
+      <div class="bar"><h1 style="font-size:18px"><span data-ic="gift"></span> แนะนำเพื่อน (referrals)</h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('refPanel').style.display='none'"><span data-ic="x" data-sz="15"></span> ปิด</button></div>
       <div id="refSummary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px"></div>
       <table><thead><tr><th>ร้าน</th><th>โค้ดเชิญ</th><th>มาจากการแนะนำของ</th><th>แนะนำสำเร็จ</th></tr></thead>
         <tbody id="refRows"></tbody></table>
     </div>
     <div id="healthPanel" style="display:none;margin-top:18px">
-      <div class="bar"><h1 style="font-size:18px">📊 สุขภาพร้าน (health / churn)</h1>
-        <button class="btn ghost" style="padding:6px 12px" onclick="$('healthPanel').style.display='none'">✕ ปิด</button></div>
+      <div class="bar"><h1 style="font-size:18px"><span data-ic="chart"></span> สุขภาพร้าน (health / churn)</h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('healthPanel').style.display='none'"><span data-ic="x" data-sz="15"></span> ปิด</button></div>
       <div id="healthSummary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px"></div>
-      <h2 style="font-size:14px;margin:10px 0 4px">⏳ ใกล้หมดอายุ (≤7 วัน) · ไม่มีออเดอร์เดือนนี้</h2>
+      <h2 style="font-size:14px;margin:10px 0 4px">ใกล้หมดอายุ (≤7 วัน) · ไม่มีออเดอร์เดือนนี้</h2>
       <table><thead><tr><th>ร้าน</th><th>แพลน</th><th>เหลือ (วัน)</th><th>ต่ออัตโนมัติ</th><th>ออเดอร์/เดือน</th></tr></thead>
         <tbody id="healthRows"></tbody></table>
     </div>
@@ -95,7 +96,7 @@ window.load=async()=>{ $('err').textContent='';
   try{ const d=await api('/admin/api/tenants'); const ts=d.tenants||[]; TENANTS=ts; const plans=Object.keys(d.plans||{free:1,pro:1});
     $('count').textContent='('+ts.length+')';
     $('rows').innerHTML=ts.map(t=>`<tr>
-      <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/${t.domain?` · 🌐 ${esc(t.domain)}`:''}</div></td>
+      <td><b>${esc(t.name)}</b><div class="slug">/b/${esc(t.slug)}/${t.domain?` · ${icon('globe',{size:13})} ${esc(t.domain)}`:''}</div></td>
       <td><span class="pill pkg">${t.package==='pos'?'POS':'+LINE'}</span></td>
       <td><select onchange="setPlan(${t.id},this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
         ${plans.map(p=>`<option value="${esc(p)}" ${t.plan===p?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
@@ -107,8 +108,8 @@ window.load=async()=>{ $('err').textContent='';
           : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
         <button class="btn ghost" onclick="setDomain(${t.id})">โดเมน</button>
         <button class="btn ghost" onclick="resetPin(${t.id})">รีเซ็ต PIN</button>
-        ${t.id!==1?`<button class="btn ghost" onclick="exportTenant(${t.id})">⬇️ ส่งออก</button>
-        <button class="btn ghost danger" onclick="deleteTenant(${t.id})">🗑️ ลบถาวร</button>`:''}
+        ${t.id!==1?`<button class="btn ghost" onclick="exportTenant(${t.id})">${icon('download',{size:14})} ส่งออก</button>
+        <button class="btn ghost danger" onclick="deleteTenant(${t.id})">${icon('trash',{size:14})} ลบถาวร</button>`:''}
       </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
   }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
 const tById=(id)=>TENANTS.find(t=>t.id===id)||{};
@@ -130,7 +131,7 @@ window.exportTenant=async(id)=>{ const t=tById(id); try{ const data=await api('/
   }catch(e){ $('err').textContent='ส่งออกไม่ได้: '+e.message; } };
 // PDPA erasure: hard-delete a tenant. Double-gated — confirm + type the slug exactly.
 window.deleteTenant=async(id)=>{ const t=tById(id); const slug=t.slug||''; const name=t.name||('#'+id);
-  if(!confirm('⚠️ ลบแบรนด์ "'+name+'" ถาวร?\nข้อมูลทั้งหมด (ออเดอร์·เมนู·ลูกค้า·ยอดขาย) จะถูกลบและกู้คืนไม่ได้\nแนะนำให้กด "ส่งออก" สำรองข้อมูลก่อน')) return;
+  if(!confirm('คำเตือน — ลบแบรนด์ "'+name+'" ถาวร?\nข้อมูลทั้งหมด (ออเดอร์·เมนู·ลูกค้า·ยอดขาย) จะถูกลบและกู้คืนไม่ได้\nแนะนำให้กด "ส่งออก" สำรองข้อมูลก่อน')) return;
   const typed=prompt('พิมพ์ slug ของร้านเพื่อยืนยันการลบถาวร:\n\n'+slug); if(typed===null) return;
   if(typed.trim()!==slug){ $('err').textContent='slug ไม่ตรง — ยกเลิกการลบเพื่อความปลอดภัย'; return; }
   try{ const r=await api('/admin/api/tenants/'+id+'/delete',{method:'POST',body:JSON.stringify({confirm:slug})});
@@ -150,9 +151,9 @@ window.loadHealth=async()=>{ try{ const d=await api('/admin/api/health'); const 
   $('healthRows').innerHTML = uniq.length ? uniq.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="slug">/b/${esc(r.slug)}</div></td>
       <td>${esc(r.plan)}</td>
       <td>${r.daysLeft==null?'<span class="muted">—</span>':(r.daysLeft<=3?('<b style="color:#c0392b">'+r.daysLeft+'</b>'):r.daysLeft)}</td>
-      <td>${r.autoRenew?'✓':'<span class="muted">✕</span>'}</td>
+      <td>${r.autoRenew?'<span style="color:var(--ok,#178a72)">'+icon('check',{size:16})+'</span>':'<span class="muted">'+icon('x',{size:16})+'</span>'}</td>
       <td>${r.ordersThisMonth===0?'<b style="color:#c0392b">0</b>':r.ordersThisMonth}</td></tr>`).join('')
-    : '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px">ไม่มีร้านที่ต้องจับตา 🎉</td></tr>';
+    : '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px">ไม่มีร้านที่ต้องจับตา</td></tr>';
   $('healthPanel').style.display=''; $('healthPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
 // Referral / growth overview.
 window.loadReferrals=async()=>{ try{ const d=await api('/admin/api/referrals'); const s=d.summary||{}; const rows=d.rows||[];
