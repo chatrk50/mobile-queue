@@ -120,11 +120,53 @@
   @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.09);opacity:.85}}
   @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
   @media(max-width:760px){ .phone{display:none} }
+  /* hero positioning pill */
+  .hpill{display:inline-flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:500;margin-bottom:20px;backdrop-filter:blur(8px);box-shadow:var(--glass-sh)}
+  .hpill .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  /* LINE status-journey phone */
+  .ljourney{display:flex;justify-content:center}
+  .linephone{width:300px;max-width:92vw;background:#fff;border:1px solid var(--glass-brd);border-radius:32px;box-shadow:0 24px 60px rgba(31,41,90,.18);overflow:hidden;animation:floaty 8s ease-in-out infinite}
+  .lhead{background:#06c755;color:#fff;padding:15px 16px;display:flex;align-items:center;gap:10px;font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
+  .lhead .lav{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+  .lhead .lav svg{width:18px;height:18px;color:#fff}
+  .lthread{background:#8ba2bd;padding:16px 14px;display:flex;flex-direction:column;gap:11px;min-height:430px}
+  .lmsg{align-self:flex-start;max-width:84%;background:#fff;border-radius:5px 16px 16px 16px;padding:11px 13px;font-size:12.5px;line-height:1.5;display:flex;gap:9px;box-shadow:0 1px 3px rgba(0,0,0,.1);opacity:0}
+  .lmsg .li{width:32px;height:32px;border-radius:10px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+  .lmsg .li svg{width:18px;height:18px}
+  .lmsg b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:13px;color:var(--ink)}
+  .lmsg .lq{color:var(--ind);font-weight:600}
+  .linephone.in .lmsg{animation:msgIn .55s cubic-bezier(.22,1,.36,1) forwards}
+  .linephone.in .lmsg:nth-of-type(1){animation-delay:.25s}
+  .linephone.in .lmsg:nth-of-type(2){animation-delay:1.1s}
+  .linephone.in .lmsg:nth-of-type(3){animation-delay:1.95s}
+  .linephone.in .lmsg:nth-of-type(4){animation-delay:2.8s}
+  .linephone.in .lmsg:nth-of-type(5){animation-delay:3.65s}
+  .stars{display:flex;gap:4px;margin-top:7px}
+  .stars svg{width:19px;height:19px;color:#d4d8e0;fill:#d4d8e0}
+  .linephone.in .stars svg{animation:starOn .35s ease forwards}
+  .linephone.in .stars svg:nth-child(1){animation-delay:4.0s}
+  .linephone.in .stars svg:nth-child(2){animation-delay:4.15s}
+  .linephone.in .stars svg:nth-child(3){animation-delay:4.3s}
+  .linephone.in .stars svg:nth-child(4){animation-delay:4.45s}
+  .linephone.in .stars svg:nth-child(5){animation-delay:4.6s}
+  @keyframes msgIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes starOn{to{color:#f5b50a;fill:#f5b50a;transform:scale(1.12)}}
+  /* comparison table */
+  .cmp{max-width:840px;margin:0 auto;background:var(--glass);border:1px solid var(--glass-brd);border-radius:20px;overflow:hidden;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
+  .cmp table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .cmp th,.cmp td{padding:14px 10px;text-align:center;border-bottom:1px solid var(--line)}
+  .cmp tr:last-child td{border-bottom:0}
+  .cmp th:first-child,.cmp td:first-child{text-align:left;font-weight:500;width:38%}
+  .cmp thead th{font-family:'Kanit',sans-serif;font-size:14px;font-weight:600}
+  .cmp .me{background:rgba(99,102,241,.09)} .cmp thead .me{color:var(--ind)}
+  .cmp .yes{color:var(--ok)} .cmp .nope{color:#c0394a} .cmp .mid{color:var(--mut)}
+  .cmp td svg{width:18px;height:18px;vertical-align:middle}
+  .cmp .amt0{font-family:'Kanit',sans-serif;font-weight:700;color:var(--ok)}
   /* scroll reveal */
   .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
   .reveal.in{opacity:1;transform:none}
   @media(max-width:760px){ .grid,.prices,.steps{grid-template-columns:1fr} .sec{grid-template-columns:repeat(2,1fr)} .hero h1{font-size:38px} h2.center{font-size:26px} }
-  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} .reveal,.ocard{opacity:1!important;transform:none!important} html{scroll-behavior:auto} }
+  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} .reveal,.ocard,.lmsg{opacity:1!important;transform:none!important} .stars svg{color:#f5b50a!important;fill:#f5b50a!important} html{scroll-behavior:auto} }
 </style>
 </head><body>
 <div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
@@ -135,6 +177,7 @@
 </div></nav>
 
 <header class="hero"><div class="wrap reveal in">
+  <div class="hpill"><span class="d"></span> ระบบคิว + สั่งผ่าน LINE · ไม่หักค่าคอม · ลูกค้าเป็นของร้านคุณ</div>
   <h1>เปิดร้าน แล้ว<span class="hl">ขายดี</span><br>ตั้งแต่วันแรก</h1>
   <p class="sub">ระบบ POS + คิว + สั่งผ่าน LINE + สะสมแต้ม สำหรับร้านอาหาร คาเฟ่ ร้านเครื่องดื่ม — ใช้บนแท็บเล็ตหรือมือถือ ไม่ต้องลงโปรแกรม</p>
   <div class="cta-row">
@@ -186,6 +229,47 @@
   </div>
 </div></section>
 
+<section style="background:var(--bg)"><div class="wrap">
+  <div class="eyebrow reveal">ลูกค้าไม่ต้องยืนรอ</div>
+  <h2 class="center reveal">แจ้งทุกขั้นตอนถึงมือลูกค้า ผ่าน LINE</h2>
+  <p class="lead reveal">ตั้งแต่กดสั่ง จนถึงรับของและให้คะแนน — ลูกค้ารู้สถานะตลอด ไม่ต้องเฝ้าหน้าร้าน</p>
+  <div class="ljourney">
+    <div class="linephone reveal">
+      <div class="lhead"><span class="lav"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span> YO-DEE Yogurt</div>
+      <div class="lthread">
+        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div><b>รับออเดอร์แล้ว</b>คิวของคุณ <span class="lq">A013</span> · โยเกิร์ตเบอร์รี่ ×1</div></div>
+        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 9.2A2 2 0 0 1 16.8 20H7.2a2 2 0 0 1-2-1.8L4 9Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span><div><b>ร้านกำลังทำ</b>กำลังเตรียมออเดอร์ของคุณ</div></div>
+        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><div><b>ใกล้ถึงคิวคุณแล้ว</b>เหลืออีก 2 คิว · เตรียมตัวมารับได้เลย</div></div>
+        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg></span><div><b>พร้อมรับแล้ว!</b>โชว์คิว <span class="lq">A013</span> ที่เคาน์เตอร์ได้เลย</div></div>
+        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span><div><b>ขอบคุณที่อุดหนุน</b>ให้คะแนนร้านหน่อยนะ
+          <div class="stars"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow reveal">ทำไมต้อง KhaiDee</div>
+  <h2 class="center reveal">ต่างจากเดลิเวอรี และ POS ทั่วไป</h2>
+  <p class="lead reveal">เดลิเวอรีไว้หา "ลูกค้าใหม่" (จ่ายคอม) · KhaiDee ทำให้ลูกค้า "กลับมาซื้อตรง" โดยไม่หักคอม</p>
+  <div class="cmp reveal">
+    <table>
+      <thead><tr><th></th><th class="me">ขายดี<br>KhaiDee</th><th>เดลิเวอรี<br>มาร์เก็ตเพลส</th><th>POS ร้าน<br>ทั่วไป</th></tr></thead>
+      <tbody>
+        <tr><td>ค่าคอมมิชชันต่อออเดอร์</td><td class="me"><span class="amt0">0%</span></td><td class="nope">~30%</td><td class="mid">0%</td></tr>
+        <tr><td>ลูกค้าเป็นของร้าน</td><td class="me"><svg class="ck" style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td></tr>
+        <tr><td>ระบบคิว + แจ้งผ่าน LINE</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
+        <tr><td>ลูกค้าสั่งผ่าน LINE ของร้านเอง</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td></tr>
+        <tr><td>เปิดใช้เองใน 1 นาที</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">—</td><td class="mid">ตั้งค่ายุ่งยาก</td></tr>
+        <tr><td>สะสมแต้ม/ลูกค้าประจำของร้าน</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
+        <tr><td>เริ่มต้นฟรี</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">ฟรี แต่หักคอม</td><td class="nope">มีค่าใช้จ่าย</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="lead reveal" style="margin-top:20px;font-size:14px">ดึงลูกค้าประจำแค่ 15% มาสั่งตรงผ่าน LINE แทนเดลิเวอรี ก็ประหยัดค่าคอมได้หลายพัน/เดือน — คุ้มค่าสมาชิกหลายเท่า</p>
+</div></section>
+
 <section><div class="wrap">
   <div class="eyebrow reveal">เริ่มง่ายมาก</div>
   <h2 class="center reveal">3 ขั้นตอน เปิดร้านพร้อมขาย</h2>
@@ -227,6 +311,7 @@
   <div class="eyebrow reveal">คำถามที่พบบ่อย</div>
   <h2 class="center reveal">สงสัยอะไร ถามได้</h2>
   <div style="margin-top:24px">
+    <details class="reveal"><summary>ใช้ KhaiDee แทน Grab / LINE MAN ได้ไหม?</summary><p>มองเป็น "คู่หู" ดีกว่าครับ — เดลิเวอรีไว้<b>หาลูกค้าใหม่</b> (จ่ายคอม ~30%) ส่วน KhaiDee ทำให้<b>ลูกค้ากลับมาสั่งตรง</b>กับร้านผ่าน LINE โดยไม่หักคอม · ดึงลูกค้าประจำมาช่องทางตรงได้มากเท่าไร ก็ยิ่งประหยัดค่าคอมและเป็นเจ้าของฐานลูกค้าเองมากเท่านั้น</p></details>
     <details class="reveal"><summary>ต้องมีอุปกรณ์อะไรบ้าง?</summary><p>แค่แท็บเล็ตหรือมือถือที่ต่อเน็ตได้ เปิดผ่านเว็บได้เลย ไม่ต้องลงโปรแกรม · เครื่องพิมพ์ใบเสร็จเสริมได้ภายหลัง</p></details>
     <details class="reveal"><summary>ต้องใช้ LINE ไหม?</summary><p>ไม่บังคับ — เริ่มแบบ POS หน้าร้าน + คิว ได้ทันที · อยากให้ลูกค้าสั่งผ่าน LINE ค่อยเชื่อมทีหลัง มีคู่มือ + ทีมช่วย</p></details>
     <details class="reveal"><summary>เงินค่าขายเข้าใคร?</summary><p>เข้าบัญชีร้านคุณโดยตรง (พร้อมเพย์/บัญชีร้าน) — <b>เราไม่ถือเงินแทน</b> ค่าบริการเก็บเฉพาะค่าสมาชิกระบบ</p></details>
