@@ -50,7 +50,9 @@ platform admin → owner email/Google login → PDPA export/erasure → security
       logAudit/listAudit; admin/owner sensitive actions recorded (no secrets); `📜` admin panel +
       `GET /admin/api/audit`. (commit 36b252c)
 - [x] Account lockout on owner-login (ownerHits, 10 fails → 429) — already in place; admin PIN too.
-- [ ] 2FA for the platform-admin console.
+- [x] 2FA for the platform-admin console — optional RFC-6238 TOTP via SAAS_ADMIN_TOTP_SECRET
+      (PIN + code → 8h admin session; PIN-alone rejected when on; brute-force lockout). Setup:
+      scripts/admin-2fa-setup.mjs. Tests test:totp + test:2fa. (commit 6fc432d)
 - [ ] Alerting on suspicious owner-login patterns (lockout done; alerting needs a channel).
 - [ ] Dependency + secret scanning in CI; periodic `npm audit` gate.
 - [ ] Pen-test / external security review before scaling.
