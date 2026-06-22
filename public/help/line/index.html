@@ -2,15 +2,19 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>วิธีเชื่อมต่อ LINE — คู่มือทีละขั้นตอน</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
   :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb}
+  .cta svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+  .brandbar{max-width:680px;margin:0 auto;padding:14px 18px 0}
+  .blogo{font-family:'Kanit',sans-serif;font-weight:700;font-size:18px;color:var(--ink);display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+  .blogo .dot{width:24px;height:24px;border-radius:7px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
   *{box-sizing:border-box}body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0;line-height:1.7}
   .wrap{max-width:680px;margin:0 auto;padding:28px 18px 60px}
-  h1{font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+  h1{font-family:'Kanit','IBM Plex Sans Thai',sans-serif;font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
   .sub{color:var(--mut);margin:0 0 20px}
   .step{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:12px;position:relative}
   .step h2{font-size:16px;font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:10px}
-  .n{width:26px;height:26px;border-radius:50%;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;font-family:'Space Grotesk',sans-serif;flex:none}
+  .n{width:26px;height:26px;border-radius:50%;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;font-family:'Kanit',sans-serif;flex:none}
   .step p,.step li{font-size:14px;margin:6px 0;color:var(--ink)}
   .where{background:var(--inds);border-radius:10px;padding:8px 12px;font-size:13px;margin-top:8px}
   .where b{color:var(--ind)}
@@ -21,6 +25,7 @@
   .easy{background:#e9f9f1;border:1px solid #9be3c6;border-radius:14px;padding:16px;margin:18px 0;font-size:14px}
 </style>
 </head><body>
+<div class="brandbar"><a class="blogo" href="/landing/"><span class="dot">ดี</span> ขายดี</a></div>
 <div class="wrap">
   <h1>เชื่อมต่อ LINE ทีละขั้นตอน</h1>
   <p class="sub">สำหรับแพ็กเกจที่มี LINE (ลูกค้าสั่งผ่านไลน์ + แจ้งคิว + สะสมแต้ม) · ใช้เวลา ~15–20 นาที</p>
@@ -61,17 +66,17 @@
   </div>
 
   <div class="step"><h2><span class="n">6</span> วางค่าเข้าระบบ + กดตรวจสอบ</h2>
-    <p>กลับมาที่หน้าแคชเชียร์ → ⚙ ตั้งค่าระบบ → <b>🟢 เชื่อมต่อ LINE</b> → วาง token / secret / LIFF ID → กด <b>ตรวจสอบ</b> ระบบจะเช็คให้ทันทีว่าต่อกับ @ร้านคุณถูกต้อง ✓</p>
+    <p>กลับมาที่หน้าแคชเชียร์ → ตั้งค่าระบบ → <b>เชื่อมต่อ LINE</b> → วาง token / secret / LIFF ID → กด <b>ตรวจสอบ</b> ระบบจะเช็คให้ทันทีว่าต่อกับ @ร้านคุณถูกต้องเรียบร้อย</p>
   </div>
 
   <div style="text-align:center;margin-top:24px">
     <p style="font-size:14px">ติดขัดตรงไหน? เราช่วยได้</p>
-    <a class="cta" id="support" href="#" target="_blank">💬 ขอความช่วยเหลือ</a>
+    <a class="cta" id="support" href="#" target="_blank"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg> ขอความช่วยเหลือ</a>
     <p style="font-size:12px;color:var(--mut);margin-top:14px"><a href="/help/">← ศูนย์ช่วยเหลือ</a></p>
   </div>
 </div>
 <script>
 (async()=>{ try{ const c=await (await fetch('/api/config')).json(); const a=document.getElementById('support');
-  if(c.supportUrl){ a.href=c.supportUrl; } else { a.href='/help/'; a.textContent='📖 ดูศูนย์ช่วยเหลือ'; } }catch(e){} })();
+  if(c.supportUrl){ a.href=c.supportUrl; } else { a.href='/help/'; a.textContent='ดูศูนย์ช่วยเหลือ'; } }catch(e){} })();
 </script>
 </body></html>
