@@ -137,6 +137,27 @@ async function setupBrand(name, pkg, unit, pin) {
   const bOnly = (await adm('GET', `/admin/api/audit?tenantId=${bId}`, null, { 'x-admin-pin': ADMIN })).data.events || [];
   ok(bOnly.length > 0 && bOnly.every(e => e.tenant_id === bId), 'audit ?tenantId scopes to that tenant only');
 
+  // ===== Tenant erasure (PDPA hard-delete / account close-out) =====
+  section('Tenant erasure (PDPA)');
+  const Z = await setupBrand('Zeta Mart', 'line', 'แก้ว', '7788');
+  const zStore = (await Z.c('GET', `/b/${Z.slug}/api/stores`)).data[0];
+  const zZone = (await Z.c('GET', `/b/${Z.slug}/api/stores/${zStore.id}/zones`)).data[0].id;
+  await Z.c('POST', `/b/${Z.slug}/api/menu`, { name: 'Item Z', price: 30 });
+  const zOrd = await Z.c('POST', `/b/${Z.slug}/api/zones/${zZone}/orders`, { items: [{ name: 'Item Z', price: 30, qty: 1 }] });
+  await Z.c('POST', `/b/${Z.slug}/api/tickets/${zOrd.data.ticketId}/paid`, { method: 'cash' });
+  const zId = (await adm('GET', '/admin/api/tenants', null, { 'x-admin-pin': ADMIN })).data.tenants.find(t => t.slug === Z.slug).id;
+  const zExp = (await adm('GET', `/admin/api/tenants/${zId}/export`, null, { 'x-admin-pin': ADMIN })).data;
+  ok(zExp.menu.some(m => m.name === 'Item Z') && zExp.stores.length >= 1, 'admin export includes the tenant\'s store + menu');
+  ok((await adm('POST', '/admin/api/tenants/1/delete', { confirm: 'yo-dee' }, { 'x-admin-pin': ADMIN })).status === 400, 'cannot delete primary tenant 1');
+  ok((await adm('POST', `/admin/api/tenants/${zId}/delete`, { confirm: 'WRONG' }, { 'x-admin-pin': ADMIN })).status === 400, 'delete without the exact slug → 400');
+  const zDel = await adm('POST', `/admin/api/tenants/${zId}/delete`, { confirm: Z.slug }, { 'x-admin-pin': ADMIN });
+  ok(zDel.status === 200 && zDel.data.deleted === true, 'delete with slug confirmation → ok');
+  ok(zDel.data.counts.stores >= 1 && zDel.data.counts.menu_items >= 1 && zDel.data.counts.orders >= 1, 'erasure removed stores + menu + orders rows');
+  ok((await Z.c('GET', `/b/${Z.slug}/api/config`)).status === 404, 'erased tenant\'s shop → 404 (gone)');
+  ok(!(await adm('GET', '/admin/api/tenants', null, { 'x-admin-pin': ADMIN })).data.tenants.some(t => t.slug === Z.slug), 'erased tenant no longer in the admin list');
+  ok((await A.c('GET', `/b/${A.slug}/api/config`)).status === 200 && (await A.c('GET', `/b/${A.slug}/api/menu`)).data.length >= 1, 'other tenant A intact after the erasure');
+  ok((await adm('GET', '/admin/api/audit', null, { 'x-admin-pin': ADMIN })).data.events.some(e => e.action === 'tenant.delete'), 'erasure recorded in the audit trail');
+
   console.log(`\n${fail ? '❌ DRY RUN FAILED' : '✅ DRY RUN PASSED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('dry-run crashed:', e); process.exit(2); });

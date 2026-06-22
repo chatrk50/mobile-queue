@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -431,6 +431,28 @@ app.post('/admin/api/tenants/:id/reset-pin', adminGate, (req, res) => {
 app.get('/admin/api/audit', adminGate, (req, res) => {
   const tid = req.query.tenantId ? Number(req.query.tenantId) : null;
   res.json({ events: listAudit({ tenantId: tid, limit: Number(req.query.limit) || 200 }) });
+});
+// Export ALL of one tenant's data as JSON (PDPA portability / pre-deletion snapshot).
+app.get('/admin/api/tenants/:id/export', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  if (!getTenant(id)) return res.status(404).json({ error: 'not_found' });
+  res.setHeader('Content-Disposition', `attachment; filename="tenant-${id}-export.json"`);
+  logAudit({ tenantId: id, actor: 'admin', action: 'tenant.export', ip: ipOf(req) });
+  res.json(exportTenant(id));
+});
+// PDPA erasure / account close-out: hard-delete a tenant + every row it owns. Irreversible, so it
+// requires the slug as a typed confirmation, refuses tenant 1, and is audit-logged.
+app.post('/admin/api/tenants/:id/delete', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === 1) return res.status(400).json({ error: 'cannot_delete_primary' });
+  const t = getTenant(id);
+  if (!t) return res.status(404).json({ error: 'not_found' });
+  if (String(req.body?.confirm || '') !== t.slug) return res.status(400).json({ error: 'confirm_mismatch' });
+  try {
+    const r = deleteTenant(id);
+    logAudit({ tenantId: id, actor: 'admin', action: 'tenant.delete', detail: 'slug=' + t.slug + ' rows=' + Object.values(r.counts).reduce((a, b) => a + b, 0), ip: ipOf(req) });
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------

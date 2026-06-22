@@ -87,6 +87,8 @@ window.load=async()=>{ $('err').textContent='';
           : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
         <button class="btn ghost" onclick="setDomain(${t.id})">โดเมน</button>
         <button class="btn ghost" onclick="resetPin(${t.id})">รีเซ็ต PIN</button>
+        ${t.id!==1?`<button class="btn ghost" onclick="exportTenant(${t.id})">⬇️ ส่งออก</button>
+        <button class="btn ghost danger" onclick="deleteTenant(${t.id})">🗑️ ลบถาวร</button>`:''}
       </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
   }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
 const tById=(id)=>TENANTS.find(t=>t.id===id)||{};
@@ -100,6 +102,21 @@ window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate'
 window.resetPin=async(id)=>{ const name=tById(id).name||('#'+id); if(!confirm('รีเซ็ต PIN เจ้าของร้าน "'+name+'"?')) return;
   try{ const d=await api('/admin/api/tenants/'+id+'/reset-pin',{method:'POST',body:'{}'});
     alert('PIN ใหม่ของ "'+name+'": '+d.pin+'\nแจ้งเจ้าของร้านและให้เปลี่ยนทันที'); }catch(e){ $('err').textContent=e.message; } };
+// PDPA: download a tenant's full data as JSON (snapshot before deletion / portability request).
+window.exportTenant=async(id)=>{ const t=tById(id); try{ const data=await api('/admin/api/tenants/'+id+'/export');
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tenant-'+(t.slug||id)+'-export.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); $('err').textContent='';
+  }catch(e){ $('err').textContent='ส่งออกไม่ได้: '+e.message; } };
+// PDPA erasure: hard-delete a tenant. Double-gated — confirm + type the slug exactly.
+window.deleteTenant=async(id)=>{ const t=tById(id); const slug=t.slug||''; const name=t.name||('#'+id);
+  if(!confirm('⚠️ ลบแบรนด์ "'+name+'" ถาวร?\nข้อมูลทั้งหมด (ออเดอร์·เมนู·ลูกค้า·ยอดขาย) จะถูกลบและกู้คืนไม่ได้\nแนะนำให้กด "ส่งออก" สำรองข้อมูลก่อน')) return;
+  const typed=prompt('พิมพ์ slug ของร้านเพื่อยืนยันการลบถาวร:\n\n'+slug); if(typed===null) return;
+  if(typed.trim()!==slug){ $('err').textContent='slug ไม่ตรง — ยกเลิกการลบเพื่อความปลอดภัย'; return; }
+  try{ const r=await api('/admin/api/tenants/'+id+'/delete',{method:'POST',body:JSON.stringify({confirm:slug})});
+    const rows=Object.values(r.counts||{}).reduce((a,b)=>a+b,0);
+    $('err').textContent=''; alert('ลบ "'+name+'" แล้ว ('+rows+' แถวข้อมูล)'); load();
+  }catch(e){ $('err').textContent = e.message==='confirm_mismatch'?'ยืนยันไม่ตรง':(e.message==='cannot_delete_primary'?'ลบร้านหลักไม่ได้':'ลบไม่ได้: '+e.message); } };
 const tName=(id)=>{ const t=tById(id); return t.name?esc(t.name):('#'+id); };
 window.loadAudit=async()=>{ try{ const d=await api('/admin/api/audit?limit=200'); const ev=d.events||[];
   $('auditCount').textContent='('+ev.length+')';

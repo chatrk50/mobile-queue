@@ -811,6 +811,60 @@ export function forgetCustomer(tenantId, { phone = null, key = null } = {}) {
   return { erased: true, found: !!c, key: k };
 }
 
+/** PDPA tenant-level erasure / account close-out: HARD-delete a tenant and EVERY row it owns,
+ *  across all tenant-scoped tables (directly via tenant_id, or via its stores/zones/orders/items/
+ *  ingredients/customers). Refuses tenant 1 (YO-DEE primary). Runs in one transaction so it's all
+ *  or nothing. Returns per-table delete counts. Export first (exportTenant) — this is irreversible.
+ *  Tenders are GLOBAL (shared) and never touched. `t` is validated to an int, so the interpolation
+ *  below carries no injection risk. */
+export function deleteTenant(tenantId) {
+  const t = Number(tenantId);
+  if (!Number.isInteger(t) || t <= 1) throw new Error('cannot_delete_primary');
+  if (!getTenant(t)) throw new Error('not_found');
+  const counts = {};
+  const del = (label, sql) => { counts[label] = db.prepare(sql).run().changes || 0; };
+  const stores = `(SELECT id FROM stores WHERE tenant_id=${t})`;
+  const zones = `(SELECT id FROM zones WHERE store_id IN ${stores})`;
+  const orders = `(SELECT id FROM orders WHERE branch_id IN ${stores})`;
+  const tickets = `(SELECT id FROM tickets WHERE store_id IN ${stores})`;
+  const items = `(SELECT id FROM menu_items WHERE tenant_id=${t})`;
+  const ings = `(SELECT id FROM ingredients WHERE tenant_id=${t})`;
+  const tiers = `(SELECT id FROM price_tiers WHERE tenant_id=${t})`;
+  const custs = `(SELECT line_user_id FROM customers WHERE tenant_id=${t})`;
+  const staff = `(SELECT id FROM staff WHERE tenant_id=${t})`;
+  db.transaction(() => {
+    // children first (FK-safe even with foreign_keys=ON)
+    del('order_items', `DELETE FROM order_items WHERE order_id IN ${orders}`);
+    del('slips', `DELETE FROM slips WHERE order_id IN ${orders} OR ticket_id IN ${tickets}`);
+    del('loyalty_moves', `DELETE FROM loyalty_moves WHERE customer_key IN ${custs} OR order_id IN ${orders}`);
+    del('sale_events', `DELETE FROM sale_events WHERE branch_id IN ${stores} OR order_id IN ${orders} OR ticket_id IN ${tickets}`);
+    del('orders', `DELETE FROM orders WHERE branch_id IN ${stores}`);
+    del('daily_stats', `DELETE FROM daily_stats WHERE zone_id IN ${zones}`);
+    del('tickets', `DELETE FROM tickets WHERE store_id IN ${stores}`);
+    del('zones', `DELETE FROM zones WHERE store_id IN ${stores}`);
+    del('recipes', `DELETE FROM recipes WHERE menu_item_id IN ${items} OR ingredient_id IN ${ings}`);
+    del('branch_menu', `DELETE FROM branch_menu WHERE branch_id IN ${stores} OR item_id IN ${items}`);
+    del('item_prices', `DELETE FROM item_prices WHERE item_id IN ${items} OR tier_id IN ${tiers} OR branch_id IN ${stores}`);
+    del('stock_moves', `DELETE FROM stock_moves WHERE ingredient_id IN ${ings} OR branch_id IN ${stores}`);
+    del('cash_sessions', `DELETE FROM cash_sessions WHERE branch_id IN ${stores}`);
+    del('sales_history', `DELETE FROM sales_history WHERE branch_id IN ${stores}`);
+    del('staff_branches', `DELETE FROM staff_branches WHERE branch_id IN ${stores} OR staff_id IN ${staff}`);
+    // roots
+    del('menu_items', `DELETE FROM menu_items WHERE tenant_id=${t}`);
+    del('ingredients', `DELETE FROM ingredients WHERE tenant_id=${t}`);
+    del('rewards', `DELETE FROM rewards WHERE tenant_id=${t}`);
+    del('customers', `DELETE FROM customers WHERE tenant_id=${t}`);
+    del('channels', `DELETE FROM channels WHERE tenant_id=${t}`);
+    del('price_tiers', `DELETE FROM price_tiers WHERE tenant_id=${t}`);
+    del('staff', `DELETE FROM staff WHERE tenant_id=${t}`);
+    del('stores', `DELETE FROM stores WHERE tenant_id=${t}`);
+    del('settings', `DELETE FROM settings WHERE key LIKE 't${t}:%'`);
+    del('audit_log', `DELETE FROM audit_log WHERE tenant_id=${t}`);
+    del('tenants', `DELETE FROM tenants WHERE id=${t}`);
+  })();
+  return { deleted: true, tenantId: t, counts };
+}
+
 /** Seed the per-tenant defaults a brand-new tenant needs to be usable: price tiers + sales
  *  channels (tenders are shared globally). Idempotent. Settings use fallbacks so need no seed. */
 export function seedTenantDefaults(tenantId) {
