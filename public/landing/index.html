@@ -1,0 +1,149 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ขายดี (KhaiDee) — ระบบ POS + คิว + LINE สำหรับร้านเล็ก</title>
+<meta name="description" content="เปิดร้านขายได้ใน 1 นาที — POS หน้าร้าน + ระบบคิว + สั่งผ่าน LINE + สะสมแต้ม สำหรับร้านอาหาร คาเฟ่ ร้านเครื่องดื่ม ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap');
+  :root{--ind:#6366f1;--ind2:#4f46e5;--inds:rgba(99,102,241,.10);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb;--ok:#178a72}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;color:var(--ink);margin:0;line-height:1.7;background:#fff;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:'Space Grotesk','IBM Plex Sans Thai',sans-serif;letter-spacing:-.02em;line-height:1.2}
+  a{color:var(--ind);text-decoration:none}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 20px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border-radius:12px;padding:13px 22px;font-weight:600;font-size:15px;cursor:pointer;border:1px solid transparent}
+  .btn.primary{background:var(--ind);color:#fff}
+  .btn.primary:hover{background:var(--ind2)}
+  .btn.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .logo .dot{width:26px;height:26px;border-radius:8px;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .navlinks{display:flex;align-items:center;gap:10px}
+  /* hero */
+  .hero{background:radial-gradient(1100px 520px at 50% -10%,var(--inds),#fff);text-align:center;padding:64px 0 48px}
+  .hero h1{font-size:46px;font-weight:700;margin:0 0 16px}
+  .hero h1 .hl{color:var(--ind)}
+  .hero p.sub{font-size:19px;color:var(--mut);max-width:620px;margin:0 auto 28px}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .micro{font-size:13px;color:var(--mut);margin-top:14px}
+  .proof{margin-top:34px;font-size:14px;color:var(--mut)}
+  .proof b{color:var(--ink)}
+  /* sections */
+  section{padding:54px 0}
+  .eyebrow{color:var(--ind);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;text-align:center}
+  h2.center{font-size:30px;text-align:center;margin:6px 0 8px}
+  .lead{text-align:center;color:var(--mut);max-width:620px;margin:0 auto 36px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px}
+  .card .ic{width:42px;height:42px;border-radius:11px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px}
+  .card h3{font-size:17px;margin:0 0 6px}
+  .card p{font-size:14px;color:var(--mut);margin:0}
+  /* pricing */
+  .pricewrap{background:var(--bg);border-radius:20px;padding:36px 20px}
+  .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:880px;margin:0 auto}
+  .price{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+  .price.feat{border:2px solid var(--ind);box-shadow:0 10px 30px rgba(99,102,241,.15)}
+  .price .tag{font-size:12px;font-weight:700;color:var(--ind);text-transform:uppercase;letter-spacing:.05em}
+  .price .amt{font-size:32px;font-weight:700;font-family:'Space Grotesk',sans-serif;margin:6px 0 2px}
+  .price .amt small{font-size:14px;color:var(--mut);font-weight:400}
+  .price ul{list-style:none;padding:0;margin:14px 0 0;text-align:left;font-size:14px}
+  .price li{padding:5px 0 5px 24px;position:relative;color:var(--ink)}
+  .price li:before{content:'✓';position:absolute;left:0;color:var(--ok);font-weight:700}
+  .founder{max-width:880px;margin:18px auto 0;background:linear-gradient(135deg,#eef2ff,#fdf4ff);border:1px solid #c7d2fe;border-radius:16px;padding:18px 22px;text-align:center;font-size:15px}
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:880px;margin:0 auto}
+  .step{text-align:center}
+  .step .n{width:40px;height:40px;border-radius:50%;background:var(--ind);color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 10px}
+  details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:8px;max-width:760px;margin-left:auto;margin-right:auto}
+  summary{font-weight:500;cursor:pointer}
+  details p{font-size:14px;color:var(--mut)}
+  .final{background:var(--ind);color:#fff;text-align:center;padding:56px 0;border-radius:0}
+  .final h2{font-size:30px;margin:0 0 10px;color:#fff}
+  .final p{color:#dfe1fb;margin:0 0 22px}
+  .final .btn.primary{background:#fff;color:var(--ind)}
+  footer{padding:34px 0;border-top:1px solid var(--line);color:var(--mut);font-size:13px;text-align:center}
+  footer a{color:var(--mut);margin:0 8px}
+  @media(max-width:760px){ .grid,.prices,.steps{grid-template-columns:1fr} .hero h1{font-size:34px} h2.center{font-size:25px} }
+</style>
+</head><body>
+
+<nav><div class="wrap">
+  <div class="logo"><span class="dot">ดี</span> ขายดี <span style="font-size:13px;color:var(--mut);font-weight:400">KhaiDee</span></div>
+  <div class="navlinks"><a href="/login/">เข้าสู่ระบบ</a><a class="btn primary" href="/signup/">เปิดร้านฟรี</a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>เปิดร้าน <span class="hl">ขายได้ใน 1 นาที</span></h1>
+  <p class="sub">ระบบ POS + คิว + สั่งผ่าน LINE + สะสมแต้ม สำหรับร้านอาหาร คาเฟ่ ร้านเครื่องดื่ม — ใช้บนแท็บเล็ตหรือมือถือ ไม่ต้องลงโปรแกรม</p>
+  <div class="cta-row">
+    <a class="btn primary" href="/signup/">ทดลองฟรี 60 วัน →</a>
+    <a class="btn ghost" href="#features">ดูฟีเจอร์ทั้งหมด</a>
+  </div>
+  <div class="micro">ไม่ต้องใส่บัตรเครดิต · เริ่มขายได้ทันที · ยกเลิกเมื่อไรก็ได้</div>
+  <p class="proof">เริ่มจากร้านจริง — <b>YO-DEE Yogurt</b> ใช้ขายหน้าร้าน + รับออเดอร์ผ่าน LINE ทุกวัน</p>
+</div></header>
+
+<section id="features"><div class="wrap">
+  <div class="eyebrow">ทุกอย่างในระบบเดียว</div>
+  <h2 class="center">ขายหน้าร้าน ถึงรับออเดอร์ออนไลน์</h2>
+  <p class="lead">ไม่ต้องต่อหลายระบบ — POS, คิว, LINE, แต้มสะสม และรายงานกำไร อยู่ที่เดียว</p>
+  <div class="grid">
+    <div class="card"><div class="ic">🧾</div><h3>POS หน้าร้าน</h3><p>กดสั่ง คิดเงิน ทอนเงิน รับเงินสด/พร้อมเพย์ แยกบิล รวมบิล ครบจบบนจอเดียว</p></div>
+    <div class="card"><div class="ic">🎫</div><h3>ระบบคิวอัตโนมัติ</h3><p>ออกบัตรคิว แจ้งลูกค้าผ่านจอ + LINE ลดความวุ่นวายหน้าร้านช่วงพีค</p></div>
+    <div class="card"><div class="ic">🟢</div><h3>สั่งผ่าน LINE</h3><p>ลูกค้าสแกนสั่งเองในไลน์ รับเลขคิว จ่ายเงิน แล้วมารับ — ไม่ต้องต่อแถว</p></div>
+    <div class="card"><div class="ic">⭐</div><h3>สะสมแต้ม / ของรางวัล</h3><p>บัตรสะสมแต้มในตัว ดึงลูกค้าให้กลับมาซ้ำ จดจำลูกค้าประจำได้</p></div>
+    <div class="card"><div class="ic">📊</div><h3>รายงาน + กำไร</h3><p>ยอดขาย กำไรขาดทุน สินค้าขายดี ชั่วโมงพีค ส่งออก Excel ได้</p></div>
+    <div class="card"><div class="ic">🏪</div><h3>หลายสาขา</h3><p>ดูแลทุกสาขาจากที่เดียว เมนูกลาง ราคาแยกช่องทาง พนักงานแยกสิทธิ์</p></div>
+  </div>
+</div></section>
+
+<section style="background:var(--bg)"><div class="wrap">
+  <div class="eyebrow">เริ่มง่ายมาก</div>
+  <h2 class="center">3 ขั้นตอน เปิดร้านพร้อมขาย</h2>
+  <p class="lead">ไม่ต้องมีพื้นฐานเทคนิค — ระบบมีคู่มือและเมนูตัวอย่างให้</p>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><h3>สมัคร</h3><p>กรอกชื่อร้าน + ตั้ง PIN ใช้เวลาไม่ถึงนาที</p></div>
+    <div class="step"><div class="n">2</div><h3>ใส่เมนู</h3><p>เลือกเมนูตัวอย่างตามประเภทร้าน แล้วแก้ได้ หรือเพิ่มเอง</p></div>
+    <div class="step"><div class="n">3</div><h3>เปิดขาย</h3><p>รับออเดอร์หน้าร้านได้ทันที · เชื่อม LINE เมื่อพร้อม</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">ราคาตรงไปตรงมา</div>
+  <h2 class="center">เริ่มฟรี จ่ายเมื่อโตขึ้น</h2>
+  <p class="lead">ทดลอง Pro ฟรี 60 วัน ไม่ต้องใส่บัตร · ยอดขายเข้าบัญชีร้านโดยตรง เราไม่ถือเงินแทน</p>
+  <div class="pricewrap">
+    <div class="prices">
+      <div class="price"><div class="tag">Free</div><div class="amt">฿0</div><ul><li>1 สาขา</li><li>POS + คิว หน้าร้าน</li><li>รายงานพื้นฐาน</li></ul></div>
+      <div class="price feat"><div class="tag">Pro · ยอดนิยม</div><div class="amt">฿299<small>/เดือน</small></div><ul><li>สูงสุด 3 สาขา</li><li>สั่งผ่าน LINE + สะสมแต้ม</li><li>รายงานละเอียด + Excel</li><li>รายปี ฿2,990 (ประหยัด 2 เดือน)</li></ul></div>
+      <div class="price"><div class="tag">Business</div><div class="amt">฿799<small>/เดือน</small></div><ul><li>ไม่จำกัดสาขา</li><li>โดเมนของร้านเอง</li><li>ทุกฟีเจอร์ Pro</li><li>รายปี ฿7,990</li></ul></div>
+    </div>
+    <div class="founder">🚀 <b>โปรผู้ก่อตั้ง 50 ร้านแรก</b> — ล็อกราคา Pro เพียง <b>฿199/เดือน ตลอดชีพ</b> + ทีมช่วยตั้งค่าให้</div>
+  </div>
+</div></section>
+
+<section style="background:var(--bg)"><div class="wrap">
+  <div class="eyebrow">คำถามที่พบบ่อย</div>
+  <h2 class="center">สงสัยอะไร ถามได้</h2>
+  <div style="margin-top:24px">
+    <details><summary>ต้องมีอุปกรณ์อะไรบ้าง?</summary><p>แค่แท็บเล็ตหรือมือถือที่ต่อเน็ตได้ เปิดผ่านเว็บได้เลย ไม่ต้องลงโปรแกรม · เครื่องพิมพ์ใบเสร็จเสริมได้ภายหลัง</p></details>
+    <details><summary>ต้องใช้ LINE ไหม?</summary><p>ไม่บังคับ — เริ่มแบบ POS หน้าร้าน + คิว ได้ทันที · อยากให้ลูกค้าสั่งผ่าน LINE ค่อยเชื่อมทีหลัง มีคู่มือ + ทีมช่วย</p></details>
+    <details><summary>เงินค่าขายเข้าใคร?</summary><p>เข้าบัญชีร้านคุณโดยตรง (พร้อมเพย์/บัญชีร้าน) — <b>เราไม่ถือเงินแทน</b> ค่าบริการเก็บเฉพาะค่าสมาชิกระบบ</p></details>
+    <details><summary>ยกเลิกได้ไหม?</summary><p>ได้ทุกเมื่อ ใช้ได้จนสิ้นรอบที่จ่ายไว้ · ข้อมูลส่งออกได้ (PDPA)</p></details>
+  </div>
+</div></section>
+
+<section class="final"><div class="wrap">
+  <h2>พร้อมให้ร้านคุณขายดีหรือยัง?</h2>
+  <p>เปิดร้านบน KhaiDee วันนี้ — ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร</p>
+  <a class="btn primary" href="/signup/">เปิดร้านฟรี →</a>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="logo" style="justify-content:center;margin-bottom:8px;font-size:17px"><span class="dot" style="width:22px;height:22px;font-size:13px">ดี</span> ขายดี · KhaiDee</div>
+  <div><a href="/signup/">เปิดร้าน</a> · <a href="/login/">เข้าสู่ระบบ</a> · <a href="/help/">ศูนย์ช่วยเหลือ</a> · <a href="/privacy/">ความเป็นส่วนตัว</a> · <a href="/terms/">ข้อกำหนด</a></div>
+  <p style="margin-top:12px">© 2026 KhaiDee · ระบบขายที่ทำให้ร้านคุณขายดี</p>
+</div></footer>
+
+</body></html>
