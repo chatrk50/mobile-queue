@@ -93,7 +93,9 @@ auto-purge-on-close still optional) · [ ] written data-retention policy doc.
 ## 6. GTM / growth
 **Done:** pricing, trial, founder, referral, landing/pricing mockup.
 **Must:** [ ] case study (YO-DEE) + 3–5 founder testimonials · [ ] LINE OA support channel.
-**Should:** [ ] vertical templates (yogurt/coffee/food) · [ ] FB/LINE community seeding ·
+**Should:** [x] vertical templates (yogurt/coffee/tea/food/bakery) — one-tap starter menus in the
+cashier empty state + `/api/menu-templates` & `/api/admin/apply-template` (commit 3dde7af) ·
+[ ] FB/LINE community seeding ·
 [x] onboarding wizard (first-menu) — first-run activation checklist in the cashier (add item →
 brand → LINE → open), owner-only, auto-hides once activated (commit fe5cc55) · [x] referral
 tracking dashboard — 🎁 admin panel (invite code · referred-by · count + % via referral + top
