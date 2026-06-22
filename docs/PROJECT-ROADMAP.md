@@ -104,7 +104,10 @@ referrers); GET /admin/api/referrals (commit f3f8d4d).
 ## 7. Support / ops
 **Must:** [ ] LINE OA support + FAQ + short Thai videos · [x] runbook (suspend, reset-PIN, refund,
 PDPA, 2FA, incident) — [`SUPPORT-RUNBOOK.md`](SUPPORT-RUNBOOK.md).
-**Should:** [ ] in-app help/tours · [ ] admin "impersonate for support" (audited) · [ ] churn/usage view.
+**Should:** [x] in-app help/tours (help center + /help/line guide + first-run checklist) ·
+[ ] admin "impersonate for support" (audited — deferred: adds attack surface, needs owner sign-off) ·
+[x] churn/usage view — 📊 admin health panel (expiring-soon, inactive, plan mix, MRR estimate)
+(commit f1d64de).
 
 ---
 
