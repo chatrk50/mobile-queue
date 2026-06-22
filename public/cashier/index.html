@@ -1404,6 +1404,37 @@ window.holdBill=async()=>{
   catch(e){ if(!cart.length){ restoreBill(snapshot,token); toast('⚠️ พักบิลไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน'); }
     else { toast('⚠️ พักบิลก่อนหน้าไม่สำเร็จ ('+err(e)+') กรุณาทำใหม่'); } } };
 
+// First-run activation checklist (SaaS owner, empty shop). Guides a brand-new tenant from an
+// empty cashier to a sellable shop: add first item → brand → connect LINE → open. Vanishes once
+// the menu has items (the activation gate) or the owner hides it. Read-only/additive.
+window.onbAddMenu=async()=>{ try{ await showMenu(); }catch(e){} try{ editMenuForm('new'); }catch(e){} };
+window.onbHide=()=>{ try{ localStorage.setItem('yodee_onb_hide','1'); }catch(e){} const c=document.getElementById('onbWrap'); if(c) c.remove(); };
+function onboardingCard(){
+  const own=(!ME||ME.role==='owner');
+  if(!own || !CFG || !CFG.saas) return '';
+  if(MENU && MENU.length>0) return '';                       // shop has items → activated, hide
+  try{ if(localStorage.getItem('yodee_onb_hide')==='1') return ''; }catch(e){}
+  const isLine = CFG.lineFeatures!==false && CFG.posOnly!==true;
+  const brandDone = !!(CFG.brand && CFG.brand.logo && CFG.brand.logo.indexOf('data:')===0);   // custom upload, not the default logo
+  const lineDone = !!CFG.lineEnabled;
+  const openDone = !!CFG.open;
+  const bn = (CFG.brand && CFG.brand.name) ? esc(CFG.brand.name) : 'ร้านของคุณ';
+  const row=(done,ic,label,sub,onclick)=> `<button onclick="${onclick}" style="display:flex;width:100%;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:8px;cursor:pointer">
+      <span style="width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;${done?'background:#178a72;color:#fff':'background:var(--inds,#eef2ff);color:var(--accent,#6366f1);border:1px dashed var(--accent,#6366f1)'}">${done?'✓':''}</span>
+      <span style="font-size:20px;flex:none">${ic}</span>
+      <span style="flex:1;text-align:left"><b style="font-size:14px">${label}</b><br><span class="muted" style="font-size:12px">${sub}</span></span>
+      <span style="color:var(--accent,#6366f1);font-size:18px;flex:none">→</span></button>`;
+  let rows = row(false,'🧋','เพิ่มเมนูแรกของคุณ','สร้างสินค้าชิ้นแรกแล้วเริ่มขายได้ทันที','onbAddMenu()');
+  rows += row(brandDone,'🎨','ตั้งค่าแบรนด์','โลโก้ · สี · ชื่อร้าน','showFeatures()');
+  if(isLine) rows += row(lineDone,'🟢','เชื่อมต่อ LINE','ให้ลูกค้าสั่ง/รับคิวผ่านไลน์ — มีคู่มือในตัว','showFeatures()');
+  rows += row(openDone,'🏪','เปิดร้าน เริ่มรับออเดอร์','สลับสถานะเป็น "เปิด" เมื่อพร้อมขาย','toggleStore()');
+  return `<div id="onbWrap" style="background:linear-gradient(135deg,#eef2ff,#fdf4ff);border:1px solid var(--line);border-radius:16px;padding:16px 16px 10px;margin:2px 2px 14px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px">
+      <div><div style="font-size:17px;font-weight:700">👋 ยินดีต้อนรับสู่ ${bn}</div>
+        <div class="muted" style="font-size:13px">ทำตามขั้นตอนนี้เพื่อเปิดร้านให้พร้อมขาย</div></div>
+      <button onclick="onbHide()" class="muted" style="background:none;border:none;font-size:12px;cursor:pointer;flex:none">ซ่อน</button>
+    </div>${rows}</div>`;
+}
 async function boot(){
   try{ CFG=await (await fetch('/api/config')).json(); }catch(e){ CFG={}; }
   try{ TENDERS=await (await fetch('/api/tenders')).json(); }catch(e){ TENDERS=[]; }
@@ -1415,6 +1446,7 @@ async function boot(){
   zones=[]; let html = mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
     + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">📊 สรุปวันนี้ ▾</button>'
     + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
+  html = onboardingCard() + html;            // first-run activation checklist (empty SaaS shop)
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     html += `<h2 style="margin:20px 2px 2px;font-size:15px;color:var(--accent)">${esc(s.name)}</h2>`;
