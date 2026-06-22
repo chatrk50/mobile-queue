@@ -34,6 +34,7 @@
     <div class="bar">
       <h1>Tenants <span class="muted" id="count" style="font-size:14px;font-weight:400"></span></h1>
       <div style="display:flex;gap:8px">
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()">🎁 แนะนำเพื่อน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()">📜 บันทึกการใช้งาน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="load()">↻ รีเฟรช</button>
       </div>
@@ -49,6 +50,13 @@
       <div class="muted" style="font-size:12px;margin-bottom:6px">การกระทำที่อ่อนไหว (ระงับ/เปลี่ยนแพลน/รีเซ็ต PIN/แก้ LINE/PDPA) — ไม่เก็บข้อมูลลับ (token/PIN ไม่ถูกบันทึก)</div>
       <table><thead><tr><th>เวลา</th><th>ร้าน</th><th>ผู้กระทำ</th><th>การกระทำ</th><th>รายละเอียด</th><th>IP</th></tr></thead>
         <tbody id="auditRows"></tbody></table>
+    </div>
+    <div id="refPanel" style="display:none;margin-top:18px">
+      <div class="bar"><h1 style="font-size:18px">🎁 แนะนำเพื่อน (referrals)</h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('refPanel').style.display='none'">✕ ปิด</button></div>
+      <div id="refSummary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px"></div>
+      <table><thead><tr><th>ร้าน</th><th>โค้ดเชิญ</th><th>มาจากการแนะนำของ</th><th>แนะนำสำเร็จ</th></tr></thead>
+        <tbody id="refRows"></tbody></table>
     </div>
   </div>
 </div>
@@ -118,6 +126,17 @@ window.deleteTenant=async(id)=>{ const t=tById(id); const slug=t.slug||''; const
     $('err').textContent=''; alert('ลบ "'+name+'" แล้ว ('+rows+' แถวข้อมูล)'); load();
   }catch(e){ $('err').textContent = e.message==='confirm_mismatch'?'ยืนยันไม่ตรง':(e.message==='cannot_delete_primary'?'ลบร้านหลักไม่ได้':'ลบไม่ได้: '+e.message); } };
 const tName=(id)=>{ const t=tById(id); return t.name?esc(t.name):('#'+id); };
+// Referral / growth overview.
+window.loadReferrals=async()=>{ try{ const d=await api('/admin/api/referrals'); const s=d.summary||{}; const rows=d.rows||[];
+  const chip=(label,val)=>`<div style="background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:110px"><div class="muted" style="font-size:12px">${label}</div><div style="font-size:20px;font-weight:700">${val}</div></div>`;
+  const top=(s.topReferrers||[]).map(r=>esc(r.name)+' ('+r.count+')').join(' · ')||'—';
+  $('refSummary').innerHTML = chip('ร้านทั้งหมด',s.tenants||0)+chip('มาจากการแนะนำ',(s.viaReferral||0)+' ('+(s.referralPct||0)+'%)')+chip('ผู้แนะนำเด่น',top);
+  $('refRows').innerHTML = rows.length ? rows.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="slug">/b/${esc(r.slug)}</div></td>
+      <td><code>${esc(r.referralCode||'—')}</code></td>
+      <td>${r.referredByName?esc(r.referredByName):'<span class="muted">—</span>'}</td>
+      <td>${r.referredCount>0?('<b>'+r.referredCount+'</b>'):'<span class="muted">0</span>'}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="muted" style="text-align:center;padding:12px">ยังไม่มีข้อมูล</td></tr>';
+  $('refPanel').style.display=''; $('refPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
 window.loadAudit=async()=>{ try{ const d=await api('/admin/api/audit?limit=200'); const ev=d.events||[];
   $('auditCount').textContent='('+ev.length+')';
   $('auditRows').innerHTML = ev.length ? ev.map(e=>{ const dt=new Date(e.at); const ts=isNaN(dt)?'':dt.toLocaleString('th-TH',{hour12:false});

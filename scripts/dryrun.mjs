@@ -137,6 +137,22 @@ async function setupBrand(name, pkg, unit, pin) {
   const bOnly = (await adm('GET', `/admin/api/audit?tenantId=${bId}`, null, { 'x-admin-pin': ADMIN })).data.events || [];
   ok(bOnly.length > 0 && bOnly.every(e => e.tenant_id === bId), 'audit ?tenantId scopes to that tenant only');
 
+  // ===== Referral tracking =====
+  section('Referral tracking (growth)');
+  const refX = client();
+  const rx = (await refX('POST', '/api/signup', { name: 'Referrer Co', package: 'pos', pin: '5151' })).data;
+  ok(!!rx.referralCode, `referrer signup → invite code ${rx.referralCode}`);
+  const refY = client();
+  const ry = (await refY('POST', '/api/signup', { name: 'Referee Co', package: 'pos', pin: '5252', ref: rx.referralCode })).data;
+  ok(ry.referred === true, 'referee signup with the code → referred:true');
+  ok((await adm('GET', '/admin/api/referrals')).status === 401, 'referrals without admin PIN → 401');
+  const refData = (await adm('GET', '/admin/api/referrals', null, { 'x-admin-pin': ADMIN })).data;
+  const xRow = refData.rows.find((r) => r.slug === rx.slug);
+  const yRow = refData.rows.find((r) => r.slug === ry.slug);
+  ok(xRow && xRow.referredCount >= 1, 'admin referrals: referrer shows referredCount ≥ 1');
+  ok(yRow && yRow.referredByName === 'Referrer Co', 'admin referrals: referee shows who referred it');
+  ok(refData.summary.viaReferral >= 1 && refData.summary.topReferrers.some((t) => t.name === 'Referrer Co'), 'referral summary metrics + top referrer');
+
   // ===== Tenant erasure (PDPA hard-delete / account close-out) =====
   section('Tenant erasure (PDPA)');
   const Z = await setupBrand('Zeta Mart', 'line', 'แก้ว', '7788');

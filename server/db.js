@@ -777,6 +777,28 @@ export function applyTenantReferral(newTenantId, code, days = 30) {
   db.prepare('UPDATE tenants SET referred_by=? WHERE id=?').run(ref.referral_code, newTenantId);
   return true;
 }
+/** Platform referral overview for the admin console: per-tenant invite code, who referred them,
+ *  and how many they've referred — plus headline growth metrics. Read-only. */
+export function referralStats() {
+  const all = db.prepare('SELECT id, name, slug, referral_code, referred_by, created_at FROM tenants ORDER BY id').all();
+  const byCode = new Map(all.map((t) => [t.referral_code, t]));
+  const referredCount = {};
+  for (const t of all) { if (t.referred_by) referredCount[t.referred_by] = (referredCount[t.referred_by] || 0) + 1; }
+  const rows = all.map((t) => ({
+    id: t.id, name: t.name, slug: t.slug, createdAt: t.created_at,
+    referralCode: t.referral_code || null,
+    referredByName: t.referred_by ? (byCode.get(t.referred_by)?.name || t.referred_by) : null,
+    referredCount: referredCount[t.referral_code] || 0,
+  }));
+  const real = rows.filter((r) => r.id > 1);                 // exclude the primary YO-DEE tenant from growth %
+  const viaReferral = real.filter((r) => r.referredByName).length;
+  const topReferrers = rows.filter((r) => r.referredCount > 0).sort((a, b) => b.referredCount - a.referredCount).slice(0, 5)
+    .map((r) => ({ name: r.name, count: r.referredCount }));
+  return {
+    summary: { tenants: real.length, viaReferral, referralPct: real.length ? Math.round((viaReferral / real.length) * 100) : 0, topReferrers },
+    rows,
+  };
+}
 // ---------- PDPA: data portability + erasure ----------
 /** Full export of a tenant's business data (data portability). Owner-gated at the route. */
 export function exportTenant(tenantId) {

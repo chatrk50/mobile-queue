@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -432,6 +432,8 @@ app.get('/admin/api/audit', adminGate, (req, res) => {
   const tid = req.query.tenantId ? Number(req.query.tenantId) : null;
   res.json({ events: listAudit({ tenantId: tid, limit: Number(req.query.limit) || 200 }) });
 });
+// Referral / growth overview (who invited whom, counts, headline metrics).
+app.get('/admin/api/referrals', adminGate, (req, res) => res.json(referralStats()));
 // Export ALL of one tenant's data as JSON (PDPA portability / pre-deletion snapshot).
 app.get('/admin/api/tenants/:id/export', adminGate, (req, res) => {
   const id = Number(req.params.id);
