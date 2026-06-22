@@ -1,0 +1,23 @@
+# gitleaks config — secret-leak scanning in CI (extends the built-in rule set).
+# Real secrets never live in git: .env is gitignored, render-saas.yaml uses sync:false (names only),
+# and code reads process.env.*. This allowlist suppresses false positives from TEST fixtures +
+# placeholder example env, so a real leak stands out.
+title = "mobile-queue gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test-only values + placeholder example env — not real secrets"
+paths = [
+  '''\.env\.example$''',                 # placeholders only (empty token values)
+  '''scripts/test-.*\.(mjs|js)$''',      # test fixtures (TOTP RFC seed, dummy session secret)
+  '''scripts/dryrun\.mjs$''',
+  '''\.github/workflows/ci\.yml$''',      # CI test-only SESSION_SECRET / admin PIN
+]
+regexes = [
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''', # RFC 6238 sample TOTP seed (test vectors)
+  '''sec-test-secret-1234567890''',        # local test SESSION_SECRET
+  '''ci-test-session-secret-0123456789''', # CI test SESSION_SECRET
+  '''(?i)adminsecret''',                   # test admin PIN
+]
