@@ -29,7 +29,9 @@
   .btn.ghost{background:var(--glass);border-color:var(--line);color:var(--ink);backdrop-filter:blur(8px)}
   .btn.ghost:hover{transform:translateY(-2px)}
   /* glass nav */
-  nav{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.62);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border-bottom:1px solid var(--glass-brd)}
+  /* hidden at the very top; slides down from above once the user scrolls a bit (Framer-style, vanilla) */
+  nav{position:fixed;left:0;right:0;top:0;z-index:30;background:rgba(255,255,255,.72);backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);border-bottom:1px solid var(--glass-brd);transform:translateY(-100%);transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s ease}
+  nav.nav-show{transform:translateY(0);box-shadow:0 6px 24px rgba(31,41,90,.09)}
   nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
   .logo{font-size:22px;color:var(--ink);display:flex;align-items:center;gap:9px;font-weight:700}
   .logo .dot{width:30px;height:30px;border-radius:9px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(99,102,241,.4)}
@@ -93,11 +95,36 @@
   .final .btn.primary{background:#fff;color:var(--ind);box-shadow:0 10px 30px rgba(0,0,0,.2)}
   footer{padding:36px 0;border-top:1px solid var(--line);color:var(--mut);font-size:13px;text-align:center}
   footer a{color:var(--mut);margin:0 8px}
+  /* product demo (animated mockup) */
+  .demo{position:relative;display:flex;justify-content:center;align-items:center;gap:26px;flex-wrap:wrap}
+  .tablet{width:min(560px,92vw);background:var(--glass);border:1px solid var(--glass-brd);border-radius:22px;box-shadow:var(--glass-sh);backdrop-filter:blur(10px);overflow:hidden;animation:floaty 7s ease-in-out infinite}
+  .tbar{display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
+  .tdot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(23,138,114,.15)}
+  .tnow{margin-left:auto;font-size:12.5px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
+  .tbody{padding:16px 18px;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,.45)}
+  .ocard{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px 14px;opacity:0}
+  .tablet.in .ocard{animation:cardIn .55s cubic-bezier(.22,1,.36,1) forwards}
+  .tablet.in .o1{animation-delay:.06s}.tablet.in .o2{animation-delay:.26s}.tablet.in .o3{animation-delay:.46s}
+  .onum{width:46px;height:46px;border-radius:11px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;font-family:'Kanit',sans-serif;font-weight:600;font-size:14px;flex:none}
+  .oinfo{flex:1;min-width:0}.oinfo b{display:block;font-size:14px}.oinfo span{font-size:12.5px;color:var(--mut)}
+  .opay{font-family:'Kanit',sans-serif;font-weight:600}
+  .opaid{font-size:12px;color:var(--ok);background:rgba(23,138,114,.12);padding:4px 10px;border-radius:9px}
+  .newbadge{font-size:11px;font-weight:600;color:#fff;background:var(--ind);padding:4px 10px;border-radius:9px;font-family:'Kanit',sans-serif;animation:pulse 1.6s ease-in-out infinite}
+  .phone{width:206px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:26px;box-shadow:var(--glass-sh);backdrop-filter:blur(10px);padding:15px;animation:floaty 7s ease-in-out infinite;animation-delay:-3.5s}
+  .phone .pbar{font-family:'Kanit',sans-serif;font-weight:600;font-size:13px;color:var(--ok);display:flex;align-items:center;gap:6px;margin-bottom:11px}
+  .pbubble{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 13px;font-size:13px;color:var(--mut)}
+  .pbubble b{font-family:'Kanit',sans-serif;color:var(--ink)}
+  .pq{margin-top:9px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border-radius:13px;padding:11px 13px;font-size:12.5px;text-align:center}
+  .pq b{font-family:'Kanit',sans-serif;font-size:20px;display:block;margin:2px 0}
+  @keyframes cardIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.09);opacity:.85}}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  @media(max-width:760px){ .phone{display:none} }
   /* scroll reveal */
   .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
   .reveal.in{opacity:1;transform:none}
   @media(max-width:760px){ .grid,.prices,.steps{grid-template-columns:1fr} .sec{grid-template-columns:repeat(2,1fr)} .hero h1{font-size:38px} h2.center{font-size:26px} }
-  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} .reveal{opacity:1;transform:none} html{scroll-behavior:auto} }
+  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} .reveal,.ocard{opacity:1!important;transform:none!important} html{scroll-behavior:auto} }
 </style>
 </head><body>
 <div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
@@ -123,6 +150,27 @@
     <span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ใช้งานจริงโดย YO-DEE</span>
   </div>
 </div></header>
+
+<section style="padding-top:26px"><div class="wrap">
+  <div class="eyebrow reveal">เห็นภาพการทำงานจริง</div>
+  <h2 class="center reveal">ออเดอร์เข้า — จัดคิว — คิดเงิน ในจอเดียว</h2>
+  <p class="lead reveal">หน้าจอแคชเชียร์เห็นทุกออเดอร์แบบเรียลไทม์ · ลูกค้าสั่งผ่าน LINE ได้เลขคิวทันที</p>
+  <div class="demo">
+    <div class="tablet reveal">
+      <div class="tbar"><span class="tdot"></span> คิวร้าน · YO-DEE <span class="tnow">กำลังเรียก A012</span></div>
+      <div class="tbody">
+        <div class="ocard o1"><div class="onum">A011</div><div class="oinfo"><b>มะม่วงปั่น ×2</b><span>ชาเขียวนม ×1</span></div><div class="opay">฿140</div></div>
+        <div class="ocard o2"><div class="onum">A012</div><div class="oinfo"><b>โยเกิร์ตเบอร์รี่</b><span>+ กราโนล่า</span></div><span class="newbadge">ใหม่</span></div>
+        <div class="ocard o3"><div class="onum">A013</div><div class="oinfo"><b>อเมริกาโน่ ×2</b><span>สั่งผ่าน LINE</span></div><span class="opaid">จ่ายแล้ว</span></div>
+      </div>
+    </div>
+    <div class="phone reveal">
+      <div class="pbar"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg> สั่งผ่าน LINE</div>
+      <div class="pbubble"><b>โยเกิร์ตเบอร์รี่</b><br>+ กราโนล่า · ฿65</div>
+      <div class="pq">คิวของคุณ<b>A013</b>พร้อมรับใน ~5 นาที</div>
+    </div>
+  </div>
+</div></section>
 
 <section id="features"><div class="wrap">
   <div class="eyebrow reveal">ทุกอย่างในระบบเดียว</div>
@@ -200,6 +248,13 @@
 </div></footer>
 
 <script>
+  // Navbar slides down from the top once the user scrolls past the hero a bit (vanilla equivalent
+  // of a Framer Motion slide-in). Hidden at the very top for a clean first view.
+  (function(){
+    var nav=document.querySelector('nav');
+    function onScroll(){ nav.classList.toggle('nav-show', window.scrollY>140); }
+    window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+  })();
   // Subtle scroll-reveal (respects reduced-motion via the CSS guard above).
   (function(){
     var els=[].slice.call(document.querySelectorAll('.reveal'));
