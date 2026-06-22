@@ -21,6 +21,8 @@ services:
         value: "1"              # turns on /signup, /b/<slug>/ routing, custom domains, isolation
       - key: SAAS_ADMIN_PIN
         sync: false             # platform-admin console (/admin) — long + random, set in Render UI
+      - key: SAAS_ADMIN_TOTP_SECRET
+        sync: false             # OPTIONAL 2FA for /admin — base32 secret from scripts/admin-2fa-setup.mjs (blank = PIN-only)
       - key: SESSION_SECRET
         sync: false             # signs staff sessions — long + random
       - key: PUBLIC_BASE_URL

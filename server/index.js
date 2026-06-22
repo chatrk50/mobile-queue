@@ -9,6 +9,7 @@ import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { SAAS, runWithTenant, currentTenantId, DEFAULT_TENANT } from './tenant.js';
 import { verifyPin, hashPin, signSession, verifySession, parseCookies } from './auth.js';
+import { verifyTotp } from './totp.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
@@ -339,25 +340,44 @@ app.post('/api/owner/google', async (req, res) => {
 // ---------- Platform admin (Phase D) — manage ALL tenants. NOT tenant-scoped. ----------
 // Gated by SAAS_ADMIN_PIN (env, SaaS service only). Header x-admin-pin or body.adminPin.
 const SAAS_ADMIN_PIN = (process.env.SAAS_ADMIN_PIN || '').trim();
-const adminFails = new Map(); // ip -> { count, until } — brute-force lockout on the platform PIN
+// Optional second factor: when SAAS_ADMIN_TOTP_SECRET (a base32 secret) is set, admin login also
+// requires a fresh 6-digit TOTP code, and console API calls then ride a short-lived admin session
+// cookie (PIN alone is no longer enough). Unset = PIN-only (unchanged). Setup: scripts/admin-2fa-setup.mjs.
+const SAAS_ADMIN_TOTP_SECRET = (process.env.SAAS_ADMIN_TOTP_SECRET || '').trim();
+const TOTP_ON = SAAS && !!SAAS_ADMIN_TOTP_SECRET;
+const ADMIN_SESSION_HOURS = 8;
+const adminFails = new Map(); // ip -> { count, until } — brute-force lockout on the platform login
 const adminLocked = (ip) => { const a = adminFails.get(ip); return !!(a && a.until > Date.now()); };
-function adminTry(req) {
-  const ok = SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
+const adminPinValid = (req) => SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
+const adminBumpFail = (ip) => { const a = adminFails.get(ip) || { count: 0, until: 0 }; a.count++; if (a.count >= 6) { a.until = Date.now() + 15 * 60000; a.count = 0; } adminFails.set(ip, a); };
+function adminTry(req) {                                  // PIN-on-every-request path (used when 2FA off)
   const ip = ipOf(req);
-  if (ok) { adminFails.delete(ip); return true; }
-  const a = adminFails.get(ip) || { count: 0, until: 0 };
-  a.count++; if (a.count >= 6) { a.until = Date.now() + 15 * 60000; a.count = 0; }
-  adminFails.set(ip, a);
+  if (adminPinValid(req)) { adminFails.delete(ip); return true; }
+  adminBumpFail(ip);
   return false;
 }
+const adminSessionOK = (req) => { try { const t = parseCookies(req).asess; const p = t ? verifySession(t) : null; return !!(p && p.admin === true); } catch { return false; } };
 const adminGate = (req, res, next) => {
   if (adminLocked(ipOf(req))) return res.status(429).json({ error: 'too_many' });
+  if (adminSessionOK(req)) return next();                 // logged-in admin session (always accepted)
+  if (TOTP_ON) return res.status(401).json({ error: 'admin_2fa' });  // 2FA on → PIN alone is insufficient
   return adminTry(req) ? next() : res.status(401).json({ error: 'admin_auth' });
 };
-// Verify the admin PIN (for the console login screen) — also rate-limited.
+// Console login: PIN (rate-limited) + TOTP when enabled → issues a signed admin session cookie.
 app.post('/admin/api/login', (req, res) => {
-  if (adminLocked(ipOf(req))) return res.status(429).json({ ok: false, error: 'too_many' });
-  res.json({ ok: adminTry(req) });
+  const ip = ipOf(req);
+  if (adminLocked(ip)) return res.status(429).json({ ok: false, error: 'too_many' });
+  if (!adminPinValid(req)) { adminBumpFail(ip); return res.json({ ok: false, totpRequired: TOTP_ON }); }
+  if (TOTP_ON) {                                          // require the rotating code too
+    const code = String(req.body?.totp || '').trim();
+    if (!verifyTotp(SAAS_ADMIN_TOTP_SECRET, code)) { adminBumpFail(ip); return res.json({ ok: false, totpRequired: true, error: code ? 'bad_totp' : 'totp' }); }
+  }
+  adminFails.delete(ip);                                  // clear the lockout counter only on FULL success
+  if (!TOTP_ON) return res.json({ ok: true });            // PIN-only mode: unchanged, no admin session
+  // 2FA passed → issue a short-lived admin session cookie (console rides it; PIN alone now insufficient).
+  const token = signSession({ admin: true, exp: Date.now() + ADMIN_SESSION_HOURS * 3600 * 1000 });
+  res.setHeader('Set-Cookie', `asess=${token}; HttpOnly; Path=/; Max-Age=${ADMIN_SESSION_HOURS * 3600}; SameSite=Lax${COOKIE_SECURE}`);
+  res.json({ ok: true });
 });
 // All tenants + a few counts for the console.
 app.get('/admin/api/tenants', adminGate, (req, res) => {

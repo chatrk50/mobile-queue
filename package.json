@@ -17,7 +17,9 @@
     "dryrun": "node scripts/dryrun.mjs",
     "test:billing": "node --experimental-sqlite scripts/test-billing.mjs",
     "test:hierarchy": "node scripts/test-hierarchy.mjs",
-    "test:restore": "node --experimental-sqlite scripts/test-restore.mjs"
+    "test:restore": "node --experimental-sqlite scripts/test-restore.mjs",
+    "test:totp": "node scripts/test-totp.mjs",
+    "test:2fa": "node scripts/test-2fa.mjs"
   },
   "engines": {
     "node": ">=22.5.0"
