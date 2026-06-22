@@ -162,6 +162,22 @@
   .cmp .yes{color:var(--ok)} .cmp .nope{color:#c0394a} .cmp .mid{color:var(--mut)}
   .cmp td svg{width:18px;height:18px;vertical-align:middle}
   .cmp .amt0{font-family:'Kanit',sans-serif;font-weight:700;color:var(--ok)}
+  /* segment chips */
+  .segs{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+  .segchip{display:inline-flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:999px;padding:9px 16px;font-size:14px;font-weight:500;backdrop-filter:blur(8px);box-shadow:var(--glass-sh)}
+  .segchip svg{width:18px;height:18px;color:var(--ind)}
+  /* savings calculator */
+  .calc{max-width:720px;margin:0 auto;background:var(--glass);border:1px solid var(--glass-brd);border-radius:22px;padding:28px;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
+  .calc .crow{margin-bottom:22px}
+  .calc label{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;font-weight:500;margin-bottom:10px}
+  .calc label b{font-family:'Kanit',sans-serif;color:var(--ind);font-size:17px}
+  .calc input[type=range]{width:100%;height:6px;accent-color:var(--ind);cursor:pointer}
+  .calc .out{text-align:center;background:linear-gradient(135deg,#eef2ff,#fbe8ff);border:1px solid #c7d2fe;border-radius:18px;padding:24px 18px;margin-top:6px}
+  .calc .out .cap{font-size:13px;color:var(--mut)}
+  .calc .out .save{font-family:'Kanit',sans-serif;font-size:44px;font-weight:700;color:var(--ind);line-height:1.05;margin:6px 0 2px}
+  .calc .out .sub{font-size:14px;color:var(--ink)}
+  .calc .out .x{display:inline-block;margin-top:12px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border-radius:999px;padding:7px 18px;font-size:13.5px;font-weight:600;font-family:'Kanit',sans-serif}
+  .calc .note{font-size:12px;color:var(--mut);text-align:center;margin-top:12px}
   /* scroll reveal */
   .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
   .reveal.in{opacity:1;transform:none}
@@ -212,6 +228,16 @@
       <div class="pbubble"><b>โยเกิร์ตเบอร์รี่</b><br>+ กราโนล่า · ฿65</div>
       <div class="pq">คิวของคุณ<b>A013</b>พร้อมรับใน ~5 นาที</div>
     </div>
+  </div>
+</div></section>
+
+<section style="padding:32px 0"><div class="wrap">
+  <p class="reveal" style="color:var(--mut);font-size:14px;margin:0 0 18px;text-align:center">เหมาะกับร้านขายดีทุกแบบ</p>
+  <div class="segs reveal">
+    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M6 8h12l-1.2 11.2A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.8L6 8Z"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/></svg> เครื่องดื่ม / ชานม</span>
+    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z"/><path d="M17 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M12 3v2"/></svg> คาเฟ่ / กาแฟ</span>
+    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M7 11a5 5 0 0 1 10 0"/><path d="M5 11h14l-6 9-1-3-1 3-6-9"/></svg> ของหวาน / โยเกิร์ต</span>
+    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 12h16a8 8 0 0 1-16 0Z"/><path d="M9 6c0 1-1 1-1 2s1 1 1 2M15 6c0 1-1 1-1 2s1 1 1 2"/></svg> สตรีทฟู้ด / ตามสั่ง</span>
   </div>
 </div></section>
 
@@ -269,6 +295,25 @@
     </table>
   </div>
   <p class="lead reveal" style="margin-top:20px;font-size:14px">ดึงลูกค้าประจำแค่ 15% มาสั่งตรงผ่าน LINE แทนเดลิเวอรี ก็ประหยัดค่าคอมได้หลายพัน/เดือน — คุ้มค่าสมาชิกหลายเท่า</p>
+</div></section>
+
+<section style="background:var(--bg)"><div class="wrap">
+  <div class="eyebrow reveal">คุ้มไหม? คำนวณเลย</div>
+  <h2 class="center reveal">ดึงลูกค้ามาสั่งตรง ประหยัดค่าคอมเท่าไร?</h2>
+  <p class="lead reveal">ลองปรับตัวเลขของร้านคุณ — ดูเงินที่ประหยัดได้เมื่อลูกค้าประจำสั่งตรงผ่าน LINE แทนเดลิเวอรี</p>
+  <div class="calc reveal">
+    <div class="crow"><label>ยอดขายต่อเดือน <b id="cSales">฿100,000</b></label>
+      <input type="range" id="rSales" min="20000" max="500000" step="5000" value="100000" aria-label="ยอดขายต่อเดือน"></div>
+    <div class="crow"><label>ยอดที่ขายผ่านเดลิเวอรีตอนนี้ <b id="cDel">30%</b></label>
+      <input type="range" id="rDel" min="0" max="60" step="5" value="30" aria-label="สัดส่วนยอดขายผ่านเดลิเวอรี"></div>
+    <div class="out">
+      <div class="cap">ถ้าดึงลูกค้าประจำครึ่งหนึ่งมาสั่งตรงผ่าน LINE (ไม่หักค่าคอม)</div>
+      <div class="save" id="cSave">฿4,500</div>
+      <div class="sub">ประหยัดค่าคอม/เดือน · <span id="cYear">฿54,000</span>/ปี</div>
+      <div class="x" id="cX">คุ้มค่า KhaiDee Pro 15 เท่า</div>
+    </div>
+    <div class="note">*ประมาณการจากค่าคอมเดลิเวอรี ~30% และดึงลูกค้าประจำมาช่องทางตรงได้ครึ่งหนึ่ง</div>
+  </div>
 </div></section>
 
 <section><div class="wrap">
@@ -340,6 +385,21 @@
     var nav=document.querySelector('nav');
     function onScroll(){ nav.classList.toggle('nav-show', window.scrollY>140); }
     window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+  })();
+  // Interactive savings calculator — personalises the no-commission value to the visitor's shop.
+  (function(){
+    var s=document.getElementById('rSales'), d=document.getElementById('rDel'); if(!s||!d) return;
+    var COMM=0.30, SHIFT=0.5, PRO=299;
+    var f=function(n){ return '฿'+Math.round(n).toLocaleString('en-US'); };
+    function upd(){
+      var sales=+s.value, del=(+d.value)/100, save=sales*del*SHIFT*COMM;
+      document.getElementById('cSales').textContent=f(sales);
+      document.getElementById('cDel').textContent=(+d.value)+'%';
+      document.getElementById('cSave').textContent=f(save);
+      document.getElementById('cYear').textContent=f(save*12);
+      document.getElementById('cX').textContent = save>=PRO ? ('คุ้มค่า KhaiDee Pro '+Math.round(save/PRO)+' เท่า') : 'เริ่มฟรีได้เลย — ยังไม่ต้องจ่าย';
+    }
+    s.addEventListener('input',upd); d.addEventListener('input',upd); upd();
   })();
   // Subtle scroll-reveal (respects reduced-motion via the CSS guard above).
   (function(){
