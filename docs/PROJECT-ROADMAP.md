@@ -56,7 +56,7 @@ platform admin → owner email/Google login → PDPA export/erasure → security
 - [ ] Alerting on suspicious owner-login patterns (lockout done; alerting needs a channel).
 - [x] Dependency scanning + full test suite in CI on every push/PR (`npm audit --audit-level=high`
       gate + e2e/tenant/isolation/billing/restore/totp/2fa/hierarchy/dryrun). `.github/workflows/ci.yml`
-      (commit 19bd6d8). [ ] secret scanning (e.g. gitleaks) still to add.
+      (commit 19bd6d8). [x] secret scanning — gitleaks `secrets` job + .gitleaks.toml (commit 69bc2b6).
 - [ ] Pen-test / external security review before scaling.
 
 ---
