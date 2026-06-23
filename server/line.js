@@ -132,6 +132,58 @@ export async function replyText(replyToken, text) {
   }
 }
 
+/** Multicast a promo message to all known LINE customers of a tenant (batches of 500).
+ *  Returns { sent, batches, stub }. Degrades gracefully when LINE is not configured. */
+export async function multicastToCustomers(tenantId, { message, imageUrl, linkUrl, linkLabel }) {
+  const { db } = await import('./db.js');
+  const rows = db.prepare('SELECT line_user_id FROM customers WHERE tenant_id=? AND line_user_id IS NOT NULL').all(tenantId);
+  const ids = rows.map((r) => r.line_user_id).filter(Boolean);
+  if (!ids.length) return { sent: 0, batches: 0, stub: false };
+
+  const msg = _buildPromoMsg(message, imageUrl, linkUrl, linkLabel || 'ดูโปรโมชั่น');
+  const client = clientFor(tenantId);
+  if (!client) {
+    console.log(`\n[LINE-STUB] multicast → ${ids.length} customers (tenant ${tenantId})\n${message}${linkUrl ? '\n' + linkUrl : ''}\n`);
+    return { sent: ids.length, batches: Math.ceil(ids.length / 500), stub: true };
+  }
+  const BATCH = 500;
+  let sent = 0, batches = 0;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const chunk = ids.slice(i, i + BATCH);
+    try {
+      await client.multicast({ to: chunk, messages: [msg] });
+      sent += chunk.length;
+    } catch (err) {
+      console.error('[LINE] multicast batch failed:', err?.statusMessage || err?.message || err);
+    }
+    batches++;
+  }
+  return { sent, batches, stub: false };
+}
+
+function _buildPromoMsg(text, imageUrl, linkUrl, label) {
+  if (!imageUrl && !linkUrl) return { type: 'text', text };
+  const lines = text.split('\n').filter((l) => l.trim());
+  const bodyContents = lines.map((t, i) => ({
+    type: 'text', text: t, wrap: true,
+    size: i === 0 ? 'md' : 'sm',
+    weight: i === 0 ? 'bold' : 'regular',
+    color: i === 0 ? '#1e3a5f' : '#555555',
+  }));
+  const bubble = {
+    type: 'bubble',
+    ...(imageUrl ? { hero: { type: 'image', url: imageUrl, size: 'full', aspectRatio: '20:13', aspectMode: 'cover' } } : {}),
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', contents: bodyContents },
+    ...(linkUrl ? {
+      footer: { type: 'box', layout: 'vertical', contents: [{
+        type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm',
+        action: { type: 'uri', label: label, uri: linkUrl },
+      }]},
+    } : {}),
+  };
+  return { type: 'flex', altText: lines[0] || text.slice(0, 40), contents: bubble };
+}
+
 /** Live-verify a Messaging API channel access token by asking LINE for the bot (OA) profile.
  *  Returns { ok, name, basicId } so the wizard can confirm "connected to @yourshop". No side effects. */
 export async function verifyMessagingToken(token) {

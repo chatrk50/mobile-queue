@@ -506,6 +506,24 @@ for (const stmt of [
 }
 // Index the idempotency token (created after the ALTER so it exists on migrated DBs too).
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_client_token ON tickets(client_token)'); } catch { /* ignore */ }
+// Promo broadcasts (adopt-backlog #2): owner-composed LINE multicasts to owned customer base.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS promos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   INTEGER NOT NULL DEFAULT 1,
+    message     TEXT NOT NULL,
+    image_url   TEXT,
+    link_url    TEXT,
+    link_label  TEXT DEFAULT 'ดูโปรโมชั่น',
+    send_at     INTEGER,           -- Unix timestamp; NULL = send immediately on creation
+    status      TEXT NOT NULL DEFAULT 'draft',  -- draft | scheduled | sent | failed | cancelled
+    sent_at     INTEGER,
+    recipients  INTEGER,           -- how many LINE user IDs received it
+    created_at  INTEGER DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_promos_tenant_status ON promos(tenant_id, status, send_at);
+  `);
+} catch { /* already exists */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
@@ -882,6 +900,7 @@ export function deleteTenant(tenantId) {
     del('stores', `DELETE FROM stores WHERE tenant_id=${t}`);
     del('settings', `DELETE FROM settings WHERE key LIKE 't${t}:%'`);
     del('audit_log', `DELETE FROM audit_log WHERE tenant_id=${t}`);
+    del('promos', `DELETE FROM promos WHERE tenant_id=${t}`);
     del('tenants', `DELETE FROM tenants WHERE id=${t}`);
   })();
   return { deleted: true, tenantId: t, counts };

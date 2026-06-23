@@ -617,6 +617,41 @@ app.post('/api/loyalty/settings', (req, res) => {
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---- Promo broadcasts (adopt-backlog #2): owner-only LINE multicast to owned customers ----
+app.get('/api/promos/audience', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ count: Q.countLineCustomers(), lineConfigured: lineConfigured(req.tenantId) });
+});
+app.get('/api/promos', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.listPromos());
+});
+app.post('/api/promos', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const { message, imageUrl, linkUrl, linkLabel, sendAt, sendNow } = req.body || {};
+  let promo;
+  try { promo = Q.createPromo({ message, imageUrl, linkUrl, linkLabel, sendAt: sendAt || null }); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  // sendNow=true or no scheduled time → fire immediately
+  if (sendNow || !sendAt) {
+    try {
+      const { multicastToCustomers } = await import('./line.js');
+      const result = await multicastToCustomers(req.tenantId, { message, imageUrl, linkUrl, linkLabel });
+      Q.markPromoSent(promo.id, { recipients: result.sent });
+      return res.json({ ok: true, id: promo.id, sent: result.sent, stub: result.stub });
+    } catch (e) {
+      Q.markPromoFailed(promo.id);
+      return res.status(500).json({ error: 'send_failed', detail: e.message });
+    }
+  }
+  res.json({ ok: true, id: promo.id, status: promo.status });
+});
+app.delete('/api/promos/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cancelPromo(Number(req.params.id))); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 // ---- Per-tenant brand editor (Phase E.3). Owner edits their brand name/short/theme/unit and
 // uploads a logo (stored as a data URL in the tenant row). SaaS-only — single-tenant uses env. ----
 app.get('/api/admin/brand', (req, res) => {
@@ -1354,6 +1389,25 @@ setInterval(() => {
     const r = Q.sweepStalePending();
     if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
   } catch { /* never let the sweep crash the server */ }
+}, 60 * 1000);
+
+// Scheduled promo sweep: fire any promo whose send_at has arrived.
+setInterval(async () => {
+  try {
+    const due = Q.duePromos();
+    if (!due.length) return;
+    const { multicastToCustomers } = await import('./line.js');
+    for (const p of due) {
+      try {
+        const result = await multicastToCustomers(p.tenant_id, { message: p.message, imageUrl: p.image_url, linkUrl: p.link_url, linkLabel: p.link_label });
+        Q.markPromoSent(p.id, { recipients: result.sent });
+        console.log(`[promo] sent id=${p.id} tenant=${p.tenant_id} → ${result.sent} recipients`);
+      } catch (e) {
+        Q.markPromoFailed(p.id);
+        console.error(`[promo] failed id=${p.id}:`, e.message);
+      }
+    }
+  } catch { /* never crash the server */ }
 }, 60 * 1000);
 
 // Billing: recurring-charge sweep — renews pro tenants whose paid-through has passed (and

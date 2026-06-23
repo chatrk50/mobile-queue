@@ -2006,3 +2006,55 @@ export function ticketView(ticketId) {
     loyalty,
   };
 }
+
+// ============ Promo broadcasts (adopt-backlog #2) ============
+
+/** Count LINE customers who can receive broadcasts for the current tenant. */
+export function countLineCustomers() {
+  return db.prepare('SELECT COUNT(*) c FROM customers WHERE tenant_id=? AND line_user_id IS NOT NULL').get(TID()).c;
+}
+
+/** Create a promo record. status='scheduled' if send_at is in the future, 'draft' otherwise. */
+export function createPromo({ message, imageUrl, linkUrl, linkLabel, sendAt }) {
+  const msg = String(message || '').trim();
+  if (!msg) throw new Error('message_required');
+  const now = Math.floor(Date.now() / 1000);
+  const scheduled = sendAt && Number(sendAt) > now;
+  const status = scheduled ? 'scheduled' : 'draft';
+  const r = db.prepare(
+    `INSERT INTO promos (tenant_id, message, image_url, link_url, link_label, send_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(TID(), msg, imageUrl || null, linkUrl || null, linkLabel || 'ดูโปรโมชั่น', sendAt || null, status);
+  return { id: Number(r.lastInsertRowid), status };
+}
+
+/** List recent promos for the current tenant (newest first). */
+export function listPromos() {
+  return db.prepare('SELECT * FROM promos WHERE tenant_id=? ORDER BY created_at DESC LIMIT 50').all(TID());
+}
+
+/** Mark a promo as sent with results. */
+export function markPromoSent(id, { recipients }) {
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare("UPDATE promos SET status='sent', sent_at=?, recipients=? WHERE id=?").run(now, recipients, id);
+}
+
+/** Mark a promo as failed. */
+export function markPromoFailed(id) {
+  db.prepare("UPDATE promos SET status='failed' WHERE id=?").run(id);
+}
+
+/** Cancel a scheduled promo (cannot cancel already-sent ones). */
+export function cancelPromo(id) {
+  const p = db.prepare('SELECT id, status FROM promos WHERE id=? AND tenant_id=?').get(id, TID());
+  if (!p) throw new Error('promo_not_found');
+  if (p.status === 'sent') throw new Error('already_sent');
+  db.prepare("UPDATE promos SET status='cancelled' WHERE id=?").run(id);
+  return { ok: true };
+}
+
+/** Fetch all scheduled promos whose send_at has passed (across all tenants — for the scheduler). */
+export function duePromos() {
+  const now = Math.floor(Date.now() / 1000);
+  return db.prepare("SELECT * FROM promos WHERE status='scheduled' AND send_at <= ?").all(now);
+}

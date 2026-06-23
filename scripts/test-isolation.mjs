@@ -133,6 +133,7 @@ const orphanChecks = [
   ['price_tiers', `SELECT COUNT(*) c FROM price_tiers WHERE tenant_id=${B.id}`],
   ['customers', `SELECT COUNT(*) c FROM customers WHERE tenant_id=${B.id}`],
   ['audit_log', `SELECT COUNT(*) c FROM audit_log WHERE tenant_id=${B.id}`],
+  ['promos', `SELECT COUNT(*) c FROM promos WHERE tenant_id=${B.id}`],
   ['zones', `SELECT COUNT(*) c FROM zones WHERE store_id IN ${idList(bStoreIds)}`],
   ['tickets', `SELECT COUNT(*) c FROM tickets WHERE store_id IN ${idList(bStoreIds)}`],
   ['orders', `SELECT COUNT(*) c FROM orders WHERE branch_id IN ${idList(bStoreIds)}`],
@@ -156,6 +157,31 @@ ok(C1('SELECT COUNT(*) c FROM stores WHERE tenant_id=?', A.id) === aStoresBefore
 ok(runWithTenant(A.id, () => Q.listMenu()).some((m) => m.name === 'Alpha Latte'), 'erasure: tenant A menu intact');
 let primaryGuard = false; try { DB.deleteTenant(1); } catch (e) { primaryGuard = e.message === 'cannot_delete_primary'; }
 ok(primaryGuard, 'erasure: refuses to delete primary tenant 1');
+
+// --- Promo broadcast isolation (adopt-backlog #2) ---
+// Create a fresh tenant C to use (B was deleted above).
+const C = DB.createTenant({ name: 'Charlie Bubble', pkg: 'line' });
+// createPromo is scoped by TID() (current tenant), listPromos/cancelPromo too.
+runWithTenant(C.id, () => Q.createPromo({ message: 'โปรโมชั่น C', linkUrl: 'https://example.com' }));
+runWithTenant(A.id, () => Q.createPromo({ message: 'โปรโมชั่น A' }));
+const cPromos = runWithTenant(C.id, () => Q.listPromos());
+const aPromos = runWithTenant(A.id, () => Q.listPromos());
+ok(cPromos.length === 1 && cPromos[0].message === 'โปรโมชั่น C', 'promo: C only sees its own promo');
+ok(aPromos.length === 1 && aPromos[0].message === 'โปรโมชั่น A', 'promo: A only sees its own promo');
+ok(!cPromos.some(p => p.message === 'โปรโมชั่น A'), 'promo: C does NOT see A\'s promo');
+// cancelPromo by wrong tenant throws promo_not_found
+let crossPromoGuard = false;
+runWithTenant(A.id, () => { try { Q.cancelPromo(cPromos[0].id); } catch(e) { crossPromoGuard = e.message === 'promo_not_found'; } });
+ok(crossPromoGuard, 'promo: A cannot cancel C\'s promo (promo_not_found)');
+// countLineCustomers is per-tenant
+const cCount = runWithTenant(C.id, () => Q.countLineCustomers());
+const aCount = runWithTenant(A.id, () => Q.countLineCustomers());
+ok(typeof cCount === 'number' && typeof aCount === 'number', 'promo: countLineCustomers returns number for each tenant');
+// duePromos returns all tenants (scheduler is tenant-agnostic); check it only returns scheduled rows
+const futureTs = Math.floor(Date.now() / 1000) + 3600;
+runWithTenant(C.id, () => Q.createPromo({ message: 'scheduled', sendAt: futureTs }));
+const due = Q.duePromos();
+ok(due.every(p => p.status === 'scheduled'), 'promo: duePromos() returns only scheduled rows');
 
 console.log(`\n${fail ? '❌' : '✅'} isolation: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
