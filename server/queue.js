@@ -1404,7 +1404,7 @@ export function editOrderItems(ticketId, items) {
 }
 
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, hold = false } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -1492,7 +1492,9 @@ export function createOrder(zoneId, items, opts = {}) {
 
   // Queue-first: issue the queue number now (at order creation) so it joins the line immediately —
   // even before payment. Pay-first leaves it 'pending' until payment confirms the number.
-  if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
+  // A HELD bill ("พักบิล / จ่ายทีหลัง") always stays in 'pending' (รอชำระเงิน) regardless of mode:
+  // the cashier explicitly parked it to collect payment later, so it must not consume a queue number.
+  if (getQueueFirst() && !hold && r.ticket && r.ticket.number === 0) {
     try { r.ticket = assignQueueNumber(r.ticket.id); } catch { /* lost a race → stays pending, harmless */ }
   }
 
