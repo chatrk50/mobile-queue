@@ -61,7 +61,7 @@ export function verifyTotp(secret, token, { step = 30, window = 1, t = Date.now(
 export function generateTotpSecret() { return base32Encode(randomBytes(20)); }
 
 /** Build the otpauth:// URL an authenticator app scans (or paste the secret manually). */
-export function otpauthUrl(secret, { issuer = 'YO-DEE SaaS Admin', account = 'admin' } = {}) {
+export function otpauthUrl(secret, { issuer = 'KhaiDee Admin', account = 'admin' } = {}) {
   const label = encodeURIComponent(issuer + ':' + account);
   return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
