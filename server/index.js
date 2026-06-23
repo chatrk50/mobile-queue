@@ -674,6 +674,18 @@ app.post('/api/tickets/:ticketId/pay-partial', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// แยกจ่ายตามรายการ: settle specific order lines by index (PIN). body: { lineIdxs:[...], method }.
+// Marks those items paid (paid_lines) + adds their server-computed subtotal to paid_amount.
+app.post('/api/tickets/:ticketId/pay-items', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.payItems(req.params.ticketId, req.body?.lineIdxs, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    if (r.settled) notifyLoyalty(r);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Edit an unpaid order's items in place (change drink/sweet/topping) — alternative to cancel+rekey.
 app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

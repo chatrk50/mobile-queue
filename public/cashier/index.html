@@ -1851,8 +1851,10 @@ function renderZone(snap){
         const sw=m?`<div class="muted" style="margin-left:14px;font-size:13px">• ${esc(m[2])}</div>`:'';
         const ks=_kitchenStatus[t.id+':'+i];
         const chip=`<button id="kbtn-${t.id}-${i}" class="kmark${ks?(' '+ks):''}" onclick="event.stopPropagation();toggleKitchen(${t.id},${i})" title="แตะเพื่อมาร์ค: กำลังทำ → เสร็จ">${ks==='making'?'🔥':ks==='done'?'✅':'○'}</button>`;
-        const lbg=ks==='making'?'background:rgba(243,157,18,.16);':ks==='done'?'background:rgba(22,135,111,.12);':'';
-        return `<div id="kline-${t.id}-${i}" style="display:flex;align-items:flex-start;gap:6px;padding:4px 4px;border-radius:8px;${lbg}">${chip}<div style="flex:1"><b style="font-size:15px">${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
+        const lbg=l.paid?'background:rgba(22,135,111,.10);':ks==='making'?'background:rgba(243,157,18,.16);':ks==='done'?'background:rgba(22,135,111,.12);':'';
+        const paidTag=l.paid?` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800;font-size:11px">✓ ชำระแล้ว</span>`:'';
+        const strike=l.paid?'text-decoration:line-through;color:var(--muted);':'';
+        return `<div id="kline-${t.id}-${i}" style="display:flex;align-items:flex-start;gap:6px;padding:4px 4px;border-radius:8px;${lbg}">${chip}<div style="flex:1"><b style="font-size:15px;${strike}">${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>${paidTag}`+sw+
           l.toppings.map(tp=>`<div class="muted" style="margin-left:2px;font-size:13px">+ ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div></div>`;
       }).join('')+`<div style="font-weight:700;color:var(--navy);margin-top:4px;font-size:14px">รวม ฿${t.order_total}</div></div>`;
     }
@@ -2079,21 +2081,27 @@ window.openItemSplit=async(tid)=>{
   if(!_splitLines.length){ toast('ไม่พบรายการ'); return; }
   _splitTid=tid; _splitSel=new Set(); renderSplitList(); $('itemSplitPop').style.display='flex'; };
 function renderSplitList(){
-  $('splitItemList').innerHTML=_splitLines.map((l,i)=>`<label class="row between" style="padding:9px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer;gap:8px;${_splitSel.has(i)?'background:#e9f8fb':''}">
-    <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" style="width:18px;height:18px" ${_splitSel.has(i)?'checked':''} onchange="toggleSplitItem(${i})"><span>${l.qty}× ${esc(l.name)}${(l.toppings||[]).length?(' <span class="muted" style="font-size:12px">+'+l.toppings.map(tp=>esc(tp.name)).join(', ')+'</span>'):''}</span></span>
-    <b>฿${lineAmt(l)}</b></label>`).join('');
+  $('splitItemList').innerHTML=_splitLines.map((l,i)=>{
+    const top=(l.toppings||[]).length?(' <span class="muted" style="font-size:12px">+'+l.toppings.map(tp=>esc(tp.name)).join(', ')+'</span>'):'';
+    if(l.paid) return `<div class="row between" style="padding:9px 12px;border:1px solid #bfe8db;border-radius:9px;gap:8px;background:#eafaf3;opacity:.85">
+      <span style="display:flex;align-items:center;gap:8px"><span style="color:#16876f;font-weight:800">✓</span><span style="text-decoration:line-through;color:var(--muted)">${l.qty}× ${esc(l.name)}${top}</span></span>
+      <b style="color:#16876f">ชำระแล้ว</b></div>`;
+    return `<label class="row between" style="padding:9px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer;gap:8px;${_splitSel.has(i)?'background:#e9f8fb':''}">
+      <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" style="width:18px;height:18px" ${_splitSel.has(i)?'checked':''} onchange="toggleSplitItem(${i})"><span>${l.qty}× ${esc(l.name)}${top}</span></span>
+      <b>฿${lineAmt(l)}</b></label>`; }).join('');
   const sub=[..._splitSel].reduce((s,i)=>s+lineAmt(_splitLines[i]),0);
   $('splitSubtotal').textContent=sub.toLocaleString('en-US'); }
-window.toggleSplitItem=(i)=>{ if(_splitSel.has(i)) _splitSel.delete(i); else _splitSel.add(i); renderSplitList(); };
+window.toggleSplitItem=(i)=>{ if(_splitLines[i]&&_splitLines[i].paid) return; if(_splitSel.has(i)) _splitSel.delete(i); else _splitSel.add(i); renderSplitList(); };
 window.closeItemSplit=()=>{ $('itemSplitPop').style.display='none'; };
 window.paySplitItems=async()=>{
-  const sub=[..._splitSel].reduce((s,i)=>s+lineAmt(_splitLines[i]),0);
-  if(sub<=0){ toast('เลือกอย่างน้อย 1 รายการ'); return; }
+  const idxs=[..._splitSel].filter(i=>!(_splitLines[i]&&_splitLines[i].paid));
+  const sub=idxs.reduce((s,i)=>s+lineAmt(_splitLines[i]),0);
+  if(!idxs.length){ toast('เลือกอย่างน้อย 1 รายการ'); return; }
   $('itemSplitPop').style.display='none';
   const method=await pickPayMethod(sub); if(method===null) return;   // reuses the cash keypad
-  try{ const r=await api('/api/tickets/'+_splitTid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:sub,method})});
+  try{ const r=await api('/api/tickets/'+_splitTid+'/pay-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineIdxs:idxs,method})});
     if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')); if(CFG.printEnabled) printKitchen(_splitTid); }
-    else toast('🧾 รับตามรายการ ฿'+sub+' · เหลืออีก ฿'+r.remaining);
+    else toast('🧾 รับตามรายการ ฿'+(r.paidNow||sub)+' · เหลืออีก ฿'+r.remaining);
   }catch(e){ toast(err(e)); } };
 // Receipt printing (prepared; only active when the owner enables it + a printer is wired).
 // Renders an 80mm-style slip into #printArea and calls the browser print (works with any

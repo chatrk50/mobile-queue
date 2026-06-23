@@ -1920,7 +1920,39 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, paid_amount: order.paid_amount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  // แยกตามรายการ: which grouped lines were already settled (display "✓ ชำระแล้ว"). paid_lines is a JSON
+  // array of line indices; paid_amount stays the money source-of-truth (settles the order when ≥ net).
+  let paidLines = [];
+  try { paidLines = order.paid_lines ? JSON.parse(order.paid_lines) : []; } catch { paidLines = []; }
+  lines.forEach((l, i) => { l.paid = paidLines.includes(i); });
+  return { total: order.total, discount: order.discount || 0, paid_amount: order.paid_amount || 0, paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+}
+
+/** Server-side subtotal of one grouped order line (drink + its toppings) — the authoritative amount
+ *  for แยกตามรายการ (never trust a client-sent amount for money). */
+function lineSubtotal(l) {
+  return Math.round((((l.price || 0) * (l.qty || 1)) + (l.toppings || []).reduce((s, tp) => s + (tp.price || 0) * (tp.qty || 1), 0)) * 100) / 100;
+}
+
+/** แยกตามรายการ: settle specific order lines. Marks them in orders.paid_lines AND adds their
+ *  authoritative subtotal to paid_amount; when paid_amount covers the net, settles + issues the queue
+ *  number (same as payPartial). Already-paid lines are ignored (idempotent). */
+export function payItems(ticketId, lineIdxs, opts = {}) {
+  const { actorId = null, method = null } = opts;
+  const o = orderForTicket(ticketId);
+  if (!o) throw new Error('order_not_found');
+  if (o.payment_status === 'paid') return { ok: true, settled: true, alreadyPaid: true, remaining: 0, paidLines: o.paid_lines };
+  if (o.payment_status === 'void') throw new Error('order_void');
+  const already = new Set(o.paid_lines || []);
+  const fresh = [...new Set((Array.isArray(lineIdxs) ? lineIdxs : []).map(Number))]
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < o.lines.length && !already.has(i));
+  if (!fresh.length) throw new Error('no_items');
+  const amt = Math.round(fresh.reduce((s, i) => s + lineSubtotal(o.lines[i]), 0) * 100) / 100;
+  const order = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const merged = [...already, ...fresh].sort((a, b) => a - b);
+  db.prepare('UPDATE orders SET paid_lines=? WHERE id=?').run(JSON.stringify(merged), order.id);
+  const r = payPartial(ticketId, amt, { actorId, method });   // accumulates paid_amount + settles when covered
+  return { ...r, paidLines: merged, paidNow: amt };
 }
 
 // Generic, non-personal labels we never need to mask.

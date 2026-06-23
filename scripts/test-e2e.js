@@ -138,6 +138,19 @@ const op = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
 const opr = Q.payPartial(op.ticket.id, 100, { method: 'cash' });
 ok(opr.settled === true && near(opr.change, 50), `INVARIANT overpay on a partial settles + returns change (change ${opr.change})`);
 
+// ---- แยกจ่ายตามรายการ (pay by item): paid lines are TRACKED (paid_lines) so paid items show "ชำระแล้ว"
+// and can't be collected twice; the server computes the line subtotal authoritatively. ----
+console.log('\n== Split by item (แยกตามรายการ) ==');
+const si = Q.createOrder(1, [{ name: 'A', price: 40, qty: 1 }, { name: 'B', price: 30, qty: 1 }, { name: 'C', price: 50, qty: 1 }], {});
+const it1 = Q.payItems(si.ticket.id, [0, 1], { method: 'cash' });
+ok(it1.settled === false && near(it1.paidNow, 70) && near(it1.remaining, 50), `INVARIANT pay-items charges the lines' server subtotal (paidNow ${it1.paidNow}, remaining ${it1.remaining})`);
+const linesAfter = Q.orderForTicket(si.ticket.id).lines;
+ok(linesAfter[0].paid && linesAfter[1].paid && !linesAfter[2].paid, `INVARIANT only the paid lines are flagged paid (${linesAfter.map((l) => +l.paid).join(',')})`);
+let dupBlocked = false; try { Q.payItems(si.ticket.id, [0], { method: 'cash' }); } catch (e) { dupBlocked = e.message === 'no_items'; }
+ok(dupBlocked, 'INVARIANT an already-paid line cannot be collected again (no_items)');
+const it2 = Q.payItems(si.ticket.id, [2], { method: 'cash' });
+ok(it2.settled === true && it2.code, `INVARIANT paying the last line settles + issues the queue number (${it2.code})`);
+
 // ---- แก้ไขออเดอร์ (edit unpaid order in place): change items + total, guarded once money is involved ----
 console.log('\n== Edit order (แก้ไขออเดอร์) ==');
 const eo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
