@@ -411,6 +411,7 @@ export function orderHistory(limit = 100) {
   const rows = db.prepare(
     `SELECT id, code, status, customer_name, closed_at
      FROM tickets WHERE status IN ('served','no_show','cancelled','skipped')
+       AND store_id IN (SELECT id FROM stores WHERE tenant_id=${TID()})
      ORDER BY COALESCE(closed_at, created_at) DESC, id DESC LIMIT ?`
   ).all(Math.max(1, Math.min(500, Number(limit) || 100)));
   return rows.map((t) => {
