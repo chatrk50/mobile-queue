@@ -184,8 +184,21 @@
 </div>
 <div id="toast" class="toast"></div>
 
+<!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
+<div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0">
+    <h1 id="amTitle" style="margin:0 0 6px"></h1>
+    <p id="amMsg" class="muted" style="font-size:14px;line-height:1.45;margin:0 0 6px;white-space:pre-line"></p>
+    <input id="amInput" onkeydown="if(event.key==='Enter')amOk()" style="display:none;width:100%;box-sizing:border-box;margin:8px 0 2px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;color:var(--ink)">
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button id="amCancel" class="ghost" style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
+      <button id="amOk" class="ok" style="flex:1.4;min-height:48px" onclick="amOk()">ตกลง</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOPPING PICKER (per drink) -->
-<div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
+<div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <h1 id="topPopTitle">ท็อปปิ้ง</h1>
     <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
@@ -198,7 +211,7 @@
 </div>
 
 <!-- SWEETNESS PICKER (step 3) -->
-<div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
+<div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
     <h1 id="sweetTitle">ความหวาน</h1>
     <p class="muted">เลือกระดับความหวาน</p>
@@ -207,7 +220,7 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
-<div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
+<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
@@ -228,6 +241,26 @@ let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = nul
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// In-app modal: appPrompt (text input) + appConfirm (yes/no) — replaces native prompt()/confirm().
+let _amRes=null;
+window.amOk=()=>{ const inp=$('amInput'); const shown=inp.style.display!=='none'; _amClose(shown?inp.value:true); };
+window.amCancel=()=>_amClose(null);
+function _amClose(v){ $('appModal').style.display='none'; const r=_amRes; _amRes=null; if(r) r(v); }
+function _appModal({title,message,okText,cancelText,danger,input}){
+  $('amTitle').textContent=title||''; $('amTitle').style.display=title?'':'none';
+  const msg=$('amMsg'); msg.textContent=message||''; msg.style.display=message?'':'none';
+  const inp=$('amInput');
+  if(input){ inp.style.display=''; inp.type=input.type||'text'; inp.value=input.value!=null?input.value:''; inp.placeholder=input.placeholder||''; inp.inputMode=input.inputMode||''; }
+  else inp.style.display='none';
+  const ok=$('amOk'); ok.textContent=okText||'ตกลง'; ok.className=danger?'ghost danger':'ok';
+  const cancel=$('amCancel'); cancel.textContent=cancelText||'ยกเลิก'; cancel.style.display=(cancelText==='')?'none':'';
+  $('appModal').style.display='flex';
+  if(input) setTimeout(()=>{ try{ inp.focus(); inp.select(); }catch(e){} },60);
+  return new Promise(res=>{ _amRes=res; }); }
+window.appPrompt=({title='',message='',value='',placeholder='',type='text',inputMode='',okText='ตกลง',cancelText='ยกเลิก'}={})=>
+  _appModal({title,message,okText,cancelText,input:{value,placeholder,type,inputMode}}).then(v=> v===null?null:String(v));
+window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
+  _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
 // White-label: apply brand name/theme/logo (defaults to YO-DEE server-side → no-op for this shop).
 async function applyBrand(){
   try{ const b=await (await fetch('/api/brand')).json(); window.BRAND=b;
@@ -519,8 +552,8 @@ function renderBasket(){
 }
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
-window.cancelBasket=()=>{ if(!cart.length){ closeOrderUI(); return; }
-  if(!confirm('ยกเลิกออเดอร์ทั้งหมด?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
+window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
+  if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
 window.confirmBasket=async()=>{
   if(submitting) return;
@@ -652,7 +685,7 @@ function applyPayChoice(){
   if(p||k) setQrFor(k);
 }
 window.requestRefund=async()=>{
-  const reason=prompt('แจ้งเหตุผลขอคืนเงิน (ถ้ามี):','')||'';
+  const reason=await appPrompt({title:'ขอคืนเงิน',message:'แจ้งเหตุผลขอคืนเงิน (ถ้ามี)',placeholder:'เหตุผล (เว้นว่างได้)',okText:'ส่งคำขอ'});
   if(reason===null) return;
   const b=$('refundReqBtn'); b.disabled=true;
   try{ await api('/api/tickets/'+ticketId+'/request-refund',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,reason})});
@@ -793,7 +826,7 @@ async function tick(){
 function startPolling(){ tick(); poll=setInterval(tick,3000); }
 
 window.cancelTicket = async ()=>{
-  if(!confirm('ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ')) return;
+  if(!(await appConfirm({title:'ขอยกเลิกออเดอร์',message:'ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ',okText:'ขอยกเลิก',danger:true}))) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
     toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');   // poll will refresh the button to "ส่งคำขอแล้ว"
   }catch(e){ const m=String(e.message||'');
