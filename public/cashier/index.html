@@ -2044,6 +2044,16 @@ window.showFeatures=async()=>{
       </div>
       <button class="ok" style="width:100%" onclick="saveBrandConfig()">บันทึกแบรนด์</button>
     </div>` : '')+
+    (CFG.saas && br ? (()=>{ const slug=br.slug||''; const shareUrl=slug?(location.origin+'/b/'+slug+'/share/'):'';
+      return shareUrl ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
+      <b>${icon('globe',{size:16})} แชร์ร้านให้ลูกค้า</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">หน้าเว็บสาธารณะของร้าน — ลิงก์เพื่อแชร์บน LINE กลุ่ม / โซเชียล / พิมพ์ QR</div>
+      <div style="display:flex;gap:6px;align-items:center;background:#f9fafb;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <code style="flex:1;font-size:11px;word-break:break-all;color:var(--navy)">${esc(shareUrl)}</code>
+        <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyShareUrl()">📋 ก๊อป</button>
+      </div>
+      <a class="ghost btn" style="width:100%;text-align:center;padding:8px;display:block;text-decoration:none" href="${esc('/b/'+slug+'/share/')}" target="_blank">เปิดหน้าแชร์ →</a>
+    </div>` : ''; })() : '')+
     (acct ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>${icon('user',{size:16})} บัญชีเจ้าของ</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">เปลี่ยนอีเมลล็อกอิน · ตั้งหรือเปลี่ยนรหัสผ่าน</div>
@@ -2154,6 +2164,10 @@ window.saveLineConfig=async()=>{
   try{ const d=await api('/api/admin/line-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast(d.configured?'เชื่อมต่อ LINE แล้ว ✓':'บันทึกแล้ว'); }catch(e){ toast(err(e)); } };
 // LINE wizard helpers: copy webhook URL, live-verify a pasted token, request help.
+window.copyShareUrl=async()=>{ const slug=(CFG&&CFG.brand&&CFG.brand.slug)||(window.BRAND&&window.BRAND.slug)||''; if(!slug) return;
+  const u=location.origin+'/b/'+slug+'/share/';
+  try{ await navigator.clipboard.writeText(u); toast('ก๊อปลิงก์ร้านแล้ว ✓'); }
+  catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ'); } } };
 window.copyWebhook=async()=>{ const u=($('lineWebhookUrl')||{}).textContent||''; if(!u) return;
   try{ await navigator.clipboard.writeText(u); toast('ก๊อป Webhook URL แล้ว ✓'); }
   catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ — เลือกข้อความเอง'); } } };

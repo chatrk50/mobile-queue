@@ -1,0 +1,202 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ร้านของเรา — KhaiDee</title>
+<meta name="description" content="สั่งออเดอร์และรับคิวผ่าน LINE ได้เลย">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/assets/logo.png">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ink:#111827;--mut:#6b7280;--line:#e5e7eb;--bg:#f9fafb;--ok:#22c55e}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0;min-height:100vh}
+  .topbar{background:#fff;border-bottom:1px solid var(--line);padding:13px 18px;display:flex;align-items:center;justify-content:space-between}
+  .logo{font-family:'Kanit',sans-serif;font-weight:700;font-size:18px;color:var(--ink);display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo .dot{width:24px;height:24px;border-radius:7px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+  .wrap{max-width:440px;margin:0 auto;padding:24px 16px 60px}
+  .shop-card{background:#fff;border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .shop-header{height:88px;display:flex;align-items:flex-end;padding:0 18px 0;position:relative}
+  .shop-logo{width:72px;height:72px;border-radius:16px;border:3px solid #fff;object-fit:cover;background:#fff;margin-bottom:-36px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .shop-body{padding:44px 18px 20px}
+  .shop-name{font-family:'Kanit','IBM Plex Sans Thai',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
+  .shop-sub{font-size:13px;color:var(--mut);margin:0 0 14px}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;margin-bottom:14px}
+  .badge.open{background:rgba(34,197,94,.12);color:#15803d}
+  .badge.closed{background:rgba(239,68,68,.1);color:#b91c1c}
+  .hours{background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;margin-bottom:16px}
+  .hours .hrow{display:flex;justify-content:space-between;padding:3px 0;color:var(--mut)}
+  .hours .hrow.today{color:var(--ink);font-weight:600}
+  .cta-row{display:flex;flex-direction:column;gap:10px}
+  .btn-line{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border-radius:14px;font-size:15px;font-weight:600;font-family:inherit;border:none;cursor:pointer;width:100%;text-decoration:none;transition:.15s}
+  .btn-order{background:#06c755;color:#fff}
+  .btn-order:hover{background:#05b349}
+  .btn-add{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+  .btn-add:hover{border-color:#06c755;color:#06c755}
+  .qr-section{text-align:center;margin-top:20px}
+  .qr-label{font-size:12px;color:var(--mut);margin-bottom:8px}
+  .qr-img{width:180px;height:180px;border-radius:12px;border:1px solid var(--line);background:#fff}
+  .qr-note{font-size:11px;color:var(--mut);margin-top:6px}
+  .menu-preview{margin-top:20px}
+  .menu-preview h3{font-size:14px;font-weight:600;color:var(--mut);margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em}
+  .menu-list{display:flex;flex-direction:column;gap:8px}
+  .menu-item{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .menu-item img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:#f3f4f6}
+  .menu-item .mi-info{flex:1;min-width:0}
+  .menu-item .mi-name{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .menu-item .mi-price{font-size:13px;color:var(--mut)}
+  .share-footer{text-align:center;margin-top:20px;font-size:12px;color:var(--mut)}
+  .share-footer a{color:var(--ind)}
+  .owner-bar{text-align:center;margin-top:14px}
+  .copy-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:500;background:#fff;cursor:pointer;color:var(--ink);font-family:inherit}
+  .copy-link:hover{border-color:var(--ind);color:var(--ind)}
+</style>
+</head><body>
+<div class="topbar">
+  <a class="logo" href="/landing/"><span class="dot">ดี</span> KhaiDee</a>
+  <span id="poweredBy" style="font-size:12px;color:var(--mut)">ขับเคลื่อนโดย KhaiDee</span>
+</div>
+
+<div class="wrap">
+  <div class="shop-card">
+    <div class="shop-header" id="shopHeader" style="background:var(--ind)">
+      <img class="shop-logo" id="shopLogo" src="/assets/logo.png" alt="โลโก้ร้าน" onerror="this.style.display='none'">
+    </div>
+    <div class="shop-body">
+      <h1 class="shop-name" id="shopName">กำลังโหลด…</h1>
+      <p class="shop-sub" id="shopAddr" style="display:none"></p>
+      <div id="openBadge"></div>
+      <div id="hoursCard" style="display:none" class="hours">
+        <div id="hoursBody"></div>
+      </div>
+      <div class="cta-row" id="ctaRow" style="display:none">
+        <a id="btnOrder" class="btn-line btn-order" href="#" style="display:none">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          สั่งออเดอร์ผ่าน LINE
+        </a>
+        <a id="btnAdd" class="btn-line btn-add" href="#" style="display:none">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+          เพิ่มเพื่อน LINE
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR code for printing -->
+  <div class="qr-section" id="qrSection" style="display:none">
+    <div class="qr-label">QR สำหรับสแกน</div>
+    <img class="qr-img" id="qrImg" alt="QR Code" onerror="this.style.display='none'">
+    <div class="qr-note">สแกนด้วยกล้องมือถือหรือ LINE เพื่อสั่งอาหาร</div>
+  </div>
+
+  <!-- Top menu preview (max 5 items) -->
+  <div class="menu-preview" id="menuSection" style="display:none">
+    <h3>เมนูยอดนิยม</h3>
+    <div class="menu-list" id="menuList"></div>
+  </div>
+
+  <!-- Share URL copy button -->
+  <div class="owner-bar">
+    <button class="copy-link" onclick="copyShareUrl()">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      คัดลอกลิงก์ร้าน
+    </button>
+  </div>
+
+  <div class="share-footer">
+    <a href="/signup/">เปิดร้านของคุณบน KhaiDee</a> ฟรี 60 วัน ไม่ต้องใส่บัตร
+  </div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DAYS=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+
+function toast(msg){ const t=document.createElement('div');
+  Object.assign(t.style,{position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'#111',color:'#fff',padding:'10px 18px',borderRadius:'10px',fontSize:'14px',fontWeight:'500',zIndex:'9999',whiteSpace:'nowrap'});
+  t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
+
+async function copyShareUrl(){
+  const url=location.href;
+  try{ await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว ✓'); }
+  catch(e){ try{ const ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('คัดลอกแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ'); } }
+}
+
+(async()=>{
+  try{
+    const [profile, cfg, menu] = await Promise.all([
+      fetch('/api/shop/profile').then(r=>r.json()),
+      fetch('/api/config').then(r=>r.json()),
+      fetch('/api/menu').then(r=>r.json()).catch(()=>[])
+    ]);
+
+    // Brand theming
+    const theme = profile.theme || '#6366f1';
+    document.documentElement.style.setProperty('--ind', theme);
+    $('shopHeader').style.background = theme;
+    if(profile.logo){ $('shopLogo').src = profile.logo; $('shopLogo').style.display=''; }
+    else { $('shopLogo').style.display='none'; }
+
+    // Name + title
+    const name = profile.name || 'ร้านของเรา';
+    $('shopName').textContent = name;
+    document.title = name + ' — KhaiDee';
+    // Update OG meta
+    document.querySelector('meta[property="og:type"]')?.remove();
+
+    // Address
+    if(profile.address){ $('shopAddr').textContent = profile.address; $('shopAddr').style.display=''; }
+    else if(profile.phone){ $('shopAddr').textContent = 'โทร ' + profile.phone; $('shopAddr').style.display=''; }
+
+    // Open/closed badge
+    const badge=$('openBadge');
+    badge.innerHTML=`<span class="badge ${profile.isOpen?'open':'closed'}">`+
+      `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="6"/></svg>`+
+      `${profile.isOpen?'เปิดอยู่':'ปิดอยู่'}</span>`;
+
+    // Hours
+    const hrs = profile.hours || [];
+    if(hrs.length){
+      const today = new Date().getDay();
+      const hrows = hrs.map(h=>{
+        const isToday = h.day_of_week === today;
+        const timeStr = h.open && h.close ? h.open + '–' + h.close : (h.closed?'ปิด':'—');
+        return `<div class="hrow${isToday?' today':''}">`+
+          `<span>${DAYS[h.day_of_week]||''}</span><span>${esc(timeStr)}</span></div>`;
+      }).join('');
+      $('hoursBody').innerHTML=hrows;
+      $('hoursCard').style.display='';
+    }
+
+    // LINE CTA buttons
+    const liffId = cfg.liffId || '';
+    const addFriend = cfg.addFriendUrl || '';
+    const hasLine = !cfg.posOnly && (liffId || addFriend);
+    if(hasLine){
+      $('ctaRow').style.display='flex';
+      if(liffId){
+        const liffUrl='https://liff.line.me/'+liffId+'?zone=1';
+        $('btnOrder').href=liffUrl; $('btnOrder').style.display='';
+        // QR code
+        $('qrImg').src='/api/qr/1'; $('qrSection').style.display='';
+      }
+      if(addFriend){
+        $('btnAdd').href=addFriend; $('btnAdd').style.display='';
+        if(!liffId){ $('qrSection').style.display='none'; }
+      }
+    }
+
+    // Menu preview (first 5 visible, priced items)
+    const items=(Array.isArray(menu)?menu:[]).filter(i=>!i.hidden&&i.price>0).slice(0,5);
+    if(items.length){
+      $('menuList').innerHTML=items.map(i=>`
+        <div class="menu-item">
+          ${i.photo?`<img src="${esc(i.photo)}" alt="${esc(i.name)}" onerror="this.style.background='#e5e7eb'">`:'<div style="width:44px;height:44px;border-radius:8px;background:#f3f4f6;flex:none"></div>'}
+          <div class="mi-info"><div class="mi-name">${esc(i.name)}</div><div class="mi-price">฿${Math.round(i.price)}</div></div>
+        </div>`).join('');
+      $('menuSection').style.display='';
+    }
+  }catch(e){ $('shopName').textContent='เกิดข้อผิดพลาด'; }
+})();
+</script>
+</body></html>
