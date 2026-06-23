@@ -598,15 +598,14 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   return { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
 }
 
-/** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
+/** Daily reset: snapshot yesterday's zone stats and restart queue counters for the current tenant. */
 export function resetAllZones() {
   // Fires at 00:00 Bangkok, so the day that just ended is "yesterday". Archive its totals, then
   // restart the queue counters. Tickets/orders are NOT deleted — they persist for history and
   // every report is date-filtered. (The old code DELETEd tickets, which hit a FK error against
   // orders and rolled the whole reset back, so numbers never restarted and "today" accumulated.)
   const ended = db.prepare(`SELECT date('now','+7 hours','-1 day') AS d`).get().d;
-  // NOTE: archiveTodaySales is NOT called here — doDailyReset handles per-tenant archiving before
-  // calling resetAllZones, so each tenant's row lands with the correct branch_id.
+  const tenantStores = `(SELECT id FROM stores WHERE tenant_id=${TID()})`;
   const tx = db.transaction(() => {
     db.prepare(
       `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)
@@ -616,12 +615,12 @@ export function resetAllZones() {
          (SELECT COUNT(*) FROM tickets t WHERE t.zone_id=z.id AND t.status='no_show' AND date(t.closed_at,'+7 hours')=?),
          (SELECT CAST(AVG((julianday(called_at)-julianday(created_at))*86400) AS INTEGER) FROM tickets t WHERE t.zone_id=z.id AND t.called_at IS NOT NULL AND date(t.created_at,'+7 hours')=?),
          (SELECT AVG(rating) FROM tickets t WHERE t.zone_id=z.id AND t.rating IS NOT NULL AND date(t.created_at,'+7 hours')=?)
-       FROM zones z`
+       FROM zones z WHERE z.store_id IN ${tenantStores}`
     ).run(ended, ended, ended, ended, ended, ended);
-    db.exec(`UPDATE zones SET last_number = 0, last_called = 0`);
+    db.prepare(`UPDATE zones SET last_number=0, last_called=0 WHERE store_id IN ${tenantStores}`).run();
   });
   tx();
-  return db.prepare('SELECT id FROM zones').all().map((z) => z.id);
+  return db.prepare(`SELECT id FROM zones WHERE store_id IN ${tenantStores}`).all().map((z) => z.id);
 }
 
 export function setZoneOpen(zoneId, isOpen) {

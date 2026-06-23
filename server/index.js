@@ -1479,9 +1479,21 @@ function doDailyReset() {
     } else {
       try { Q.archiveTodaySales(ended); Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
     }
-    const zoneIds = Q.resetAllZones();
-    for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
-    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+    let totalZones = 0;
+    if (SAAS) {
+      for (const t of listTenants()) {
+        try {
+          const zoneIds = runWithTenant(t.id, () => Q.resetAllZones());
+          for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+          totalZones += zoneIds.length;
+        } catch (_) { /* never block reset */ }
+      }
+    } else {
+      const zoneIds = Q.resetAllZones();
+      for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+      totalZones = zoneIds.length;
+    }
+    console.log(`[reset] queue reset to 0 for ${totalZones} zones`);
   } catch (e) {
     // Never let a reset failure crash the process or stop the next night from being scheduled.
     console.error('[reset] failed:', e && e.message);
