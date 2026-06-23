@@ -627,6 +627,8 @@ export function resetAllZones() {
 }
 
 export function setZoneOpen(zoneId, isOpen) {
+  const zone = getZone(zoneId);
+  if (!zone) throw new Error('zone_not_found');
   db.prepare('UPDATE zones SET is_open = ? WHERE id = ?').run(isOpen ? 1 : 0, zoneId);
   return getZone(zoneId);
 }
