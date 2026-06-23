@@ -132,7 +132,7 @@
       <div><h1>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
     </div>
-    <input id="histSearch" oninput="filterHistory()" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู" autocomplete="off" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);background:#fff;box-sizing:border-box">
+    <input id="histSearch" oninput="filterHistory()" placeholder="ค้นหา เลขคิว / ชื่อลูกค้า / เมนู" autocomplete="off" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);background:#fff;box-sizing:border-box">
     <div id="historyBody" style="margin-top:14px"></div>
   </div>
 
@@ -443,7 +443,7 @@
 <!-- CASH: amount received → change (or exact) -->
 <div id="cashPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:360px;width:100%;margin:0">
-    <div class="row between"><h1 style="margin:0">💵 เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()" aria-label="ปิด">✕</button></div>
+    <div class="row between"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>เงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()" aria-label="ปิด">✕</button></div>
     <div style="text-align:center;margin:10px 0 6px"><div class="muted" style="font-size:13px">ยอดที่ต้องชำระ</div>
       <div style="font-size:24px;font-weight:800;color:var(--navy)">฿<span id="cashDue">0</span></div></div>
     <label class="muted" style="font-size:13px">รับเงินมา (เว้นว่าง = รับพอดี)</label>
@@ -548,6 +548,14 @@ const IC={
   print:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>',
   kitchen:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 13.5V21h12v-7.5"/><path d="M5 9a4 4 0 0 1 4-4 3.5 3.5 0 0 1 6 0 4 4 0 0 1 4 4 3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/></svg>',
   slip:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg>',
+  refresh:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+  trend:'<svg class="ic" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+  clock:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  cal:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  trash:'<svg class="ic" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  cup:'<svg class="ic" viewBox="0 0 24 24"><path d="M7 2h10l2 10H5z"/><path d="M5 12a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>',
+  card:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  target:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -633,7 +641,7 @@ function renderHistory(list, q){
     return `<div class="qitem"><div style="flex:1">
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
-      ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
+      ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">${IC.refresh}ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
       <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
   }).join('');
 }
@@ -681,7 +689,7 @@ function renderSales(){
   const span = salesView==='daily'?14 : salesView==='weekly'?12 : salesView==='monthly'?12 : 6;
   const trendRows = rows.slice(0,span).reverse().map(r=>({ label:keyOf(r), sub:shortPeriod(keyOf(r)), value:Math.round(r.net||0) }));
   const trend=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 10px 6px;margin-bottom:14px">
-    <div class="row between" style="margin:0 4px 2px"><b style="font-size:13px">📈 แนวโน้มกำไรสุทธิ (${lab})</b><span class="muted" style="font-size:11px">${span} ${lab}ล่าสุด</span></div>
+    <div class="row between" style="margin:0 4px 2px"><b style="font-size:13px">${IC.trend}แนวโน้มกำไรสุทธิ (${lab})</b><span class="muted" style="font-size:11px">${span} ${lab}ล่าสุด</span></div>
     ${chartCols(trendRows, baht)}</div>`;
   // P&L summary across the visible period (cost lines show for days archived after the breakdown shipped).
   const T=rows.reduce((a,r)=>({revenue:a.revenue+(r.revenue||0),gross:a.gross+(r.gross||0),net:a.net+(r.net||0),
@@ -855,7 +863,7 @@ window.editBranchForm=(id)=>{
         <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
         <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
       </div>
-      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'🟢 เปิดอยู่ — กดปิดร้านชั่วคราว':'🔴 ปิดอยู่ — กดเปิดร้าน'}</button>`}
+      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'<span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;margin-right:6px"></span> เปิดอยู่ — กดปิดร้านชั่วคราว':'<span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;margin-right:6px"></span> ปิดอยู่ — กดเปิดร้าน'}</button>`}
       <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
     </div>`;
 };
@@ -1167,15 +1175,15 @@ async function renderCharts(){
   const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
   $('chartsBody').innerHTML =
-    card('📈 ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
+    card(IC.trend+'ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
-      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
-      card('💳 ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
+      card(IC.cup+'เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
+      card(IC.card+'ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
     `</div>`+
-    card('🕐 ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v)) +
-    (wk.length?card('📅 แนวโน้มรายสัปดาห์ (กำไรสุทธิ · 12 สัปดาห์)', chartCols(wk, baht)):'') +
-    (mo.length?card('🗓️ แนวโน้มรายเดือน (กำไรสุทธิ · 12 เดือน)', chartCols(mo, baht)):'') +
-    (yr.length?card('📆 แนวโน้มรายปี (กำไรสุทธิ)', chartCols(yr, baht)):'');
+    card(IC.clock+'ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v)) +
+    (wk.length?card(IC.cal+'แนวโน้มรายสัปดาห์ (กำไรสุทธิ · 12 สัปดาห์)', chartCols(wk, baht)):'') +
+    (mo.length?card(IC.cal+'แนวโน้มรายเดือน (กำไรสุทธิ · 12 เดือน)', chartCols(mo, baht)):'') +
+    (yr.length?card(IC.cal+'แนวโน้มรายปี (กำไรสุทธิ)', chartCols(yr, baht)):'');
 }
 window.showReport=async()=>{
   try{ const r=await api('/api/report'); const p=r.pnl||{};
@@ -1195,7 +1203,7 @@ window.showReport=async()=>{
       `</div>`+
       `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
         <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> ${unit()} · รวม <b>${money(r.revenue)}</b></span>
-        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> ${unit()}</span>
+        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · ${IC.trash}ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> ${unit()}</span>
       </div>`+
       `<h2>กำไร–ขาดทุน (วันนี้)</h2><div class="queue-list" style="gap:4px">`+
         pl('ยอดเครื่องดื่ม',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
@@ -1213,7 +1221,7 @@ window.showReport=async()=>{
         <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">ขายแล้ว ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· เหลืออีก '+(p.breakEvenCups-(p.cups||0))}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">เป้าหมายวันนี้ ${money(p.targetDaily)} · ส่วนต่าง <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
       `<div style="margin-top:10px;background:#eef7fb;border:1px solid var(--line);border-radius:12px;padding:12px">
-        <div class="row between" style="align-items:center"><b>🎯 เป้ากำไร</b>
+        <div class="row between" style="align-items:center"><b>${IC.target}เป้ากำไร</b>
           <span style="font-size:13px">อัตรากำไร <input id="goalMargin" type="number" value="50" min="0" max="95" step="5" style="width:64px;padding:6px;display:inline-block" oninput="calcGoal()">%</span></div>
         <div id="goalOut" style="margin-top:8px;font-size:13px"></div></div>`+
       `<h2 style="margin-top:16px">สัดส่วนยอดขาย</h2>${bars||'<p class="muted">ยังไม่มีการขายวันนี้</p>'}`+
@@ -1240,11 +1248,11 @@ async function loadInsights(){
     <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${((stars[s]||0)/maxN*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
     <span class="muted" style="width:28px;text-align:right">${stars[s]||0}</span></div>`).join('');
   const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}</span><span class="muted">${t.order_count} ครั้ง</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
-  box.innerHTML=`<h2>⭐ ความพึงพอใจลูกค้า</h2>
+  box.innerHTML=`<h2>★ ความพึงพอใจลูกค้า</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
       ${sat.total?starBars:'<p class="muted" style="font-size:12px">ยังไม่มีรีวิว</p>'}</div>
-    <h2>🔁 ลูกค้าซื้อซ้ำ (LINE)</h2>
+    <h2>${IC.refresh}ลูกค้าซื้อซ้ำ (LINE)</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
@@ -1297,7 +1305,7 @@ async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
     const tiers=await api('/api/price-tiers'); const chans=await api('/api/channels/all');
     const tierRows=tiers.filter(t=>!t.is_default).map(t=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(t.name)} (บวกจากราคาปกติ)</span><input id="tier_${t.id}" type="number" inputmode="decimal" value="${t.markup_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">%</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveTier(${t.id})">บันทึก</button></div>`).join('');
     const chanRows=chans.map(c=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(c.name)} ${c.active?'':'<span class="muted">(ปิด)</span>'}</span><input id="chan_${c.id}" type="number" inputmode="decimal" value="${c.commission_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">% คอม</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveChan(${c.id})">บันทึก</button></div>`).join('');
-    box.innerHTML=`<details style="border:1px solid var(--line);border-radius:10px;padding:10px"><summary style="cursor:pointer;font-weight:700">💰 ราคาเดลิเวอรี่ & ค่าคอมช่องทาง</summary>
+    box.innerHTML=`<details style="border:1px solid var(--line);border-radius:10px;padding:10px"><summary style="cursor:pointer;font-weight:700">${IC.cash}ราคาเดลิเวอรี่ & ค่าคอมช่องทาง</summary>
       <div style="margin-top:8px"><div class="muted" style="font-size:12px">ราคาเดลิเวอรี่ = ราคาปกติ + % ที่ตั้ง (เช่น 150% = 2.5 เท่า)</div>${tierRows}
       <div class="muted" style="font-size:12px;margin-top:8px">ค่าคอมแพลตฟอร์ม (ใช้คำนวณกำไรหลังหักคอม)</div>${chanRows}</div></details>`;
   }catch(e){ box.innerHTML=''; }
