@@ -1711,9 +1711,9 @@ function zonePanel(z){
 }
 
 // New-order sound on/off (cashier preference, remembered). Default on.
-function soundOn(){ try{ return localStorage.getItem('yodee_sound')!=='0'; }catch(e){ return true; } }
+function soundOn(){ try{ return localStorage.getItem(lsKey('sound'))!=='0'; }catch(e){ return true; } }
 function applySoundBtn(){ const b=$('soundBtn'); if(b){ const on=soundOn(); b.innerHTML = (window.icon?icon(on?'bell':'bellOff',{size:18}):(on?'🔔':'🔕')); b.setAttribute('aria-label', (on?'ปิด':'เปิด')+'เสียงเตือนออเดอร์ใหม่'); b.setAttribute('aria-pressed', on?'true':'false'); } }
-window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem('yodee_sound', next?'1':'0'); }catch(e){}
+window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem(lsKey('sound'), next?'1':'0'); }catch(e){}
   applySoundBtn(); toast(next?'🔔 เปิดเสียงเตือนออเดอร์ใหม่':'🔕 ปิดเสียงเตือนออเดอร์ใหม่'); if(next) beep(880); };
 // Two-tone chime for a new LINE order (distinct from the single payment beep). Respects the mute toggle.
 function dingNewOrder(){ if(!soundOn()) return; try{ beep(1046); setTimeout(()=>{ try{ beep(1318); }catch(e){} },130); }catch(e){} }
@@ -1941,7 +1941,7 @@ window.printReceipt=async(tid)=>{
     }).join('');
     const net=Math.round((((o.total||0)-(o.discount||0)))*100)/100;
     $('printArea').innerHTML=`<div class="rcpt">
-      <h2>YO-DEE YOGURT</h2>
+      <h2>${((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt').toUpperCase()}</h2>
       <div class="ctr">${esc(v.zone||'')}</div>
       <div class="ctr">${dt}</div>
       <div class="hr"></div>
@@ -1955,7 +1955,7 @@ window.printReceipt=async(tid)=>{
       <div class="li"><span>ชำระโดย</span><span>${methodTH(o.method)}${o.paid?' ✓':''}</span></div>
       <div class="hr"></div>
       <div class="ctr">ขอบคุณที่ใช้บริการค่ะ 🙏</div>
-      <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(v.code||'')}</div>
+      <div class="ctr" style="font-size:10px">${esc((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt')} · ${esc(v.code||'')}</div>
     </div>`;
     window.print();
   }catch(e){ toast(err(e)); }

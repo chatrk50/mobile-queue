@@ -1361,10 +1361,12 @@ app.get('/api/report.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const { buildReportWorkbook } = await import('./report-excel.js');
-    const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
-    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || BRAND.name });
+    const stores = db.prepare('SELECT name FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(currentTenantId());
+    const storeName = stores?.name || brandFor(req).name || BRAND.name;
+    const buf = await buildReportWorkbook(Q.dailyReport(), { store: storeName });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
+    const rSlug = storeName.replace(/[^a-z0-9]/gi, '_');
+    res.set('Content-Disposition', `attachment; filename="${rSlug}_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
@@ -1375,11 +1377,13 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
     const branchId = req.query.branchId ? Number(req.query.branchId) : null;
     const { buildDetailedWorkbook } = await import('./report-excel.js');
-    const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+    const stores = db.prepare('SELECT name FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(currentTenantId());
+    const storeName = stores?.name || brandFor(req).name || BRAND.name;
     const data = Q.detailedReports({ date, branchId });
-    const buf = await buildDetailedWorkbook(data, { store: stores?.name || BRAND.name, date: date || new Date().toISOString().slice(0, 10) });
+    const buf = await buildDetailedWorkbook(data, { store: storeName, date: date || new Date().toISOString().slice(0, 10) });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="YO-DEE_Detailed_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
+    const dSlug = storeName.replace(/[^a-z0-9]/gi, '_');
+    res.set('Content-Disposition', `attachment; filename="${dSlug}_Detailed_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
