@@ -455,14 +455,15 @@ export function archiveTodaySales(dateStr = null) {
  *  revenue → COGS → gross profit → opex/waste → net profit chain (cost lines available for days
  *  archived after the breakdown columns shipped; revenue/gross/net are present for all). */
 export function salesHistory() {
-  const daily = db.prepare('SELECT * FROM sales_history ORDER BY date DESC LIMIT 90').all();
+  const stores = `(SELECT id FROM stores WHERE tenant_id=${TID()})`;
+  const daily = db.prepare(`SELECT * FROM sales_history WHERE branch_id IN ${stores} ORDER BY date DESC LIMIT 90`).all();
   const roll = (groupExpr, limit) => db.prepare(
     `SELECT ${groupExpr} AS period, COUNT(*) AS days,
             SUM(cups) AS cups, SUM(revenue) AS revenue, SUM(gross) AS gross, SUM(net) AS net,
             SUM(COALESCE(drink_sales,0)) AS drink_sales, SUM(COALESCE(topping_sales,0)) AS topping_sales,
             SUM(COALESCE(cogs,0)) AS cogs, SUM(COALESCE(opex,0)) AS opex, SUM(COALESCE(waste_cost,0)) AS waste_cost,
             SUM(void_cups) AS void_cups, SUM(void_amount) AS void_amount
-       FROM sales_history GROUP BY period ORDER BY period DESC LIMIT ?`
+       FROM sales_history WHERE branch_id IN ${stores} GROUP BY period ORDER BY period DESC LIMIT ?`
   ).all(limit);
   const weekly = roll("strftime('%Y-W%W', date)", 26);   // YYYY-Www (Mon-based ISO-ish week)
   const monthly = roll('substr(date,1,7)', 24);   // YYYY-MM
