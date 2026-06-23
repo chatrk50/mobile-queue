@@ -177,11 +177,27 @@ ok(crossPromoGuard, 'promo: A cannot cancel C\'s promo (promo_not_found)');
 const cCount = runWithTenant(C.id, () => Q.countLineCustomers());
 const aCount = runWithTenant(A.id, () => Q.countLineCustomers());
 ok(typeof cCount === 'number' && typeof aCount === 'number', 'promo: countLineCustomers returns number for each tenant');
-// duePromos returns all tenants (scheduler is tenant-agnostic); check it only returns scheduled rows
-const futureTs = Math.floor(Date.now() / 1000) + 3600;
-runWithTenant(C.id, () => Q.createPromo({ message: 'scheduled', sendAt: futureTs }));
-const due = Q.duePromos();
-ok(due.every(p => p.status === 'scheduled'), 'promo: duePromos() returns only scheduled rows');
+// duePromos: a scheduled promo becomes due once send_at passes; future-scheduled does not.
+const nowTs = Math.floor(Date.now() / 1000);
+const futureTs = nowTs + 3600;
+// Create scheduled promo, then back-date it to simulate time passing (scheduler logic).
+const nowPlusPromo = runWithTenant(C.id, () => Q.createPromo({ message: 'near-future', sendAt: nowTs + 1 }));
+db.prepare('UPDATE promos SET send_at=? WHERE id=?').run(nowTs - 5, nowPlusPromo.id);
+const futurePromo = runWithTenant(C.id, () => Q.createPromo({ message: 'future', sendAt: futureTs }));
+const due1 = Q.duePromos();
+ok(due1.some(p => p.id === nowPlusPromo.id), 'promo: past-due promo appears in duePromos()');
+ok(!due1.some(p => p.id === futurePromo.id), 'promo: future promo does NOT appear in duePromos()');
+ok(due1.every(p => p.status === 'scheduled'), 'promo: duePromos() returns only scheduled rows');
+// lifecycle: mark sent → disappears from duePromos; recipients stored
+runWithTenant(C.id, () => Q.markPromoSent(nowPlusPromo.id, { recipients: 42 }));
+const due2 = Q.duePromos();
+ok(!due2.some(p => p.id === nowPlusPromo.id), 'promo: sent promo no longer in duePromos()');
+const sent = runWithTenant(C.id, () => Q.listPromos()).find(p => p.id === nowPlusPromo.id);
+ok(sent && sent.status === 'sent' && sent.recipients === 42, 'promo: markPromoSent sets status=sent + recipients');
+// cancel: cancelled promo does not appear in duePromos
+runWithTenant(C.id, () => Q.cancelPromo(futurePromo.id));
+const due3 = Q.duePromos();
+ok(!due3.some(p => p.id === futurePromo.id), 'promo: cancelled promo not in duePromos()');
 
 // --- clearTransactions isolation: A clearing must NOT wipe C's data ---
 // Give C a paid order so there's something to protect.
