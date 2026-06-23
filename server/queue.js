@@ -824,8 +824,8 @@ export function getRecipe(menuItemId) {
   return db.prepare(
     `SELECT r.ingredient_id AS ingredientId, r.qty, i.name, i.unit, i.stock_qty
        FROM recipes r JOIN ingredients i ON i.id = r.ingredient_id
-      WHERE r.menu_item_id = ? ORDER BY i.name`
-  ).all(menuItemId);
+      WHERE r.menu_item_id = ? AND i.tenant_id = ? ORDER BY i.name`
+  ).all(menuItemId, TID());
 }
 /** Replace a menu item's recipe with the given {ingredientId, qty} rows (qty>0 kept). */
 export function setRecipe(menuItemId, rows = []) {
