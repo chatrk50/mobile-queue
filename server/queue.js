@@ -436,12 +436,15 @@ export function archiveTodaySales(dateStr = null) {
   const rep = dailyReport(null, validDay ? dateStr : null);
   if ((rep.issued || 0) === 0 && (rep.revenue || 0) === 0) return null; // nothing to save
   const dayExpr = validDay ? `'${dateStr}'` : `date('now','+7 hours')`;
+  const firstStore = db.prepare('SELECT id FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(TID());
+  const branchId = firstStore ? firstStore.id : 1;
   db.prepare(
     `INSERT OR REPLACE INTO sales_history
-       (date, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows,
+       (date, branch_id, cups, revenue, gross, net, void_orders, void_cups, void_amount, issued, served, no_shows,
         drink_sales, topping_sales, cogs, opex, waste_cost)
-     VALUES (${dayExpr}, ?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?)`
-  ).run(rep.pnl.cups || 0, rep.revenue || 0, rep.pnl.grossProfit || 0, rep.pnl.netProfit || 0,
+     VALUES (${dayExpr}, ?, ?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?)`
+  ).run(branchId,
+        rep.pnl.cups || 0, rep.revenue || 0, rep.pnl.grossProfit || 0, rep.pnl.netProfit || 0,
         rep.voided.orders || 0, rep.voided.cups || 0, rep.voided.amount || 0,
         rep.issued || 0, rep.cupsSold || 0, rep.noShows || 0,
         rep.pnl.drinkSales || 0, rep.pnl.toppingSales || 0, rep.pnl.cogs || 0, rep.pnl.opexDaily || 0, rep.pnl.wasteCost || 0);
@@ -599,7 +602,8 @@ export function resetAllZones() {
   // every report is date-filtered. (The old code DELETEd tickets, which hit a FK error against
   // orders and rolled the whole reset back, so numbers never restarted and "today" accumulated.)
   const ended = db.prepare(`SELECT date('now','+7 hours','-1 day') AS d`).get().d;
-  archiveTodaySales(ended); // sales_history row for the day that just ended
+  // NOTE: archiveTodaySales is NOT called here — doDailyReset handles per-tenant archiving before
+  // calling resetAllZones, so each tenant's row lands with the correct branch_id.
   const tx = db.transaction(() => {
     db.prepare(
       `INSERT OR REPLACE INTO daily_stats (date, zone_id, issued, served, no_shows, avg_wait_sec, avg_rating)

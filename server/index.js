@@ -1459,10 +1459,11 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
 function doDailyReset() {
   try {
     // Push end-of-day LINE summary to each owner BEFORE counters are wiped.
+    const ended = db.prepare(`SELECT date('now','+7 hours','-1 day') AS d`).get().d;
     if (SAAS) {
       const REMIND_DAYS = new Set([1, 3, 7]);
       for (const t of listTenants()) {
-        try { runWithTenant(t.id, () => Q.pushOwnerSummary()); } catch (_) { /* never block reset */ }
+        try { runWithTenant(t.id, () => { Q.archiveTodaySales(ended); Q.pushOwnerSummary(); }); } catch (_) { /* never block reset */ }
         // Trial / plan-expiry reminders: send at -7, -3, -1 days.
         try {
           const bs = billingStatus(t.id);
@@ -1476,7 +1477,7 @@ function doDailyReset() {
         } catch (_) { /* never block reset */ }
       }
     } else {
-      try { Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
+      try { Q.archiveTodaySales(ended); Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
     }
     const zoneIds = Q.resetAllZones();
     for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
