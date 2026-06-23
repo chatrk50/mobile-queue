@@ -28,9 +28,7 @@
     const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const html=zones.map(z=>`<a class="btn ghost" href="${b}/liff/?zone=${z.id}">${ic}ลูกค้า · ${esc(z.name)}</a>`).join('');
     document.getElementById('printBtn').insertAdjacentHTML('beforebegin', html);
-  }catch(e){
-    document.getElementById('printBtn').insertAdjacentHTML('beforebegin',`<a class="btn ghost" href="${b}/liff/?zone=1">${ic}ลูกค้า (โซน 1)</a>`);
-  }
+  }catch(e){ /* API unavailable — skip zone links rather than emit wrong zone=1 */ }
 })();
 </script>
 <script src="/assets/brand.js"></script></body></html>
