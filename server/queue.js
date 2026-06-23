@@ -1552,7 +1552,7 @@ export function createOrder(zoneId, items, opts = {}) {
   const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
   // Classify each line as a base drink or an addon (topping) for exact addon reporting.
   const toppingNames = new Set(
-    db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name)
+    db.prepare("SELECT name FROM menu_items WHERE category='topping' AND tenant_id=?").all(TID()).map((r) => r.name)
   );
   // Pay-first model: create the ticket in 'pending' state with NO queue number yet.
   // The real queue number is issued only once payment is confirmed (assignQueueNumber),
@@ -1654,6 +1654,7 @@ export function setOrderPaid(ticketId, opts = {}) {
   const { actorId = null, method = null, skipLoyalty = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(order.branch_id, TID())) throw new Error('order_not_found');
   // Idempotent: an already-paid order returns its existing result unchanged, so a retried
   // combined create+pay never double-deducts stock, double-awards loyalty, or resets paid_at.
   if (order.payment_status === 'paid') {
@@ -1837,7 +1838,7 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
 
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   const { actorId = null, reason = null, kind: kindOpt = null, restock = false } = opts;
-  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT * FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   const wasPaid = !!(order && order.payment_status === 'paid');   // paid => stock was deducted
