@@ -283,7 +283,9 @@ app.get('/api/onboard', (req, res) => {
   const lineOk = !!(getSetting('line:token', '') || getSetting('liff:id', ''));
   const stores = Q.listStores();
   const hasHours = stores.some((s) => s.hours_open);
-  res.json({ name: brand.name, menuCount, lineOk, hasHours, templates: listTemplates() });
+  const tenant = getTenant(req.tenantId);
+  const referralCode = tenant?.referral_code || null;
+  res.json({ name: brand.name, menuCount, lineOk, hasHours, templates: listTemplates(), referralCode });
 });
 
 // ---------- SaaS self-registration (Phase B) ----------

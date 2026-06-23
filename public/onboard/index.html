@@ -57,6 +57,14 @@
   .tpl-count{font-size:11px;color:var(--mut)}
   .tpl-skip{display:block;text-align:center;margin-top:10px;font-size:12px;color:var(--mut);cursor:pointer;text-decoration:underline;background:none;border:none;width:100%;font-family:inherit}
   .tpl-skip:hover{color:var(--ind)}
+  /* referral card */
+  .ref-card{background:linear-gradient(135deg,#eef2ff,#fdf4ff);border:1px solid #c7d2fe;border-radius:20px;padding:20px;margin-bottom:14px}
+  .ref-card h2{font-family:'Kanit',sans-serif;font-size:15px;font-weight:600;margin:0 0 4px;color:var(--ink)}
+  .ref-card p{font-size:12.5px;color:var(--mut);margin:0 0 12px}
+  .ref-row{display:flex;gap:8px;align-items:center}
+  .ref-code{flex:1;background:#fff;border:1px solid #c7d2fe;border-radius:10px;padding:10px 12px;font-size:18px;font-weight:700;font-family:'Kanit',monospace;letter-spacing:.06em;color:var(--ind);text-align:center}
+  .ref-copy{flex:none;padding:10px 14px;background:var(--ind);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s}
+  .ref-copy:hover{background:#5457e0}
   /* CTA */
   .cta{display:block;width:100%;text-align:center;margin-top:6px;padding:14px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;font-family:'Kanit',sans-serif;cursor:pointer;text-decoration:none;box-shadow:0 8px 22px rgba(99,102,241,.35);transition:.15s}
   .cta:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(99,102,241,.45)}
@@ -136,6 +144,16 @@
     </div>
   </div>
 
+  <!-- Referral card — shown when referralCode is present -->
+  <div class="ref-card" id="refCard" style="display:none">
+    <h2>แนะนำเพื่อน รับเดือนพิเศษฟรี</h2>
+    <p>เพื่อนสมัครด้วยโค้ดนี้ — ทั้งคุณและเพื่อนได้ Pro ต่อฟรีอีก 30 วัน</p>
+    <div class="ref-row">
+      <div class="ref-code" id="refCodeDisplay"></div>
+      <button class="ref-copy" id="refCopyBtn" onclick="copyRef()">ก๊อป</button>
+    </div>
+  </div>
+
   <a class="cta" id="ctaBtn" href="#">เข้าหน้าแคชเชียร์ →</a>
   <a class="skip" href="/help/line/">อยากเชื่อม LINE ก่อน? ดูคู่มือทีละขั้นตอน</a>
 </div>
@@ -154,6 +172,14 @@ function copyUrl(){
   }).catch(() => {});
 }
 
+function copyRef() {
+  const code = document.getElementById('refCodeDisplay').textContent;
+  const link = location.origin + '/signup/?ref=' + code;
+  navigator.clipboard.writeText(link).then(() => {
+    const b = document.getElementById('refCopyBtn');
+    b.textContent = 'ก๊อปแล้ว!'; setTimeout(() => { b.textContent = 'ก๊อป'; }, 1800);
+  }).catch(() => {});
+}
 function markMenuDone(count) {
   document.getElementById('ico1').className = 'ico done';
   document.getElementById('s1status').innerHTML =
@@ -192,6 +218,12 @@ async function applyTemplate(id, btn) {
         grid.appendChild(btn);
       });
       document.getElementById('tplCard').style.display = '';
+    }
+
+    // Referral card
+    if (d.referralCode) {
+      document.getElementById('refCodeDisplay').textContent = d.referralCode;
+      document.getElementById('refCard').style.display = '';
     }
 
     // Step 3: LINE
