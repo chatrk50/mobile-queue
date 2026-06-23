@@ -704,7 +704,7 @@ app.delete('/api/promos/:id', (req, res) => {
 // uploads a logo (stored as a data URL in the tenant row). SaaS-only — single-tenant uses env. ----
 app.get('/api/admin/brand', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ saas: SAAS, ...brandFor(req) });
+  res.json({ saas: SAAS, ...brandFor(req), about: getSetting('brand:about', '') || '' });
 });
 // Owner sees their plan + this-month usage (quota).
 app.get('/api/admin/usage', (req, res) => {
@@ -749,7 +749,11 @@ app.post('/billing/omise/webhook', async (req, res) => {
 app.post('/api/admin/brand', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });   // brand identity = owner only
   if (!SAAS) return res.status(400).json({ error: 'single_tenant_uses_env' });
-  try { updateTenantBrand(req.tenantId, req.body || {}); res.json({ ok: true, ...brandFor(req) }); }
+  try {
+    updateTenantBrand(req.tenantId, req.body || {});
+    if (req.body?.about !== undefined) setSetting('brand:about', String(req.body.about || '').slice(0, 200));
+    res.json({ ok: true, ...brandFor(req), about: getSetting('brand:about', '') || '' });
+  }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---- Per-tenant LINE connect (Phase C). A Pkg-2 brand owner pastes their own Messaging API

@@ -2038,6 +2038,7 @@ window.showFeatures=async()=>{
       </div>
       <input id="brandNameInp" placeholder="ชื่อร้าน" value="${esc(br.name||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
       <input id="brandShortInp" placeholder="ชื่อย่อ" value="${esc(br.short||'')}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
+      <textarea id="brandAboutInp" placeholder="คำอธิบายสั้นๆ ของร้าน เช่น 'โยเกิร์ตเพื่อสุขภาพ รสชาติดี'" maxlength="200" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:6px;resize:vertical;min-height:60px;font-family:inherit">${esc(br.about||'')}</textarea>
       <div class="row" style="gap:8px;margin-bottom:8px">
         <input id="brandUnitInp" placeholder="หน่วย (แก้ว/จาน)" value="${esc(br.unit||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <input id="brandThemeInp" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(br.theme||'')?br.theme:'#1e3a5f'}" style="width:52px;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px">
@@ -2140,7 +2141,7 @@ window.onLogoFile=async(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) 
   try{ _brandLogo=await resizeImage(f,256); $('brandLogoPrev').src=_brandLogo; $('brandLogoPrev').style.visibility='visible'; }
   catch(err2){ toast('อัปโหลดไม่สำเร็จ'); } };
 window.saveBrandConfig=async()=>{
-  const body={ name:$('brandNameInp').value.trim(), short:$('brandShortInp').value.trim(), unit:$('brandUnitInp').value.trim(), theme:$('brandThemeInp').value };
+  const body={ name:$('brandNameInp').value.trim(), short:$('brandShortInp').value.trim(), unit:$('brandUnitInp').value.trim(), theme:$('brandThemeInp').value, about:($('brandAboutInp')||{}).value||'' };
   if(_brandLogo) body.logo=_brandLogo;
   try{ await api('/api/admin/brand',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast('บันทึกแบรนด์แล้ว ✓'); applyBrand(); }catch(e){ toast(err(e)); } };
