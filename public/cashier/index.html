@@ -297,6 +297,7 @@
           <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ล้างบิล</button>
           <button class="ghost" id="billHoldBtn" style="flex:1.4;background:rgba(243,203,85,.18);color:#946f00;border-color:#f3cb55" onclick="holdBill()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>พักบิล (จ่ายทีหลัง)</button>
           <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน → ออกคิว</button>
+          <button class="ok" id="billSaveBtn" style="flex:2;display:none;background:#16876f" onclick="saveEdit()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกการแก้ไข</button>
         </div>
       </div>
       <!-- RIGHT: menu -->
@@ -1282,7 +1283,7 @@ function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img
 window.delItem=async(id)=>{ if(!confirm('ลบเมนูนี้?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
-let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null;
+let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null;
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
   if(!CHANNELS.length){ sel.style.display='none'; return; } sel.style.display='';
@@ -1332,7 +1333,33 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
-window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); $('dash').style.display=''; };
+window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; setEditMode(false); $('dash').style.display=''; };
+// ---------- แก้ไขออเดอร์: load an unpaid order back into the cart, edit, save in place ----------
+function setEditMode(on){
+  const hold=$('billHoldBtn'), pay=$('billPayBtn'), save=$('billSaveBtn');
+  if(hold) hold.style.display=on?'none':''; if(pay) pay.style.display=on?'none':''; if(save) save.style.display=on?'':'none';
+  if(on && _editTicket) $('orderZone').textContent='แก้ไขออเดอร์ #'+_editTicket; }
+window.editOrder=async(tid, zoneId)=>{
+  let lines, blocked;
+  try{ const v=await api('/api/tickets/'+tid); const o=v.order||{}; lines=o.lines||[]; blocked=(o.paid||o.status==='paid'); }
+  catch(e){ toast(err(e)); return; }
+  if(blocked){ toast('ออเดอร์นี้ชำระแล้ว แก้ไขไม่ได้'); return; }
+  if(!lines.length){ toast('ไม่พบรายการในออเดอร์'); return; }
+  const entries=[];
+  for(const l of lines){ let name=l.name, sweet=100; const m=String(name).match(/^(.*) · หวาน (\d+)%$/); if(m){ name=m[1]; sweet=+m[2]; }
+    const qty=Math.max(1, l.qty||1);
+    for(let k=0;k<qty;k++) entries.push({ name, price:l.price, toppings:(l.toppings||[]).map(tp=>({name:tp.name,price:tp.price,qty:tp.qty})), sweet }); }
+  await showOrder(zoneId);                 // opens the order screen (this resets cart) …
+  _editTicket=tid; cart=entries; renderBasketCount(); setEditMode(true);   // … then load the order in
+  toast('✏️ แก้ไขออเดอร์ #'+tid+' — ปรับเมนู/ท็อปปิ้ง/ความหวาน แล้วกดบันทึก'); };
+window.saveEdit=async()=>{
+  if(!_editTicket) return;
+  if(!cart.length){ toast('บิลว่าง — เพิ่มรายการก่อนบันทึก'); return; }
+  const tid=_editTicket, items=buildBillItems(cart);
+  try{ const r=await api('/api/tickets/'+tid+'/edit-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    toast('✅ แก้ไขออเดอร์ #'+tid+' แล้ว · ยอดใหม่ ฿'+r.total);
+    _editTicket=null; cart=[]; setEditMode(false); hideOrder();
+  }catch(e){ const m=String(e&&e.message||''); toast(/already_paid/.test(m)?'ชำระไปแล้ว แก้ไขไม่ได้':/has_partial_payment/.test(m)?'มีการรับเงินบางส่วนแล้ว แก้ไขไม่ได้':err(e)); } };
 
 // Back out of the drink builder entirely (customer changed their mind) — clears the in-progress
 // drink + closes the topping/sweet popups, returning to the menu without adding anything.
@@ -1434,6 +1461,7 @@ function restoreBill(snapshot,token){ cart=snapshot; _heldToken=token||null; _he
 // Reuse the held token only when re-sending the exact same restored bill; otherwise a fresh token.
 function tokenFor(snapshot){ return (_heldToken && _heldSig===billSig(snapshot)) ? _heldToken : billToken(); }
 window.confirmBasket=async()=>{
+  if(_editTicket){ return saveEdit(); }   // in edit mode, the action saves the order (no new bill)
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
   // Pick the tender FIRST (popup shows instantly — no order created yet).
   const total=cart.reduce((s,e)=>s+entryTotal(e),0);
@@ -1451,6 +1479,7 @@ window.confirmBasket=async()=>{
     else { toast('⚠️ บิลก่อนหน้าส่งไม่สำเร็จ ('+err(e)+') กรุณาทำรายการนั้นใหม่'); } } };
 // Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
 window.holdBill=async()=>{
+  if(_editTicket){ return saveEdit(); }
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
   const snapshot=cart.slice(); const token=tokenFor(snapshot);
   cart=[]; _heldToken=null; _heldSig=null; hideOrder(); beep(660);
@@ -1690,6 +1719,9 @@ function renderZone(snap){
   // แยกตามรายการ: only for a multi-line bill — pick items, pay their subtotal as a partial.
   const splitBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && (t.order_lines||[]).length>=2)
     ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">🧾 แยกรายการ</button>` : '';
+  // แก้ไขออเดอร์: change drink/topping/sweet in place instead of cancel+rekey (unpaid, no partial).
+  const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && !(t.order_paid>0))
+    ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">✏️ แก้ไข</button>` : '';
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
@@ -1699,7 +1731,7 @@ function renderZone(snap){
       <div class="qitem" style="${t.cancel_requested?cancelCardStyle(t):('background:'+(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)'))}"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}${splitBtn(t)}
+        <div class="row" style="gap:6px;flex-wrap:wrap">${editBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}${splitBtn(t)}
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';

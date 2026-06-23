@@ -129,6 +129,18 @@ const op = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
 const opr = Q.payPartial(op.ticket.id, 100, { method: 'cash' });
 ok(opr.settled === true && near(opr.change, 50), `INVARIANT overpay on a partial settles + returns change (change ${opr.change})`);
 
+// ---- แก้ไขออเดอร์ (edit unpaid order in place): change items + total, guarded once money is involved ----
+console.log('\n== Edit order (แก้ไขออเดอร์) ==');
+const eo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
+const er = Q.editOrderItems(eo.ticket.id, [{ name: 'Drink', price: 100, qty: 2 }, { name: 'Topping', price: 10, qty: 1 }]);
+ok(near(er.total, 210), `editOrderItems replaces items + recomputes total (210) — got ${er.total}`);
+const eitems = db.prepare('SELECT name, qty, kind FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.ticket_id=? ORDER BY oi.id').all(eo.ticket.id);
+ok(eitems.length === 2 && eitems.some((i) => i.name === 'Topping' && i.kind === 'addon'), 'edited items persisted with correct kind (Topping=addon)');
+ok(near(db.prepare('SELECT total FROM orders WHERE ticket_id=?').get(eo.ticket.id).total, 210), 'order total updated to 210');
+Q.setOrderPaid(eo.ticket.id, { method: 'cash' });
+let editPaidErr = null; try { Q.editOrderItems(eo.ticket.id, [{ name: 'Drink', price: 1, qty: 1 }]); } catch (e) { editPaidErr = e.message; }
+ok(editPaidErr === 'already_paid', `INVARIANT cannot edit a PAID order (got ${editPaidErr})`);
+
 // ---- "Today" is date-scoped: an order from another day must NOT count in today's revenue ----
 console.log('\n== Daily report is date-scoped (today only) ==');
 const todayRev = Q.dailyReport().revenue;

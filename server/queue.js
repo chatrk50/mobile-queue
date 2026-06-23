@@ -1377,6 +1377,32 @@ export function customerSuggestions(lineUserId) {
  * opts.lineUserId / opts.customerName: tie the ticket to a LINE customer so they can
  * resume it and receive pushes. Customer self-orders are deduped (one open order each).
  */
+/** Edit a still-unpaid order's items in place (change drink / sweetness / toppings) instead of
+ *  cancel-and-rekey. Replaces all order_items + recomputes total. Guarded: not paid, not void, and
+ *  nothing collected yet (paid_amount 0). Stock isn't touched here — it deducts at payment. */
+export function editOrderItems(ticketId, items) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') throw new Error('already_paid');
+  if (order.payment_status === 'void') throw new Error('order_void');
+  if ((order.paid_amount || 0) > 0) throw new Error('has_partial_payment');
+  const lines = (Array.isArray(items) ? items : [])
+    .map((it) => ({ name: (it.name || '').toString().slice(0, 60), price: Math.max(0, Number(it.price) || 0), qty: Math.max(1, Math.min(99, Math.round(Number(it.qty) || 1))) }))
+    .filter((it) => it.name);
+  if (!lines.length) throw new Error('empty_order');
+  const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
+  const toppingNames = new Set(db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name));
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM order_items WHERE order_id=?').run(order.id);
+    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
+    for (const it of lines) ins.run(order.id, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
+    db.prepare('UPDATE orders SET total=? WHERE id=?').run(total, order.id);
+  });
+  tx();
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, meta: {} });
+  return { ok: true, total, ticketId: Number(ticketId) };
+}
+
 export function createOrder(zoneId, items, opts = {}) {
   const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
