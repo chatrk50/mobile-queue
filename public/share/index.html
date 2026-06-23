@@ -177,10 +177,11 @@ async function copyShareUrl(){
     if(hasLine){
       $('ctaRow').style.display='flex';
       if(liffId){
-        const liffUrl='https://liff.line.me/'+liffId+'?zone=1';
+        const zoneId = profile.firstZoneId || 1;
+        const liffUrl='https://liff.line.me/'+liffId+'?zone='+zoneId;
         $('btnOrder').href=liffUrl; $('btnOrder').style.display='';
         // QR code
-        $('qrImg').src='/api/qr/1'; $('qrSection').style.display='';
+        $('qrImg').src='/api/qr/'+zoneId; $('qrSection').style.display='';
       }
       if(addFriend){
         $('btnAdd').href=addFriend; $('btnAdd').style.display='';

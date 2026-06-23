@@ -300,9 +300,11 @@ app.get('/api/shop/profile', (req, res) => {
   const stores = Q.listStores();
   const loc = stores[0] || null;
   const about = getSetting('brand:about', '') || null;
+  const firstZone = loc ? db.prepare('SELECT id FROM zones WHERE store_id=? ORDER BY id LIMIT 1').get(loc.id) : null;
   res.json({ name: brand.name, short: brand.short, theme: brand.theme, logo: brand.logo, unit: brand.unit,
     isOpen, hours, about,
-    phone: loc?.phone || null, address: loc?.address || null });
+    phone: loc?.phone || null, address: loc?.address || null,
+    firstZoneId: firstZone?.id || null });
 });
 
 // Public onboarding status — used by the post-signup wizard page; no auth needed.
