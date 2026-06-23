@@ -283,7 +283,7 @@ app.get('/api/onboard', (req, res) => {
   const lineOk = !!(getSetting('line:token', '') || getSetting('liff:id', ''));
   const stores = Q.listStores();
   const hasHours = stores.some((s) => s.hours_open);
-  res.json({ name: brand.name, menuCount, lineOk, hasHours });
+  res.json({ name: brand.name, menuCount, lineOk, hasHours, templates: listTemplates() });
 });
 
 // ---------- SaaS self-registration (Phase B) ----------
@@ -321,6 +321,7 @@ app.post('/api/signup', (req, res) => {
     const referred = req.body?.ref ? applyTenantReferral(t.id, req.body.ref) : false;
     const rec = signupHits.get(ip) && signupHits.get(ip).until > now ? signupHits.get(ip) : { count: 0, until: now + SIGNUP_WINDOW };
     rec.count += 1; signupHits.set(ip, rec);
+    issueOwnerSession(res, t.id); // auto-login: lets onboard page call protected APIs immediately
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

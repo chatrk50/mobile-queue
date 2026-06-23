@@ -46,6 +46,17 @@
   .pin-box .pi svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
   .pin-box p{margin:0;font-size:13.5px}
   .pin-box b{color:var(--ind)}
+  /* template picker */
+  .tpl-intro{font-size:13px;color:var(--mut);margin:0 0 12px}
+  .tpl-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .tpl-opt{border:1.5px solid var(--line);border-radius:14px;padding:13px 12px;cursor:pointer;text-align:center;transition:.15s;background:#fff}
+  .tpl-opt:hover{border-color:var(--ind);background:var(--inds)}
+  .tpl-opt:disabled{opacity:.5;cursor:default}
+  .tpl-icon{font-size:24px;display:block;margin-bottom:4px}
+  .tpl-label{font-size:13px;font-weight:600;display:block;color:var(--ink)}
+  .tpl-count{font-size:11px;color:var(--mut)}
+  .tpl-skip{display:block;text-align:center;margin-top:10px;font-size:12px;color:var(--mut);cursor:pointer;text-decoration:underline;background:none;border:none;width:100%;font-family:inherit}
+  .tpl-skip:hover{color:var(--ind)}
   /* CTA */
   .cta{display:block;width:100%;text-align:center;margin-top:6px;padding:14px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;font-family:'Kanit',sans-serif;cursor:pointer;text-decoration:none;box-shadow:0 8px 22px rgba(99,102,241,.35);transition:.15s}
   .cta:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(99,102,241,.45)}
@@ -102,6 +113,14 @@
     </div>
   </div>
 
+  <!-- Template picker — shown only when menuCount === 0 -->
+  <div class="card" id="tplCard" style="display:none">
+    <h2>เลือกเมนูตัวอย่างเริ่มต้น</h2>
+    <p class="tpl-intro">แตะประเภทร้านของคุณ — ระบบเพิ่มเมนูให้ทันที แก้ไขราคา/ชื่อได้ทีหลัง</p>
+    <div class="tpl-grid" id="tplGrid"></div>
+    <button class="tpl-skip" onclick="hideTpl()">ข้าม — ฉันจะเพิ่มเมนูเอง</button>
+  </div>
+
   <!-- PIN reminder -->
   <div class="pin-box" id="pinBox" style="margin-bottom:14px">
     <div class="pi"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
@@ -135,16 +154,44 @@ function copyUrl(){
   }).catch(() => {});
 }
 
+function markMenuDone(count) {
+  document.getElementById('ico1').className = 'ico done';
+  document.getElementById('s1status').innerHTML =
+    '<span class="pill-done"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>มีเมนูแล้ว ' + count + ' รายการ</span>';
+}
+function hideTpl() { document.getElementById('tplCard').style.display = 'none'; }
+
+async function applyTemplate(id, btn) {
+  const grid = document.getElementById('tplGrid');
+  grid.querySelectorAll('button').forEach(b => b.disabled = true);
+  btn.textContent = '⏳ กำลังเพิ่ม…';
+  try {
+    const r = await fetch('/api/admin/apply-template', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template: id }) });
+    const d = await r.json();
+    if (r.ok && d.added) { markMenuDone(d.added); hideTpl(); }
+    else { grid.querySelectorAll('button').forEach(b => b.disabled = false); btn.textContent = btn.dataset.label; }
+  } catch (_) { grid.querySelectorAll('button').forEach(b => b.disabled = false); btn.textContent = btn.dataset.label; }
+}
+
 (async () => {
   try {
     const d = await (await fetch('/api/onboard')).json();
     if (d.name) document.getElementById('shopName').textContent = '"' + d.name + '"';
 
-    // Step 1: menu
+    // Step 1: menu — if already populated, mark done; otherwise show template picker
     if (d.menuCount > 0) {
-      document.getElementById('ico1').className = 'ico done';
-      document.getElementById('s1status').innerHTML =
-        '<span class="pill-done"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>มีเมนูแล้ว ' + d.menuCount + ' รายการ</span>';
+      markMenuDone(d.menuCount);
+    } else if (d.templates && d.templates.length) {
+      const grid = document.getElementById('tplGrid');
+      d.templates.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'tpl-opt'; btn.dataset.label = t.emoji + ' ' + t.label;
+        btn.innerHTML = '<span class="tpl-icon">' + t.emoji + '</span><span class="tpl-label">' + t.label + '</span><span class="tpl-count">' + t.count + ' เมนู</span>';
+        btn.onclick = () => applyTemplate(t.id, btn);
+        grid.appendChild(btn);
+      });
+      document.getElementById('tplCard').style.display = '';
     }
 
     // Step 3: LINE
