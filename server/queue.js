@@ -1900,7 +1900,8 @@ export function sweepStalePending({ actorId = null } = {}) {
        FROM tickets t
        JOIN orders o ON o.id = (SELECT id FROM orders WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1)
       WHERE t.status IN ('pending','waiting') AND o.payment_status NOT IN ('paid','void')
-        AND t.created_at <= datetime('now', ?)`
+        AND t.created_at <= datetime('now', ?)
+        AND t.store_id IN (SELECT id FROM stores WHERE tenant_id=${TID()})`
   ).all(`-${mins} minutes`);
   if (!rows.length) return { voided: 0, zones: [] };
   const zones = new Set();

@@ -1499,11 +1499,15 @@ function scheduleDailyReset() {
 scheduleDailyReset();
 
 // Background sweep: void abandoned (unpaid) pending orders so they don't pile up on the till.
-// Controlled by the owner's "pending:void_min" setting (0 = off). Refreshes any zone it touches.
+// Controlled by each tenant's "pending:void_min" setting (0 = off). Refreshes any zone it touches.
 setInterval(() => {
+  const sweep = () => { const r = Q.sweepStalePending(); if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal })); };
   try {
-    const r = Q.sweepStalePending();
-    if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
+    if (SAAS) {
+      for (const t of listTenants()) { try { runWithTenant(t.id, sweep); } catch { /* never crash */ } }
+    } else {
+      sweep();
+    }
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
 
