@@ -451,6 +451,7 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
+  `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
