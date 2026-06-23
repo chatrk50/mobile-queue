@@ -897,6 +897,7 @@ app.get('/api/stores', (req, res) => {
   res.json(Q.listStores());
 });
 app.get('/api/stores/:storeId/zones', (req, res) => {
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(req.params.storeId, req.tenantId)) return res.status(404).json({ error: 'store_not_found' });
   const zones = db.prepare('SELECT * FROM zones WHERE store_id = ? ORDER BY id').all(req.params.storeId);
   res.json(zones);
 });
