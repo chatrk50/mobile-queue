@@ -866,9 +866,10 @@ app.get('/api/zones/:zoneId', (req, res) => {
 app.get('/api/qr/:zoneId', async (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).end();
-  const url = LIFF_ID
-    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}`
-    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}`;
+  const lc = lineCfgFor(req);
+  const url = lc.liffId
+    ? `https://liff.line.me/${lc.liffId}?zone=${z.id}`
+    : `${PUBLIC_BASE_URL}${req.tenantBase || ''}/liff/?zone=${z.id}`;
   try {
     const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.type('png').send(buf);
@@ -1410,6 +1411,14 @@ app.get('/api/zones/:zoneId/stream', (req, res) => {
 // ---------- Daily queue reset at midnight (Asia/Bangkok, UTC+7) ----------
 function doDailyReset() {
   try {
+    // Push end-of-day LINE summary to each owner BEFORE counters are wiped.
+    if (SAAS) {
+      for (const t of listTenants()) {
+        try { runWithTenant(t.id, () => Q.pushOwnerSummary()); } catch (_) { /* never block reset */ }
+      }
+    } else {
+      try { Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
+    }
     const zoneIds = Q.resetAllZones();
     for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
     console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
