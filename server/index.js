@@ -438,6 +438,7 @@ app.get('/admin/api/tenants', adminGate, (req, res) => {
       orders: db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c,
       plan: Q.tenantPlan(t.id).name,
       ordersThisMonth: Q.monthOrderCount(t.id),
+      lineCustomers: runWithTenant(t.id, () => Q.countLineCustomers()),
       daysLeft: bs.daysLeft,
       trial: bs.trial,
       expiringSoon: bs.expiringSoon,

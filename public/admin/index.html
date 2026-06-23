@@ -46,7 +46,7 @@
     </div>
     <div class="err" id="err"></div>
     <table>
-      <thead><tr><th>ร้าน</th><th>แพ็กเกจ</th><th>แพลน</th><th>สาขา</th><th>ออเดอร์/เดือน</th><th>สถานะ</th><th></th></tr></thead>
+      <thead><tr><th>ร้าน</th><th>แพ็กเกจ</th><th>แพลน</th><th>สาขา</th><th>ออเดอร์/เดือน</th><th>LINE ลูกค้า</th><th>สถานะ</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div id="auditPanel" style="display:none;margin-top:18px">
@@ -105,6 +105,7 @@ window.load=async()=>{ $('err').textContent='';
         ${t.expiringSoon?`<span style="font-size:10px;color:#c0394a;font-weight:700;margin-left:3px">⚠️${t.daysLeft}d</span>`:''}
       </td>
       <td>${t.stores}</td><td>${t.ordersThisMonth}</td>
+      <td>${t.lineCustomers>0?`<b>${t.lineCustomers}</b>`:'<span class="muted">—</span>'}</td>
       <td><span class="pill ${t.active?'live':'susp'}">${t.active?'ใช้งาน':'ระงับ'}</span></td>
       <td class="act">
         ${t.id!==1?(t.active
@@ -114,7 +115,7 @@ window.load=async()=>{ $('err').textContent='';
         <button class="btn ghost" onclick="resetPin(${t.id})">รีเซ็ต PIN</button>
         ${t.id!==1?`<button class="btn ghost" onclick="exportTenant(${t.id})">${icon('download',{size:14})} ส่งออก</button>
         <button class="btn ghost danger" onclick="deleteTenant(${t.id})">${icon('trash',{size:14})} ลบถาวร</button>`:''}
-      </td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีแบรนด์</td></tr>';
+      </td></tr>`).join('') || '<tr><td colspan="8" class="muted">ยังไม่มีแบรนด์</td></tr>';
   }catch(e){ $('err').textContent='โหลดไม่ได้: '+e.message; } };
 const tById=(id)=>TENANTS.find(t=>t.id===id)||{};
 window.setPlan=async(id,plan)=>{ try{ await api('/admin/api/tenants/'+id+'/plan',{method:'POST',body:JSON.stringify({plan})}); load(); }catch(e){ $('err').textContent=e.message; } };
