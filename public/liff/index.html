@@ -603,7 +603,9 @@ window.confirmBasket=async()=>{
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
       ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
-    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
+    const msg=e.message==='order_limit'?'ร้านนี้ขณะนี้ไม่สามารถรับออเดอร์เพิ่มได้ชั่วคราว — กรุณาติดต่อร้าน':('สั่งไม่สำเร็จ: '+e.message);
+    toast(msg);
   }
 };
 

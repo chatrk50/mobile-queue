@@ -541,7 +541,7 @@ document.addEventListener('click',(e)=>{ const m=$('adminMenu'); if(!m||m.style.
 async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่'}; return m[e.message]||e.message; }
+function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',order_limit:'ครบโควต้า 500 ออเดอร์/เดือน (Free) — ⚙ ตั้งค่า > แพ็กเกจ เพื่ออัปเกรด',branch_limit:'ครบจำนวนสาขาของแพ็กเกจปัจจุบัน — ⚙ ตั้งค่า > แพ็กเกจ เพื่ออัปเกรด'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
