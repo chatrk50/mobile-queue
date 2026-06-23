@@ -629,6 +629,8 @@ const IC={
   bell:'<svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
   trash:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>',
   chart:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>',
+  check:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
+  serve:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 11h18M12 11V7a3 3 0 0 1 6 0M5 11a7 7 0 0 1 14 0M2 15h20M4 15l1 4a2 2 0 0 0 2 1.6h10A2 2 0 0 0 19 19l1-4"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -1908,31 +1910,36 @@ function renderZone(snap){
   const kitchenBg=(t)=> allLinesDone(t)?'rgba(22,135,111,.16)':anyLineMaking(t)?'rgba(243,157,18,.12)':'';
   const pendingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):('background:'+(kitchenBg(t)||(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)')));
   const waitingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):(kitchenBg(t)?'background:'+kitchenBg(t):'');
+  // Big contextual PRIMARY action (full-width, top of the action stack): collect payment while the
+  // order is unpaid → then "เสิร์ฟแล้ว" once paid. One prominent button guides the cashier pay → serve.
+  const payOrServe=(t)=>{ if(t.order_total==null) return '';
+    return (t.payment_status!=='paid')
+      ? `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
+      : `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;background:var(--accent2);color:#06281f" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
-      <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="${pendingCardBg(t)}"><div>${tsTop(t)}<div>
+      <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="flex-direction:column;align-items:stretch;gap:8px;${pendingCardBg(t)}"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}
-          <button class="ok" style="padding:11px 14px;flex:1;min-width:160px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
-          ${voidBtn(t)}</div></div>`).join('')+`</div>`
+        <button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
+        <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
-    <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="${waitingCardBg(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
+    <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="flex-direction:column;align-items:stretch;gap:8px;${waitingCardBg(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+printBtn(t)+slipViewBtn(t))}${payBtn(t)}${voidBtn(t)}
+      ${payOrServe(t)}
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+printBtn(t)+slipViewBtn(t))}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
-        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
-        ${serveBtn(t)}
-      </div></div>`).join('')
+    <div class="qitem" style="flex-direction:column;align-items:stretch;gap:8px"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
+      ${payOrServe(t)}
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, ppBtn(t)+slipViewBtn(t)+discBtn(t)+redeemBtn(t)+printBtn(t))}${voidBtn(t)}
+        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button></div></div>`).join('')
     : '<p class="muted">—</p>';
 }
 
