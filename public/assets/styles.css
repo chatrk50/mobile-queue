@@ -44,6 +44,9 @@ h1,h2,h3,.brand{font-family:"Poppins","LINE Seed Sans TH","Nunito Sans",sans-ser
   border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px;margin:14px 0;box-shadow:var(--glass-shadow)}
 /* Modal/popup backdrops: blur the page behind the dialog (the Apple "glass sheet over content" look). */
 .glass-ovl{backdrop-filter:blur(7px) saturate(1.3);-webkit-backdrop-filter:blur(7px) saturate(1.3)}
+/* Every modal card must stay within the screen (phone-safe) and scroll its overflow internally —
+   so no popup (login keypad, topping picker, etc.) ever runs past the device frame. */
+.glass-ovl>.card{max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 h1{font-size:22px;margin:.2em 0;color:var(--navy)}
 h2{font-size:16px;margin:.2em 0;color:var(--muted);font-weight:600}
 .big-number{font-size:64px;font-weight:800;letter-spacing:2px;line-height:1;

@@ -738,7 +738,10 @@ app.post('/api/reset', (req, res) => {
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null));
+  // ?date=YYYY-MM-DD → P&L for that past Bangkok day (recomputed from the durable orders table);
+  // omitted/invalid → today. dailyReport validates the date format itself.
+  const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : null;
+  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null, date));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
