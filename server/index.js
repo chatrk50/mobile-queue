@@ -174,6 +174,7 @@ app.use((req, res, next) => {
       out = out.replace('<title>ร้านของเรา — KhaiDee</title>', `<title>${shopName} — KhaiDee</title>`);
     } catch { /* keep static title */ }
   }
+  out = out.replace('href="/manifest.webmanifest"', `href="${req.tenantBase}/manifest.webmanifest"`);
   res.type('html').send(out.includes('</head>') ? out.replace('</head>', shim + '</head>') : shim + out);
 });
 
@@ -253,7 +254,7 @@ app.get('/manifest.webmanifest', (req, res) => {
   const b = brandFor(req);
   res.type('application/manifest+json').json({
     name: b.name, short_name: b.short, description: `${b.name}`,
-    start_url: '/cashier/', scope: '/', display: 'standalone', orientation: 'any',
+    start_url: (req.tenantBase || '') + '/cashier/', scope: (req.tenantBase || '') + '/', display: 'standalone', orientation: 'any',
     background_color: '#ffffff', theme_color: b.theme, lang: 'th',
     icons: [
       { src: b.logo, sizes: '192x192', type: 'image/png', purpose: 'any' },

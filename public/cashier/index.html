@@ -522,6 +522,8 @@ async function applyBrand(){
 }
 applyBrand();
 (function(){ const b=(location.pathname.match(/^(\/b\/[^/]+)/)||['',''])[1]; if(b){ const el=document.querySelector('a[href="/"]'); if(el) el.href=b+'/'; } })();
+const _tenantSlug=(location.pathname.match(/^\/b\/([^/]+)/)||[,''])[1];
+const lsKey=(k)=>_tenantSlug?'kd_'+_tenantSlug+'_'+k:'yodee_'+k;
 // Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -1580,12 +1582,12 @@ window.holdBill=async()=>{
 // empty cashier to a sellable shop: add first item → brand → connect LINE → open. Vanishes once
 // the menu has items (the activation gate) or the owner hides it. Read-only/additive.
 window.onbAddMenu=async()=>{ try{ await showMenu(); }catch(e){} try{ editMenuForm('new'); }catch(e){} };
-window.onbHide=()=>{ try{ localStorage.setItem('yodee_onb_hide','1'); }catch(e){} const c=document.getElementById('onbWrap'); if(c) c.remove(); };
+window.onbHide=()=>{ try{ localStorage.setItem(lsKey('onb_hide'),'1'); }catch(e){} const c=document.getElementById('onbWrap'); if(c) c.remove(); };
 function onboardingCard(){
   const own=(!ME||ME.role==='owner');
   if(!own || !CFG || !CFG.saas) return '';
   if(MENU && MENU.length>0) return '';                       // shop has items → activated, hide
-  try{ if(localStorage.getItem('yodee_onb_hide')==='1') return ''; }catch(e){}
+  try{ if(localStorage.getItem(lsKey('onb_hide'))==='1') return ''; }catch(e){}
   const isLine = CFG.lineFeatures!==false && CFG.posOnly!==true;
   const brandDone = !!(CFG.brand && CFG.brand.logo && CFG.brand.logo.indexOf('data:')===0);   // custom upload, not the default logo
   const lineDone = !!CFG.lineEnabled;
@@ -1625,7 +1627,7 @@ async function boot(){
     for(const z of zs){ zones.push(z); html += zonePanel(z); }
   }
   $('dash').innerHTML = html;
-  if(mgr){ let open=false; try{ open=localStorage.getItem('yodee_today_open')==='1'; }catch(e){}
+  if(mgr){ let open=false; try{ open=localStorage.getItem(lsKey('today_open'))==='1'; }catch(e){}
     if(open){ $('todayChips').style.display='flex'; $('todayToggle').textContent='📊 สรุปวันนี้ ▴'; loadTodayStats(); }
     if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }  // self-skips when collapsed
   streams.forEach(s=>s.close()); streams=[];
@@ -1651,7 +1653,7 @@ async function boot(){
 window.toggleToday=()=>{ const c=$('todayChips'), b=$('todayToggle'); if(!c) return;
   const open=c.style.display==='none'; c.style.display=open?'flex':'none';
   if(b) b.textContent='📊 สรุปวันนี้ '+(open?'▴':'▾');
-  try{ localStorage.setItem('yodee_today_open', open?'1':'0'); }catch(e){}
+  try{ localStorage.setItem(lsKey('today_open'), open?'1':'0'); }catch(e){}
   if(open) loadTodayStats(); };
 async function loadTodayStats(){
   const el=$('todayChips'); if(!el || el.style.display==='none') return;   // only fetch when expanded
