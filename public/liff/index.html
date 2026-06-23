@@ -449,8 +449,8 @@ async function loadLoyalty(){
     $('loyPoints').textContent = have;
     $('loyRate').textContent = 'ครบ '+per+' '+unit()+' = ฟรี 1 '+unit();
     const badge=$('loyBadge'); if(badge){
-      const tn = bal.next? '<div style="font-size:11px;opacity:.85;font-weight:400;margin-top:2px">อีก '+bal.next.toGo+' '+unit()+' เป็น '+esc(bal.next.label)+'</div>' : '';
-      if(bal.tier){ badge.innerHTML='<b>'+esc(bal.tier.emoji+' '+bal.tier.label)+'</b>'+(bal.tier.perk?' · '+esc(bal.tier.perk):'')+tn; badge.style.display=''; }
+      // No toGo text here — the tier progress bar below the stamp bar shows that detail.
+      if(bal.tier){ badge.innerHTML='<b>'+esc(bal.tier.emoji+' '+bal.tier.label)+'</b>'+(bal.tier.perk?' · '+esc(bal.tier.perk):''); badge.style.display=''; }
       else if(bal.next){ badge.innerHTML='<span style="font-weight:400">อีก '+bal.next.toGo+' '+unit()+' เป็น '+esc(bal.next.label)+'</span>'; badge.style.display=''; }
       else { badge.style.display='none'; }
     }
