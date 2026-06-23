@@ -88,6 +88,15 @@ let guard2 = false;
 runWithTenant(A.id, () => { try { Q.updateIngredient(bIng.id, { name: 'hacked' }); } catch (e) { guard2 = e.message === 'ingredient_not_found'; } });
 ok(guard2, 'A cannot update B\'s ingredient by id (ingredient_not_found)');
 
+// --- Configurable membership tiers (owner-set, per-tenant) ---
+runWithTenant(A.id, () => Q.setTiers([{ label: 'เริ่มต้น', min: 5, emoji: '⭐' }, { label: 'VIP', min: 50, emoji: '👑', perk: 'ลด 10%' }]));
+ok(runWithTenant(A.id, () => Q.loyaltyTier(60))?.label === 'VIP', 'A: tier at 60 lifetime = VIP (configured)');
+ok(runWithTenant(A.id, () => Q.loyaltyTier(10))?.label === 'เริ่มต้น', 'A: tier at 10 = เริ่มต้น');
+ok(runWithTenant(A.id, () => Q.loyaltyTier(2)) === null, 'A: below first threshold = no tier');
+const aNext = runWithTenant(A.id, () => Q.nextTier(10));
+ok(aNext && aNext.label === 'VIP' && aNext.toGo === 40, 'A: nextTier from 10 = VIP, toGo 40');
+ok(runWithTenant(B.id, () => Q.getTiers())[0].label === 'ขาประจำ', 'B: still default tiers (per-tenant isolation)');
+
 // --- Tenant erasure completeness: deleting B must leave ZERO orphan rows in ANY table ---
 DB.seedTenantDefaults(B.id);                                   // ensure channels + price_tiers exist
 const C1 = (sql, ...a) => db.prepare(sql).get(...a).c;

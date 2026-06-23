@@ -384,7 +384,12 @@ async function loadLoyalty(){
     const per = conf.stampsPerReward||10, have = bal.points||0;
     $('loyPoints').textContent = have;
     $('loyRate').textContent = 'ครบ '+per+' '+unit()+' = ฟรี 1 '+unit();
-    const badge=$('loyBadge'); if(bal.tier){ badge.textContent=bal.tier.emoji+' '+bal.tier.label; badge.style.display=''; } else if(badge){ badge.style.display='none'; }
+    const badge=$('loyBadge'); if(badge){
+      const tn = bal.next? '<div style="font-size:11px;opacity:.85;font-weight:400;margin-top:2px">อีก '+bal.next.toGo+' '+unit()+' เป็น '+esc(bal.next.label)+'</div>' : '';
+      if(bal.tier){ badge.innerHTML='<b>'+esc(bal.tier.emoji+' '+bal.tier.label)+'</b>'+(bal.tier.perk?' · '+esc(bal.tier.perk):'')+tn; badge.style.display=''; }
+      else if(bal.next){ badge.innerHTML='<span style="font-weight:400">อีก '+bal.next.toGo+' '+unit()+' เป็น '+esc(bal.next.label)+'</span>'; badge.style.display=''; }
+      else { badge.style.display='none'; }
+    }
     const inCycle = have % per, toGo = (per - inCycle) % per, free = Math.floor(have/per);
     if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' '+unit()+'! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' '+unit()+'ได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
     else { $('loyNext').textContent='อีก '+toGo+' '+unit()+' รับของรางวัลฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }

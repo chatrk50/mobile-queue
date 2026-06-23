@@ -1124,12 +1124,51 @@ export function setStampsPerReward(n) {
  *  that pulls counter customers into ordering via LINE (endowed-progress effect). 0 = off. */
 export function getWelcomeBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:welcome_bonus', '2')) || 0)); }
 export function setWelcomeBonus(n) { const v = Math.max(0, Math.round(Number(n) || 0)); setSetting('loyalty:welcome_bonus', String(v)); return { welcomeBonus: v }; }
+// Membership tiers — owner-configurable (threshold by lifetime stamps + a perk note). Defaults
+// preserve the original silver/gold/vip ladder. Stored as JSON in setting 'loyalty:tiers'.
+const DEFAULT_TIERS = [
+  { key: 'silver', label: 'ขาประจำ', emoji: '⭐', min: 20, perk: '' },
+  { key: 'gold', label: 'ลูกค้าประจำ', emoji: '🏅', min: 50, perk: '' },
+  { key: 'vip', label: 'VIP', emoji: '👑', min: 100, perk: '' },
+];
+/** Owner-configured tiers, sanitised + sorted ascending by min. Falls back to defaults. */
+export function getTiers() {
+  let arr = null;
+  try { arr = JSON.parse(getSetting('loyalty:tiers', '') || 'null'); } catch { arr = null; }
+  if (!Array.isArray(arr) || !arr.length) arr = DEFAULT_TIERS;
+  return arr.map((t, i) => ({
+    key: String(t.key || ('t' + i)).slice(0, 16),
+    label: String(t.label || ('ระดับ ' + (i + 1))).slice(0, 30),
+    emoji: String(t.emoji || '⭐').slice(0, 4),
+    min: Math.max(0, Math.round(Number(t.min) || 0)),
+    perk: String(t.perk || '').slice(0, 80),
+  })).sort((a, b) => a.min - b.min);
+}
+/** Owner sets the tier ladder. Validates non-empty labels + numeric thresholds; max 6 tiers. */
+export function setTiers(tiers) {
+  if (!Array.isArray(tiers)) throw new Error('tiers_must_be_array');
+  const clean = tiers.slice(0, 6).map((t, i) => ({
+    key: String(t.key || ('t' + i)).slice(0, 16),
+    label: String(t.label || '').trim().slice(0, 30),
+    emoji: String(t.emoji || '⭐').trim().slice(0, 4) || '⭐',
+    min: Math.max(0, Math.round(Number(t.min) || 0)),
+    perk: String(t.perk || '').trim().slice(0, 80),
+  })).filter((t) => t.label).sort((a, b) => a.min - b.min);
+  if (!clean.length) throw new Error('need_at_least_one_tier');
+  setSetting('loyalty:tiers', JSON.stringify(clean));
+  return { tiers: clean };
+}
 /** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
 export function loyaltyTier(lifetime) {
   const l = lifetime || 0;
-  if (l >= 100) return { key: 'vip', label: 'VIP', emoji: '👑' };
-  if (l >= 50) return { key: 'gold', label: 'ลูกค้าประจำ', emoji: '🏅' };
-  if (l >= 20) return { key: 'silver', label: 'ขาประจำ', emoji: '⭐' };
+  let hit = null;
+  for (const t of getTiers()) { if (l >= t.min) hit = t; }   // tiers are ascending → last match = highest
+  return hit;
+}
+/** The next tier above the current lifetime (for "อีก N แก้วเป็น VIP"), or null at the top. */
+export function nextTier(lifetime) {
+  const l = lifetime || 0;
+  for (const t of getTiers()) { if (t.min > l) return { ...t, toGo: t.min - l }; }
   return null;
 }
 /** Bangkok-local helpers for the birthday free drink. */
@@ -1147,10 +1186,10 @@ export function setCustomerBirthday(key, birthday) {
 }
 /** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier + birthday. */
 export function loyaltyBalance(key) {
-  if (!key) return { key, points: 0, lifetime: 0, tier: null, birthday: null, isBirthday: false };
+  if (!key) return { key, points: 0, lifetime: 0, tier: null, next: nextTier(0), birthday: null, isBirthday: false };
   const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=?').get(key);
   const lifetime = c ? (c.lifetime_points || 0) : 0;
-  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
+  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), next: nextTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
 // ---- Phone-keyed loyalty (Package 1 — no LINE) ----
 // A walk-in customer is identified by phone; the loyalty key is 'tel:<digits>'. The cashier
