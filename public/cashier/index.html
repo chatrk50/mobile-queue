@@ -452,6 +452,8 @@
   .feat-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card,#fff)}
   .feat-row .ic{width:22px;height:22px;color:var(--navy);flex:none}
   #payMethodBtns .ic{margin:0;width:26px;height:26px}
+  #todayChips .ic{margin:0;width:14px;height:14px;flex:none}
+  #todayToggle .ic,#todayBtn .ic{width:15px;height:15px;margin-right:4px}
 </style>
 <div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
@@ -539,7 +541,7 @@
 
 <div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="position:sticky;top:0;background:rgba(255,255,255,.86);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:1;padding:2px 0 8px;margin-bottom:2px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -648,6 +650,7 @@ const IC={
   serve:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 11h18M12 11V7a3 3 0 0 1 6 0M5 11a7 7 0 0 1 14 0M2 15h20M4 15l1 4a2 2 0 0 0 2 1.6h10A2 2 0 0 0 19 19l1-4"/></svg>',
   wallet:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="17" cy="14" r="1.2"/></svg>',
   card:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
+  cup:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -948,7 +951,7 @@ function renderDetail(){
   } else if(t==='chan'){
     // Order-source mix first (how orders came in: LINE vs walk-in vs delivery), then channel revenue.
     const srcs=(DET.sources||[]); const stot=DET.sourceTotalOrders||0; const sMax=Math.max(...srcs.map(s=>s.orders),1);
-    const srcSection=`<div style="margin-bottom:6px"><b>📊 ช่องทางการสั่งซื้อ</b> <span class="muted" style="font-size:12px">· ${stot} ออเดอร์วันนี้ (ไม่รวมยกเลิก)</span></div>`+
+    const srcSection=`<div style="margin-bottom:6px"><b>${IC.chart}ช่องทางการสั่งซื้อ</b> <span class="muted" style="font-size:12px">· ${stot} ออเดอร์วันนี้ (ไม่รวมยกเลิก)</span></div>`+
       (srcs.length? srcs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0">
           <div style="width:160px;font-size:13px">${esc(s.label)}</div>
           <div style="flex:1;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:22px;width:${Math.round((s.orders/sMax)*100)}%;background:var(--navy,#1e3a5f);min-width:3px;border-radius:6px"></div></div>
@@ -956,7 +959,7 @@ function renderDetail(){
         </div>`).join('') : '<p class="muted" style="font-size:13px">ยังไม่มีออเดอร์วันนี้</p>')
       +`<div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>`;
     const rows=(DET.channels||[]); const ct=DET.channelTotals||{gross:0,commission:0,net:0};
-    box.innerHTML=srcSection+`<div style="margin-bottom:10px"><b>💰 รายได้ตามช่องทาง</b> · ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
+    box.innerHTML=srcSection+`<div style="margin-bottom:10px"><b>${IC.cash}รายได้ตามช่องทาง</b> · ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
       (rows.length?detTable([{t:'#',r:1},{t:'ช่องทาง'},{t:'ออเดอร์',r:1},{t:'ยอดขาย',r:1},{t:'ค่าคอม',r:1},{t:'สุทธิ',r:1}], rows.map((c,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${esc(c.channel)}${c.commission_pct?` <span class="muted" style="font-size:11px">${c.commission_pct}%</span>`:''}</td><td style="text-align:right">${c.orders}</td><td style="text-align:right">${baht2(c.gross)}</td><td style="text-align:right;color:var(--danger)">${c.commission?('−'+baht2(c.commission)):'—'}</td><td style="text-align:right"><b>${baht2(c.net)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มียอดขาย</p>');
   } else if(t==='disc'){
     const rows=(DET.discounts||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>ส่วนลดรวม ${baht2(DET.discountTotal)}</b> · ${rows.length} ออเดอร์</div>`+
@@ -1671,7 +1674,7 @@ async function boot(){
   // without opening the report. Hidden for cashiers (revenue is owner-facing).
   const mgr=(!ME||['owner','manager'].includes(ME.role));
   zones=[]; let html = mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
-    + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">📊 สรุปวันนี้ ▾</button>'
+    + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">'+IC.chart+'สรุปวันนี้ ▾</button>'
     + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
@@ -1680,7 +1683,7 @@ async function boot(){
   }
   $('dash').innerHTML = html;
   if(mgr){ let open=false; try{ open=localStorage.getItem('yodee_today_open')==='1'; }catch(e){}
-    if(open){ $('todayChips').style.display='flex'; $('todayToggle').textContent='📊 สรุปวันนี้ ▴'; loadTodayStats(); }
+    if(open){ $('todayChips').style.display='flex'; $('todayToggle').innerHTML=IC.chart+'สรุปวันนี้ ▴'; loadTodayStats(); }
     if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }  // self-skips when collapsed
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
@@ -1704,27 +1707,27 @@ async function boot(){
 // Toggle the pulse strip open/closed (manager preference, remembered). Collapsed by default.
 window.toggleToday=()=>{ const c=$('todayChips'), b=$('todayToggle'); if(!c) return;
   const open=c.style.display==='none'; c.style.display=open?'flex':'none';
-  if(b) b.textContent='📊 สรุปวันนี้ '+(open?'▴':'▾');
+  if(b) b.innerHTML=IC.chart+'สรุปวันนี้ '+(open?'▴':'▾');
   try{ localStorage.setItem('yodee_today_open', open?'1':'0'); }catch(e){}
   if(open) loadTodayStats(); };
 async function loadTodayStats(){
   const el=$('todayChips'); if(!el || el.style.display==='none') return;   // only fetch when expanded
   try{
     const r=await api('/api/report');
-    const chip=(label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
-      <div style="font-size:11px;color:var(--muted);white-space:nowrap">${label}</div>
+    const chip=(icon,label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:4px">${icon}${label}</div>
       <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
     let chips =
-      chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
-      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +   // cups SOLD (drink units) — matches the P&L report
-      chip('🍦 เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
-      chip('🎫 ออกคิว', r.issued||0) +
-      chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
-      chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
+      chip(IC.cash,'ยอดวันนี้', baht2(r.revenue||0)) +
+      chip(IC.cup,'ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +   // cups SOLD (drink units) — matches the P&L report
+      chip(IC.serve,'เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
+      chip(IC.ticket,'ออกคิว', r.issued||0) +
+      chip(IC.clock,'รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
+      chip(IC.loyalty,'เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
     // Target progress — only when the owner has set a daily target (FIN_TARGET_REVENUE).
     const tgt=r.pnl&&r.pnl.targetDaily;
     if(tgt&&tgt>0){ const pct=Math.round(((r.revenue||0)/tgt)*100);
-      chips += chip('🎯 เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
+      chips += chip(IC.chart,'เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
     el.innerHTML = chips;
   }catch(e){ /* leave the strip as-is on a transient error; the toggle controls visibility */ }
 }
@@ -1937,30 +1940,31 @@ function renderZone(snap){
     return (t.payment_status!=='paid')
       ? `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
       : `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;background:var(--accent2);color:#06281f" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
+  // Card layout: order info on the LEFT, the action group (big primary + secondary row) on the RIGHT.
+  // Wraps to a stack on a narrow phone. flex-basis keeps the action column a sensible width on iPad.
+  const actionCol=(big, secondary)=> `<div style="display:flex;flex-direction:column;gap:8px;flex:1 1 210px;max-width:320px">${big}<div class="row" style="gap:6px;align-items:center">${secondary}</div></div>`;
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
-      <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="flex-direction:column;align-items:stretch;gap:8px;${pendingCardBg(t)}"><div>${tsTop(t)}<div>
+      <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${pendingCardBg(t)}">
+        <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
-        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
-        <div class="row" style="gap:6px;align-items:center">${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}</div></div>`).join('')+`</div>`
+        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
+        ${actionCol(`<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
-    <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="flex-direction:column;align-items:stretch;gap:8px;${waitingCardBg(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
-      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      ${payOrServe(t)}
-      <div class="row" style="gap:6px;align-items:center">${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}
-        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
+    <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
+      <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
+      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem" style="flex-direction:column;align-items:stretch;gap:8px"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      ${payOrServe(t)}
-      <div class="row" style="gap:6px;align-items:center">${moreBtn(t, editBtn(t)+ppBtn(t)+slipViewBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${voidBtn(t)}
-        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button></div></div>`).join('')
+    <div class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
+      <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div></div>
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+slipViewBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`).join('')
     : '<p class="muted">—</p>';
 }
 
