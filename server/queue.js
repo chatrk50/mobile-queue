@@ -744,10 +744,12 @@ export function listBranchMenu(branchId) {
             COALESCE(bm.enabled, 1) AS enabled, bm.price_override,
             COALESCE(bm.soldout, mi.soldout) AS soldout
        FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
-      WHERE mi.active = 1 ORDER BY mi.sort, mi.id`
-  ).all(branchId);
+      WHERE mi.active = 1 AND mi.tenant_id = ? ORDER BY mi.sort, mi.id`
+  ).all(branchId, TID());
 }
 export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride, soldout } = {}) {
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(branchId, TID())) throw new Error('store_not_found');
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, TID())) throw new Error('item_not_found');
   const cur = db.prepare('SELECT * FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId) || { enabled: 1, price_override: null, soldout: 0, sort: null };
   const en = enabled != null ? (enabled ? 1 : 0) : cur.enabled;
   const po = priceOverride !== undefined ? (priceOverride === null || priceOverride === '' ? null : Math.max(0, Number(priceOverride) || 0)) : cur.price_override;
@@ -1379,11 +1381,13 @@ export function getMenuDeliveryPrice(itemId) {
   return r ? r.price : null;
 }
 export function setMenuDeliveryPrice(itemId, price) {
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, TID())) throw new Error('item_not_found');
   const tid = deliveryTierId(); if (!tid) return { ok: false };
   if (price == null || price === '' || Number(price) <= 0) { db.prepare('DELETE FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').run(itemId, tid); return { ok: true, cleared: true }; }
   return setItemPrice(itemId, tid, price, 0);
 }
 export function setItemPrice(itemId, tierId, price, branchId = 0) {
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, TID())) throw new Error('item_not_found');
   const p = Math.max(0, Number(price) || 0);
   db.prepare(`INSERT INTO item_prices (item_id, tier_id, branch_id, price) VALUES (?,?,?,?)
               ON CONFLICT(item_id, tier_id, branch_id) DO UPDATE SET price=excluded.price`)
@@ -1455,6 +1459,7 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(id, TID())) throw new Error('item_not_found');
   db.prepare('DELETE FROM menu_items WHERE id=?').run(id);
   return { ok: true };
 }
