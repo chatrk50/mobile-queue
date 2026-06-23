@@ -462,11 +462,18 @@
     <div style="background:var(--navy,#1e3a5f);color:#fff;border-radius:12px;padding:12px 18px;text-align:right;margin-bottom:10px">
       <div style="font-size:11px;opacity:.7">รับเงินมา</div>
       <div style="font-size:30px;font-weight:800;line-height:1.1">฿<span id="cashRecvDisp">0</span></div></div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-      <button class="cashk" onclick="cashKey('7')">7</button><button class="cashk" onclick="cashKey('8')">8</button><button class="cashk" onclick="cashKey('9')">9</button><button class="cashq" onclick="setCash(10)">฿10</button>
-      <button class="cashk" onclick="cashKey('4')">4</button><button class="cashk" onclick="cashKey('5')">5</button><button class="cashk" onclick="cashKey('6')">6</button><button class="cashq" onclick="setCash(20)">฿20</button>
-      <button class="cashk" onclick="cashKey('1')">1</button><button class="cashk" onclick="cashKey('2')">2</button><button class="cashk" onclick="cashKey('3')">3</button><button class="cashq" onclick="setCash(50)">฿50</button>
-      <button class="cashk" onclick="cashClear()" style="color:var(--danger)">C</button><button class="cashk" onclick="cashKey('0')">0</button><button class="cashk" onclick="cashKey('.')">.</button><button class="cashq" onclick="cashExact()" style="font-size:15px">พอดี</button>
+    <!-- PRIMARY: tap the banknotes the customer handed (adds up) — covers almost every cash sale. -->
+    <div style="font-size:12px;color:var(--muted);margin:0 2px 5px">แตะธนบัตรที่ลูกค้าให้มา (กดเพิ่มได้)</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
+      <button class="cashq" onclick="addCash(20)">+฿20</button><button class="cashq" onclick="addCash(50)">+฿50</button><button class="cashq" onclick="addCash(100)">+฿100</button>
+      <button class="cashq" onclick="addCash(500)">+฿500</button><button class="cashq" onclick="addCash(1000)">+฿1000</button><button class="cashq" onclick="cashExact()" style="background:#d9f5ea;border-color:#9fe0cb;color:#0c5e48">พอดี ✓</button>
+    </div>
+    <!-- SECONDARY: number pad for odd amounts / coins. -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+      <button class="cashk" onclick="cashKey('7')">7</button><button class="cashk" onclick="cashKey('8')">8</button><button class="cashk" onclick="cashKey('9')">9</button>
+      <button class="cashk" onclick="cashKey('4')">4</button><button class="cashk" onclick="cashKey('5')">5</button><button class="cashk" onclick="cashKey('6')">6</button>
+      <button class="cashk" onclick="cashKey('1')">1</button><button class="cashk" onclick="cashKey('2')">2</button><button class="cashk" onclick="cashKey('3')">3</button>
+      <button class="cashk" onclick="cashKey('.')">.</button><button class="cashk" onclick="cashKey('0')">0</button><button class="cashk" onclick="cashClear()" style="color:var(--danger)">ล้าง C</button>
     </div>
     <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin:12px 0">
       <span class="muted" style="font-size:14px">เงินทอน</span>
@@ -651,6 +658,7 @@ const IC={
   wallet:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="17" cy="14" r="1.2"/></svg>',
   card:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
   cup:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>',
+  search:'<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -1901,6 +1909,10 @@ function renderZone(snap){
   // A customer who attached a slip shows as 'claimed' — let the cashier view it.
   const slipViewBtn=(t)=> (t.payment_status==='claimed')
     ? `<button class="ghost" style="padding:8px 10px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>` : '';
+  // A LINE customer who declared payment ('claimed') needs the cashier to VERIFY — keep this
+  // prominent ON the card (not buried in เพิ่มเติม) with a clear highlight + icon.
+  const verifyBtn=(t)=> (t.payment_status==='claimed')
+    ? `<button style="padding:9px 12px;font-weight:800;border:1.5px solid #7fd3e3;border-radius:11px;background:#d6f1f7;color:#0e6b7e;cursor:pointer" onclick="viewSlip(${t.id})" title="ลูกค้าแจ้งชำระทางไลน์ — ตรวจสลิป/เช็คเงินเข้า">${IC.search}ตรวจสลิป</button>` : '';
   // Can't serve an unpaid order — disable the button until it's marked paid.
   const serveBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" disabled style="opacity:.5" title="ยืนยันการชำระก่อน">เสิร์ฟแล้ว</button>`
@@ -1936,10 +1948,11 @@ function renderZone(snap){
   const waitingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):(kitchenBg(t)?'background:'+kitchenBg(t):'');
   // Big contextual PRIMARY action (full-width, top of the action stack): collect payment while the
   // order is unpaid → then "เสิร์ฟแล้ว" once paid. One prominent button guides the cashier pay → serve.
+  // Distinct pastel states (theme-matched, not loud): awaiting payment = soft butter; ready to serve = soft mint.
   const payOrServe=(t)=>{ if(t.order_total==null) return '';
     return (t.payment_status!=='paid')
-      ? `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
-      : `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;background:var(--accent2);color:#06281f" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
+      ? `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
+      : `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#a9e3d0;color:#0c5e48" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
   // Card layout: order info on the LEFT, the action group (big primary + secondary row) on the RIGHT.
   // Wraps to a stack on a narrow phone. flex-basis keeps the action column a sensible width on iPad.
   const actionCol=(big, secondary)=> `<div style="display:flex;flex-direction:column;gap:8px;flex:1 1 210px;max-width:320px">${big}<div class="row" style="gap:6px;align-items:center">${secondary}</div></div>`;
@@ -1953,18 +1966,18 @@ function renderZone(snap){
         <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
-        ${actionCol(`<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}`)}</div>`).join('')+`</div>`
+        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
     <div class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+slipViewBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`).join('')
     : '<p class="muted">—</p>';
 }
 
@@ -2008,7 +2021,9 @@ window.cashKey=(d)=>{
   _cashRecv = (_cashRecv==='0' && d!=='.') ? d : (_cashRecv + d);
   calcChange(); };
 window.cashClear=()=>{ _cashRecv=''; calcChange(); };
-window.setCash=(v)=>{ _cashRecv=String(v); calcChange(); };  // quick denomination (฿10/20/50)
+window.setCash=(v)=>{ _cashRecv=String(v); calcChange(); };  // (legacy) replace with a fixed amount
+// Banknote tap: ADD the note to the running "received" total (tap each note the customer handed).
+window.addCash=(n)=>{ const cur=Number(_cashRecv)||0; _cashRecv=String(Math.round((cur+n)*100)/100); calcChange(); };
 window.cashExact=()=>{ _cashRecv=String(_payAmt); calcChange(); };
 window.calcChange=()=>{ const due=_payAmt, recv=_cashRecv===''?due:(Number(_cashRecv)||0), box=$('cashChange'), btn=$('cashConfirmBtn');
   $('cashRecvDisp').textContent = _cashRecv==='' ? fmt0(due) : (_cashRecv==='.' ? '0.' : _cashRecv);

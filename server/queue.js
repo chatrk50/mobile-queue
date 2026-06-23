@@ -143,10 +143,13 @@ export function setStatus(ticketId, status, threshold) {
   // Notify the customer on LINE when their order is handed over (served).
   if (status === 'served' && t.line_user_id) {
     pushQueue(t.line_user_id,
-      `✅ รับเครื่องดื่มเรียบร้อย\n` +
-      `หมายเลข: ${t.code}\n` +
-      `We look forward to welcoming you back 😊`,
-      queueLink(t.zone_id), 'ให้คะแนนร้าน');
+      `✅ รับเครื่องดื่มเรียบร้อยแล้ว · หมายเลข ${t.code}\n` +
+      `\n` +
+      `⭐ รบกวนให้คะแนนร้านหน่อยนะคะ ⭐\n` +
+      `👇 แตะปุ่ม "ให้คะแนนร้าน" ด้านล่าง — แค่ 5 วินาที มีความหมายกับร้านมากค่ะ 🙏\n` +
+      `\n` +
+      `ขอบคุณที่อุดหนุน แล้วพบกันใหม่นะคะ 😊`,
+      queueLink(t.zone_id), '⭐ ให้คะแนนร้าน');
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
