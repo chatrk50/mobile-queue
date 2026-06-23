@@ -1847,6 +1847,9 @@ function renderZone(snap){
     ? (t.loy_phone
         ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
         : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.loyalty}แต้ม</button>`) : '';
+  // Collect payment on a queued (already-numbered) order that's still unpaid → marks it paid in place.
+  const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
+    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
