@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -377,6 +377,28 @@ const adminFails = new Map(); // ip -> { count, until } — brute-force lockout 
 const adminLocked = (ip) => { const a = adminFails.get(ip); return !!(a && a.until > Date.now()); };
 const adminPinValid = (req) => SAAS && SAAS_ADMIN_PIN && (req.get('x-admin-pin') === SAAS_ADMIN_PIN || req.body?.adminPin === SAAS_ADMIN_PIN);
 const adminBumpFail = (ip) => { const a = adminFails.get(ip) || { count: 0, until: 0 }; a.count++; if (a.count >= 6) { a.until = Date.now() + 15 * 60000; a.count = 0; } adminFails.set(ip, a); };
+// Owner account: change email and/or password while holding an owner session.
+app.get('/api/owner/account', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const t = getTenant(req.tenantId);
+  res.json({ email: t?.owner_email || null, hasPassword: !!(t?.owner_pass_hash) });
+});
+app.post('/api/owner/change-email', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
+  updateOwnerEmail(req.tenantId, email);
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.change_email', ip: ipOf(req) });
+  res.json({ ok: true });
+});
+app.post('/api/owner/change-password', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const password = String(req.body?.password || '');
+  if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+  setOwnerPassword(req.tenantId, password);
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.change_password', ip: ipOf(req) });
+  res.json({ ok: true });
+});
 function adminTry(req) {                                  // PIN-on-every-request path (used when 2FA off)
   const ip = ipOf(req);
   if (adminPinValid(req)) { adminFails.delete(ip); return true; }

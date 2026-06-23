@@ -763,6 +763,10 @@ export function getTenantByReferral(code) {
 export function setOwnerPassword(tenantId, password) {
   if (!password) return; db.prepare('UPDATE tenants SET owner_pass_hash=? WHERE id=?').run(hashPin(String(password)), tenantId);
 }
+export function updateOwnerEmail(tenantId, email) {
+  const e = String(email || '').trim().toLowerCase();
+  db.prepare('UPDATE tenants SET owner_email=? WHERE id=?').run(e || null, Number(tenantId));
+}
 /** Email+password → the active shops that email owns with a matching password. */
 export function ownerLoginMatches(email, password) {
   const e = String(email || '').trim().toLowerCase();
