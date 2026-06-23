@@ -814,6 +814,7 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
 }
 export function stockMoves(ingredientId, limit = 50) {
+  if (!db.prepare('SELECT 1 FROM ingredients WHERE id=? AND tenant_id=?').get(ingredientId, TID())) return [];
   return db.prepare('SELECT * FROM stock_moves WHERE ingredient_id=? ORDER BY id DESC LIMIT ?').all(ingredientId, limit);
 }
 
