@@ -766,7 +766,8 @@ window.saveQR=async()=>{
     g.fillStyle='#ffffff'; g.fillRect(0,0,cv.width,cv.height);
     g.fillStyle='#16314f'; g.fillRect(0,0,W,headH);              // navy header band
     g.textAlign='center'; g.fillStyle='#ffffff';
-    g.font='800 32px system-ui,-apple-system,sans-serif'; g.fillText('YO-DEE YOGURT', W/2, 44);
+    const brandLabel=((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt').toUpperCase();
+    g.font='800 28px system-ui,-apple-system,sans-serif'; g.fillText(brandLabel, W/2, 44);
     g.font='600 16px system-ui,-apple-system,sans-serif'; g.fillText('Thai QR Payment · พร้อมเพย์', W/2, 72);
     const qx=(W-qrSize)/2, qy=headH+pad/2;
     g.drawImage(qr, qx, qy, qrSize, qrSize);                     // the QR itself
@@ -776,15 +777,16 @@ window.saveQR=async()=>{
     g.fillStyle='#6b7280'; g.font='500 14px system-ui,-apple-system,sans-serif';
     g.fillText('สแกนด้วยแอปธนาคารเพื่อชำระเงิน', W/2, headH+qrSize+pad+46);
     const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
-    const file=new File([blob],'yodee-qr.png',{type:'image/png'});
+    const shopSlug=((window.BRAND&&window.BRAND.slug)||'shop').toLowerCase().replace(/[^a-z0-9]/g,'-');
+    const file=new File([blob],shopSlug+'-qr.png',{type:'image/png'});
     // Best on mobile/LINE: native share sheet → "บันทึกรูปภาพ" / Save to Photos.
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({files:[file], title:'YO-DEE YOGURT — QR ชำระเงิน'});
+      await navigator.share({files:[file], title:((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt')+' — QR ชำระเงิน'});
       toast('เลือก "บันทึกรูปภาพ" → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
       return;
     }
     // Fallback: download link (works in some browsers).
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='yodee-qr.png';
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=shopSlug+'-qr.png';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
     toast('บันทึก QR แล้ว → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
   }catch(e){
