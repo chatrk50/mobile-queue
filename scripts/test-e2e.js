@@ -179,6 +179,12 @@ console.log('\n== Queue-first model ==');
 Q.setQueueFirst(true);
 const qf = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
 ok(qf.ticket.number > 0 && qf.ticket.status === 'waiting', `INVARIANT queue number issued at creation (number ${qf.ticket.number}, status ${qf.ticket.status})`);
+// A held bill ("พักบิล") must stay in รอชำระเงิน (pending, no number) EVEN in queue-first mode,
+// then take a real number only when the cashier collects payment later.
+const held = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { hold: true });
+ok(held.ticket.number === 0 && held.ticket.status === 'pending', `INVARIANT held bill stays pending under queue-first (number ${held.ticket.number}, status ${held.ticket.status})`);
+const heldPaid = Q.setOrderPaid(held.ticket.id, { method: 'cash' });
+ok(heldPaid.number > 0, `INVARIANT paying a held bill issues its queue number (${heldPaid.number})`);
 let qfServed = false; try { Q.setStatus(qf.ticket.id, 'served'); qfServed = true; } catch (e) { /* order_unpaid */ }
 ok(!qfServed, 'INVARIANT an unpaid queued order canNOT be served (pay-before-serve preserved)');
 Q.setOrderPaid(qf.ticket.id, { method: 'cash' });

@@ -1499,7 +1499,7 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
 function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
-  if(payMethod) body.pay=payMethod;
+  if(payMethod) body.pay=payMethod; else body.hold=true;   // no tender = พักบิล → park in รอชำระเงิน (don't take a queue number yet)
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if
 // a "failed" send actually reached the server, the retry returns the SAME order (never a duplicate).
