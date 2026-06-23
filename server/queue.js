@@ -1226,7 +1226,7 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   if (!loyaltyEnabled()) throw new Error('loyalty_off');
   const d = normalizePhone(phone);
   if (!d) throw new Error('bad_phone');
-  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   if (t.line_user_id) throw new Error('already_line_customer');
   const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -1757,7 +1757,7 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
  *  already carries the customer's line_user_id, so no QR/id handshake is needed at the counter —
  *  the cashier just taps "แลกฟรี" on the customer's order. One redemption per order. */
 export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
-  const t = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   const loyKey = t && (t.line_user_id || t.customer_key);
   if (!t || !loyKey) throw new Error('no_customer');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
