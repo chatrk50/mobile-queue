@@ -354,6 +354,25 @@
   </div>
 </div>
 
+<!-- ITEM DETAILS: tap a bill line to change quantity / topping-sweet / remove -->
+<div id="itemDetailPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0">
+    <div class="row between"><h1 style="margin:0">รายละเอียดรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemDetail()">✕</button></div>
+    <div style="text-align:center;margin:12px 0 4px"><b id="detailName" style="font-size:18px;color:var(--navy)"></b><div class="muted" id="detailOpts" style="font-size:13px;margin-top:4px"></div></div>
+    <div class="row between" style="margin:16px 0;align-items:center">
+      <span style="font-weight:700">จำนวน</span>
+      <div class="row" style="gap:12px;align-items:center">
+        <button class="ghost" style="padding:8px 18px;font-size:22px;line-height:1" onclick="detailQty(-1)">−</button>
+        <b id="detailQty" style="font-size:22px;min-width:30px;text-align:center">1</b>
+        <button class="ghost" style="padding:8px 18px;font-size:22px;line-height:1" onclick="detailQty(1)">+</button>
+      </div>
+    </div>
+    <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin-bottom:14px"><span class="muted">รวมรายการนี้</span><b style="font-size:18px">฿<span id="detailLineTotal">0</span></b></div>
+    <button class="ghost" style="width:100%;padding:13px;margin-bottom:8px;color:#0e6b7e;border-color:#bfe3ec;box-sizing:border-box" onclick="detailEditOptions()">🧋 เปลี่ยนท็อปปิ้ง / ความหวาน</button>
+    <button class="ghost danger" style="width:100%;padding:13px;box-sizing:border-box" onclick="detailRemove()">🗑️ ลบรายการนี้</button>
+  </div>
+</div>
+
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
@@ -1298,7 +1317,7 @@ function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img
 window.delItem=async(id)=>{ if(!confirm('ลบเมนูนี้?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
-let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null;
+let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null;
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
   if(!CHANNELS.length){ sel.style.display='none'; return; } sel.style.display='';
@@ -1362,8 +1381,7 @@ window.editOrder=async(tid, zoneId)=>{
   if(!lines.length){ toast('ไม่พบรายการในออเดอร์'); return; }
   const entries=[];
   for(const l of lines){ let name=l.name, sweet=100; const m=String(name).match(/^(.*) · หวาน (\d+)%$/); if(m){ name=m[1]; sweet=+m[2]; }
-    const qty=Math.max(1, l.qty||1);
-    for(let k=0;k<qty;k++) entries.push({ name, price:l.price, toppings:(l.toppings||[]).map(tp=>({name:tp.name,price:tp.price,qty:tp.qty})), sweet }); }
+    entries.push({ name, price:l.price, toppings:(l.toppings||[]).map(tp=>({name:tp.name,price:tp.price,qty:tp.qty})), sweet, qty:Math.max(1, l.qty||1) }); }
   await showOrder(zoneId);                 // opens the order screen (this resets cart) …
   _editTicket=tid; cart=entries; renderBasketCount(); setEditMode(true);   // … then load the order in
   toast('✏️ แก้ไขออเดอร์ #'+tid+' — ปรับเมนู/ท็อปปิ้ง/ความหวาน แล้วกดบันทึก'); };
@@ -1378,7 +1396,7 @@ window.saveEdit=async()=>{
 
 // Back out of the drink builder entirely (customer changed their mind) — clears the in-progress
 // drink + closes the topping/sweet popups, returning to the menu without adding anything.
-window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
+window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; _editEntryIdx=null; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
   $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
@@ -1400,18 +1418,22 @@ function openSweet(){ $('topPop').style.display='none';
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
     <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
-window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops), sweet:s });
-  $('sweetPop').style.display='none'; renderBasketCount(); toast('เพิ่ม '+pendingDrink.name+' แล้ว'); };
-function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
+window.chooseSweet=(s)=>{ const entry={ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops), sweet:s, qty:1 };
+  if(_editEntryIdx!=null && cart[_editEntryIdx]){ entry.qty=cart[_editEntryIdx].qty||1; cart[_editEntryIdx]=entry; _editEntryIdx=null; toast('แก้ไขรายการแล้ว'); }
+  else { cart.push(entry); toast('เพิ่ม '+pendingDrink.name+' แล้ว'); }
+  $('sweetPop').style.display='none'; renderBasketCount(); };
+// Per-unit price + toppings, times the line quantity.
+function entryTotal(e){ return (e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0)) * (e.qty||1); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
 // Live bill (left pane of the split-screen order taker). Re-rendered on every cart change.
 function renderBill(){
   const list=$('billList'); if(!list) return;
   list.innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div style="flex:1">
-      <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+    <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
+      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
+      <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('')
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
   const total=cart.reduce((s,e)=>s+entryTotal(e),0);
@@ -1426,12 +1448,30 @@ function renderBasketCount(){ const c=$('basketCount'); if(c){ c.textContent=car
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasketCount(); };
+// ---------- Item details: tap a bill line → change quantity / topping-sweet / remove ----------
+window.openItemDetail=(i)=>{ const e=cart[i]; if(!e) return; _detailIdx=i;
+  $('detailName').textContent=e.name;
+  $('detailOpts').textContent=((e.sweet!=null&&e.sweet!==100)?('ความหวาน '+e.sweet+'%'):'หวานปกติ')+(e.toppings.length?(' · '+e.toppings.map(t=>t.name).join(', ')):'');
+  $('detailQty').textContent=e.qty||1; $('detailLineTotal').textContent=entryTotal(e);
+  $('itemDetailPop').style.display='flex'; };
+window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx=null; };
+window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
+  $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
+window.detailRemove=()=>{ if(_detailIdx==null) return; cart.splice(_detailIdx,1); closeItemDetail(); renderBasketCount(); toast('ลบรายการแล้ว'); };
+// Re-open the topping+sweet picker for this line, pre-filled, and update it in place on confirm.
+window.detailEditOptions=()=>{ const e=cart[_detailIdx]; if(!e) return; const drink=MENU.find(m=>m.name===e.name);
+  if(!drink){ toast('ไม่พบเมนูนี้ในระบบ — ลบแล้วเพิ่มใหม่'); return; }
+  _editEntryIdx=_detailIdx; $('itemDetailPop').style.display='none';
+  pendingDrink=drink; pendingTops={};
+  e.toppings.forEach(tp=>{ const m=MENU.find(x=>x.name===tp.name); if(m) pendingTops[m.id]={name:tp.name,price:tp.price,qty:tp.qty}; });
+  $('topPopTitle').textContent=drink.name+' · ฿'+drink.price; renderTopPop(); $('topPop').style.display='flex'; };
 function renderBasket(){
   $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div style="flex:1">
-      <div class="row between"><b>1× ${esc(e.name)}</b><span class="muted">฿${e.price}</span></div>
+    <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
+      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}</div>
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
+      <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง — เพิ่มเครื่องดื่ม</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
@@ -1447,7 +1487,7 @@ function beep(freq){ try{ _ac=_ac||new (window.AudioContext||window.webkitAudioC
   g.gain.exponentialRampToValueAtTime(.0001,_ac.currentTime+.18); o.start(); o.stop(_ac.currentTime+.18); }catch(e){} }
 // Build the POST items from a cart snapshot (drink + sweetness + each topping line).
 function buildBillItems(entries){ const items=[];
-  entries.forEach(e=>{ items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:1}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty})); });
+  entries.forEach(e=>{ const q=e.qty||1; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:q}); e.toppings.forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*q})); });
   return items; }
 // Idempotency: a unique token per bill-send. Reused across retries (and a manual re-send of the
 // SAME restored bill) so a request that quietly reached the server can't create a duplicate order.
