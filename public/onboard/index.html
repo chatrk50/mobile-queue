@@ -1,0 +1,159 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ยินดีต้อนรับ — เริ่มต้นใช้งาน</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
+  :root{--ind:#6366f1;--inds:rgba(99,102,241,.10);--ok:#178a72;--oks:rgba(23,138,114,.12);--ink:#1a1a2e;--mut:#6b7280;--line:#e6e7ec;--bg:#f7f7fb}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0;min-height:100vh}
+  .topbar{max-width:520px;margin:0 auto;padding:14px 18px 0;display:flex;align-items:center;justify-content:space-between}
+  .logo{font-family:'Kanit',sans-serif;font-weight:700;font-size:18px;color:var(--ink);display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .wrap{max-width:520px;margin:0 auto;padding:24px 18px 48px}
+  .hero{text-align:center;padding:28px 0 20px}
+  .checkmark{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 8px 24px rgba(22,163,74,.3)}
+  .checkmark svg{width:30px;height:30px;stroke:#fff;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .hero h1{font-family:'Kanit',sans-serif;font-size:24px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em}
+  .hero p{color:var(--mut);font-size:14px;margin:0}
+  .card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:14px}
+  .card h2{font-family:'Kanit',sans-serif;font-size:16px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  /* checklist */
+  .step{display:flex;align-items:flex-start;gap:13px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:0;padding-bottom:0}
+  .step:first-child{padding-top:0}
+  .ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+  .ico svg{width:20px;height:20px;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .ico.done{background:var(--oks)}
+  .ico.done svg{stroke:var(--ok)}
+  .ico.todo{background:var(--inds)}
+  .ico.todo svg{stroke:var(--ind)}
+  .ico.opt{background:#f1f5f9}
+  .ico.opt svg{stroke:var(--mut)}
+  .step-body{flex:1;min-width:0}
+  .step-body b{display:block;font-size:14px;font-weight:600}
+  .step-body span{font-size:12.5px;color:var(--mut)}
+  .pill-done{display:inline-flex;align-items:center;gap:4px;background:var(--oks);color:var(--ok);font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;margin-top:4px}
+  .pill-done svg{width:12px;height:12px;stroke:var(--ok);stroke-width:2.5;fill:none}
+  .pill-todo{display:inline-flex;align-items:center;gap:4px;background:var(--inds);color:var(--ind);font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;margin-top:4px}
+  /* url box */
+  .urlbox{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
+  .urlbox code{font-size:13px;color:var(--ink);word-break:break-all;flex:1}
+  .urlbox button{flex:none;font-size:12px;font-weight:500;padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;white-space:nowrap;color:var(--ink)}
+  .urlbox button:hover{border-color:var(--ind);color:var(--ind)}
+  /* pin reminder */
+  .pin-box{background:linear-gradient(135deg,#eef2ff,#fbe8ff);border:1px solid #c7d2fe;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px}
+  .pin-box .pi{width:40px;height:40px;border-radius:10px;background:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+  .pin-box .pi svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .pin-box p{margin:0;font-size:13.5px}
+  .pin-box b{color:var(--ind)}
+  /* CTA */
+  .cta{display:block;width:100%;text-align:center;margin-top:6px;padding:14px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;font-family:'Kanit',sans-serif;cursor:pointer;text-decoration:none;box-shadow:0 8px 22px rgba(99,102,241,.35);transition:.15s}
+  .cta:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(99,102,241,.45)}
+  .skip{display:block;text-align:center;margin-top:10px;font-size:13px;color:var(--mut);text-decoration:none}
+  .skip:hover{color:var(--ind)}
+</style>
+</head><body>
+<div class="topbar">
+  <a class="logo" href="/landing/"><span class="dot">ดี</span> ขายดี <small style="font-size:10px;color:var(--mut);font-weight:400">KhaiDee</small></a>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="checkmark"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h1>ร้าน <span id="shopName">ของคุณ</span> พร้อมแล้ว!</h1>
+    <p>ทดลอง Pro ฟรี 60 วัน · เริ่มขายได้ทันที</p>
+  </div>
+
+  <!-- Checklist -->
+  <div class="card">
+    <h2>ขั้นตอนแนะนำ (ทำได้เลยทุกข้อ)</h2>
+    <!-- Step 1: Menu -->
+    <div class="step">
+      <div class="ico todo" id="ico1">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21Z"/><path d="M9 8h6M9 12h4"/></svg>
+      </div>
+      <div class="step-body">
+        <b>เพิ่มเมนูสินค้า</b>
+        <span>เลือกเมนูตัวอย่างแล้วแก้ได้ หรือเพิ่มเองทีละรายการ</span>
+        <div id="s1status"><span class="pill-todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>รอดำเนินการ</span></div>
+      </div>
+    </div>
+    <!-- Step 2: First order -->
+    <div class="step">
+      <div class="ico todo" id="ico2">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+      </div>
+      <div class="step-body">
+        <b>ลองรับออเดอร์หน้าร้าน</b>
+        <span>กดสั่งเมนู คิดเงิน รับชำระ — ทดสอบก่อนเปิดร้านจริง</span>
+        <div><span class="pill-todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>ทำหลังใส่เมนูแล้ว</span></div>
+      </div>
+    </div>
+    <!-- Step 3: LINE -->
+    <div class="step">
+      <div class="ico opt" id="ico3">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>
+      </div>
+      <div class="step-body">
+        <b>เชื่อม LINE OA <span style="font-weight:400;color:var(--mut)">(ทำทีหลังได้)</span></b>
+        <span>ให้ลูกค้าสั่งผ่านไลน์ รับแต้มสะสม จ่ายออนไลน์ได้</span>
+        <div id="s3status"><span class="pill-todo" style="background:#f1f5f9;color:var(--mut)"><svg viewBox="0 0 24 24" style="stroke:var(--mut)"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>ยังไม่ได้เชื่อม</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIN reminder -->
+  <div class="pin-box" id="pinBox" style="margin-bottom:14px">
+    <div class="pi"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+    <p>เข้าหน้าแคชเชียร์ด้วย <b>PIN ที่ตั้งไว้</b> ตอนสมัคร — เก็บ PIN ไว้ให้ดี</p>
+  </div>
+
+  <!-- Shop URL -->
+  <div class="card" style="padding:16px">
+    <div style="font-size:12.5px;font-weight:600;color:var(--mut);margin-bottom:8px">URL ร้านของคุณ (บุ๊กมาร์กเลย)</div>
+    <div class="urlbox">
+      <code id="shopUrl">กำลังโหลด…</code>
+      <button onclick="copyUrl()">ก๊อป</button>
+    </div>
+  </div>
+
+  <a class="cta" id="ctaBtn" href="#">เข้าหน้าแคชเชียร์ →</a>
+  <a class="skip" href="/help/line/">อยากเชื่อม LINE ก่อน? ดูคู่มือทีละขั้นตอน</a>
+</div>
+
+<script>
+const slug = (location.pathname.match(/\/b\/([^/]+)\//) || [])[1] || '';
+const cashierUrl = slug ? `/b/${slug}/cashier/` : '/cashier/';
+document.getElementById('ctaBtn').href = cashierUrl;
+document.getElementById('shopUrl').textContent = location.origin + cashierUrl;
+
+function copyUrl(){
+  const u = location.origin + cashierUrl;
+  navigator.clipboard.writeText(u).then(() => {
+    const b = document.querySelector('.urlbox button');
+    b.textContent = 'ก๊อปแล้ว'; setTimeout(() => { b.textContent = 'ก๊อป'; }, 1800);
+  }).catch(() => {});
+}
+
+(async () => {
+  try {
+    const d = await (await fetch('/api/onboard')).json();
+    if (d.name) document.getElementById('shopName').textContent = '"' + d.name + '"';
+
+    // Step 1: menu
+    if (d.menuCount > 0) {
+      document.getElementById('ico1').className = 'ico done';
+      document.getElementById('s1status').innerHTML =
+        '<span class="pill-done"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>มีเมนูแล้ว ' + d.menuCount + ' รายการ</span>';
+    }
+
+    // Step 3: LINE
+    if (d.lineOk) {
+      document.getElementById('ico3').className = 'ico done';
+      document.getElementById('s3status').innerHTML =
+        '<span class="pill-done"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>เชื่อม LINE แล้ว</span>';
+    }
+  } catch (_) {}
+})();
+</script>
+</body></html>

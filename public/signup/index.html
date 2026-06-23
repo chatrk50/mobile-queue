@@ -51,11 +51,19 @@
   </div>
 
   <div class="card" id="form">
+    <div id="gbtn-wrap" style="display:none;margin-bottom:4px">
+      <div id="gbtn" style="display:flex;justify-content:center"></div>
+      <div class="divider">หรือกรอกเอง</div>
+    </div>
     <label>ชื่อร้าน / แบรนด์ <span class="hint">— แสดงบนหัวจอ รายงาน และแอป</span></label>
     <input id="name" type="text" placeholder="เช่น Bean House Coffee" maxlength="80" autocomplete="organization">
 
     <label>อีเมลเจ้าของ <span class="hint">(ไม่บังคับ — ไว้ติดต่อ/กู้คืน)</span></label>
     <input id="email" type="email" placeholder="you@email.com" maxlength="120" autocomplete="email">
+    <span id="gmail-badge" style="display:none;font-size:12px;color:var(--ind);font-weight:500;margin-top:4px;display:none">
+      <svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;stroke:var(--ind);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"/></svg>
+      ยืนยันด้วย Google แล้ว
+    </span>
 
     <label>แพ็กเกจ</label>
     <div class="pkg" id="pkg">
@@ -120,12 +128,12 @@ window.submitSignup=async()=>{
       body:JSON.stringify({name,email,package:pkg,pin,unit,theme,ref,password:password||undefined})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'signup_failed');
-    const url=d.url; const abs=location.origin+url;
+    const url=d.url; const onboardUrl=url.replace('/cashier/','/onboard/'); const abs=location.origin+url;
     $('form').style.display='none'; $('done').style.display='';
     const til=(d.trialUntil||'').slice(0,10);
     $('doneMsg').textContent='ร้าน "'+name+'" พร้อมใช้งานแล้ว · '+(d.trialDays?('ทดลอง Pro ฟรี '+d.trialDays+' วัน ถึง '+til):'')+(d.referred?' · +1 เดือนจากโค้ดเพื่อน!':'')+(d.founder?' · ราคา Founder ล็อกราคาแล้ว':'')+' · เข้าด้วย PIN ที่ตั้งไว้';
-    $('goShop').href=url; $('shopUrl').textContent=abs;
-    setTimeout(()=>{ location.href=url; }, 4000);
+    $('goShop').href=onboardUrl; $('goShop').textContent='เริ่มต้นใช้งาน →'; $('shopUrl').textContent=abs;
+    setTimeout(()=>{ location.href=onboardUrl; }, 3500);
   }catch(e){
     const m=String(e.message);
     $('err').textContent = m==='too_many_signups'?'สมัครบ่อยเกินไป ลองใหม่ภายหลัง'
@@ -136,5 +144,26 @@ window.submitSignup=async()=>{
     $('go').disabled=false; $('go').textContent='สร้างร้าน →';
   }
 };
+// Google Sign-In button
+(async()=>{ try{
+  const c=await (await fetch('/api/owner/config')).json();
+  if(!c.googleClientId) return;
+  const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true;
+  s.onload=()=>{ try{
+    google.accounts.id.initialize({ client_id:c.googleClientId, callback:(resp)=>{
+      try{
+        const raw=resp.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+        const p=JSON.parse(atob(raw+'=='.slice(0,(4-raw.length%4)%4)));
+        const ef=$('email');
+        if(ef){ ef.value=p.email||''; ef.readOnly=true; ef.style.background='rgba(99,102,241,.07)'; ef.style.borderColor='var(--ind)'; }
+        const vb=$('gmail-badge'); if(vb) vb.style.display='';
+        const nf=$('name'); if(nf&&!nf.value.trim()&&p.name) nf.value=p.name;
+      }catch(e){}
+    }});
+    google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'large',width:340,text:'signup_with',locale:'th'});
+    $('gbtn-wrap').style.display='';
+  }catch(e){} };
+  document.head.appendChild(s);
+}catch(e){} })();
 </script>
 </body></html>

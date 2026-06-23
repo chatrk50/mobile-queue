@@ -276,6 +276,16 @@ app.get('/api/shop/profile', (req, res) => {
     phone: loc?.phone || null, address: loc?.address || null });
 });
 
+// Public onboarding status — used by the post-signup wizard page; no auth needed.
+app.get('/api/onboard', (req, res) => {
+  const brand = brandFor(req);
+  const menuCount = Q.listMenu().length;
+  const lineOk = !!(getSetting('line:token', '') || getSetting('liff:id', ''));
+  const stores = Q.listStores();
+  const hasHours = stores.some((s) => s.hours_open);
+  res.json({ name: brand.name, menuCount, lineOk, hasHours });
+});
+
 // ---------- SaaS self-registration (Phase B) ----------
 // Public signup → creates a tenant (unique slug + brand), seeds a usable shop (store + Zone A,
 // default tiers/channels) and an OWNER staff with the chosen PIN, then returns the live link.
