@@ -1417,8 +1417,20 @@ function doDailyReset() {
   try {
     // Push end-of-day LINE summary to each owner BEFORE counters are wiped.
     if (SAAS) {
+      const REMIND_DAYS = new Set([1, 3, 7]);
       for (const t of listTenants()) {
         try { runWithTenant(t.id, () => Q.pushOwnerSummary()); } catch (_) { /* never block reset */ }
+        // Trial / plan-expiry reminders: send at -7, -3, -1 days.
+        try {
+          const bs = billingStatus(t.id);
+          if (bs.expiringSoon && REMIND_DAYS.has(bs.daysLeft)) {
+            const d = bs.daysLeft;
+            const msg = d === 1
+              ? `🚨 แพ็กเกจ ${bs.plan.toUpperCase()} ของร้าน "${t.name}" หมดพรุ่งนี้ — อัปเกรดด่วนใน ⚙ ตั้งค่า เพื่อรักษา LINE และข้อมูลลูกค้าไว้`
+              : `⚠️ แพ็กเกจ ${bs.plan.toUpperCase()} ของร้าน "${t.name}" จะหมดใน ${d} วัน — เข้า ⚙ ตั้งค่า > แพ็กเกจ เพื่ออัปเกรดและใช้งานต่อเนื่อง`;
+            runWithTenant(t.id, () => Q.notifyOwner(msg));
+          }
+        } catch (_) { /* never block reset */ }
       }
     } else {
       try { Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
