@@ -424,10 +424,10 @@
   .kmark.making{border-color:#f3961a;background:rgba(243,157,18,.16)}
   .kmark.done{border-color:#16876f;background:rgba(22,135,111,.16)}
   /* "เพิ่มเติม" overflow menu: stack the reused action buttons full-width + big for easy tapping. */
-  #moreMenuBody{display:flex;flex-direction:column;gap:8px}
-  #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:15px 16px!important;font-size:16px!important;min-height:56px;border-radius:13px!important;gap:4px}
-  #moreMenuBody>.pill{align-self:flex-start;padding:12px 16px!important;font-size:14px}
-  #moreMenuBody .ic{width:20px;height:20px}
+  #moreMenuBody{display:flex;flex-direction:column;gap:7px;padding-right:2px}
+  #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
+  #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
+  #moreMenuBody .ic{width:19px;height:19px}
 </style>
 <div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
@@ -464,11 +464,12 @@
     </div>
   </div>
 </div>
-<!-- "เพิ่มเติม" overflow menu: the occasional per-order actions, stacked big for easy tapping. -->
-<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:flex-end;justify-content:center;padding:0" onclick="if(event.target===this)closeMoreMenu()">
-  <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:18px 18px 0 0;max-height:80vh;overflow:auto">
-    <div class="row between" style="margin-bottom:8px"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
-    <div id="moreMenuBody" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
+<!-- "เพิ่มเติม" overflow menu: occasional per-order actions. Centered card with a FIXED header and a
+     SCROLLABLE body so every button is reachable even on a short (landscape) screen. -->
+<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
+  <div class="card" style="max-width:440px;width:100%;margin:0;max-height:88vh;display:flex;flex-direction:column;padding:16px">
+    <div class="row between" style="margin:0 0 10px;flex:none"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
+    <div id="moreMenuBody" style="overflow-y:auto;flex:1;min-height:0" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
   </div>
 </div>
 <!-- รวมบิล bar: appears when ≥2 pending bills are ticked -->
