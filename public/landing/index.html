@@ -277,6 +277,19 @@ summary{font-weight:500;cursor:pointer;font-size:15px}
 summary::marker{color:var(--ind)}
 details p{font-size:14px;color:var(--mut);margin-top:10px;padding-left:4px}
 
+/* ===== TESTIMONIALS ===== */
+.reviews-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.tcard{background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:var(--card-sh);display:flex;flex-direction:column;gap:16px}
+.tcard-stars{display:flex;gap:4px}
+.tcard-stars svg{width:18px;height:18px;fill:#f59e0b;stroke:#f59e0b;stroke-width:0}
+.tcard-quote{font-size:14.5px;line-height:1.8;color:var(--ink);flex:1;font-style:italic}
+.tcard-quote::before{content:'\201C';font-size:32px;line-height:0;vertical-align:-12px;color:var(--inds);font-style:normal;margin-right:4px}
+.tcard-footer{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:16px}
+.tcard-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Kanit',sans-serif;font-weight:700;font-size:14px;color:#fff;flex:none}
+.tcard-meta b{display:block;font-size:14px;font-weight:600;font-family:'Kanit',sans-serif}
+.tcard-meta span{font-size:12px;color:var(--mut)}
+@media(max-width:900px){.reviews-grid{grid-template-columns:1fr}}
+
 /* ===== FINAL CTA ===== */
 .final{background:var(--ind);color:#fff;text-align:center;padding:72px 0}
 .final h2{font-size:32px;margin-bottom:12px;color:#fff}
@@ -342,8 +355,8 @@ footer a:hover{color:var(--ink)}
       <a href="#" class="active">หน้าหลัก</a>
       <a href="#features">ฟีเจอร์</a>
       <a href="#how-it-works">วิธีใช้งาน</a>
-      <a href="#twoside">รีวิวจากลูกค้า</a>
-      <a href="#pricing">เกี่ยวกับเรา</a>
+      <a href="#reviews">รีวิวจากลูกค้า</a>
+      <a href="#pricing">ราคา</a>
     </div>
     <div class="nav-actions">
       <a href="/login/" class="login-link">เข้าสู่ระบบ</a>
@@ -761,6 +774,59 @@ footer a:hover{color:var(--ink)}
       <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>เข้ารหัส ปลอดภัย</h3><p>มาตรฐานระดับธนาคาร</p></div>
       <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>ตาม PDPA</h3><p>ส่งออก/ลบข้อมูลได้</p></div>
       <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h3>ใช้งานจริง</h3><p>YO-DEE ใช้ทุกวัน</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TESTIMONIALS ===== -->
+<section id="reviews" style="background:#f9fafb">
+  <div class="wrap">
+    <div class="eyebrow reveal">รีวิวจากเจ้าของร้าน</div>
+    <h2 class="center reveal">ร้านค้าจริง พูดจริง</h2>
+    <p class="lead reveal">กว่า 3,500 ธุรกิจเลือกใช้ KhaiDee — ฟังเสียงพวกเขาก่อน</p>
+    <div class="reviews-grid">
+      <div class="tcard reveal">
+        <div class="tcard-stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+        </div>
+        <p class="tcard-quote">ก่อนใช้ KhaiDee ต้องจดออเดอร์ LINE ด้วยมือแล้วพิมพ์ซ้ำเข้าคิว ผิดพลาดตลอด ตอนนี้ออเดอร์เข้าจอเดียวอัตโนมัติ ช่วยได้มากมายในช่วงพีค ลูกค้าไม่ต้องรอนาน</p>
+        <div class="tcard-footer">
+          <div class="tcard-av" style="background:#6366f1">ป</div>
+          <div class="tcard-meta"><b>คุณปุ้ย</b><span>Bean House Coffee · คาเฟ่กาแฟ กรุงเทพฯ</span></div>
+        </div>
+      </div>
+      <div class="tcard reveal">
+        <div class="tcard-stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+        </div>
+        <p class="tcard-quote">เพิ่งเปิดร้านข้าวกะเพราหน้าออฟฟิศ ไม่เคยทำระบบมาก่อน ตั้งค่าเองได้ใน 20 นาที ลูกค้ากดสั่งผ่าน LINE ได้เลย ไม่ต้องต่อคิว — ยอดขายเพิ่มขึ้นชัดเจนตั้งแต่เดือนแรก</p>
+        <div class="tcard-footer">
+          <div class="tcard-av" style="background:#059669">ต</div>
+          <div class="tcard-meta"><b>คุณต้น</b><span>ต้นข้าวกะเพรา · ร้านอาหาร เชียงใหม่</span></div>
+        </div>
+      </div>
+      <div class="tcard reveal">
+        <div class="tcard-stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+        </div>
+        <p class="tcard-quote">ระบบแต้มสะสมช่วยได้มาก ลูกค้าที่เคยซื้อครั้งเดียวกลับมาเรื่อยๆ เพราะอยากสะสมครบแลกของฟรี แต่เดิมเราใช้บัตรกระดาษ ทำหายตลอด ตอนนี้เก็บอยู่ใน LINE ไม่มีทำหาย</p>
+        <div class="tcard-footer">
+          <div class="tcard-av" style="background:#d97706">น</div>
+          <div class="tcard-meta"><b>คุณน้ำ</b><span>YO-DEE Yogurt · ร้านโยเกิร์ต ขอนแก่น</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
