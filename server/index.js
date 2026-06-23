@@ -674,6 +674,16 @@ app.post('/api/tickets/:ticketId/pay-partial', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Edit an unpaid order's items in place (change drink/sweet/topping) — alternative to cancel+rekey.
+app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.editOrderItems(req.params.ticketId, req.body?.items);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier cancels/voids a ticket + its order (PIN). Before the generic /:action route.
 app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
