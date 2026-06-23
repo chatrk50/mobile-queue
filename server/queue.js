@@ -477,7 +477,8 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   const D = date;                  // null => today (BKK)
   const b = [branchId, branchId];  // for the "(? IS NULL OR o.branch_id = ?)" guard
   const DAY = "COALESCE(?, date('now','+7 hours'))";
-  const BR = "(? IS NULL OR o.branch_id = ?)";
+  const TENANT_STORES = `(SELECT id FROM stores WHERE tenant_id=${TID()})`;
+  const BR = `(? IS NULL OR o.branch_id = ?) AND o.branch_id IN ${TENANT_STORES}`;
 
   const transactions = db.prepare(
     `SELECT t.code, t.status AS ticket_status, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
