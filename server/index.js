@@ -775,6 +775,7 @@ app.get('/api/admin/line-config', (req, res) => {
     hasToken: !!(getSetting('line:token', '')),
     hasSecret: !!(getSetting('line:secret', '')),
     webhookUrl: `${PUBLIC_BASE_URL}/b/${(brandFor(req).slug || '')}/line/webhook`,
+    liffEndpointUrl: `${PUBLIC_BASE_URL}/b/${(brandFor(req).slug || '')}/liff/`,
   });
 });
 app.post('/api/admin/line-config', (req, res) => {

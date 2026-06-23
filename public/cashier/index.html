@@ -2087,11 +2087,18 @@ window.showFeatures=async()=>{
         <a href="/help/line/" target="_blank" style="font-size:12px;white-space:nowrap">📖 คู่มือทีละขั้นตอน</a>
       </div>
       <div class="muted" style="font-size:12px;margin:4px 0 8px">ทำตามคู่มือเพื่อขอ <b>token · secret · LIFF ID</b> จาก LINE Developers แล้วกรอกด้านล่าง ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
-      <div style="background:var(--bg,#f7f7fb);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px">
+      <div style="background:var(--bg,#f7f7fb);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px">
         <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 1</b> — ตั้ง Webhook URL นี้ใน LINE Developers (แท็บ Messaging API):</div>
         <div style="display:flex;gap:6px;align-items:center">
           <code id="lineWebhookUrl" style="flex:1;word-break:break-all;font-size:11px">${esc(lc.webhookUrl||'')}</code>
           <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyWebhook()">📋 ก๊อป</button>
+        </div>
+      </div>
+      <div style="background:var(--bg,#f7f7fb);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px">
+        <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 1b</b> — (เฉพาะ LIFF) ใส่ URL นี้เป็น <b>Endpoint URL</b> ตอนสร้าง LIFF app ใน LINE Developers:</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <code id="lineLiffEndpointUrl" style="flex:1;word-break:break-all;font-size:11px">${esc(lc.liffEndpointUrl||'')}</code>
+          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyLiffEndpoint()">📋 ก๊อป</button>
         </div>
       </div>
       <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 2</b> — วางค่าจาก LINE Developers:</div>
@@ -2174,6 +2181,9 @@ window.copyShareUrl=async()=>{ const slug=(CFG&&CFG.brand&&CFG.brand.slug)||(win
   catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ'); } } };
 window.copyWebhook=async()=>{ const u=($('lineWebhookUrl')||{}).textContent||''; if(!u) return;
   try{ await navigator.clipboard.writeText(u); toast('ก๊อป Webhook URL แล้ว ✓'); }
+  catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ — เลือกข้อความเอง'); } } };
+window.copyLiffEndpoint=async()=>{ const u=($('lineLiffEndpointUrl')||{}).textContent||''; if(!u) return;
+  try{ await navigator.clipboard.writeText(u); toast('ก๊อป LIFF Endpoint URL แล้ว ✓'); }
   catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ — เลือกข้อความเอง'); } } };
 window.verifyLine=async()=>{ const m=$('lineVerifyMsg'); const tk=$('lineTokenInp').value.trim();
   if(!tk){ m.innerHTML='<span style="color:var(--mut,#6b7280)">วาง Channel access token ในช่องด้านบนก่อน แล้วกดตรวจสอบ</span>'; return; }
