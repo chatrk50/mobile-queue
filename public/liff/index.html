@@ -31,7 +31,30 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
-  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <!-- Branded shop homepage (adopt-backlog #3) -->
+  <div id="shopProfile" style="background:linear-gradient(150deg,var(--navy,#1e3a5f) 0%,#1a6a8f 100%);border-radius:22px;padding:28px 20px 22px;text-align:center;margin:0 0 14px;position:relative;overflow:hidden">
+    <!-- decorative blobs -->
+    <div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;background:rgba(255,255,255,.07);border-radius:50%;pointer-events:none"></div>
+    <div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;background:rgba(255,255,255,.05);border-radius:50%;pointer-events:none"></div>
+    <!-- logo -->
+    <img id="shopLogo" class="logo" src="/assets/logo.png"
+      onerror="this.style.display='none';document.getElementById('shopLogoFb').style.display=''"
+      style="width:72px;height:72px;border-radius:18px;object-fit:cover;box-shadow:0 6px 22px rgba(0,0,0,.35);display:block;margin:0 auto 12px" alt="">
+    <div id="shopLogoFb" data-brand-name style="display:none;width:72px;height:72px;border-radius:18px;background:rgba(255,255,255,.18);color:#fff;font-size:26px;font-weight:900;line-height:72px;margin:0 auto 12px">ด</div>
+    <!-- name -->
+    <h1 id="shopName" data-brand-name style="color:#fff;margin:0 0 10px;font-size:22px;font-weight:800;letter-spacing:.2px">YO-DEE Yogurt</h1>
+    <!-- open/closed badge -->
+    <div id="shopOpenBadge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.25);border-radius:99px;padding:4px 14px;font-size:13px;color:#fff;font-weight:600;margin-bottom:10px">
+      <span id="shopOpenDot" style="width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex:none"></span>
+      <span id="shopOpenLabel">กำลังโหลด…</span>
+    </div>
+    <!-- hours -->
+    <div id="shopHours" style="display:none;font-size:12px;color:rgba(255,255,255,.8);margin-top:2px"></div>
+    <!-- address / phone -->
+    <div id="shopContact" style="display:none;font-size:12px;color:rgba(255,255,255,.7);margin-top:6px;line-height:1.6"></div>
+    <!-- about blurb -->
+    <div id="shopAbout" style="display:none;font-size:13px;color:rgba(255,255,255,.85);margin-top:10px;line-height:1.5;font-style:italic"></div>
+  </div>
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
@@ -239,6 +262,42 @@ async function applyBrand(){
   }catch(e){}
 }
 applyBrand();
+// Branded shop profile card (adopt-backlog #3): open/closed status, hours, contact.
+async function applyShopProfile(){
+  try{
+    const p=await (await fetch('/api/shop/profile')).json();
+    // sync theme + logo in case applyBrand hasn't resolved yet
+    if(p.theme){ document.documentElement.style.setProperty('--navy',p.theme); document.querySelector('meta[name=theme-color]')?.setAttribute('content',p.theme); const sp=$('shopProfile'); if(sp) sp.style.background=`linear-gradient(150deg,${p.theme} 0%,#1a6a8f 100%)`; }
+    if(p.logo){ const sl=$('shopLogo'); if(sl) sl.src=p.logo; }
+    // open/closed badge
+    const dot=$('shopOpenDot'), lbl=$('shopOpenLabel');
+    if(dot&&lbl){
+      if(p.isOpen){ dot.style.background='#4ade80'; dot.style.boxShadow='0 0 6px #4ade80'; lbl.textContent='เปิดบริการ'; }
+      else { dot.style.background='#f87171'; dot.style.boxShadow='0 0 6px #f87171'; lbl.textContent='ปิดบริการ'; }
+    }
+    // hours strip
+    const hEl=$('shopHours');
+    if(hEl&&p.hours&&p.hours.open&&p.hours.close){
+      const dayNames=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+      const days=p.hours.days?p.hours.days.split(',').filter(Boolean).map(d=>dayNames[+d]||d).join(' '):null;
+      hEl.textContent=(days?days+' ':'')+(p.hours.open||'')+' – '+(p.hours.close||'') + ' น.';
+      hEl.style.display='';
+    }
+    // contact (address / phone)
+    const cEl=$('shopContact');
+    if(cEl&&(p.address||p.phone)){
+      const parts=[];
+      if(p.address) parts.push('📍 '+p.address);
+      if(p.phone) parts.push('📞 '+p.phone);
+      cEl.innerHTML=parts.join('<br>');
+      cEl.style.display='';
+    }
+    // about blurb
+    const aEl=$('shopAbout');
+    if(aEl&&p.about){ aEl.textContent=p.about; aEl.style.display=''; }
+  }catch(e){}
+}
+applyShopProfile();
 // Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}

@@ -263,6 +263,19 @@ app.get('/api/config', (req, res) => {
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(brandFor(req)));
 
+// Public shop profile for the LIFF branded homepage: brand + open status + hours + first-store contact.
+app.get('/api/shop/profile', (req, res) => {
+  const brand = brandFor(req);
+  const hours = Q.getStoreHours();
+  const isOpen = Q.isStoreOpen();
+  const stores = Q.listStores();
+  const loc = stores[0] || null;
+  const about = getSetting('brand:about', '') || null;
+  res.json({ name: brand.name, short: brand.short, theme: brand.theme, logo: brand.logo, unit: brand.unit,
+    isOpen, hours, about,
+    phone: loc?.phone || null, address: loc?.address || null });
+});
+
 // ---------- SaaS self-registration (Phase B) ----------
 // Public signup → creates a tenant (unique slug + brand), seeds a usable shop (store + Zone A,
 // default tiers/channels) and an OWNER staff with the chosen PIN, then returns the live link.
