@@ -178,8 +178,8 @@ async function copyShareUrl(){
     const hasLine = !cfg.posOnly && (liffId || addFriend);
     if(hasLine){
       $('ctaRow').style.display='flex';
-      if(liffId){
-        const zoneId = profile.firstZoneId || 1;
+      if(liffId && profile.firstZoneId){
+        const zoneId = profile.firstZoneId;
         const liffUrl='https://liff.line.me/'+liffId+'?zone='+zoneId;
         $('btnOrder').href=liffUrl; $('btnOrder').style.display='';
         // QR code
