@@ -183,5 +183,24 @@ runWithTenant(C.id, () => Q.createPromo({ message: 'scheduled', sendAt: futureTs
 const due = Q.duePromos();
 ok(due.every(p => p.status === 'scheduled'), 'promo: duePromos() returns only scheduled rows');
 
+// --- clearTransactions isolation: A clearing must NOT wipe C's data ---
+// Give C a paid order so there's something to protect.
+const cBefore = runWithTenant(C.id, () => {
+  const br = Q.createBranch({ name: 'C HQ' });
+  const zoneId = db.prepare('SELECT id FROM zones WHERE store_id=? ORDER BY id LIMIT 1').get(br.id).id;
+  Q.createOrder(zoneId, [{ name: 'C Drink', price: 30, qty: 1 }], { source: 'cashier' });
+  const storeId = br.id;
+  return db.prepare('SELECT COUNT(*) c FROM tickets WHERE store_id=?').get(storeId).c;
+});
+// A wipes its own transactions
+runWithTenant(A.id, () => Q.clearTransactions());
+const aAfter  = db.prepare(`SELECT COUNT(*) c FROM tickets WHERE store_id IN (SELECT id FROM stores WHERE tenant_id=?)`).get(A.id).c;
+const cAfter  = runWithTenant(C.id, () => {
+  const storeId = db.prepare('SELECT id FROM stores WHERE tenant_id=? LIMIT 1').get(C.id).id;
+  return db.prepare('SELECT COUNT(*) c FROM tickets WHERE store_id=?').get(storeId).c;
+});
+ok(aAfter === 0, 'clearTx: A\'s tickets gone after clear');
+ok(cAfter >= cBefore && cBefore >= 1, 'clearTx: C\'s tickets untouched by A\'s clear');
+
 console.log(`\n${fail ? '❌' : '✅'} isolation: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

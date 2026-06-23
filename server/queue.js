@@ -1863,15 +1863,31 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
  *  price tiers, channels, tenders. Used once after test runs before real trading begins.
  *  Atomic; returns the row count removed per table. */
 export function clearTransactions() {
-  // order matters for FKs: order_items → orders → tickets; the rest are independent.
-  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  const tid = TID();
+  // Build subqueries scoped to this tenant so we never touch another tenant's rows in SaaS.
+  const stores  = `(SELECT id FROM stores  WHERE tenant_id=${tid})`;
+  const zones   = `(SELECT id FROM zones   WHERE store_id IN ${stores})`;
+  const tickets = `(SELECT id FROM tickets WHERE zone_id  IN ${zones})`;
+  const orders  = `(SELECT id FROM orders  WHERE ticket_id IN ${tickets})`;
+  const dels = [
+    ['order_items',   `WHERE order_id  IN ${orders}`],
+    ['orders',        `WHERE ticket_id IN ${tickets}`],
+    ['tickets',       `WHERE zone_id   IN ${zones}`],
+    ['sale_events',   `WHERE branch_id IN ${stores}`],
+    ['loyalty_moves', `WHERE (order_id IN ${orders}) OR (order_id IS NULL AND customer_key IN (SELECT line_user_id FROM customers WHERE tenant_id=${tid}))`],
+    ['cash_sessions', `WHERE branch_id IN ${stores}`],
+    ['daily_stats',   `WHERE zone_id   IN ${zones}`],
+    ['sales_history', `WHERE branch_id IN ${stores}`],
+    ['customers',     `WHERE tenant_id=${tid}`],
+    ['slips',         `WHERE order_id  IN ${orders}`],
+  ];
   return db.transaction(() => {
     const removed = {};
-    for (const t of tables) {
-      try { removed[t] = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c; db.prepare(`DELETE FROM ${t}`).run(); }
-      catch { removed[t] = 'skip'; }   // table absent on an older schema → ignore
+    for (const [table, where] of dels) {
+      try { removed[table] = db.prepare(`SELECT COUNT(*) c FROM ${table} ${where}`).get().c; db.prepare(`DELETE FROM ${table} ${where}`).run(); }
+      catch { removed[table] = 'skip'; }
     }
-    db.prepare('UPDATE zones SET last_number=0, last_called=0').run();   // queue numbers restart at 1
+    db.prepare(`UPDATE zones SET last_number=0, last_called=0 WHERE store_id IN ${stores}`).run();
     return removed;
   })();
 }
