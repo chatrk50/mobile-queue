@@ -156,16 +156,18 @@ async function copyShareUrl(){
       `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="6"/></svg>`+
       `${profile.isOpen?'เปิดอยู่':'ปิดอยู่'}</span>`;
 
-    // Hours
-    const hrs = profile.hours || [];
-    if(hrs.length){
+    // Hours — profile.hours is { open, close, days } (CSV of open weekdays 0-6).
+    const hrs = profile.hours;
+    if(hrs && hrs.open && hrs.close){
       const today = new Date().getDay();
-      const hrows = hrs.map(h=>{
-        const isToday = h.day_of_week === today;
-        const timeStr = h.open && h.close ? h.open + '–' + h.close : (h.closed?'ปิด':'—');
-        return `<div class="hrow${isToday?' today':''}">`+
-          `<span>${DAYS[h.day_of_week]||''}</span><span>${esc(timeStr)}</span></div>`;
-      }).join('');
+      const openDays = hrs.days ? hrs.days.split(',').filter(Boolean).map(Number) : null;
+      let hrows;
+      if(openDays){
+        hrows=[0,1,2,3,4,5,6].map(d=>`<div class="hrow${d===today?' today':''}">`+
+          `<span>${DAYS[d]}</span><span>${openDays.includes(d)?hrs.open+'–'+hrs.close:'ปิด'}</span></div>`).join('');
+      } else {
+        hrows=`<div class="hrow today"><span>ทุกวัน</span><span>${esc(hrs.open)}–${esc(hrs.close)}</span></div>`;
+      }
       $('hoursBody').innerHTML=hrows;
       $('hoursCard').style.display='';
     }
