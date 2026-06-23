@@ -430,13 +430,19 @@ app.post('/admin/api/login', (req, res) => {
 });
 // All tenants + a few counts for the console.
 app.get('/admin/api/tenants', adminGate, (req, res) => {
-  const rows = listTenants().map((t) => ({
-    ...t,
-    stores: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(t.id).c,
-    orders: db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c,
-    plan: Q.tenantPlan(t.id).name,
-    ordersThisMonth: Q.monthOrderCount(t.id),
-  }));
+  const rows = listTenants().map((t) => {
+    const bs = billingStatus(t.id);
+    return {
+      ...t,
+      stores: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(t.id).c,
+      orders: db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c,
+      plan: Q.tenantPlan(t.id).name,
+      ordersThisMonth: Q.monthOrderCount(t.id),
+      daysLeft: bs.daysLeft,
+      trial: bs.trial,
+      expiringSoon: bs.expiringSoon,
+    };
+  });
   res.json({ tenants: rows, plans: Q.listPlans() });
 });
 // Admin sets a tenant's plan (manual billing — automated payment provider plugs in later).
