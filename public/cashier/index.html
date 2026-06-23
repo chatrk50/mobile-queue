@@ -423,6 +423,11 @@
   .kmark:active{transform:scale(.9)}
   .kmark.making{border-color:#f3961a;background:rgba(243,157,18,.16)}
   .kmark.done{border-color:#16876f;background:rgba(22,135,111,.16)}
+  /* "เพิ่มเติม" overflow menu: stack the reused action buttons full-width + big for easy tapping. */
+  #moreMenuBody{display:flex;flex-direction:column;gap:8px}
+  #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:15px 16px!important;font-size:16px!important;min-height:56px;border-radius:13px!important;gap:4px}
+  #moreMenuBody>.pill{align-self:flex-start;padding:12px 16px!important;font-size:14px}
+  #moreMenuBody .ic{width:20px;height:20px}
 </style>
 <div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
@@ -457,6 +462,13 @@
       <button id="amCancel" class="ghost" style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
       <button id="amOk" class="ok" style="flex:1.4;min-height:48px" onclick="amOk()">ตกลง</button>
     </div>
+  </div>
+</div>
+<!-- "เพิ่มเติม" overflow menu: the occasional per-order actions, stacked big for easy tapping. -->
+<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:flex-end;justify-content:center;padding:0" onclick="if(event.target===this)closeMoreMenu()">
+  <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:18px 18px 0 0;max-height:80vh;overflow:auto">
+    <div class="row between" style="margin-bottom:8px"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
+    <div id="moreMenuBody" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
   </div>
 </div>
 <!-- รวมบิล bar: appears when ≥2 pending bills are ticked -->
@@ -571,6 +583,9 @@ window.appPrompt=({title='',message='',value='',placeholder='',type='text',input
 // appConfirm → resolves true on OK, false on cancel.
 window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
   _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
+// "เพิ่มเติม" overflow menu: show the secondary actions stashed for this ticket (built in renderZone).
+window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('moreMenu').style.display='flex'; };
+window.closeMoreMenu=()=>{ $('moreMenu').style.display='none'; };
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
@@ -592,6 +607,12 @@ const IC={
   print:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>',
   kitchen:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 13.5V21h12v-7.5"/><path d="M5 9a4 4 0 0 1 4-4 3.5 3.5 0 0 1 6 0 4 4 0 0 1 4 4 3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/></svg>',
   slip:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg>',
+  edit:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  loyalty:'<svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>',
+  discount:'<svg class="ic" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 3 12.2V5a2 2 0 0 1 2-2h7.2a2 2 0 0 1 1.4.6l7 7a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>',
+  partial:'<svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
+  split:'<svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+  more:'<svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -1556,7 +1577,7 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
 function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
-  if(payMethod) body.pay=payMethod; else body.hold=true;   // no tender = พักบิล → park in รอชำระเงิน (don't take a queue number yet)
+  if(payMethod) body.pay=payMethod;   // no tender = พักบิล (held); queue number follows the เข้าคิวทันที setting
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if
 // a "failed" send actually reached the server, the retry returns the SAME order (never a duplicate).
@@ -1774,21 +1795,21 @@ function renderZone(snap){
   };
   const ord=(t)=>{
     if(t.order_lines&&t.order_lines.length){
-      return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map((l,i)=>{
+      return `<div style="font-size:14px;margin-top:4px">`+t.order_lines.map((l,i)=>{
         const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line
         const nm=m?m[1]:l.name;
-        const sw=m?`<div class="muted" style="margin-left:12px">• ${esc(m[2])}</div>`:'';
+        const sw=m?`<div class="muted" style="margin-left:14px;font-size:13px">• ${esc(m[2])}</div>`:'';
         const ks=_kitchenStatus[t.id+':'+i];
         const chip=`<button id="kbtn-${t.id}-${i}" class="kmark${ks?(' '+ks):''}" onclick="event.stopPropagation();toggleKitchen(${t.id},${i})" title="แตะเพื่อมาร์ค: กำลังทำ → เสร็จ">${ks==='making'?'🔥':ks==='done'?'✅':'○'}</button>`;
         const lbg=ks==='making'?'background:rgba(243,157,18,.16);':ks==='done'?'background:rgba(22,135,111,.12);':'';
-        return `<div id="kline-${t.id}-${i}" style="display:flex;align-items:flex-start;gap:6px;padding:3px 4px;border-radius:8px;${lbg}">${chip}<div style="flex:1"><b>${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
-          l.toppings.map(tp=>`<div class="muted" style="margin-left:2px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div></div>`;
-      }).join('')+`<div style="font-weight:700;color:var(--navy);margin-top:3px">รวม ฿${t.order_total}</div></div>`;
+        return `<div id="kline-${t.id}-${i}" style="display:flex;align-items:flex-start;gap:6px;padding:4px 4px;border-radius:8px;${lbg}">${chip}<div style="flex:1"><b style="font-size:15px">${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
+          l.toppings.map(tp=>`<div class="muted" style="margin-left:2px;font-size:13px">+ ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div></div>`;
+      }).join('')+`<div style="font-weight:700;color:var(--navy);margin-top:4px;font-size:14px">รวม ฿${t.order_total}</div></div>`;
     }
     if(!t.order_summary) return '';
     const net=(t.order_net!=null?t.order_net:t.order_total);
     const amt=(t.order_discount>0)?`<b>฿${net}</b> <span style="text-decoration:line-through;opacity:.6">฿${t.order_total}</span> <span style="color:var(--danger)">(ลด ฿${t.order_discount})</span>`:`฿${t.order_total}`;
-    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
+    return `<div class="muted" style="font-size:13.5px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
   };
   // Date+time shown ABOVE the queue number (no clock icon).
   const tsTop=(t)=> t.order_created_at ? `<div class="muted" style="font-size:11px;line-height:1.3">${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
@@ -1816,7 +1837,7 @@ function renderZone(snap){
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">${IC.qr}QR</button>` : '';
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">ลด</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">${IC.discount}ลด</button>` : '';
   // Loyalty redeem: shown only when this LINE customer has enough stamps for a free drink.
   const redeemBtn=(t)=> (t.loy_points!=null && t.loy_points>=(CFG.loyaltyStamps||10) && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
@@ -1824,8 +1845,8 @@ function renderZone(snap){
   // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
   const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
     ? (t.loy_phone
-        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">📱 ${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
-        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">📱 แต้ม</button>`) : '';
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.loyalty}แต้ม</button>`) : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
@@ -1848,13 +1869,18 @@ function renderZone(snap){
   const paidPill=(t)=> ((t.order_paid||0)>0 && t.payment_status!=='paid')
     ? ` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800">จ่ายแล้ว ฿${t.order_paid} · เหลือ ฿${remainOf(t)}</span>` : '';
   const partBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">✂️ บางส่วน</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)},${t.order_paid||0},${netOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">${IC.partial}บางส่วน</button>` : '';
   // แยกตามรายการ: only for a multi-line bill — pick items, pay their subtotal as a partial.
   const splitBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && (t.order_lines||[]).length>=2)
-    ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">🧾 แยกรายการ</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">${IC.split}แยกรายการ</button>` : '';
   // แก้ไขออเดอร์: change drink/topping/sweet in place instead of cancel+rekey (unpaid, no partial).
   const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && !(t.order_paid>0))
-    ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">✏️ แก้ไข</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">${IC.edit}แก้ไข</button>` : '';
+  // "เพิ่มเติม" overflow: collect the occasional actions into one menu so the card row stays tidy.
+  // Each card passes its own applicable secondary buttons (pending vs waiting differ); openMoreMenu shows them.
+  window._moreCache = window._moreCache || {};
+  const moreBtn=(t, sec)=>{ window._moreCache[t.id]=sec||'';
+    return (sec&&sec.trim()) ? `<button class="ghost" style="padding:8px 12px" onclick="openMoreMenu(${t.id})">${IC.more}เพิ่มเติม</button>` : ''; };
   // Kitchen progress marks: colour helpers + toggle button per order card.
   // Kitchen marks are PER drink line (a cook batches the same item across orders). Card tint is derived:
   // all drink lines done → green (ready to serve), any line being made → amber.
@@ -1872,14 +1898,14 @@ function renderZone(snap){
       <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="${pendingCardBg(t)}"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap">${editBtn(t)}${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}${splitBtn(t)}
-          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
+        <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}
+          <button class="ok" style="padding:11px 14px;flex:1;min-width:160px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="${waitingCardBg(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap">${makeBtns(t)}${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${moreBtn(t, makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+printBtn(t)+slipViewBtn(t))}${payBtn(t)}${voidBtn(t)}
         <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
@@ -1967,8 +1993,9 @@ window.payMerge=async()=>{
     _mergeSel.clear(); renderMergeBar(); if(CFG.printEnabled) ids.forEach(printKitchen);
   }catch(e){ toast(err(e)); } };
 // ---------- แยกจ่ายตามเงิน: take a partial payment toward a bill; repeat until balance = 0 ----------
-window.payPartialStart=async(tid, remain)=>{
-  const s=await appPrompt({title:'✂️ แบ่งจ่าย (บางส่วน)',message:'รับเงินงวดนี้กี่บาท? · ยอดคงเหลือ ฿'+remain,type:'number',inputMode:'decimal',value:String(remain),okText:'ถัดไป'});
+window.payPartialStart=async(tid, remain, paid=0, net=0)=>{
+  const info = (paid>0) ? ('ยอดเต็ม ฿'+net+' · จ่ายแล้ว ฿'+paid+' · เหลือ ฿'+remain) : ('ยอดคงเหลือ ฿'+remain);
+  const s=await appPrompt({title:'แบ่งจ่าย (บางส่วน)',message:'รับเงินงวดนี้กี่บาท?\n'+info,type:'number',inputMode:'decimal',value:String(remain),okText:'ถัดไป'});
   if(s===null) return; const amt=Math.round((Number(s)||0)*100)/100;
   if(!(amt>0)){ toast('จำนวนเงินไม่ถูกต้อง'); return; }
   const method=await pickPayMethod(amt); if(method===null) return;   // reuses the cash keypad for this slice

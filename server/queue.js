@@ -1473,7 +1473,7 @@ export function editOrderItems(ticketId, items) {
 }
 
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, hold = false } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -1560,10 +1560,10 @@ export function createOrder(zoneId, items, opts = {}) {
   }
 
   // Queue-first: issue the queue number now (at order creation) so it joins the line immediately —
-  // even before payment. Pay-first leaves it 'pending' until payment confirms the number.
-  // A HELD bill ("พักบิล / จ่ายทีหลัง") always stays in 'pending' (รอชำระเงิน) regardless of mode:
-  // the cashier explicitly parked it to collect payment later, so it must not consume a queue number.
-  if (getQueueFirst() && !hold && r.ticket && r.ticket.number === 0) {
+  // even before payment, INCLUDING a held bill ("พักบิล / จ่ายทีหลัง"). The เข้าคิวทันที toggle is the
+  // single source of truth: ON → every order gets a number now (unpaid ones wait in the queue with a
+  // "ค้างชำระ" badge); OFF (pay-first) → number is issued only when payment is confirmed.
+  if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
     try { r.ticket = assignQueueNumber(r.ticket.id); } catch { /* lost a race → stays pending, harmless */ }
   }
 
@@ -1917,7 +1917,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, paid_amount: order.paid_amount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 // Generic, non-personal labels we never need to mask.
