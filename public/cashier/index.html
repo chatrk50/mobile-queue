@@ -1945,7 +1945,7 @@ window.printReceipt=async(tid)=>{
     }).join('');
     const net=Math.round((((o.total||0)-(o.discount||0)))*100)/100;
     $('printArea').innerHTML=`<div class="rcpt">
-      <h2>${((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt').toUpperCase()}</h2>
+      <h2>${((window.BRAND&&window.BRAND.name)||'ร้านของเรา').toUpperCase()}</h2>
       <div class="ctr">${esc(v.zone||'')}</div>
       <div class="ctr">${dt}</div>
       <div class="hr"></div>
@@ -1959,7 +1959,7 @@ window.printReceipt=async(tid)=>{
       <div class="li"><span>ชำระโดย</span><span>${methodTH(o.method)}${o.paid?' ✓':''}</span></div>
       <div class="hr"></div>
       <div class="ctr">ขอบคุณที่ใช้บริการค่ะ 🙏</div>
-      <div class="ctr" style="font-size:10px">${esc((window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt')} · ${esc(v.code||'')}</div>
+      <div class="ctr" style="font-size:10px">${esc((window.BRAND&&window.BRAND.name)||'ร้านของเรา')} · ${esc(v.code||'')}</div>
     </div>`;
     window.print();
   }catch(e){ toast(err(e)); }
