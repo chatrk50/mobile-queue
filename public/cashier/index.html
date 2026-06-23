@@ -2053,7 +2053,10 @@ window.showFeatures=async()=>{
         <code style="flex:1;font-size:11px;word-break:break-all;color:var(--navy)">${esc(shareUrl)}</code>
         <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyShareUrl()">📋 ก๊อป</button>
       </div>
-      <a class="ghost btn" style="width:100%;text-align:center;padding:8px;display:block;text-decoration:none" href="${esc('/b/'+slug+'/share/')}" target="_blank">เปิดหน้าแชร์ →</a>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <a class="ghost btn" style="text-align:center;padding:8px;display:block;text-decoration:none" href="${esc('/b/'+slug+'/share/')}" target="_blank">เปิดหน้าแชร์ →</a>
+        <a class="ghost btn" style="text-align:center;padding:8px;display:block;text-decoration:none" href="${esc('/b/'+slug+'/print/')}" target="_blank">${icon('print',{size:14})} โปสเตอร์ QR</a>
+      </div>
     </div>` : ''; })() : '')+
     (acct ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>${icon('user',{size:16})} บัญชีเจ้าของ</b>
