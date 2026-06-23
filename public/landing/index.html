@@ -1,469 +1,866 @@
 <!doctype html><html lang="th"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ขายดี (KhaiDee) — ระบบ POS + คิว + LINE สำหรับร้านเล็ก</title>
-<meta name="description" content="เปิดร้านแล้วขายดีตั้งแต่วันแรก — POS หน้าร้าน + ระบบคิว + สั่งผ่าน LINE + สะสมแต้ม สำหรับร้านอาหาร คาเฟ่ ร้านเครื่องดื่ม ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร">
+<title>ขายดี (KhaiDee) — ระบบ POS + คิว + LINE สำหรับร้านค้า</title>
+<meta name="description" content="จัดการออเดอร์จาก LINE และหน้าร้านในที่เดียว ไม่พลาดทุกการขาย เพิ่มยอดขายให้เติบโต — ทดลองฟรี ไม่ต้องใส่บัตร">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Brand type: Kanit (Cadson Demak) for display — the Thai "promo/sell" voice; IBM Plex Sans Thai for body. */
-  @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
-  :root{
-    --ind:#6366f1;--ind2:#4f46e5;--inds:rgba(99,102,241,.10);--ink:#16162e;--mut:#6b7280;--line:#e6e7ec;--bg:#f6f7fb;--ok:#178a72;
-    --glass:rgba(255,255,255,.6);--glass-brd:rgba(255,255,255,.75);--glass-sh:0 10px 34px rgba(31,41,90,.10);
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;color:var(--ink);margin:0;line-height:1.7;background:var(--bg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
-  h1,h2,h3,.logo,.amt,.n{font-family:'Kanit','IBM Plex Sans Thai',sans-serif;font-weight:600;letter-spacing:0;line-height:1.18}
-  a{color:var(--ind);text-decoration:none}
-  .wrap{max-width:1040px;margin:0 auto;padding:0 20px;position:relative}
-  /* decorative living-glass blobs */
-  .blobs{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-  .blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.5;animation:float 18s ease-in-out infinite}
-  .blob.a{width:520px;height:520px;background:radial-gradient(circle,#a5b4fc,transparent 70%);top:-160px;left:-120px}
-  .blob.b{width:460px;height:460px;background:radial-gradient(circle,#f0abfc,transparent 70%);top:120px;right:-160px;animation-delay:-6s}
-  .blob.c{width:420px;height:420px;background:radial-gradient(circle,#99f6e4,transparent 70%);top:1100px;left:30%;animation-delay:-11s}
-  @keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-26px)}}
-  /* buttons */
-  .btn{display:inline-flex;align-items:center;gap:8px;border-radius:13px;padding:14px 24px;font-weight:600;font-size:15px;font-family:'Kanit',sans-serif;cursor:pointer;border:1px solid transparent;transition:transform .15s ease,box-shadow .2s ease,background .2s ease}
-  .btn.primary{background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;box-shadow:0 8px 22px rgba(99,102,241,.35)}
-  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(99,102,241,.45)}
-  .btn.ghost{background:var(--glass);border-color:var(--line);color:var(--ink);backdrop-filter:blur(8px)}
-  .btn.ghost:hover{transform:translateY(-2px)}
-  /* glass nav */
-  /* hidden at the very top; slides down from above once the user scrolls a bit (Framer-style, vanilla) */
-  nav{position:fixed;left:0;right:0;top:0;z-index:30;background:rgba(255,255,255,.72);backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);border-bottom:1px solid var(--glass-brd);transform:translateY(-100%);transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .3s ease}
-  nav.nav-show{transform:translateY(0);box-shadow:0 6px 24px rgba(31,41,90,.09)}
-  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
-  .logo{font-size:22px;color:var(--ink);display:flex;align-items:center;gap:9px;font-weight:700}
-  .logo .dot{width:30px;height:30px;border-radius:9px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(99,102,241,.4)}
-  .logo small{font-size:12px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
-  .navlinks{display:flex;align-items:center;gap:12px}
-  /* hero */
-  .hero{text-align:center;padding:74px 0 40px}
-  .hero h1{font-size:54px;font-weight:700;margin:0 0 18px}
-  .hero h1 .hl{background:linear-gradient(120deg,#6366f1,#a855f7,#6366f1);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 5s linear infinite}
-  @keyframes shine{to{background-position:200% center}}
-  .hero p.sub{font-size:19px;color:var(--mut);max-width:600px;margin:0 auto 30px}
-  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-  .micro{font-size:13px;color:var(--mut);margin-top:16px}
-  /* trust strip */
-  .trust{display:flex;flex-wrap:wrap;gap:10px 26px;justify-content:center;max-width:780px;margin:30px auto 0;padding:16px 20px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:16px;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
-  .trust span{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink);font-weight:500}
-  .trust svg{width:18px;height:18px;color:var(--ind)}
-  svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-  /* sections */
-  section{padding:56px 0}
-  .eyebrow{color:var(--ind);font-weight:600;font-size:13px;letter-spacing:.06em;text-align:center;font-family:'Kanit',sans-serif}
-  h2.center{font-size:33px;text-align:center;margin:6px 0 8px}
-  .lead{text-align:center;color:var(--mut);max-width:600px;margin:0 auto 38px}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .card{background:var(--glass);border:1px solid var(--glass-brd);border-radius:18px;padding:24px;backdrop-filter:blur(10px);box-shadow:var(--glass-sh);transition:transform .25s ease,box-shadow .25s ease}
-  .card:hover{transform:translateY(-5px);box-shadow:0 18px 44px rgba(31,41,90,.16)}
-  .card .ic{width:46px;height:46px;border-radius:13px;background:linear-gradient(180deg,#eef0ff,#e0e3ff);color:var(--ind);display:flex;align-items:center;justify-content:center;margin-bottom:13px;box-shadow:inset 0 1px 0 #fff}
-  .card .ic svg{width:24px;height:24px}
-  .card h3{font-size:18px;margin:0 0 6px}
-  .card p{font-size:14px;color:var(--mut);margin:0}
-  /* steps */
-  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:880px;margin:0 auto}
-  .step{text-align:center}
-  .step .n{width:46px;height:46px;border-radius:50%;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 6px 18px rgba(99,102,241,.4)}
-  /* pricing */
-  .pricewrap{background:var(--glass);border:1px solid var(--glass-brd);border-radius:24px;padding:34px 20px;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
-  .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:880px;margin:0 auto}
-  .price{background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:18px;padding:24px;text-align:center;transition:transform .2s ease}
-  .price:hover{transform:translateY(-4px)}
-  .price.feat{border:2px solid var(--ind);box-shadow:0 14px 36px rgba(99,102,241,.2);position:relative}
-  .price .tag{font-size:12px;font-weight:600;color:var(--ind);letter-spacing:.04em;font-family:'Kanit',sans-serif}
-  .price .amt{font-size:34px;margin:6px 0 2px}
-  .price .amt small{font-size:14px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
-  .price ul{list-style:none;padding:0;margin:14px 0 0;text-align:left;font-size:14px}
-  .price li{padding:5px 0 5px 26px;position:relative}
-  .price li svg{position:absolute;left:0;top:7px;width:16px;height:16px;color:var(--ok)}
-  .founder{max-width:880px;margin:18px auto 0;background:linear-gradient(120deg,#eef2ff,#fbe8ff);border:1px solid #c7d2fe;border-radius:18px;padding:18px 24px;text-align:center;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
-  .founder svg{width:20px;height:20px;color:var(--ind)}
-  /* security band */
-  .sec{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:880px;margin:0 auto}
-  .sec .s{text-align:center}
-  .sec .s .ic{width:44px;height:44px;border-radius:12px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
-  .sec .s svg{width:22px;height:22px}
-  .sec h3{font-size:15px;margin:0 0 2px}.sec p{font-size:12.5px;color:var(--mut);margin:0}
-  details{background:var(--glass);border:1px solid var(--glass-brd);border-radius:13px;padding:13px 17px;margin-bottom:8px;max-width:760px;margin-left:auto;margin-right:auto;backdrop-filter:blur(8px)}
-  summary{font-weight:500;cursor:pointer}summary::marker{color:var(--ind)}
-  details p{font-size:14px;color:var(--mut)}
-  .final{background:linear-gradient(135deg,#6f72f5,#7c3aed);color:#fff;text-align:center;padding:60px 0;position:relative;overflow:hidden}
-  .final h2{font-size:33px;margin:0 0 10px;color:#fff}
-  .final p{color:#e6e7ff;margin:0 0 24px}
-  .final .btn.primary{background:#fff;color:var(--ind);box-shadow:0 10px 30px rgba(0,0,0,.2)}
-  footer{padding:36px 0;border-top:1px solid var(--line);color:var(--mut);font-size:13px;text-align:center}
-  footer a{color:var(--mut);margin:0 8px}
-  /* product demo (animated mockup) */
-  .demo{position:relative;display:flex;justify-content:center;align-items:center;gap:26px;flex-wrap:wrap}
-  .tablet{width:min(560px,92vw);background:var(--glass);border:1px solid var(--glass-brd);border-radius:22px;box-shadow:var(--glass-sh);backdrop-filter:blur(10px);overflow:hidden;animation:floaty 7s ease-in-out infinite}
-  .tbar{display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
-  .tdot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(23,138,114,.15)}
-  .tnow{margin-left:auto;font-size:12.5px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
-  .tbody{padding:16px 18px;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,.45)}
-  .ocard{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px 14px;opacity:0}
-  .tablet.in .ocard{animation:cardIn .55s cubic-bezier(.22,1,.36,1) forwards}
-  .tablet.in .o1{animation-delay:.06s}.tablet.in .o2{animation-delay:.26s}.tablet.in .o3{animation-delay:.46s}
-  .onum{width:46px;height:46px;border-radius:11px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;font-family:'Kanit',sans-serif;font-weight:600;font-size:14px;flex:none}
-  .oinfo{flex:1;min-width:0}.oinfo b{display:block;font-size:14px}.oinfo span{font-size:12.5px;color:var(--mut)}
-  .opay{font-family:'Kanit',sans-serif;font-weight:600}
-  .opaid{font-size:12px;color:var(--ok);background:rgba(23,138,114,.12);padding:4px 10px;border-radius:9px}
-  .newbadge{font-size:11px;font-weight:600;color:#fff;background:var(--ind);padding:4px 10px;border-radius:9px;font-family:'Kanit',sans-serif;animation:pulse 1.6s ease-in-out infinite}
-  .phone{width:206px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:26px;box-shadow:var(--glass-sh);backdrop-filter:blur(10px);padding:15px;animation:floaty 7s ease-in-out infinite;animation-delay:-3.5s}
-  .phone .pbar{font-family:'Kanit',sans-serif;font-weight:600;font-size:13px;color:var(--ok);display:flex;align-items:center;gap:6px;margin-bottom:11px}
-  .pbubble{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 13px;font-size:13px;color:var(--mut)}
-  .pbubble b{font-family:'Kanit',sans-serif;color:var(--ink)}
-  .pq{margin-top:9px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border-radius:13px;padding:11px 13px;font-size:12.5px;text-align:center}
-  .pq b{font-family:'Kanit',sans-serif;font-size:20px;display:block;margin:2px 0}
-  @keyframes cardIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
-  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.09);opacity:.85}}
-  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-  @media(max-width:760px){ .phone{display:none} }
-  /* hero positioning pill */
-  .hpill{display:inline-flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:500;margin-bottom:20px;backdrop-filter:blur(8px);box-shadow:var(--glass-sh)}
-  .hpill .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
-  /* LINE status-journey phone */
-  .ljourney{display:flex;justify-content:center}
-  .linephone{width:300px;max-width:92vw;background:#fff;border:1px solid var(--glass-brd);border-radius:32px;box-shadow:0 24px 60px rgba(31,41,90,.18);overflow:hidden;animation:floaty 8s ease-in-out infinite}
-  .lhead{background:#06c755;color:#fff;padding:15px 16px;display:flex;align-items:center;gap:10px;font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
-  .lhead .lav{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
-  .lhead .lav svg{width:18px;height:18px;color:#fff}
-  .lthread{background:#8ba2bd;padding:16px 14px;display:flex;flex-direction:column;gap:11px;min-height:430px}
-  .lmsg{align-self:flex-start;max-width:84%;background:#fff;border-radius:5px 16px 16px 16px;padding:11px 13px;font-size:12.5px;line-height:1.5;display:flex;gap:9px;box-shadow:0 1px 3px rgba(0,0,0,.1);opacity:0}
-  .lmsg .li{width:32px;height:32px;border-radius:10px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
-  .lmsg .li svg{width:18px;height:18px}
-  .lmsg b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:13px;color:var(--ink)}
-  .lmsg .lq{color:var(--ind);font-weight:600}
-  .linephone.in .lmsg{animation:msgIn .55s cubic-bezier(.22,1,.36,1) forwards}
-  .linephone.in .lmsg:nth-of-type(1){animation-delay:.25s}
-  .linephone.in .lmsg:nth-of-type(2){animation-delay:1.1s}
-  .linephone.in .lmsg:nth-of-type(3){animation-delay:1.95s}
-  .linephone.in .lmsg:nth-of-type(4){animation-delay:2.8s}
-  .linephone.in .lmsg:nth-of-type(5){animation-delay:3.65s}
-  .stars{display:flex;gap:4px;margin-top:7px}
-  .stars svg{width:19px;height:19px;color:#d4d8e0;fill:#d4d8e0}
-  .linephone.in .stars svg{animation:starOn .35s ease forwards}
-  .linephone.in .stars svg:nth-child(1){animation-delay:4.0s}
-  .linephone.in .stars svg:nth-child(2){animation-delay:4.15s}
-  .linephone.in .stars svg:nth-child(3){animation-delay:4.3s}
-  .linephone.in .stars svg:nth-child(4){animation-delay:4.45s}
-  .linephone.in .stars svg:nth-child(5){animation-delay:4.6s}
-  @keyframes msgIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
-  @keyframes starOn{to{color:#f5b50a;fill:#f5b50a;transform:scale(1.12)}}
-  /* comparison table */
-  .cmp{max-width:840px;margin:0 auto;background:var(--glass);border:1px solid var(--glass-brd);border-radius:20px;overflow:hidden;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
-  .cmp table{width:100%;border-collapse:collapse;font-size:13.5px}
-  .cmp th,.cmp td{padding:14px 10px;text-align:center;border-bottom:1px solid var(--line)}
-  .cmp tr:last-child td{border-bottom:0}
-  .cmp th:first-child,.cmp td:first-child{text-align:left;font-weight:500;width:38%}
-  .cmp thead th{font-family:'Kanit',sans-serif;font-size:14px;font-weight:600}
-  .cmp .me{background:rgba(99,102,241,.09)} .cmp thead .me{color:var(--ind)}
-  .cmp .yes{color:var(--ok)} .cmp .nope{color:#c0394a} .cmp .mid{color:var(--mut)}
-  .cmp td svg{width:18px;height:18px;vertical-align:middle}
-  .cmp .amt0{font-family:'Kanit',sans-serif;font-weight:700;color:var(--ok)}
-  /* segment chips */
-  .segs{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-  .segchip{display:inline-flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--glass-brd);border-radius:999px;padding:9px 16px;font-size:14px;font-weight:500;backdrop-filter:blur(8px);box-shadow:var(--glass-sh)}
-  .segchip svg{width:18px;height:18px;color:var(--ind)}
-  /* savings calculator */
-  .calc{max-width:720px;margin:0 auto;background:var(--glass);border:1px solid var(--glass-brd);border-radius:22px;padding:28px;backdrop-filter:blur(10px);box-shadow:var(--glass-sh)}
-  .calc .crow{margin-bottom:22px}
-  .calc label{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;font-weight:500;margin-bottom:10px}
-  .calc label b{font-family:'Kanit',sans-serif;color:var(--ind);font-size:17px}
-  .calc input[type=range]{width:100%;height:6px;accent-color:var(--ind);cursor:pointer}
-  .calc .out{text-align:center;background:linear-gradient(135deg,#eef2ff,#fbe8ff);border:1px solid #c7d2fe;border-radius:18px;padding:24px 18px;margin-top:6px}
-  .calc .out .cap{font-size:13px;color:var(--mut)}
-  .calc .out .save{font-family:'Kanit',sans-serif;font-size:44px;font-weight:700;color:var(--ind);line-height:1.05;margin:6px 0 2px}
-  .calc .out .sub{font-size:14px;color:var(--ink)}
-  .calc .out .x{display:inline-block;margin-top:12px;background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;border-radius:999px;padding:7px 18px;font-size:13.5px;font-weight:600;font-family:'Kanit',sans-serif}
-  .calc .note{font-size:12px;color:var(--mut);text-align:center;margin-top:12px}
-  /* two-sided (customer <-> shop) */
-  .twoside{display:flex;justify-content:center;align-items:stretch;gap:22px;flex-wrap:wrap}
-  .sidecol{display:flex;flex-direction:column;align-items:center;gap:14px;width:300px;max-width:92vw}
-  .sidelabel{font-family:'Kanit',sans-serif;font-weight:600;font-size:15px;color:var(--ink);display:flex;align-items:center;gap:8px}
-  .sidelabel svg{width:19px;height:19px;color:var(--ind)}
-  .syncmid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--mut);font-size:12px;text-align:center;align-self:center}
-  .syncmid .sy{width:46px;height:46px;border-radius:50%;background:var(--glass);border:1px solid var(--glass-brd);display:flex;align-items:center;justify-content:center;box-shadow:var(--glass-sh);animation:pulse 2.4s ease-in-out infinite}
-  .syncmid .sy svg{width:22px;height:22px;color:var(--ind)}
-  .shoppanel{width:300px;max-width:92vw;background:#fff;border:1px solid var(--glass-brd);border-radius:32px;box-shadow:0 24px 60px rgba(31,41,90,.18);overflow:hidden;animation:floaty 8s ease-in-out infinite;animation-delay:-2.5s}
-  .shead{background:linear-gradient(180deg,#6f72f5,var(--ind));color:#fff;padding:15px 16px;display:flex;align-items:center;gap:9px;font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
-  .shead .sdot{width:9px;height:9px;border-radius:50%;background:#7ef0c0;box-shadow:0 0 0 4px rgba(126,240,192,.3)}
-  .sbody{padding:14px;display:flex;flex-direction:column;gap:9px;background:#f1f4f9;min-height:430px}
-  .srow{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:13px;padding:11px 13px;font-size:12.5px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.05);opacity:0}
-  .shoppanel.in .srow{animation:msgIn .55s cubic-bezier(.22,1,.36,1) forwards}
-  .shoppanel.in .srow:nth-of-type(1){animation-delay:.25s}
-  .shoppanel.in .srow:nth-of-type(2){animation-delay:1.1s}
-  .shoppanel.in .srow:nth-of-type(3){animation-delay:1.95s}
-  .shoppanel.in .srow:nth-of-type(4){animation-delay:2.8s}
-  .shoppanel.in .srow:nth-of-type(5){animation-delay:3.65s}
-  .srow .si{width:32px;height:32px;border-radius:10px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
-  .srow .si svg{width:18px;height:18px}
-  .srow b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:13px;color:var(--ink)}
-  .srow .sq{color:var(--ind);font-weight:600}
-  .benefits{background:var(--glass);border:1px solid var(--glass-brd);border-radius:14px;padding:13px 15px;width:100%;backdrop-filter:blur(8px);box-shadow:var(--glass-sh)}
-  .benefits .bt{font-family:'Kanit',sans-serif;font-weight:600;font-size:13px;margin-bottom:7px;color:var(--ind)}
-  .benefits .ben{display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:3px 0}
-  .benefits .ben svg{width:15px;height:15px;color:var(--ok);flex:none;margin-top:3px}
-  @media(max-width:760px){ .syncmid .sy{transform:rotate(90deg)} }
-  /* scroll reveal */
-  .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
-  .reveal.in{opacity:1;transform:none}
-  @media(max-width:760px){ .grid,.prices,.steps{grid-template-columns:1fr} .sec{grid-template-columns:repeat(2,1fr)} .hero h1{font-size:38px} h2.center{font-size:26px} }
-  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} .reveal,.ocard,.lmsg,.srow{opacity:1!important;transform:none!important} .stars svg{color:#f5b50a!important;fill:#f5b50a!important} html{scroll-behavior:auto} }
+:root{
+  --ind:#6366f1;--ind2:#4f46e5;--inds:rgba(99,102,241,.10);
+  --ink:#111827;--mut:#6b7280;--line:#e5e7eb;--bg:#ffffff;--ok:#22c55e;
+  --card-sh:0 1px 3px rgba(0,0,0,.08);--card-sh-hover:0 8px 24px rgba(0,0,0,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;color:var(--ink);line-height:1.7;background:var(--bg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2,h3,.logo-text,.amt,.step-n{font-family:'Kanit','IBM Plex Sans Thai',sans-serif;font-weight:600;letter-spacing:0;line-height:1.2}
+a{color:var(--ind);text-decoration:none}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ===== LAYOUT ===== */
+.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+section{padding:72px 0}
+
+/* ===== NAV ===== */
+nav{position:sticky;top:0;left:0;right:0;z-index:50;background:#fff;border-bottom:1px solid var(--line);height:70px;display:flex;align-items:center}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:1200px;margin:0 auto;padding:0 24px}
+.nav-logo{display:flex;align-items:center;gap:10px;font-family:'Kanit',sans-serif;font-weight:700;font-size:20px;color:var(--ink);text-decoration:none}
+.nav-logo .dot{width:32px;height:32px;border-radius:50%;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none}
+.nav-links{display:flex;align-items:center;gap:4px}
+.nav-links a{font-size:14px;font-weight:500;color:var(--mut);padding:6px 12px;border-radius:8px;transition:color .15s;font-family:'IBM Plex Sans Thai',sans-serif}
+.nav-links a:hover,.nav-links a.active{color:var(--ink)}
+.nav-links a.active{border-bottom:2px solid var(--ind);border-radius:0;padding-bottom:4px;color:var(--ind)}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.nav-actions .login-link{font-size:14px;font-weight:500;color:var(--mut);padding:6px 12px}
+.nav-actions .login-link:hover{color:var(--ink)}
+.btn-primary{display:inline-flex;align-items:center;gap:6px;background:var(--ind);color:#fff;font-family:'Kanit',sans-serif;font-weight:600;font-size:14px;padding:10px 20px;border-radius:10px;border:none;cursor:pointer;transition:background .15s,transform .15s,box-shadow .15s}
+.btn-primary:hover{background:var(--ind2);transform:translateY(-1px);box-shadow:0 4px 14px rgba(99,102,241,.35)}
+.btn-outline{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--ink);font-family:'Kanit',sans-serif;font-weight:600;font-size:14px;padding:10px 20px;border-radius:10px;border:1.5px solid var(--line);cursor:pointer;transition:border-color .15s,transform .15s}
+.btn-outline:hover{border-color:var(--ind);color:var(--ind);transform:translateY(-1px)}
+
+/* ===== HERO ===== */
+.hero{padding:80px 0 60px}
+.hero .wrap{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;max-width:1200px}
+/* Left col */
+.hero-left{display:flex;flex-direction:column;gap:0}
+.hero-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.08);color:var(--ind);font-family:'IBM Plex Sans Thai',sans-serif;font-size:13px;font-weight:500;padding:6px 14px;border-radius:999px;margin-bottom:24px;width:fit-content}
+.hero-chip svg{width:14px;height:14px}
+.hero h1{font-size:52px;font-weight:700;color:var(--ink);line-height:1.1;margin-bottom:8px}
+.hero h2.accent{font-size:36px;font-weight:600;color:var(--ind);margin-bottom:20px;line-height:1.2}
+.hero-body{font-size:16px;color:var(--mut);line-height:1.75;margin-bottom:28px}
+/* Feature icons row */
+.hero-features{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px}
+.hero-feat{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.hero-feat .feat-icon{width:44px;height:44px;border-radius:50%;background:rgba(99,102,241,.08);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+.hero-feat .feat-icon svg{width:20px;height:20px}
+.hero-feat span{font-size:11px;font-weight:500;color:var(--mut);line-height:1.4}
+/* CTA row */
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.hero-cta .btn-primary{font-size:15px;padding:13px 24px}
+.hero-cta .btn-outline{font-size:15px;padding:13px 24px}
+/* Social proof */
+.hero-proof{display:flex;align-items:center;gap:10px}
+.avatars{display:flex}
+.avatars .av{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:var(--inds);color:var(--ind);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'Kanit',sans-serif;margin-left:-6px}
+.avatars .av:first-child{margin-left:0}
+.avatars .av:nth-child(1){background:#e0e7ff;color:#4f46e5}
+.avatars .av:nth-child(2){background:#fce7f3;color:#be185d}
+.avatars .av:nth-child(3){background:#d1fae5;color:#065f46}
+.avatars .av:nth-child(4){background:#fef3c7;color:#92400e}
+.hero-proof-text{font-size:13px;color:var(--mut);font-weight:500}
+.hero-proof-text strong{color:var(--ink)}
+
+/* ===== RIGHT COL: DUAL PHONES ===== */
+.hero-right{position:relative;display:flex;flex-direction:column;align-items:center}
+.phones-labels{display:flex;align-items:flex-end;justify-content:space-around;width:100%;margin-bottom:10px;padding:0 20px}
+.phone-label{font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px}
+.phone-label.green{background:#dcfce7;color:#16a34a}
+.phone-label.purple{background:#ede9fe;color:#7c3aed}
+.phones-row{display:flex;align-items:flex-start;justify-content:center;gap:0;position:relative;width:100%}
+/* Sync badge between phones */
+.sync-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;display:flex;flex-direction:column;align-items:center;gap:6px}
+.sync-circle{width:48px;height:48px;border-radius:50%;background:#fff;border:1.5px solid var(--line);box-shadow:0 4px 12px rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;color:var(--ind)}
+.sync-circle svg{width:22px;height:22px}
+.sync-label{font-size:10px;font-weight:600;color:var(--mut);text-align:center;line-height:1.3}
+
+/* Phone mockup base */
+.phone-mock{width:210px;border-radius:24px;box-shadow:0 20px 60px rgba(31,41,90,.18);overflow:hidden;flex:none}
+.phone-mock.left-phone{transform:translateY(0)}
+.phone-mock.right-phone{transform:translateY(20px)}
+/* LINE phone */
+.lp-head{background:#06c755;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:9px;font-family:'Kanit',sans-serif;font-weight:600;font-size:14px}
+.lp-av{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex:none}
+.lp-av svg{width:16px;height:16px;color:#fff}
+.lp-body{background:#8ba2bd;padding:12px 10px;display:flex;flex-direction:column;gap:8px;min-height:320px}
+.lp-msg{background:#fff;border-radius:4px 14px 14px 14px;padding:10px 11px;font-size:11.5px;line-height:1.5;display:flex;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.08);opacity:0}
+.lp-msg .lp-ic{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.10);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+.lp-msg .lp-ic svg{width:15px;height:15px}
+.lp-msg b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:12px;color:var(--ink)}
+.lp-msg .lp-q{color:var(--ind);font-weight:600}
+.lp-stars{display:flex;gap:3px;margin-top:5px}
+.lp-stars svg{width:14px;height:14px;color:#d4d8e0;fill:#d4d8e0}
+/* Shop phone */
+.sp-head{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:14px 16px;font-family:'Kanit',sans-serif;font-weight:600;font-size:13px}
+.sp-head span{font-size:11px;opacity:.8;font-family:'IBM Plex Sans Thai';font-weight:400}
+.sp-body{background:#f3f4f6;padding:10px 9px;display:flex;flex-direction:column;gap:7px;min-height:320px}
+.sp-row{background:#fff;border-radius:10px;padding:9px 10px;font-size:11px;line-height:1.5;display:flex;gap:8px;align-items:flex-start;box-shadow:0 1px 2px rgba(0,0,0,.05);opacity:0}
+.sp-row .sp-ic{width:26px;height:26px;border-radius:7px;background:rgba(99,102,241,.08);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+.sp-row .sp-ic svg{width:14px;height:14px}
+.sp-row b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:11.5px;color:var(--ink)}
+.sp-row .sp-q{color:var(--ind);font-weight:600}
+
+/* Animate phone cards on load */
+.phone-mock.ready .lp-msg,.phone-mock.ready .sp-row{animation:cardIn .55s cubic-bezier(.22,1,.36,1) forwards}
+.phone-mock.ready .lp-msg:nth-child(1),.phone-mock.ready .sp-row:nth-child(1){animation-delay:.3s}
+.phone-mock.ready .lp-msg:nth-child(2),.phone-mock.ready .sp-row:nth-child(2){animation-delay:.7s}
+.phone-mock.ready .lp-msg:nth-child(3),.phone-mock.ready .sp-row:nth-child(3){animation-delay:1.1s}
+.phone-mock.ready .lp-msg:nth-child(4),.phone-mock.ready .sp-row:nth-child(4){animation-delay:1.5s}
+.phone-mock.ready .lp-msg:nth-child(5),.phone-mock.ready .sp-row:nth-child(5){animation-delay:1.9s}
+.phone-mock.ready .lp-stars svg{animation:starOn .35s ease forwards}
+.phone-mock.ready .lp-stars svg:nth-child(1){animation-delay:2.4s}
+.phone-mock.ready .lp-stars svg:nth-child(2){animation-delay:2.55s}
+.phone-mock.ready .lp-stars svg:nth-child(3){animation-delay:2.7s}
+.phone-mock.ready .lp-stars svg:nth-child(4){animation-delay:2.85s}
+.phone-mock.ready .lp-stars svg:nth-child(5){animation-delay:3.0s}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes starOn{to{color:#f59e0b;fill:#f59e0b}}
+
+/* ===== STATS BAR ===== */
+.stats-bar{display:grid;grid-template-columns:1fr 1fr}
+.stats-left{background:var(--ind);color:#fff;padding:56px 48px}
+.stats-left h2{font-size:28px;color:#fff;margin-bottom:6px}
+.stats-left p{color:rgba(255,255,255,.75);font-size:15px;margin-bottom:32px}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.stat-item .stat-num{font-family:'Kanit',sans-serif;font-size:26px;font-weight:700;color:#fff}
+.stat-item .stat-label{font-size:12px;color:rgba(255,255,255,.7);margin-top:2px}
+.stats-right{background:#fff;padding:56px 48px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stats-right h3{font-size:16px;color:var(--ind);font-family:'Kanit',sans-serif;font-weight:600;margin-bottom:20px}
+.biz-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.biz-card{background:#f9fafb;border-radius:12px;padding:16px;border:1px solid var(--line)}
+.biz-card .biz-icon{width:36px;height:36px;border-radius:10px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.biz-card .biz-icon svg{width:18px;height:18px}
+.biz-card h4{font-family:'Kanit',sans-serif;font-size:14px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.biz-card p{font-size:12px;color:var(--mut)}
+
+/* ===== SECTION HEADERS ===== */
+.eyebrow{color:var(--ind);font-weight:600;font-size:13px;letter-spacing:.06em;text-align:center;font-family:'Kanit',sans-serif;margin-bottom:10px}
+h2.center{font-size:32px;text-align:center;margin-bottom:8px}
+.lead{text-align:center;color:var(--mut);max-width:600px;margin:0 auto 40px;font-size:15.5px}
+
+/* ===== FEATURES GRID ===== */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:var(--card-sh);transition:transform .2s ease,box-shadow .2s ease}
+.card:hover{transform:translateY(-4px);box-shadow:var(--card-sh-hover)}
+.card .ic{width:44px;height:44px;border-radius:12px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.card .ic svg{width:22px;height:22px}
+.card h3{font-size:16px;margin-bottom:6px}
+.card p{font-size:14px;color:var(--mut)}
+
+/* ===== TWO-SIDE SECTION ===== */
+.twoside{display:flex;justify-content:center;align-items:stretch;gap:24px;flex-wrap:wrap}
+.sidecol{display:flex;flex-direction:column;align-items:center;gap:16px;width:300px;max-width:92vw}
+.sidelabel{font-family:'Kanit',sans-serif;font-weight:600;font-size:15px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.sidelabel svg{width:18px;height:18px;color:var(--ind)}
+.syncmid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--mut);font-size:12px;text-align:center;align-self:center}
+.syncmid .sy{width:46px;height:46px;border-radius:50%;background:#fff;border:1.5px solid var(--line);box-shadow:0 4px 12px rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center}
+.syncmid .sy svg{width:22px;height:22px;color:var(--ind)}
+/* LINE journey phone (twoside) */
+.linephone{width:300px;max-width:92vw;background:#fff;border:1px solid var(--line);border-radius:28px;box-shadow:0 20px 50px rgba(31,41,90,.12);overflow:hidden}
+.lhead{background:#06c755;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;font-family:'Kanit',sans-serif;font-weight:600;font-size:15px}
+.lhead .lav{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+.lhead .lav svg{width:16px;height:16px;color:#fff}
+.lthread{background:#8ba2bd;padding:14px 12px;display:flex;flex-direction:column;gap:10px;min-height:360px}
+.lmsg{align-self:flex-start;max-width:84%;background:#fff;border-radius:4px 14px 14px 14px;padding:10px 12px;font-size:12px;line-height:1.5;display:flex;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);opacity:0}
+.lmsg .li{width:30px;height:30px;border-radius:9px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+.lmsg .li svg{width:16px;height:16px}
+.lmsg b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:12.5px;color:var(--ink)}
+.lmsg .lq{color:var(--ind);font-weight:600}
+.linephone.in .lmsg{animation:cardIn .55s cubic-bezier(.22,1,.36,1) forwards}
+.linephone.in .lmsg:nth-of-type(1){animation-delay:.25s}
+.linephone.in .lmsg:nth-of-type(2){animation-delay:1.0s}
+.linephone.in .lmsg:nth-of-type(3){animation-delay:1.75s}
+.linephone.in .lmsg:nth-of-type(4){animation-delay:2.5s}
+.linephone.in .lmsg:nth-of-type(5){animation-delay:3.25s}
+.stars{display:flex;gap:4px;margin-top:6px}
+.stars svg{width:17px;height:17px;color:#d4d8e0;fill:#d4d8e0}
+.linephone.in .stars svg{animation:starOn .35s ease forwards}
+.linephone.in .stars svg:nth-child(1){animation-delay:3.7s}
+.linephone.in .stars svg:nth-child(2){animation-delay:3.85s}
+.linephone.in .stars svg:nth-child(3){animation-delay:4.0s}
+.linephone.in .stars svg:nth-child(4){animation-delay:4.15s}
+.linephone.in .stars svg:nth-child(5){animation-delay:4.3s}
+/* Shop panel (twoside) */
+.shoppanel{width:300px;max-width:92vw;background:#fff;border:1px solid var(--line);border-radius:28px;box-shadow:0 20px 50px rgba(31,41,90,.12);overflow:hidden}
+.shead{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:9px;font-family:'Kanit',sans-serif;font-weight:600;font-size:14px}
+.shead .sdot{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.3)}
+.sbody{padding:12px;display:flex;flex-direction:column;gap:8px;background:#f9fafb;min-height:360px}
+.srow{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 11px;font-size:12px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.04);opacity:0}
+.shoppanel.in .srow{animation:cardIn .55s cubic-bezier(.22,1,.36,1) forwards}
+.shoppanel.in .srow:nth-of-type(1){animation-delay:.25s}
+.shoppanel.in .srow:nth-of-type(2){animation-delay:1.0s}
+.shoppanel.in .srow:nth-of-type(3){animation-delay:1.75s}
+.shoppanel.in .srow:nth-of-type(4){animation-delay:2.5s}
+.shoppanel.in .srow:nth-of-type(5){animation-delay:3.25s}
+.srow .si{width:30px;height:30px;border-radius:9px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;flex:none}
+.srow .si svg{width:16px;height:16px}
+.srow b{font-family:'Kanit',sans-serif;font-weight:600;display:block;font-size:12.5px;color:var(--ink)}
+.srow .sq{color:var(--ind);font-weight:600}
+.benefits{background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:13px 15px;width:100%}
+.benefits .bt{font-family:'Kanit',sans-serif;font-weight:600;font-size:13px;margin-bottom:7px;color:var(--ind)}
+.benefits .ben{display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:3px 0}
+.benefits .ben svg{width:15px;height:15px;color:var(--ok);flex:none;margin-top:3px}
+
+/* ===== STEPS ===== */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:840px;margin:0 auto}
+.step{text-align:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px 20px;box-shadow:var(--card-sh)}
+.step .step-n{width:44px;height:44px;border-radius:50%;background:var(--ind);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.step h3{font-size:17px;margin-bottom:6px}
+.step p{font-size:13.5px;color:var(--mut)}
+
+/* ===== PRICING ===== */
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:880px;margin:0 auto}
+.price{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center;box-shadow:var(--card-sh);transition:transform .2s}
+.price:hover{transform:translateY(-4px)}
+.price.feat{border:2px solid var(--ind);box-shadow:0 8px 28px rgba(99,102,241,.18);position:relative}
+.price .tag{font-size:12px;font-weight:600;color:var(--ind);letter-spacing:.04em;font-family:'Kanit',sans-serif;margin-bottom:8px}
+.price .amt{font-size:34px;font-family:'Kanit',sans-serif;font-weight:700;margin:6px 0 2px;color:var(--ink)}
+.price .amt small{font-size:14px;color:var(--mut);font-weight:400;font-family:'IBM Plex Sans Thai'}
+.price ul{list-style:none;text-align:left;font-size:14px;margin-top:16px}
+.price li{padding:5px 0 5px 24px;position:relative;color:var(--mut)}
+.price li svg{position:absolute;left:0;top:8px;width:15px;height:15px;color:var(--ok)}
+.founder{max-width:880px;margin:16px auto 0;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:14px;padding:16px 20px;text-align:center;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
+.founder svg{width:18px;height:18px;color:var(--ind)}
+
+/* ===== SECURITY ===== */
+.sec{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:880px;margin:0 auto}
+.sec .s{text-align:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 16px;box-shadow:var(--card-sh)}
+.sec .s .ic{width:44px;height:44px;border-radius:12px;background:var(--inds);color:var(--ind);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.sec .s svg{width:22px;height:22px}
+.sec h3{font-size:14px;margin-bottom:4px}
+.sec p{font-size:12px;color:var(--mut)}
+
+/* ===== COMPARISON TABLE ===== */
+.cmp{max-width:840px;margin:0 auto;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--card-sh)}
+.cmp table{width:100%;border-collapse:collapse;font-size:13.5px}
+.cmp th,.cmp td{padding:13px 10px;text-align:center;border-bottom:1px solid var(--line)}
+.cmp tr:last-child td{border-bottom:0}
+.cmp th:first-child,.cmp td:first-child{text-align:left;font-weight:500;width:38%;padding-left:20px}
+.cmp thead th{font-family:'Kanit',sans-serif;font-size:14px;font-weight:600;background:#f9fafb}
+.cmp .me{background:rgba(99,102,241,.06)}.cmp thead .me{color:var(--ind)}
+.cmp .yes{color:var(--ok)}.cmp .nope{color:#dc2626}.cmp .mid{color:var(--mut)}
+.cmp td svg{width:18px;height:18px;vertical-align:middle}
+.cmp .amt0{font-family:'Kanit',sans-serif;font-weight:700;color:var(--ok)}
+
+/* ===== SEGMENT CHIPS ===== */
+.segs{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.segchip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:14px;font-weight:500;box-shadow:var(--card-sh)}
+.segchip svg{width:17px;height:17px;color:var(--ind)}
+
+/* ===== SAVINGS CALCULATOR ===== */
+.calc{max-width:680px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:32px;box-shadow:var(--card-sh)}
+.calc .crow{margin-bottom:22px}
+.calc label{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;font-weight:500;margin-bottom:10px}
+.calc label b{font-family:'Kanit',sans-serif;color:var(--ind);font-size:17px}
+.calc input[type=range]{width:100%;height:5px;accent-color:var(--ind);cursor:pointer}
+.calc .out{text-align:center;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:14px;padding:24px 18px;margin-top:6px}
+.calc .out .cap{font-size:13px;color:var(--mut)}
+.calc .out .save{font-family:'Kanit',sans-serif;font-size:44px;font-weight:700;color:var(--ind);line-height:1.05;margin:6px 0 2px}
+.calc .out .sub{font-size:14px;color:var(--ink)}
+.calc .out .x{display:inline-block;margin-top:12px;background:var(--ind);color:#fff;border-radius:999px;padding:7px 18px;font-size:13px;font-weight:600;font-family:'Kanit',sans-serif}
+.calc .note{font-size:12px;color:var(--mut);text-align:center;margin-top:12px}
+
+/* ===== FAQ ===== */
+details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:8px;max-width:720px;margin-left:auto;margin-right:auto;box-shadow:var(--card-sh)}
+details+details{margin-top:8px}
+summary{font-weight:500;cursor:pointer;font-size:15px}
+summary::marker{color:var(--ind)}
+details p{font-size:14px;color:var(--mut);margin-top:10px;padding-left:4px}
+
+/* ===== FINAL CTA ===== */
+.final{background:var(--ind);color:#fff;text-align:center;padding:72px 0}
+.final h2{font-size:32px;margin-bottom:12px;color:#fff}
+.final p{color:rgba(255,255,255,.8);margin-bottom:28px;font-size:16px}
+.final .btn-white{display:inline-flex;align-items:center;gap:8px;background:#fff;color:var(--ind);font-family:'Kanit',sans-serif;font-weight:700;font-size:15px;padding:14px 28px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:transform .15s,box-shadow .15s}
+.final .btn-white:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.22)}
+
+/* ===== FOOTER ===== */
+footer{padding:36px 0;border-top:1px solid var(--line);color:var(--mut);font-size:13px;text-align:center}
+.footer-logo{display:inline-flex;align-items:center;gap:9px;font-family:'Kanit',sans-serif;font-weight:700;font-size:17px;color:var(--ink);margin-bottom:12px}
+.footer-logo .dot{width:26px;height:26px;border-radius:50%;background:var(--ind);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+footer a{color:var(--mut);margin:0 8px}
+footer a:hover{color:var(--ink)}
+
+/* ===== SCROLL REVEAL ===== */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+  .hero .wrap{grid-template-columns:1fr;gap:40px;text-align:center}
+  .hero h1{font-size:40px}
+  .hero h2.accent{font-size:28px}
+  .hero-chip{margin:0 auto 24px}
+  .hero-features{grid-template-columns:repeat(4,1fr)}
+  .hero-cta{justify-content:center}
+  .hero-proof{justify-content:center}
+  .hero-right{display:none}
+  .stats-bar{grid-template-columns:1fr}
+  .stats-left,.stats-right{padding:40px 24px}
+  .grid,.prices,.steps{grid-template-columns:1fr}
+  .sec{grid-template-columns:repeat(2,1fr)}
+  h2.center{font-size:26px}
+  .nav-links{display:none}
+}
+@media(max-width:600px){
+  .hero-features{grid-template-columns:repeat(2,1fr)}
+  .sec{grid-template-columns:1fr 1fr}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .biz-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:480px){
+  .hero h1{font-size:34px}
+  .hero h2.accent{font-size:24px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal,.lmsg,.srow,.lp-msg,.sp-row{opacity:1!important;transform:none!important}
+  .stars svg,.lp-stars svg{color:#f59e0b!important;fill:#f59e0b!important}
+  html{scroll-behavior:auto}
+}
 </style>
 </head><body>
-<div class="blobs"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
 
-<nav><div class="wrap">
-  <div class="logo"><span class="dot">ดี</span> ขายดี <small>KhaiDee</small></div>
-  <div class="navlinks"><a href="/login/">เข้าสู่ระบบ</a><a class="btn primary" href="/signup/">เปิดร้านฟรี</a></div>
-</div></nav>
-
-<header class="hero"><div class="wrap reveal in">
-  <div class="hpill"><span class="d"></span> ระบบคิวเต็มรูปแบบ + LINE · เริ่มฟรี เปิดเองใน 1 นาที · ไม่หักค่าคอม</div>
-  <h1>เปิดร้าน แล้ว<span class="hl">ขายดี</span><br>ตั้งแต่วันแรก</h1>
-  <p class="sub">ระบบ POS + คิว + สั่งผ่าน LINE + สะสมแต้ม สำหรับร้านอาหาร คาเฟ่ ร้านเครื่องดื่ม — ใช้บนแท็บเล็ตหรือมือถือ ไม่ต้องลงโปรแกรม</p>
-  <div class="cta-row">
-    <a class="btn primary" href="/signup/">ทดลองฟรี 60 วัน
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-    <a class="btn ghost" href="#features">ดูฟีเจอร์ทั้งหมด</a>
-  </div>
-  <div class="micro">ไม่ต้องใส่บัตรเครดิต · เริ่มขายได้ทันที · ยกเลิกเมื่อไรก็ได้</div>
-  <div class="trust">
-    <span><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg> ไม่เก็บเลขบัตร</span>
-    <span><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg> เงินเข้าบัญชีร้านโดยตรง</span>
-    <span><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> ตาม PDPA</span>
-    <span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ใช้งานจริงโดย YO-DEE</span>
-  </div>
-</div></header>
-
-<section style="padding-top:26px"><div class="wrap">
-  <div class="eyebrow reveal">เห็นภาพการทำงานจริง</div>
-  <h2 class="center reveal">ออเดอร์เข้า — จัดคิว — คิดเงิน ในจอเดียว</h2>
-  <p class="lead reveal">หน้าจอแคชเชียร์เห็นทุกออเดอร์แบบเรียลไทม์ · ลูกค้าสั่งผ่าน LINE ได้เลขคิวทันที</p>
-  <div class="demo">
-    <div class="tablet reveal">
-      <div class="tbar"><span class="tdot"></span> คิวร้าน · YO-DEE <span class="tnow">กำลังเรียก A012</span></div>
-      <div class="tbody">
-        <div class="ocard o1"><div class="onum">A011</div><div class="oinfo"><b>มะม่วงปั่น ×2</b><span>ชาเขียวนม ×1</span></div><div class="opay">฿140</div></div>
-        <div class="ocard o2"><div class="onum">A012</div><div class="oinfo"><b>โยเกิร์ตเบอร์รี่</b><span>+ กราโนล่า</span></div><span class="newbadge">ใหม่</span></div>
-        <div class="ocard o3"><div class="onum">A013</div><div class="oinfo"><b>อเมริกาโน่ ×2</b><span>สั่งผ่าน LINE</span></div><span class="opaid">จ่ายแล้ว</span></div>
-      </div>
+<!-- ===== NAV ===== -->
+<nav>
+  <div class="wrap">
+    <a href="/" class="nav-logo">
+      <span class="dot">ดี</span>
+      <span class="logo-text">ขายดี <span style="font-weight:400;font-size:15px;color:var(--mut)">KhaiDee</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="#" class="active">หน้าหลัก</a>
+      <a href="#features">ฟีเจอร์</a>
+      <a href="#how-it-works">วิธีใช้งาน</a>
+      <a href="#twoside">รีวิวจากลูกค้า</a>
+      <a href="#pricing">เกี่ยวกับเรา</a>
     </div>
-    <div class="phone reveal">
-      <div class="pbar"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg> สั่งผ่าน LINE</div>
-      <div class="pbubble"><b>โยเกิร์ตเบอร์รี่</b><br>+ กราโนล่า · ฿65</div>
-      <div class="pq">คิวของคุณ<b>A013</b>พร้อมรับใน ~5 นาที</div>
+    <div class="nav-actions">
+      <a href="/login/" class="login-link">เข้าสู่ระบบ</a>
+      <a href="/signup/" class="btn-primary">เปิดร้านฟรี</a>
     </div>
   </div>
-</div></section>
+</nav>
 
-<section style="padding:32px 0"><div class="wrap">
-  <p class="reveal" style="color:var(--mut);font-size:14px;margin:0 0 18px;text-align:center">เหมาะกับร้านขายดีทุกแบบ</p>
-  <div class="segs reveal">
-    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M6 8h12l-1.2 11.2A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.8L6 8Z"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/></svg> เครื่องดื่ม / ชานม</span>
-    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z"/><path d="M17 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M12 3v2"/></svg> คาเฟ่ / กาแฟ</span>
-    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M7 11a5 5 0 0 1 10 0"/><path d="M5 11h14l-6 9-1-3-1 3-6-9"/></svg> ของหวาน / โยเกิร์ต</span>
-    <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 12h16a8 8 0 0 1-16 0Z"/><path d="M9 6c0 1-1 1-1 2s1 1 1 2M15 6c0 1-1 1-1 2s1 1 1 2"/></svg> สตรีทฟู้ด / ตามสั่ง</span>
-  </div>
-</div></section>
-
-<section id="features"><div class="wrap">
-  <div class="eyebrow reveal">ทุกอย่างในระบบเดียว</div>
-  <h2 class="center reveal">ขายหน้าร้าน ถึงรับออเดอร์ออนไลน์</h2>
-  <p class="lead reveal">ไม่ต้องต่อหลายระบบ — POS, คิว, LINE, แต้มสะสม และรายงานกำไร อยู่ที่เดียว</p>
-  <div class="grid">
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21Z"/><path d="M9 8h6M9 12h6"/></svg></div><h3>POS หน้าร้าน</h3><p>กดสั่ง คิดเงิน ทอนเงิน รับเงินสด/พร้อมเพย์ แยกบิล รวมบิล ครบจบบนจอเดียว</p></div>
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4Z"/><path d="M14 7v2M14 13v2"/></svg></div><h3>ระบบคิวอัตโนมัติ</h3><p>ออกบัตรคิว แจ้งลูกค้าผ่านจอ + LINE ลดความวุ่นวายหน้าร้านช่วงพีค</p></div>
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg></div><h3>สั่งผ่าน LINE</h3><p>ลูกค้าสแกนสั่งเองในไลน์ รับเลขคิว จ่ายเงิน แล้วมารับ — ไม่ต้องต่อแถว</p></div>
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></div><h3>สะสมแต้ม / ของรางวัล</h3><p>บัตรสะสมแต้มในตัว ดึงลูกค้าให้กลับมาซ้ำ จดจำลูกค้าประจำได้</p></div>
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></div><h3>รายงาน + กำไร</h3><p>ยอดขาย กำไรขาดทุน สินค้าขายดี ชั่วโมงพีค ส่งออก Excel ได้</p></div>
-    <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-4 7 4v13"/><path d="M9 21v-5h6v5"/></svg></div><h3>หลายสาขา</h3><p>ดูแลทุกสาขาจากที่เดียว เมนูกลาง ราคาแยกช่องทาง พนักงานแยกสิทธิ์</p></div>
-  </div>
-</div></section>
-
-<section style="background:var(--bg)"><div class="wrap">
-  <div class="eyebrow reveal">ออกแบบให้ได้ทั้งสองฝั่ง</div>
-  <h2 class="center reveal">ลูกค้าสะดวก · ร้านขายคล่อง — ออเดอร์เดียว ซิงค์สองฝั่ง</h2>
-  <p class="lead reveal">ทุกการแจ้งเตือนถึงลูกค้า = การกระทำหนึ่งของร้าน เชื่อมกันแบบเรียลไทม์</p>
-  <div class="twoside">
-    <div class="sidecol">
-      <div class="sidelabel"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ฝั่งลูกค้า — ใน LINE</div>
-      <div class="linephone reveal">
-      <div class="lhead"><span class="lav"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span> YO-DEE Yogurt</div>
-      <div class="lthread">
-        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div><b>รับออเดอร์แล้ว</b>คิวของคุณ <span class="lq">A013</span> · โยเกิร์ตเบอร์รี่ ×1</div></div>
-        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 9.2A2 2 0 0 1 16.8 20H7.2a2 2 0 0 1-2-1.8L4 9Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span><div><b>ร้านกำลังทำ</b>กำลังเตรียมออเดอร์ของคุณ</div></div>
-        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><div><b>ใกล้ถึงคิวคุณแล้ว</b>เหลืออีก 2 คิว · เตรียมตัวมารับได้เลย</div></div>
-        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg></span><div><b>พร้อมรับแล้ว!</b>โชว์คิว <span class="lq">A013</span> ที่เคาน์เตอร์ได้เลย</div></div>
-        <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span><div><b>ขอบคุณที่อุดหนุน</b>ให้คะแนนร้านหน่อยนะ
-          <div class="stars"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></div>
-        </div></div>
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="wrap">
+    <!-- Left -->
+    <div class="hero-left">
+      <div class="hero-chip">
+        <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        แพลตฟอร์มซื้อ-ขายสำหรับร้านค้า
       </div>
-      </div>
-      <div class="benefits"><div class="bt">ลูกค้าได้</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ไม่ต้องต่อแถว · รู้สถานะทุกขั้นแบบเรียลไทม์</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> สั่งซ้ำง่าย + สะสมแต้ม/ของรางวัล</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> มั่นใจ ได้ของถูก ตรงคิว ไม่ต้องเฝ้าหน้าร้าน</div>
-      </div>
-    </div>
-    <div class="syncmid"><div class="sy"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg></div>ซิงค์<br>เรียลไทม์</div>
-    <div class="sidecol">
-      <div class="sidelabel"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-4 7 4v13"/></svg> ฝั่งร้าน — แคชเชียร์</div>
-      <div class="shoppanel reveal">
-        <div class="shead"><span class="sdot"></span> หน้าจอร้าน · คิว A013</div>
-        <div class="sbody">
-          <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 12V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7"/></svg></span><div><b>ออเดอร์ใหม่เข้า</b><span class="sq">A013</span> · โยเกิร์ตเบอร์รี่ ×1 — เด้งเข้าจอทันที</div></div>
-          <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg></span><div><b>กดเริ่มทำ</b>ระบบแจ้งลูกค้าอัตโนมัติว่ากำลังทำ</div></div>
-          <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></span><div><b>เรียกคิว A013</b>ขึ้นจอเรียกคิว + ส่ง LINE หาลูกค้า</div></div>
-          <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><div><b>รับเงิน ฿65 · เสิร์ฟ</b>ยอดเข้าบัญชีร้านตรง ไม่หักค่าคอม</div></div>
-          <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span><div><b>+1 แต้ม · รีวิว 5 ดาว</b>ได้ลูกค้าประจำ + ข้อมูลเป็นของร้าน</div></div>
+      <h1>ลูกค้าสะดวก · ร้านขายคล่อง</h1>
+      <h2 class="accent">ออเดอร์เดียว ซิงค์สองฝั่ง</h2>
+      <p class="hero-body">จัดการออเดอร์จาก LINE และหน้าร้านในที่เดียว<br>ไม่พลาดทุกการขาย เพิ่มยอดขายให้เติบโต</p>
+      <div class="hero-features">
+        <div class="hero-feat">
+          <div class="feat-icon">
+            <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </div>
+          <span>ซิงค์ออเดอร์<br>อัตโนมัติ</span>
+        </div>
+        <div class="hero-feat">
+          <div class="feat-icon">
+            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          </div>
+          <span>เพิ่มยอดขาย<br>ไม่พลาดทุกโอกาส</span>
+        </div>
+        <div class="hero-feat">
+          <div class="feat-icon">
+            <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+          </div>
+          <span>จัดการง่าย<br>ในที่เดียว</span>
+        </div>
+        <div class="hero-feat">
+          <div class="feat-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+          </div>
+          <span>ปลอดภัย<br>ข้อมูลไม่รั่วไหล</span>
         </div>
       </div>
-      <div class="benefits"><div class="bt">ร้านได้</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ออเดอร์ + เงิน ชัดเจน ลดงานหน้าร้าน</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> จัดคิวช่วงพีคง่าย ไม่วุ่นวาย</div>
-        <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ลูกค้ากลับมาซื้อซ้ำ + รีวิว + เป็นเจ้าของข้อมูล</div>
+      <div class="hero-cta">
+        <a href="/signup/" class="btn-primary" style="font-size:15px;padding:13px 24px">เริ่มใช้งานฟรี →</a>
+        <a href="#how-it-works" class="btn-outline" style="font-size:15px;padding:13px 24px">▶ ดูวิธีการทำงาน</a>
+      </div>
+      <div class="hero-proof">
+        <div class="avatars">
+          <div class="av">K</div>
+          <div class="av">S</div>
+          <div class="av">Y</div>
+          <div class="av">P</div>
+        </div>
+        <span class="hero-proof-text"><strong>ร้านค้ากว่า 3,500+</strong> ธุรกิจ ไว้วางใจขายดี</span>
+      </div>
+    </div>
+
+    <!-- Right: Dual phone mockups -->
+    <div class="hero-right">
+      <div class="phones-labels">
+        <span class="phone-label green">ลูกค้าซื้อ</span>
+        <span class="phone-label purple">ร้านขาย</span>
+      </div>
+      <div class="phones-row">
+        <!-- Left phone: LINE customer -->
+        <div class="phone-mock left-phone" id="heroLinePhone">
+          <div class="lp-head">
+            <span class="lp-av"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span>
+            YO-DEE Yogurt
+          </div>
+          <div class="lp-body">
+            <div class="lp-msg">
+              <span class="lp-ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <div><b>รับออเดอร์แล้ว</b>คิวของคุณ <span class="lp-q">A013</span> · โยเกิร์ตเบอร์รี่ ×1</div>
+            </div>
+            <div class="lp-msg">
+              <span class="lp-ic"><svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 9.2A2 2 0 0 1 16.8 20H7.2a2 2 0 0 1-2-1.8L4 9Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span>
+              <div><b>ชำระเงินสำเร็จ</b>A013 · 125 บาท โอนเงินผ่าน QR Code</div>
+            </div>
+            <div class="lp-msg">
+              <span class="lp-ic"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
+              <div><b>กำลังเตรียมออเดอร์</b>A013 · โยเกิร์ตเบอร์รี่ ×1</div>
+            </div>
+            <div class="lp-msg">
+              <span class="lp-ic"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+              <div><b>พร้อมรับสินค้า!</b>A013 · สาขาเซ็นทรัล เวสต์เกต</div>
+            </div>
+            <div class="lp-msg">
+              <span class="lp-ic"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span>
+              <div><b>ขอบคุณ!</b>ให้คะแนนร้านหน่อยนะคะ
+                <div class="lp-stars">
+                  <svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>
+                  <svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>
+                  <svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>
+                  <svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>
+                  <svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync badge -->
+        <div class="sync-badge">
+          <div class="sync-circle">
+            <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </div>
+          <div class="sync-label">ซิงค์<br>อัตโนมัติ</div>
+        </div>
+
+        <!-- Right phone: Shop dashboard -->
+        <div class="phone-mock right-phone" id="heroShopPhone">
+          <div class="sp-head">
+            หน้าร้าน <span>· คิว A013</span>
+          </div>
+          <div class="sp-body">
+            <div class="sp-row">
+              <span class="sp-ic"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+              <div><b>ออเดอร์ใหม่เข้า</b><span class="sp-q">A013</span> · โยเกิร์ตเบอร์รี่ ×1 เข้ามาจาก LINE</div>
+            </div>
+            <div class="sp-row">
+              <span class="sp-ic"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+              <div><b>แจ้งเตือนครัว</b>เตรียมโยเกิร์ตเบอร์รี่ ×1</div>
+            </div>
+            <div class="sp-row">
+              <span class="sp-ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <div><b>ออเดอร์พร้อมเสิร์ฟ</b><span class="sp-q">A013</span> · พร้อมรับสินค้า</div>
+            </div>
+            <div class="sp-row">
+              <span class="sp-ic"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+              <div><b>รับเงินแล้ว</b>ยอดขาย 125 บาท</div>
+            </div>
+            <div class="sp-row">
+              <span class="sp-ic"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span>
+              <div><b>+1 แต้ม · รีวิว 5 ดาว</b>ให้ลูกค้าประจำ + ข้อมูลเชิงลึก</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</div></section>
+</section>
 
-<section><div class="wrap">
-  <div class="eyebrow reveal">ทำไมต้อง KhaiDee</div>
-  <h2 class="center reveal">ต่างจากเดลิเวอรี และ POS ทั่วไป</h2>
-  <p class="lead reveal">เดลิเวอรีไว้หา "ลูกค้าใหม่" (จ่ายคอม) · KhaiDee ทำให้ลูกค้า "กลับมาซื้อตรง" โดยไม่หักคอม</p>
-  <div class="cmp reveal">
-    <table>
-      <thead><tr><th></th><th class="me">ขายดี<br>KhaiDee</th><th>เดลิเวอรี<br>มาร์เก็ตเพลส</th><th>ระบบ LINE/<br>POS ทั่วไป</th></tr></thead>
-      <tbody>
-        <tr><td>ราคาเริ่มต้น</td><td class="me"><span class="amt0">เริ่มฟรี · ฿299</span></td><td class="mid">ฟรี แต่หักคอม</td><td class="nope">~พันบาท/เดือน</td></tr>
-        <tr><td>ค่าคอมมิชชันต่อออเดอร์</td><td class="me"><span class="amt0">0%</span></td><td class="nope">~30%</td><td class="mid">0%</td></tr>
-        <tr><td>ลูกค้าเป็นของร้าน</td><td class="me"><svg class="ck" style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td></tr>
-        <tr><td>ระบบคิว + แจ้งผ่าน LINE</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
-        <tr><td>ลูกค้าสั่งผ่าน LINE ของร้านเอง</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td></tr>
-        <tr><td>เปิดใช้เองใน 1 นาที</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">—</td><td class="mid">ตั้งค่ายุ่งยาก</td></tr>
-        <tr><td>สะสมแต้ม/ลูกค้าประจำของร้าน</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#c0394a" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
-        <tr><td>เริ่มต้นฟรี</td><td class="me"><svg style="color:#178a72" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">ฟรี แต่หักคอม</td><td class="nope">มีค่าใช้จ่าย</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="lead reveal" style="margin-top:20px;font-size:14px">ดึงลูกค้าประจำแค่ 15% มาสั่งตรงผ่าน LINE แทนเดลิเวอรี ก็ประหยัดค่าคอมได้หลายพัน/เดือน — คุ้มค่าสมาชิกหลายเท่า</p>
-</div></section>
-
-<section style="background:var(--bg)"><div class="wrap">
-  <div class="eyebrow reveal">คุ้มไหม? คำนวณเลย</div>
-  <h2 class="center reveal">ดึงลูกค้ามาสั่งตรง ประหยัดค่าคอมเท่าไร?</h2>
-  <p class="lead reveal">ลองปรับตัวเลขของร้านคุณ — ดูเงินที่ประหยัดได้เมื่อลูกค้าประจำสั่งตรงผ่าน LINE แทนเดลิเวอรี</p>
-  <div class="calc reveal">
-    <div class="crow"><label>ยอดขายต่อเดือน <b id="cSales">฿100,000</b></label>
-      <input type="range" id="rSales" min="20000" max="500000" step="5000" value="100000" aria-label="ยอดขายต่อเดือน"></div>
-    <div class="crow"><label>ยอดที่ขายผ่านเดลิเวอรีตอนนี้ <b id="cDel">30%</b></label>
-      <input type="range" id="rDel" min="0" max="60" step="5" value="30" aria-label="สัดส่วนยอดขายผ่านเดลิเวอรี"></div>
-    <div class="out">
-      <div class="cap">ถ้าดึงลูกค้าประจำครึ่งหนึ่งมาสั่งตรงผ่าน LINE (ไม่หักค่าคอม)</div>
-      <div class="save" id="cSave">฿4,500</div>
-      <div class="sub">ประหยัดค่าคอม/เดือน · <span id="cYear">฿54,000</span>/ปี</div>
-      <div class="x" id="cX">คุ้มค่า KhaiDee Pro 15 เท่า</div>
+<!-- ===== STATS + CATEGORIES BAR ===== -->
+<div class="stats-bar">
+  <div class="stats-left">
+    <h2>จัดการครบจบในที่เดียว</h2>
+    <p>เพิ่มยอดขายให้ธุรกิจคุณ</p>
+    <div class="stats-grid">
+      <div class="stat-item"><div class="stat-num">3,500+</div><div class="stat-label">ร้านค้าใช้งาน</div></div>
+      <div class="stat-item"><div class="stat-num">98.5%</div><div class="stat-label">ความพึงพอใจ</div></div>
+      <div class="stat-item"><div class="stat-num">1.2M+</div><div class="stat-label">ออเดอร์ที่จัดการ</div></div>
+      <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-label">ซัพพอร์ตดูแล</div></div>
     </div>
-    <div class="note">*ประมาณการจากค่าคอมเดลิเวอรี ~30% และดึงลูกค้าประจำมาช่องทางตรงได้ครึ่งหนึ่ง</div>
   </div>
-</div></section>
-
-<section><div class="wrap">
-  <div class="eyebrow reveal">เริ่มง่ายมาก</div>
-  <h2 class="center reveal">3 ขั้นตอน เปิดร้านพร้อมขาย</h2>
-  <p class="lead reveal">ไม่ต้องมีพื้นฐานเทคนิค — ระบบมีคู่มือและเมนูตัวอย่างให้</p>
-  <div class="steps">
-    <div class="step reveal"><div class="n">1</div><h3>สมัคร</h3><p>กรอกชื่อร้าน + ตั้ง PIN ใช้เวลาไม่ถึงนาที</p></div>
-    <div class="step reveal"><div class="n">2</div><h3>ใส่เมนู</h3><p>เลือกเมนูตัวอย่างตามประเภทร้าน แล้วแก้ได้ หรือเพิ่มเอง</p></div>
-    <div class="step reveal"><div class="n">3</div><h3>เปิดขาย</h3><p>รับออเดอร์หน้าร้านได้ทันที · เชื่อม LINE เมื่อพร้อม</p></div>
-  </div>
-</div></section>
-
-<section><div class="wrap">
-  <div class="eyebrow reveal">ราคาตรงไปตรงมา</div>
-  <h2 class="center reveal">เริ่มฟรี จ่ายเมื่อโตขึ้น</h2>
-  <p class="lead reveal">ทดลอง Pro ฟรี 60 วัน ไม่ต้องใส่บัตร · ยอดขายเข้าบัญชีร้านโดยตรง เราไม่ถือเงินแทน</p>
-  <div class="pricewrap reveal">
-    <div class="prices">
-      <div class="price"><div class="tag">Free</div><div class="amt">฿0</div><ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>1 สาขา</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>POS + คิว หน้าร้าน</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายงานพื้นฐาน</li></ul></div>
-      <div class="price feat"><div class="tag">Pro · ยอดนิยม</div><div class="amt">฿299<small>/เดือน</small></div><ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>สูงสุด 3 สาขา</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>สั่งผ่าน LINE + สะสมแต้ม</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายงานละเอียด + Excel</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายปี ฿2,990 (ประหยัด 2 เดือน)</li></ul></div>
-      <div class="price"><div class="tag">Business</div><div class="amt">฿799<small>/เดือน</small></div><ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>ไม่จำกัดสาขา</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>โดเมนของร้านเอง</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>ทุกฟีเจอร์ Pro</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายปี ฿7,990</li></ul></div>
+  <div class="stats-right">
+    <h3>เหมาะสำหรับธุรกิจ</h3>
+    <div class="biz-grid">
+      <div class="biz-card">
+        <div class="biz-icon"><svg viewBox="0 0 24 24"><path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z"/><path d="M17 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M12 3v2"/></svg></div>
+        <h4>ร้านอาหาร</h4><p>คาเฟ่ เครื่องดื่ม</p>
+      </div>
+      <div class="biz-card">
+        <div class="biz-icon"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
+        <h4>ค้าปลีก</h4><p>สินค้าทั่วไป</p>
+      </div>
+      <div class="biz-card">
+        <div class="biz-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div>
+        <h4>ความงาม</h4><p>สกินแคร์ สปา</p>
+      </div>
+      <div class="biz-card">
+        <div class="biz-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <h4>บริการ</h4><p>ทุกประเภทธุรกิจ</p>
+      </div>
     </div>
-    <div class="founder"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg> <b>โปรผู้ก่อตั้ง 50 ร้านแรก</b> — ล็อกราคา Pro เพียง <b>฿199/เดือน ตลอดชีพ</b> + ทีมช่วยตั้งค่าให้</div>
   </div>
-</div></section>
+</div>
 
-<section><div class="wrap">
-  <div class="eyebrow reveal">วางใจได้</div>
-  <h2 class="center reveal">ปลอดภัย โปร่งใส เป็นมืออาชีพ</h2>
-  <p class="lead reveal">เราดูแลข้อมูลร้านและลูกค้าของคุณอย่างจริงจัง</p>
-  <div class="sec">
-    <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>ไม่ถือเงินแทน</h3><p>ยอดขายเข้าบัญชีร้านตรง</p></div>
-    <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>เข้ารหัส ปลอดภัย</h3><p>มาตรฐานระดับธนาคาร</p></div>
-    <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>ตาม PDPA</h3><p>ส่งออก/ลบข้อมูลได้</p></div>
-    <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h3>ใช้งานจริง</h3><p>YO-DEE ใช้ทุกวัน</p></div>
+<!-- ===== SEGMENTS ===== -->
+<section style="padding:32px 0;border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <p class="reveal" style="color:var(--mut);font-size:14px;margin-bottom:16px;text-align:center">เหมาะกับร้านขายดีทุกแบบ</p>
+    <div class="segs reveal">
+      <span class="segchip"><svg viewBox="0 0 24 24"><path d="M6 8h12l-1.2 11.2A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.8L4 8Z"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/></svg> เครื่องดื่ม / ชานม</span>
+      <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z"/><path d="M17 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M12 3v2"/></svg> คาเฟ่ / กาแฟ</span>
+      <span class="segchip"><svg viewBox="0 0 24 24"><path d="M7 11a5 5 0 0 1 10 0"/><path d="M5 11h14l-6 9-1-3-1 3-6-9"/></svg> ของหวาน / โยเกิร์ต</span>
+      <span class="segchip"><svg viewBox="0 0 24 24"><path d="M4 12h16a8 8 0 0 1-16 0Z"/><path d="M9 6c0 1-1 1-1 2s1 1 1 2M15 6c0 1-1 1-1 2s1 1 1 2"/></svg> สตรีทฟู้ด / ตามสั่ง</span>
+    </div>
   </div>
-</div></section>
+</section>
 
-<section><div class="wrap">
-  <div class="eyebrow reveal">คำถามที่พบบ่อย</div>
-  <h2 class="center reveal">สงสัยอะไร ถามได้</h2>
-  <div style="margin-top:24px">
-    <details class="reveal"><summary>ใช้ KhaiDee แทน Grab / LINE MAN ได้ไหม?</summary><p>มองเป็น "คู่หู" ดีกว่าครับ — เดลิเวอรีไว้<b>หาลูกค้าใหม่</b> (จ่ายคอม ~30%) ส่วน KhaiDee ทำให้<b>ลูกค้ากลับมาสั่งตรง</b>กับร้านผ่าน LINE โดยไม่หักคอม · ดึงลูกค้าประจำมาช่องทางตรงได้มากเท่าไร ก็ยิ่งประหยัดค่าคอมและเป็นเจ้าของฐานลูกค้าเองมากเท่านั้น</p></details>
-    <details class="reveal"><summary>ต้องมีอุปกรณ์อะไรบ้าง?</summary><p>แค่แท็บเล็ตหรือมือถือที่ต่อเน็ตได้ เปิดผ่านเว็บได้เลย ไม่ต้องลงโปรแกรม · เครื่องพิมพ์ใบเสร็จเสริมได้ภายหลัง</p></details>
-    <details class="reveal"><summary>ต้องใช้ LINE ไหม?</summary><p>ไม่บังคับ — เริ่มแบบ POS หน้าร้าน + คิว ได้ทันที · อยากให้ลูกค้าสั่งผ่าน LINE ค่อยเชื่อมทีหลัง มีคู่มือ + ทีมช่วย</p></details>
-    <details class="reveal"><summary>เงินค่าขายเข้าใคร?</summary><p>เข้าบัญชีร้านคุณโดยตรง (พร้อมเพย์/บัญชีร้าน) — <b>เราไม่ถือเงินแทน</b> ค่าบริการเก็บเฉพาะค่าสมาชิกระบบ</p></details>
-    <details class="reveal"><summary>ยกเลิกได้ไหม?</summary><p>ได้ทุกเมื่อ ใช้ได้จนสิ้นรอบที่จ่ายไว้ · ข้อมูลส่งออกได้ (PDPA)</p></details>
+<!-- ===== FEATURES ===== -->
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow reveal">ทุกอย่างในระบบเดียว</div>
+    <h2 class="center reveal">ขายหน้าร้าน ถึงรับออเดอร์ออนไลน์</h2>
+    <p class="lead reveal">ไม่ต้องต่อหลายระบบ — POS, คิว, LINE, แต้มสะสม และรายงานกำไร อยู่ที่เดียว</p>
+    <div class="grid">
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21Z"/><path d="M9 8h6M9 12h6"/></svg></div>
+        <h3>POS หน้าร้าน</h3>
+        <p>กดสั่ง คิดเงิน ทอนเงิน รับเงินสด/พร้อมเพย์ แยกบิล รวมบิล ครบจบบนจอเดียว</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4Z"/><path d="M14 7v2M14 13v2"/></svg></div>
+        <h3>ระบบคิวอัตโนมัติ</h3>
+        <p>ออกบัตรคิว แจ้งลูกค้าผ่านจอ + LINE ลดความวุ่นวายหน้าร้านช่วงพีค</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg></div>
+        <h3>สั่งผ่าน LINE</h3>
+        <p>ลูกค้าสแกนสั่งเองในไลน์ รับเลขคิว จ่ายเงิน แล้วมารับ — ไม่ต้องต่อแถว</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></div>
+        <h3>สะสมแต้ม / ของรางวัล</h3>
+        <p>บัตรสะสมแต้มในตัว ดึงลูกค้าให้กลับมาซ้ำ จดจำลูกค้าประจำได้</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></div>
+        <h3>รายงาน + กำไร</h3>
+        <p>ยอดขาย กำไรขาดทุน สินค้าขายดี ชั่วโมงพีค ส่งออก Excel ได้</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-4 7 4v13"/><path d="M9 21v-5h6v5"/></svg></div>
+        <h3>หลายสาขา</h3>
+        <p>ดูแลทุกสาขาจากที่เดียว เมนูกลาง ราคาแยกช่องทาง พนักงานแยกสิทธิ์</p>
+      </div>
+    </div>
   </div>
-</div></section>
+</section>
 
-<section class="final"><div class="wrap reveal">
-  <h2>พร้อมให้ร้านคุณขายดีหรือยัง?</h2>
-  <p>เปิดร้านบน KhaiDee วันนี้ — ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร</p>
-  <a class="btn primary" href="/signup/">เปิดร้านฟรี
-    <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-</div></section>
+<!-- ===== TWO-SIDE SECTION ===== -->
+<section id="twoside" style="background:#f9fafb">
+  <div class="wrap">
+    <div class="eyebrow reveal">ออกแบบให้ได้ทั้งสองฝั่ง</div>
+    <h2 class="center reveal">ลูกค้าสะดวก · ร้านขายคล่อง — ออเดอร์เดียว ซิงค์สองฝั่ง</h2>
+    <p class="lead reveal">ทุกการแจ้งเตือนถึงลูกค้า = การกระทำหนึ่งของร้าน เชื่อมกันแบบเรียลไทม์</p>
+    <div class="twoside">
+      <div class="sidecol">
+        <div class="sidelabel">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          ฝั่งลูกค้า — ใน LINE
+        </div>
+        <div class="linephone reveal">
+          <div class="lhead"><span class="lav"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span> YO-DEE Yogurt</div>
+          <div class="lthread">
+            <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div><b>รับออเดอร์แล้ว</b>คิวของคุณ <span class="lq">A013</span> · โยเกิร์ตเบอร์รี่ ×1</div></div>
+            <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 9.2A2 2 0 0 1 16.8 20H7.2a2 2 0 0 1-2-1.8L4 9Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span><div><b>ร้านกำลังทำ</b>กำลังเตรียมออเดอร์ของคุณ</div></div>
+            <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><div><b>ใกล้ถึงคิวคุณแล้ว</b>เหลืออีก 2 คิว · เตรียมตัวมารับได้เลย</div></div>
+            <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg></span><div><b>พร้อมรับแล้ว!</b>โชว์คิว <span class="lq">A013</span> ที่เคาน์เตอร์ได้เลย</div></div>
+            <div class="lmsg"><span class="li"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span><div><b>ขอบคุณที่อุดหนุน</b>ให้คะแนนร้านหน่อยนะ
+              <div class="stars"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></div>
+            </div></div>
+          </div>
+        </div>
+        <div class="benefits">
+          <div class="bt">ลูกค้าได้</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ไม่ต้องต่อแถว · รู้สถานะทุกขั้นแบบเรียลไทม์</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> สั่งซ้ำง่าย + สะสมแต้ม/ของรางวัล</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> มั่นใจ ได้ของถูก ตรงคิว ไม่ต้องเฝ้าหน้าร้าน</div>
+        </div>
+      </div>
+      <div class="syncmid">
+        <div class="sy"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg></div>
+        ซิงค์<br>เรียลไทม์
+      </div>
+      <div class="sidecol">
+        <div class="sidelabel">
+          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-4 7 4v13"/></svg>
+          ฝั่งร้าน — แคชเชียร์
+        </div>
+        <div class="shoppanel reveal">
+          <div class="shead"><span class="sdot"></span> หน้าจอร้าน · คิว A013</div>
+          <div class="sbody">
+            <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 12V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7"/></svg></span><div><b>ออเดอร์ใหม่เข้า</b><span class="sq">A013</span> · โยเกิร์ตเบอร์รี่ ×1 — เด้งเข้าจอทันที</div></div>
+            <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg></span><div><b>กดเริ่มทำ</b>ระบบแจ้งลูกค้าอัตโนมัติว่ากำลังทำ</div></div>
+            <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></span><div><b>เรียกคิว A013</b>ขึ้นจอเรียกคิว + ส่ง LINE หาลูกค้า</div></div>
+            <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><div><b>รับเงิน ฿125 · เสิร์ฟ</b>ยอดเข้าบัญชีร้านตรง ไม่หักค่าคอม</div></div>
+            <div class="srow"><span class="si"><svg viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg></span><div><b>+1 แต้ม · รีวิว 5 ดาว</b>ได้ลูกค้าประจำ + ข้อมูลเป็นของร้าน</div></div>
+          </div>
+        </div>
+        <div class="benefits">
+          <div class="bt">ร้านได้</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ออเดอร์ + เงิน ชัดเจน ลดงานหน้าร้าน</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> จัดคิวช่วงพีคง่าย ไม่วุ่นวาย</div>
+          <div class="ben"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ลูกค้ากลับมาซื้อซ้ำ + รีวิว + เป็นเจ้าของข้อมูล</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-<footer><div class="wrap">
-  <div class="logo" style="justify-content:center;margin-bottom:8px;font-size:18px"><span class="dot" style="width:24px;height:24px;font-size:14px">ดี</span> ขายดี <small>KhaiDee</small></div>
-  <div><a href="/signup/">เปิดร้าน</a> · <a href="/login/">เข้าสู่ระบบ</a> · <a href="/help/">ศูนย์ช่วยเหลือ</a> · <a href="/privacy/">ความเป็นส่วนตัว</a> · <a href="/terms/">ข้อกำหนด</a></div>
-  <p style="margin-top:12px">© 2026 KhaiDee · ระบบขายที่ทำให้ร้านคุณขายดี</p>
-</div></footer>
+<!-- ===== COMPARISON ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow reveal">ทำไมต้อง KhaiDee</div>
+    <h2 class="center reveal">ต่างจากเดลิเวอรี และ POS ทั่วไป</h2>
+    <p class="lead reveal">เดลิเวอรีไว้หา "ลูกค้าใหม่" (จ่ายคอม) · KhaiDee ทำให้ลูกค้า "กลับมาซื้อตรง" โดยไม่หักคอม</p>
+    <div class="cmp reveal">
+      <table>
+        <thead><tr><th></th><th class="me">ขายดี KhaiDee</th><th>เดลิเวอรี มาร์เก็ตเพลส</th><th>ระบบ LINE/POS ทั่วไป</th></tr></thead>
+        <tbody>
+          <tr><td>ราคาเริ่มต้น</td><td class="me"><span class="amt0">เริ่มฟรี · ฿299</span></td><td class="mid">ฟรี แต่หักคอม</td><td class="nope">~พันบาท/เดือน</td></tr>
+          <tr><td>ค่าคอมมิชชันต่อออเดอร์</td><td class="me"><span class="amt0">0%</span></td><td class="nope">~30%</td><td class="mid">0%</td></tr>
+          <tr><td>ลูกค้าเป็นของร้าน</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#dc2626" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td></tr>
+          <tr><td>ระบบคิว + แจ้งผ่าน LINE</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#dc2626" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
+          <tr><td>ลูกค้าสั่งผ่าน LINE ของร้านเอง</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#dc2626" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td><svg style="color:#dc2626" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td></tr>
+          <tr><td>เปิดใช้เองใน 1 นาที</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">—</td><td class="mid">ตั้งค่ายุ่งยาก</td></tr>
+          <tr><td>สะสมแต้ม/ลูกค้าประจำของร้าน</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td><svg style="color:#dc2626" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></td><td class="mid">บางเจ้า</td></tr>
+          <tr><td>เริ่มต้นฟรี</td><td class="me"><svg style="color:var(--ok)" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></td><td class="mid">ฟรี แต่หักคอม</td><td class="nope">มีค่าใช้จ่าย</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lead reveal" style="margin-top:20px;font-size:14px">ดึงลูกค้าประจำแค่ 15% มาสั่งตรงผ่าน LINE แทนเดลิเวอรี ก็ประหยัดค่าคอมได้หลายพัน/เดือน — คุ้มค่าสมาชิกหลายเท่า</p>
+  </div>
+</section>
+
+<!-- ===== SAVINGS CALCULATOR ===== -->
+<section style="background:#f9fafb">
+  <div class="wrap">
+    <div class="eyebrow reveal">คุ้มไหม? คำนวณเลย</div>
+    <h2 class="center reveal">ดึงลูกค้ามาสั่งตรง ประหยัดค่าคอมเท่าไร?</h2>
+    <p class="lead reveal">ลองปรับตัวเลขของร้านคุณ — ดูเงินที่ประหยัดได้เมื่อลูกค้าประจำสั่งตรงผ่าน LINE แทนเดลิเวอรี</p>
+    <div class="calc reveal">
+      <div class="crow">
+        <label>ยอดขายต่อเดือน <b id="cSales">฿100,000</b></label>
+        <input type="range" id="rSales" min="20000" max="500000" step="5000" value="100000" aria-label="ยอดขายต่อเดือน">
+      </div>
+      <div class="crow">
+        <label>ยอดที่ขายผ่านเดลิเวอรีตอนนี้ <b id="cDel">30%</b></label>
+        <input type="range" id="rDel" min="0" max="60" step="5" value="30" aria-label="สัดส่วนยอดขายผ่านเดลิเวอรี">
+      </div>
+      <div class="out">
+        <div class="cap">ถ้าดึงลูกค้าประจำครึ่งหนึ่งมาสั่งตรงผ่าน LINE (ไม่หักค่าคอม)</div>
+        <div class="save" id="cSave">฿4,500</div>
+        <div class="sub">ประหยัดค่าคอม/เดือน · <span id="cYear">฿54,000</span>/ปี</div>
+        <div class="x" id="cX">คุ้มค่า KhaiDee Pro 15 เท่า</div>
+      </div>
+      <div class="note">*ประมาณการจากค่าคอมเดลิเวอรี ~30% และดึงลูกค้าประจำมาช่องทางตรงได้ครึ่งหนึ่ง</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section id="how-it-works">
+  <div class="wrap">
+    <div class="eyebrow reveal">เริ่มง่ายมาก</div>
+    <h2 class="center reveal">3 ขั้นตอน เปิดร้านพร้อมขาย</h2>
+    <p class="lead reveal">ไม่ต้องมีพื้นฐานเทคนิค — ระบบมีคู่มือและเมนูตัวอย่างให้</p>
+    <div class="steps">
+      <div class="step reveal"><div class="step-n">1</div><h3>สมัคร</h3><p>กรอกชื่อร้าน + ตั้ง PIN ใช้เวลาไม่ถึงนาที</p></div>
+      <div class="step reveal"><div class="step-n">2</div><h3>ใส่เมนู</h3><p>เลือกเมนูตัวอย่างตามประเภทร้าน แล้วแก้ได้ หรือเพิ่มเอง</p></div>
+      <div class="step reveal"><div class="step-n">3</div><h3>เปิดขาย</h3><p>รับออเดอร์หน้าร้านได้ทันที · เชื่อม LINE เมื่อพร้อม</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PRICING ===== -->
+<section id="pricing" style="background:#f9fafb">
+  <div class="wrap">
+    <div class="eyebrow reveal">ราคาตรงไปตรงมา</div>
+    <h2 class="center reveal">เริ่มฟรี จ่ายเมื่อโตขึ้น</h2>
+    <p class="lead reveal">ทดลอง Pro ฟรี 60 วัน ไม่ต้องใส่บัตร · ยอดขายเข้าบัญชีร้านโดยตรง เราไม่ถือเงินแทน</p>
+    <div class="prices reveal">
+      <div class="price">
+        <div class="tag">Free</div>
+        <div class="amt">฿0</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>1 สาขา</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>POS + คิว หน้าร้าน</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายงานพื้นฐาน</li>
+        </ul>
+      </div>
+      <div class="price feat">
+        <div class="tag">Pro · ยอดนิยม</div>
+        <div class="amt">฿299<small>/เดือน</small></div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>สูงสุด 3 สาขา</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>สั่งผ่าน LINE + สะสมแต้ม</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายงานละเอียด + Excel</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายปี ฿2,990 (ประหยัด 2 เดือน)</li>
+        </ul>
+      </div>
+      <div class="price">
+        <div class="tag">Business</div>
+        <div class="amt">฿799<small>/เดือน</small></div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>ไม่จำกัดสาขา</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>โดเมนของร้านเอง</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>ทุกฟีเจอร์ Pro</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รายปี ฿7,990</li>
+        </ul>
+      </div>
+    </div>
+    <div class="founder">
+      <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
+      <b>โปรผู้ก่อตั้ง 50 ร้านแรก</b> — ล็อกราคา Pro เพียง <b>฿199/เดือน ตลอดชีพ</b> + ทีมช่วยตั้งค่าให้
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECURITY ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow reveal">วางใจได้</div>
+    <h2 class="center reveal">ปลอดภัย โปร่งใส เป็นมืออาชีพ</h2>
+    <p class="lead reveal">เราดูแลข้อมูลร้านและลูกค้าของคุณอย่างจริงจัง</p>
+    <div class="sec">
+      <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>ไม่ถือเงินแทน</h3><p>ยอดขายเข้าบัญชีร้านตรง</p></div>
+      <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><h3>เข้ารหัส ปลอดภัย</h3><p>มาตรฐานระดับธนาคาร</p></div>
+      <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>ตาม PDPA</h3><p>ส่งออก/ลบข้อมูลได้</p></div>
+      <div class="s reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h3>ใช้งานจริง</h3><p>YO-DEE ใช้ทุกวัน</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section style="background:#f9fafb">
+  <div class="wrap">
+    <div class="eyebrow reveal">คำถามที่พบบ่อย</div>
+    <h2 class="center reveal">สงสัยอะไร ถามได้</h2>
+    <div style="margin-top:28px">
+      <details class="reveal"><summary>ใช้ KhaiDee แทน Grab / LINE MAN ได้ไหม?</summary><p>มองเป็น "คู่หู" ดีกว่าครับ — เดลิเวอรีไว้<b>หาลูกค้าใหม่</b> (จ่ายคอม ~30%) ส่วน KhaiDee ทำให้<b>ลูกค้ากลับมาสั่งตรง</b>กับร้านผ่าน LINE โดยไม่หักคอม · ดึงลูกค้าประจำมาช่องทางตรงได้มากเท่าไร ก็ยิ่งประหยัดค่าคอมและเป็นเจ้าของฐานลูกค้าเองมากเท่านั้น</p></details>
+      <details class="reveal"><summary>ต้องมีอุปกรณ์อะไรบ้าง?</summary><p>แค่แท็บเล็ตหรือมือถือที่ต่อเน็ตได้ เปิดผ่านเว็บได้เลย ไม่ต้องลงโปรแกรม · เครื่องพิมพ์ใบเสร็จเสริมได้ภายหลัง</p></details>
+      <details class="reveal"><summary>ต้องใช้ LINE ไหม?</summary><p>ไม่บังคับ — เริ่มแบบ POS หน้าร้าน + คิว ได้ทันที · อยากให้ลูกค้าสั่งผ่าน LINE ค่อยเชื่อมทีหลัง มีคู่มือ + ทีมช่วย</p></details>
+      <details class="reveal"><summary>เงินค่าขายเข้าใคร?</summary><p>เข้าบัญชีร้านคุณโดยตรง (พร้อมเพย์/บัญชีร้าน) — <b>เราไม่ถือเงินแทน</b> ค่าบริการเก็บเฉพาะค่าสมาชิกระบบ</p></details>
+      <details class="reveal"><summary>ยกเลิกได้ไหม?</summary><p>ได้ทุกเมื่อ ใช้ได้จนสิ้นรอบที่จ่ายไว้ · ข้อมูลส่งออกได้ (PDPA)</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FINAL CTA ===== -->
+<section class="final">
+  <div class="wrap reveal">
+    <h2>พร้อมให้ร้านคุณขายดีหรือยัง?</h2>
+    <p>เปิดร้านบน KhaiDee วันนี้ — ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร</p>
+    <a class="btn-white" href="/signup/">เปิดร้านฟรี
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="wrap">
+    <div class="footer-logo"><span class="dot">ดี</span> ขายดี KhaiDee</div>
+    <div>
+      <a href="/signup/">เปิดร้าน</a> ·
+      <a href="/login/">เข้าสู่ระบบ</a> ·
+      <a href="/help/">ศูนย์ช่วยเหลือ</a> ·
+      <a href="/privacy/">ความเป็นส่วนตัว</a> ·
+      <a href="/terms/">ข้อกำหนด</a>
+    </div>
+    <p style="margin-top:12px">© 2026 KhaiDee · ระบบขายที่ทำให้ร้านคุณขายดี</p>
+  </div>
+</footer>
 
 <script>
-  // Navbar slides down from the top once the user scrolls past the hero a bit (vanilla equivalent
-  // of a Framer Motion slide-in). Hidden at the very top for a clean first view.
-  (function(){
-    var nav=document.querySelector('nav');
-    function onScroll(){ nav.classList.toggle('nav-show', window.scrollY>140); }
-    window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
-  })();
-  // Interactive savings calculator — personalises the no-commission value to the visitor's shop.
-  (function(){
-    var s=document.getElementById('rSales'), d=document.getElementById('rDel'); if(!s||!d) return;
-    var COMM=0.30, SHIFT=0.5, PRO=299;
-    var f=function(n){ return '฿'+Math.round(n).toLocaleString('en-US'); };
-    function upd(){
-      var sales=+s.value, del=(+d.value)/100, save=sales*del*SHIFT*COMM;
-      document.getElementById('cSales').textContent=f(sales);
-      document.getElementById('cDel').textContent=(+d.value)+'%';
-      document.getElementById('cSave').textContent=f(save);
-      document.getElementById('cYear').textContent=f(save*12);
-      document.getElementById('cX').textContent = save>=PRO ? ('คุ้มค่า KhaiDee Pro '+Math.round(save/PRO)+' เท่า') : 'เริ่มฟรีได้เลย — ยังไม่ต้องจ่าย';
-    }
-    s.addEventListener('input',upd); d.addEventListener('input',upd); upd();
-  })();
-  // Subtle scroll-reveal (respects reduced-motion via the CSS guard above).
-  (function(){
-    var els=[].slice.call(document.querySelectorAll('.reveal'));
-    if(!('IntersectionObserver' in window)){ els.forEach(function(e){e.classList.add('in')}); return; }
-    var io=new IntersectionObserver(function(entries){
-      entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
-    },{threshold:.12});
-    els.forEach(function(e){ if(!e.classList.contains('in')) io.observe(e); });
-  })();
+// Hero phone card animations on load
+(function(){
+  var lp=document.getElementById('heroLinePhone');
+  var sp=document.getElementById('heroShopPhone');
+  if(lp) setTimeout(function(){ lp.classList.add('ready'); }, 400);
+  if(sp) setTimeout(function(){ sp.classList.add('ready'); }, 400);
+})();
+
+// Savings calculator
+(function(){
+  var s=document.getElementById('rSales'), d=document.getElementById('rDel');
+  if(!s||!d) return;
+  var COMM=0.30, SHIFT=0.5, PRO=299;
+  var f=function(n){ return '฿'+Math.round(n).toLocaleString('en-US'); };
+  function upd(){
+    var sales=+s.value, del=(+d.value)/100, save=sales*del*SHIFT*COMM;
+    document.getElementById('cSales').textContent=f(sales);
+    document.getElementById('cDel').textContent=(+d.value)+'%';
+    document.getElementById('cSave').textContent=f(save);
+    document.getElementById('cYear').textContent=f(save*12);
+    document.getElementById('cX').textContent = save>=PRO ? ('คุ้มค่า KhaiDee Pro '+Math.round(save/PRO)+' เท่า') : 'เริ่มฟรีได้เลย — ยังไม่ต้องจ่าย';
+  }
+  s.addEventListener('input',upd); d.addEventListener('input',upd); upd();
+})();
+
+// Scroll reveal
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!('IntersectionObserver' in window)){ els.forEach(function(e){e.classList.add('in')}); return; }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }
+    });
+  },{threshold:.10});
+  els.forEach(function(e){ if(!e.classList.contains('in')) io.observe(e); });
+})();
+
+// Trigger LINE/Shop panel animations when scrolled into view
+(function(){
+  var lp=document.querySelector('.linephone');
+  var sp=document.querySelector('.shoppanel');
+  if(!lp&&!sp) return;
+  if(!('IntersectionObserver' in window)){
+    if(lp) lp.classList.add('in');
+    if(sp) sp.classList.add('in');
+    return;
+  }
+  var io2=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){ en.target.classList.add('in'); io2.unobserve(en.target); }
+    });
+  },{threshold:.15});
+  if(lp) io2.observe(lp);
+  if(sp) io2.observe(sp);
+})();
 </script>
 </body></html>
