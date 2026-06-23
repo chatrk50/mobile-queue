@@ -190,9 +190,9 @@ export function setStatus(ticketId, status, threshold) {
   // Notify the customer on LINE when their order is handed over (served).
   if (status === 'served' && t.line_user_id) {
     pushQueue(t.line_user_id,
-      `✅ รับเครื่องดื่มเรียบร้อย\n` +
+      `✅ รับออเดอร์เรียบร้อยแล้ว\n` +
       `หมายเลข: ${t.code}\n` +
-      `We look forward to welcoming you back 😊`,
+      `ขอบคุณที่มาใช้บริการ — แวะมาใหม่ได้เสมอนะคะ 😊`,
       queueLink(t.zone_id), 'ให้คะแนนร้าน');
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
