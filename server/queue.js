@@ -1,4 +1,4 @@
-import { db, getSetting, setSetting } from './db.js';
+import { db, getSetting, setSetting, getTenant } from './db.js';
 import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 import { currentTenantId, SAAS } from './tenant.js';
@@ -1104,7 +1104,7 @@ export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text)
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
   const lines = [
-    `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `📊 สรุปยอดวันนี้ — ${getTenant(TID())?.brand_name || process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
     `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
