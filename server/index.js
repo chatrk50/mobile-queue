@@ -253,6 +253,17 @@ app.use((req, res, next) => {
   if (pinPresent(req) && pinLocked(ipOf(req))) return res.status(429).json({ error: 'too_many_attempts' });
   next();
 });
+// SaaS: redirect root "/" to the KhaiDee landing page when no tenant slug or custom domain is
+// active — i.e. the visitor hit the shared SaaS host directly.
+if (SAAS) {
+  app.get('/', (req, res, next) => {
+    if (!req.tenantBase && req.tenantId === DEFAULT_TENANT && !getTenantByDomain(req.hostname)) {
+      return res.redirect(302, '/landing/');
+    }
+    next();
+  });
+}
+
 // PWA manifest built from the brand config (so the home-screen app name/icon/colour follow the
 // brand). Registered before express.static so it wins over the static file.
 app.get('/manifest.webmanifest', (req, res) => {
