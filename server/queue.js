@@ -178,7 +178,7 @@ export function callNext(zoneId, threshold) {
 export function setStatus(ticketId, status, threshold) {
   const allowed = ['served', 'skipped', 'cancelled', 'no_show'];
   if (!allowed.includes(status)) throw new Error('bad_status');
-  const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  const t = db.prepare('SELECT * FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   // Can't serve an order until payment is CONFIRMED (a customer "I've paid" claim
   // is not enough — the cashier must verify and mark it paid).
@@ -1052,7 +1052,7 @@ export function setQueueFirst(on) { setSetting('queue:first', on ? '1' : '0'); r
 
 /** Cashier commits to making a queued order → locks the customer's self-cancel (idempotent). */
 export function startMaking(ticketId, { actorId = null } = {}) {
-  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT * FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   if (!t.making_at) db.prepare("UPDATE tickets SET making_at=datetime('now'), cancel_requested=NULL WHERE id=?").run(ticketId);
   return db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
@@ -1072,12 +1072,13 @@ export function customerRequestCancel(ticketId, lineUserId) {
 }
 /** Cashier keeps the order despite the customer's cancel request (clears the sticky flag). */
 export function dismissCancelRequest(ticketId) {
+  if (!db.prepare('SELECT 1 FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID())) throw new Error('ticket_not_found');
   db.prepare('UPDATE tickets SET cancel_requested=NULL WHERE id=?').run(ticketId);
   return { ok: true };
 }
 /** Cashier nudges the LINE customer to pay before the kitchen makes it (queue-first waste guard). */
 export function askToPay(ticketId) {
-  const t = db.prepare('SELECT line_user_id, code, zone_id FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT line_user_id, code, zone_id FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   if (!t.line_user_id) return { ok: false, reason: 'no_line' };
   const o = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
