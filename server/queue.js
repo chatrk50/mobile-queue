@@ -574,6 +574,7 @@ function cashComponents(branchId, sinceAt) {
 }
 /** Current open cash session for a branch (+ live expected cash so far). */
 export function currentCashSession(branchId = 1) {
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(branchId, TID())) return { open: false };
   const s = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
   if (!s) return { open: false };
   const c = cashComponents(branchId, s.opened_at);
@@ -581,12 +582,14 @@ export function currentCashSession(branchId = 1) {
 }
 /** Open a drawer with a starting float (one open session per branch at a time). */
 export function openCashSession(branchId = 1, { actorId = null, openFloat = 0 } = {}) {
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(branchId, TID())) throw new Error('store_not_found');
   if (db.prepare('SELECT id FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL').get(branchId)) throw new Error('session_already_open');
   db.prepare('INSERT INTO cash_sessions (branch_id, opened_by, open_float) VALUES (?,?,?)').run(branchId, actorId, Math.max(0, Number(openFloat) || 0));
   return currentCashSession(branchId);
 }
 /** Close the drawer: counted vs expected -> over/short, with a Z-report summary. */
 export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0, note = null } = {}) {
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(branchId, TID())) throw new Error('store_not_found');
   const cur = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
   if (!cur) throw new Error('no_open_session');
   const c = cashComponents(branchId, cur.opened_at);
