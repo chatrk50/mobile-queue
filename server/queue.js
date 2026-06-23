@@ -507,11 +507,39 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   });
   const channelTotals = channelsReport.reduce((a, r) => ({ gross: a.gross + r.gross, commission: a.commission + r.commission, net: a.net + r.net }), { gross: 0, commission: 0, net: 0 });
 
+  // Order-source mix: how the day's orders came in — LINE self-order (source='customer') vs walk-in
+  // counter (cashier, no delivery channel) vs each delivery channel (Grab/LINE MAN…). Share of orders,
+  // void excluded. Answers "กี่ % มาจากไลน์ / หน้าร้าน / ช่องทางอื่น ต่อวัน".
+  const srcRows = db.prepare(
+    `SELECT o.source AS src, c.name AS channel, COALESCE(c.commission_pct,0) AS fee,
+            COUNT(*) AS orders, SUM(o.total - COALESCE(o.discount,0)) AS revenue
+       FROM orders o
+       JOIN tickets t ON t.id = o.ticket_id
+       LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status != 'void' AND date(COALESCE(o.paid_at, o.created_at), '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY o.source, c.name, c.commission_pct`
+  ).all(D, ...b);
+  const srcBuckets = new Map();
+  for (const r of srcRows) {
+    let key, label;
+    if (r.src === 'customer') { key = 'line'; label = '📱 ลูกค้าสั่งผ่าน LINE'; }
+    else if (r.channel && r.fee > 0) { key = 'ch:' + r.channel; label = r.channel; }   // delivery platform
+    else { key = 'counter'; label = '🏪 หน้าร้าน'; }                                     // walk-in counter
+    const bkt = srcBuckets.get(key) || { key, label, orders: 0, revenue: 0 };
+    bkt.orders += r.orders; bkt.revenue += r.revenue || 0;
+    srcBuckets.set(key, bkt);
+  }
+  const sourceTotalOrders = [...srcBuckets.values()].reduce((s, x) => s + x.orders, 0);
+  const sources = [...srcBuckets.values()]
+    .map((s) => ({ key: s.key, label: s.label, orders: s.orders, revenue: Math.round(s.revenue * 100) / 100,
+                   pct: sourceTotalOrders ? Math.round((s.orders / sourceTotalOrders) * 1000) / 10 : 0 }))
+    .sort((a, b) => b.orders - a.orders);
+
   const voidTotals = {};
   for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
   const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
-  return { date: D, transactions, payments, paidTotal, paidOrders, cups, toppings, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly, topItems };
+  return { date: D, transactions, payments, paidTotal, paidOrders, cups, toppings, discounts, discountTotal, channels: channelsReport, channelTotals, sources, sourceTotalOrders, voids, voidTotals, addons, hourly, topItems };
 }
 
 // ---------- Cash drawer / Z-report (end-of-day cash-up) ----------

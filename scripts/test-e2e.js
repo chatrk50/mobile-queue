@@ -57,6 +57,12 @@ ok(gr && near(gr.gross, 100) && near(gr.commission, 30) && near(gr.net, 70),
   `INVARIANT channel net-after-commission: Grab 100→70 — got ${JSON.stringify(gr)}`);
 ok(near(det.channelTotals.gross, det.paidTotal), `INVARIANT Σchannel gross==paidTotal (${det.channelTotals.gross})`);
 
+// ---- Order-source mix (how orders came in: walk-in vs LINE vs delivery), share of the day ----
+ok(det.sourceTotalOrders === 3, `INVARIANT source mix counts non-void orders (3) — got ${det.sourceTotalOrders}`);
+const counterSrc = det.sources.find((s) => s.key === 'counter');
+ok(counterSrc && counterSrc.orders === 2, `walk-in counter = 2 orders (S1,S2) — got ${JSON.stringify(counterSrc)}`);
+ok(near(det.sources.reduce((s, x) => s + x.pct, 0), 100), `INVARIANT source % sum to ~100 — got ${det.sources.reduce((s, x) => s + x.pct, 0)}`);
+
 const refund = det.voidTotals.refund;
 ok(refund && refund.count === 1 && near(refund.amount, 50), 'S4 recorded as a refund (1 × 50)');
 
