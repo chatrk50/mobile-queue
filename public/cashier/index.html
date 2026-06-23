@@ -59,6 +59,7 @@
   .ff{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
   .ff input,.ff select{ padding:9px; border:1px solid var(--line); border-radius:8px; font-size:14px; color:var(--ink); background:#fff; }
 </style>
+<script src="/assets/icons.js"></script>
 </head><body>
 <div class="wrap wide">
   <div class="row between" style="align-items:flex-start">
@@ -73,7 +74,7 @@
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px;min-height:40px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px;min-height:40px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
-      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px;min-width:40px;min-height:40px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เปิด/ปิดเสียงเตือนออเดอร์ใหม่">🔔</button>
+      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px;min-width:40px;min-height:40px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เปิด/ปิดเสียงเตือนออเดอร์ใหม่"></button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px;min-height:40px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px;min-height:40px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
@@ -1437,13 +1438,13 @@ function onboardingCard(){
   const bn = (CFG.brand && CFG.brand.name) ? esc(CFG.brand.name) : 'ร้านของคุณ';
   const row=(done,ic,label,sub,onclick)=> `<button onclick="${onclick}" style="display:flex;width:100%;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:8px;cursor:pointer">
       <span style="width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;${done?'background:#178a72;color:#fff':'background:var(--inds,#eef2ff);color:var(--accent,#6366f1);border:1px dashed var(--accent,#6366f1)'}">${done?'✓':''}</span>
-      <span style="font-size:20px;flex:none">${ic}</span>
+      <span style="flex:none;color:var(--accent,#6366f1)">${ic}</span>
       <span style="flex:1;text-align:left"><b style="font-size:14px">${label}</b><br><span class="muted" style="font-size:12px">${sub}</span></span>
       <span style="color:var(--accent,#6366f1);font-size:18px;flex:none">→</span></button>`;
-  let rows = row(false,'🧋','เพิ่มเมนูแรกของคุณ','สร้างสินค้าชิ้นแรกแล้วเริ่มขายได้ทันที','onbAddMenu()');
-  rows += row(brandDone,'🎨','ตั้งค่าแบรนด์','โลโก้ · สี · ชื่อร้าน','showFeatures()');
-  if(isLine) rows += row(lineDone,'🟢','เชื่อมต่อ LINE','ให้ลูกค้าสั่ง/รับคิวผ่านไลน์ — มีคู่มือในตัว','showFeatures()');
-  rows += row(openDone,'🏪','เปิดร้าน เริ่มรับออเดอร์','สลับสถานะเป็น "เปิด" เมื่อพร้อมขาย','toggleStore()');
+  let rows = row(false,icon('cup',{size:22}),'เพิ่มเมนูแรกของคุณ','สร้างสินค้าชิ้นแรกแล้วเริ่มขายได้ทันที','onbAddMenu()');
+  rows += row(brandDone,icon('palette',{size:22}),'ตั้งค่าแบรนด์','โลโก้ · สี · ชื่อร้าน','showFeatures()');
+  if(isLine) rows += row(lineDone,icon('chat',{size:22}),'เชื่อมต่อ LINE','ให้ลูกค้าสั่ง/รับคิวผ่านไลน์ — มีคู่มือในตัว','showFeatures()');
+  rows += row(openDone,icon('store',{size:22}),'เปิดร้าน เริ่มรับออเดอร์','สลับสถานะเป็น "เปิด" เมื่อพร้อมขาย','toggleStore()');
   return `<div id="onbWrap" style="background:linear-gradient(135deg,#eef2ff,#fdf4ff);border:1px solid var(--line);border-radius:16px;padding:16px 16px 10px;margin:2px 2px 14px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px">
       <div><div style="font-size:17px;font-weight:700">👋 ยินดีต้อนรับสู่ ${bn}</div>
@@ -1554,7 +1555,7 @@ function zonePanel(z){
 
 // New-order sound on/off (cashier preference, remembered). Default on.
 function soundOn(){ try{ return localStorage.getItem('yodee_sound')!=='0'; }catch(e){ return true; } }
-function applySoundBtn(){ const b=$('soundBtn'); if(b){ const on=soundOn(); b.textContent = on?'🔔':'🔕'; b.setAttribute('aria-label', (on?'ปิด':'เปิด')+'เสียงเตือนออเดอร์ใหม่'); b.setAttribute('aria-pressed', on?'true':'false'); } }
+function applySoundBtn(){ const b=$('soundBtn'); if(b){ const on=soundOn(); b.innerHTML = (window.icon?icon(on?'bell':'bellOff',{size:18}):(on?'🔔':'🔕')); b.setAttribute('aria-label', (on?'ปิด':'เปิด')+'เสียงเตือนออเดอร์ใหม่'); b.setAttribute('aria-pressed', on?'true':'false'); } }
 window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem('yodee_sound', next?'1':'0'); }catch(e){}
   applySoundBtn(); toast(next?'🔔 เปิดเสียงเตือนออเดอร์ใหม่':'🔕 ปิดเสียงเตือนออเดอร์ใหม่'); if(next) beep(880); };
 // Two-tone chime for a new LINE order (distinct from the single payment beep). Respects the mute toggle.
@@ -1841,7 +1842,7 @@ window.showFeatures=async()=>{
     </div>`+
     (bill ? (()=>{ const P=bill.prices||{pro:{},business:{}}; const b=(s)=>Math.round((s||0)/100).toLocaleString('en-US'); const lbl=(p)=>p==='business'?'Business':p==='pro'?'Pro':'Free';
       return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>💳 แพ็กเกจการใช้งาน</b>${bill.founder?' <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;font-size:11px">🔒 Founder</span>':''}
+      <b>${icon('cash',{size:16})} แพ็กเกจการใช้งาน</b>${bill.founder?' <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;font-size:11px">🔒 Founder</span>':''}
       ${bill.expiringSoon?`<div style="background:rgba(229,91,107,.12);color:#c0394a;border-radius:8px;padding:8px;font-size:12px;font-weight:700;margin:6px 0">⚠️ แพ็กเกจจะหมดอายุใน ${bill.daysLeft} วัน — กดอัปเกรด/ต่ออายุเพื่อใช้ต่อ</div>`:''}
       <div class="muted" style="font-size:12px;margin:2px 0 8px">${bill.trial
         ? `🎁 ทดลองใช้ <b style="color:#7c3aed">${lbl(bill.plan)}</b> ฟรีถึง <b>${esc((bill.planUntil||'').slice(0,10))}</b> — กดอัปเกรดเพื่อใช้ต่อ`
@@ -1859,7 +1860,7 @@ window.showFeatures=async()=>{
       ${bill.referralCode?`<div class="muted" style="font-size:11px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">🎁 แนะนำเพื่อน: โค้ด <b>${esc(bill.referralCode)}</b> — เพื่อนสมัครด้วยโค้ดนี้ รับฟรีคนละ 1 เดือน</div>`:''}
     </div>`; })() : '')+
     (br ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>🎨 แบรนด์ของร้าน</b>
+      <b>${icon('palette',{size:16})} แบรนด์ของร้าน</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ชื่อ · สี · หน่วยนับ · โลโก้ — เปลี่ยนแล้วมีผลทุกหน้าทันที</div>
       <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
         <img id="brandLogoPrev" src="${esc(br.logo||'/assets/logo.png')}" alt="ตัวอย่างโลโก้ร้าน" onerror="this.style.visibility='hidden'" style="width:46px;height:46px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:#fff">
@@ -1874,7 +1875,7 @@ window.showFeatures=async()=>{
       <button class="ok" style="width:100%" onclick="saveBrandConfig()">บันทึกแบรนด์</button>
     </div>` : '')+
     (CFG.saas ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>🔐 ข้อมูล & PDPA</b>
+      <b>${icon('lock',{size:16})} ข้อมูล & PDPA</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ส่งออกข้อมูลร้าน (พกพา) · ลบข้อมูลลูกค้ารายบุคคลตามคำขอ</div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">⬇️ ส่งออก (JSON)</button>
@@ -1884,7 +1885,7 @@ window.showFeatures=async()=>{
     </div>` : '')+
     (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <b>🟢 เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
+        <b>${icon('chat',{size:16})} เชื่อมต่อ LINE (แพ็กเกจ +LINE)</b>
         <a href="/help/line/" target="_blank" style="font-size:12px;white-space:nowrap">📖 คู่มือทีละขั้นตอน</a>
       </div>
       <div class="muted" style="font-size:12px;margin:4px 0 8px">ทำตามคู่มือเพื่อขอ <b>token · secret · LIFF ID</b> จาก LINE Developers แล้วกรอกด้านล่าง ${lc.configured?'· <span style="color:#178a72;font-weight:700">เชื่อมต่อแล้ว ✓</span>':''}</div>
@@ -1910,7 +1911,7 @@ window.showFeatures=async()=>{
     </div>` : '')+
     `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
     `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
-      <b style="color:var(--danger)">🧹 ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
+      <b style="color:var(--danger)">${icon('trash',{size:16})} ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div>
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
