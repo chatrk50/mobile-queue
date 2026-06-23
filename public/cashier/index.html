@@ -45,8 +45,16 @@
   }
   /* On-screen PIN keypad — tap numbers directly, no device keyboard needed */
   .pinpad{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0; }
-  .pinkey{ font-size:22px; font-weight:700; padding:16px 0; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--navy); cursor:pointer; transition:background .08s; }
+  .pinkey{ font-size:22px; font-weight:700; padding:16px 0; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--navy); cursor:pointer; transition:background .08s; touch-action:manipulation; }
   .pinkey:active{ background:var(--surface,#f1f5f9); transform:translateY(1px); }
+  /* Login card must fit the phone frame: cap height + shrink keypad on short screens so nothing overflows. */
+  #loginCard{ max-height:94vh; overflow:auto; }
+  @media (max-height:760px){
+    #loginCard{ margin:14px auto!important; padding:16px; }
+    #loginCard h1{ font-size:18px; margin:.1em 0; }
+    .pinkey{ padding:11px 0; font-size:19px; }
+    #pin{ margin:8px 0!important; }
+  }
   /* Split-pane editor (menu + branch): list left, edit form right; stacks on phone */
   .ms-split{ display:grid; grid-template-columns:minmax(230px,38%) 1fr; gap:14px; align-items:start; }
   @media (max-width:760px){ .ms-split{ grid-template-columns:1fr; } }
@@ -111,7 +119,11 @@
   <!-- DAILY REPORT -->
   <div id="reportCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>รายงานประจำวัน</h1><p class="muted" style="margin:2px 0 0">วันนี้ · รีเซ็ต 00:00 (เวลาไทย)</p></div>
+      <div><h1>รายงานประจำวัน</h1>
+        <div class="row" style="gap:6px;align-items:center;margin-top:4px">
+          <input id="reportDateInp" type="date" onchange="setReportDate(this.value)" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink)">
+          <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setReportDate('')">วันนี้</button>
+        </div></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ต้นทุน</button>
@@ -199,28 +211,30 @@
   <!-- LOYALTY POINTS & REWARDS (owner/manager) -->
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้แต้มอัตโนมัติ</p></div>
+      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
-    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-weight:700"><input id="loyEnabledInp" type="checkbox"> เปิดใช้งานสะสมแก้ว</label>
-      <span style="margin-left:8px">สะสมครบ</span>
-      <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
-      <span>แก้ว = ฟรี 1 แก้ว (ไม่เกิน 49฿)</span>
+    <div style="margin-top:14px;display:grid;gap:12px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span>สะสมครบ</span>
+        <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <span><span data-unit>แก้ว</span> = ฟรี 1 <span data-unit>แก้ว</span> (ไม่เกิน 49฿)</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span>สั่งผ่านไลน์ครั้งแรก แถมฟรี</span>
+        <input id="loyWelcomeInp" type="number" inputmode="numeric" min="0" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <span>ดวง (0 = ปิด)</span>
+        <button class="ok" style="padding:8px 18px;margin-left:auto" onclick="saveLoyaltySettings()">บันทึก</button>
+      </div>
     </div>
-    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span>🎁 สั่งผ่านไลน์ครั้งแรก แถมฟรี</span>
-      <input id="loyWelcomeInp" type="number" inputmode="numeric" min="0" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px">
-      <span>ดวง (0 = ปิด)</span>
-      <button class="ok" style="padding:8px 16px;margin-left:auto" onclick="saveLoyaltySettings()">บันทึก</button>
-    </div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">ลูกค้า LINE ที่จ่ายเงินแล้วได้ 1 ดวง/แก้ว (เฉพาะสั่งผ่านไลน์ — หน้าร้านไม่ได้ดวง เป็นแรงจูงใจให้ย้ายมาสั่งไลน์) · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> — ลูกค้าหน้าร้านผูกเบอร์ที่เคาน์เตอร์ (ปุ่ม 📱 แต้ม) ก่อนรับเงิน · ลูกค้าสั่งผ่านไลน์ได้อัตโนมัติ · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
       <div id="rewardsBody"></div>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
-        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" data-unit-ph="กี่" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="rwImg" placeholder="ลิงก์รูป (ไม่บังคับ)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
       </div>
@@ -333,12 +347,12 @@
 <div id="printArea"></div>
 
 <!-- TOPPING PICKER (per drink) -->
-<div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
-    <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
-    <div id="topPopBtns" style="margin:12px 0"></div>
-    <div class="row" style="gap:8px">
+<div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
+    <div class="row between" style="flex:none"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <p class="muted" style="flex:none;margin:6px 0 8px">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
+    <div id="topPopBtns" style="overflow-y:auto;flex:1;min-height:0;margin:0"></div>
+    <div class="row" style="gap:8px;flex:none;margin-top:12px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
       <button class="ok" style="flex:1" onclick="confirmDrink()">ถัดไป</button>
     </div>
@@ -346,7 +360,7 @@
 </div>
 
 <!-- SWEETNESS PICKER (step 3) -->
-<div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
+<div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
     <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
     <p class="muted">เลือกระดับความหวาน</p>
@@ -355,7 +369,7 @@
 </div>
 
 <!-- ITEM DETAILS: tap a bill line to change quantity / topping-sweet / remove -->
-<div id="itemDetailPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+<div id="itemDetailPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0">
     <div class="row between"><h1 style="margin:0">รายละเอียดรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemDetail()">✕</button></div>
     <div style="text-align:center;margin:12px 0 4px"><b id="detailName" style="font-size:18px;color:var(--navy)"></b><div class="muted" id="detailOpts" style="font-size:13px;margin-top:4px"></div></div>
@@ -374,7 +388,7 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
-<div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
+<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตรวจออเดอร์</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="basketList" class="queue-list" style="margin:12px 0"></div>
@@ -387,7 +401,7 @@
 </div>
 
 <!-- PROMPTPAY QR (show to a customer paying at the counter) -->
-<div id="ppPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+<div id="ppPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
     <div class="row between"><h1 style="margin:0">PromptPay</h1><button class="ghost" style="padding:6px 12px" onclick="closePromptPay()">✕</button></div>
     <img id="ppPopImg" alt="PromptPay QR" style="width:240px;max-height:300px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px auto 4px">
@@ -397,7 +411,7 @@
 </div>
 
 <!-- PAYMENT METHOD PICKER (on Pay) -->
-<div id="payMethodPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
+<div id="payMethodPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center">
     <h1 style="margin:0 0 4px">รับชำระเงิน</h1>
     <div style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:14px">ยอด ฿<span id="payMethodAmt">0</span></div>
@@ -407,12 +421,41 @@
 
 <!-- CASH: amount received → change (or exact) -->
 <style>
-  .cashk{padding:15px 0;font-size:21px;font-weight:700;background:#fff;border:1px solid var(--line);border-radius:11px;color:var(--navy);cursor:pointer;-webkit-tap-highlight-color:transparent}
-  .cashk:active{background:var(--surface,#f1f5f9);transform:translateY(1px)}
-  .cashq{padding:15px 0;font-size:16px;font-weight:800;background:#e9f8fb;border:1px solid #bfe3ec;border-radius:11px;color:#0e6b7e;cursor:pointer;-webkit-tap-highlight-color:transparent}
-  .cashq:active{background:#d4f0f6;transform:translateY(1px)}
+  /* Cash keypad: big touch targets + touch-action:manipulation kills the iPad 300ms double-tap
+     delay that made taps feel like they "didn't register". user-select/none stops text-select on hold. */
+  .cashk,.cashq{min-height:62px;font-size:26px;font-weight:800;border-radius:13px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;
+    display:flex;align-items:center;justify-content:center;transition:background .06s,transform .06s;border:1.5px solid var(--line)}
+  .cashk{background:#fff;color:var(--navy)}
+  .cashk:active{background:#e4ebf3;transform:scale(.96)}
+  .cashq{font-size:19px;background:#e9f8fb;border-color:#bfe3ec;color:#0e6b7e}
+  .cashq:active{background:#cfeef5;transform:scale(.96)}
+  /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
+  .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
+    cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    display:flex;align-items:center;justify-content:center;padding:0;transition:transform .06s,border-color .06s}
+  .kmark:active{transform:scale(.9)}
+  .kmark.making{border-color:#f3961a;background:rgba(243,157,18,.16)}
+  .kmark.done{border-color:#16876f;background:rgba(22,135,111,.16)}
+  /* "เพิ่มเติม" overflow menu: stack the reused action buttons full-width + big for easy tapping. */
+  #moreMenuBody{display:flex;flex-direction:column;gap:7px;padding-right:2px}
+  #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
+  #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
+  #moreMenuBody .ic{width:19px;height:19px}
+  /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
+  .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  .tgl.on{background:var(--accent2,#2fc2a6)}
+  .tgl.off{background:#ccd6df}
+  .tgl::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(16,40,70,.3)}
+  .tgl.on::after{left:25px}
+  .tgl:disabled{opacity:.45;cursor:not-allowed}
+  .feat-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card,#fff)}
+  .feat-row .ic{width:22px;height:22px;color:var(--navy);flex:none}
+  #payMethodBtns .ic{margin:0;width:26px;height:26px}
+  #todayChips .ic{margin:0;width:14px;height:14px;flex:none}
+  #todayToggle .ic,#todayBtn .ic{width:15px;height:15px;margin-right:4px}
 </style>
-<div id="cashPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+<div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
     <div class="row between"><h1 style="margin:0">💵 รับเงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
     <div class="row between" style="font-size:13px;margin:10px 2px 6px"><span class="muted">ยอดที่ต้องชำระ</span><b style="color:var(--navy);font-size:17px">฿<span id="cashDue">0</span></b></div>
@@ -434,6 +477,27 @@
     </div>
   </div>
 </div>
+<!-- Generic in-app modal (replaces the browser's native prompt()/confirm() so dialogs match the app
+     and behave well on the iPad till). Driven by appPrompt()/appConfirm(). -->
+<div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:72;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:390px;width:100%;margin:0">
+    <h2 id="amTitle" style="margin:0 0 6px"></h2>
+    <p id="amMsg" class="muted" style="font-size:14px;line-height:1.45;margin:0 0 6px;white-space:pre-line"></p>
+    <input id="amInput" onkeydown="if(event.key==='Enter')amOk()" style="display:none;width:100%;box-sizing:border-box;margin:8px 0 2px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;color:var(--ink)">
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button id="amCancel" class="ghost" style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
+      <button id="amOk" class="ok" style="flex:1.4;min-height:48px" onclick="amOk()">ตกลง</button>
+    </div>
+  </div>
+</div>
+<!-- "เพิ่มเติม" overflow menu: occasional per-order actions. Centered card with a FIXED header and a
+     SCROLLABLE body so every button is reachable even on a short (landscape) screen. -->
+<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
+  <div class="card" style="max-width:440px;width:100%;margin:0;max-height:88vh;display:flex;flex-direction:column;padding:16px">
+    <div class="row between" style="margin:0 0 10px;flex:none"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
+    <div id="moreMenuBody" style="overflow-y:auto;flex:1;min-height:0" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
+  </div>
+</div>
 <!-- รวมบิล bar: appears when ≥2 pending bills are ticked -->
 <div id="mergeBar" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:53;background:var(--navy,#1e3a5f);color:#fff;padding:10px 16px;box-shadow:0 -4px 18px rgba(0,0,0,.18)">
   <div style="max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px">
@@ -443,7 +507,7 @@
   </div>
 </div>
 <!-- แยกจ่ายตามรายการ: pick menu items → their subtotal is taken as a partial payment -->
-<div id="itemSplitPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+<div id="itemSplitPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:92vh;overflow:auto">
     <div class="row between"><h1 style="margin:0">🧾 แยกจ่ายตามรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemSplit()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:8px 0 10px">เลือกเมนูที่จะจ่ายงวดนี้ — ที่เหลือเก็บภายหลังได้</p>
@@ -458,7 +522,7 @@
   </div>
 </div>
 
-<div id="voidPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
+<div id="voidPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;text-align:center">
     <h1 style="margin:0 0 2px">ยกเลิกออเดอร์</h1>
     <p class="muted" style="font-size:12px;margin:0 0 12px">เลือกเหตุผล — มีผลต่อรายงาน (ขาย/คืนเงิน/ของเสีย)</p>
@@ -466,18 +530,18 @@
   </div>
 </div>
 
-<div id="recipePop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
+<div id="recipePop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">สูตร — <span id="recipeName">—</span></h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('recipePop').style.display='none'">✕</button></div>
-    <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 แก้ว — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 10px">ใส่ปริมาณวัตถุดิบที่ใช้ต่อ 1 <span data-unit>แก้ว</span> — ระบบจะตัดสต๊อกอัตโนมัติเมื่อขาย (เว้นว่าง = ไม่ตัด)</p>
     <div id="recipeRows" style="display:grid;gap:8px"></div>
     <button class="ok" style="width:100%;margin-top:12px" onclick="saveRecipe()">บันทึกสูตร</button>
   </div>
 </div>
 
-<div id="featuresPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
+<div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="position:sticky;top:0;background:var(--surface,#fff);z-index:1;padding-bottom:6px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -504,13 +568,54 @@ window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
 window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
+// Defaults to YO-DEE server-side, so this is a no-op for the existing shop.
+async function applyBrand(){
+  try{ const b=await (await fetch('/api/brand')).json(); window.BRAND=b;
+    if(b.theme){ document.documentElement.style.setProperty('--navy', b.theme); document.querySelector('meta[name=theme-color]')?.setAttribute('content', b.theme); }
+    if(b.logo) document.querySelectorAll('img.logo,[data-brand-logo]').forEach(el=>{ el.src=b.logo; });
+    document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=b.name);
+    document.querySelectorAll('[data-brand-short]').forEach(el=>el.textContent=b.short);
+    if(b.unit && b.unit!=='แก้ว'){
+      document.querySelectorAll('[data-unit]').forEach(el=>el.textContent=b.unit);
+      document.querySelectorAll('[data-unit-ph]').forEach(el=>el.placeholder=el.getAttribute('data-unit-ph')+b.unit);
+    }
+    if(b.name) document.title=document.title.replace(/YO-DEE Yogurt/g,b.name).replace(/YO-DEE/g,b.short||b.name);
+  }catch(e){}
+}
+applyBrand();
+// Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
+function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// ---------- In-app modal: appPrompt (text/number input) + appConfirm (yes/no). Replace native
+// prompt()/confirm() so dialogs look like the app and tap reliably on the iPad. Promise-based. ----------
+let _amRes=null;
+window.amOk=()=>{ const inp=$('amInput'); const shown=inp.style.display!=='none'; _amClose(shown?inp.value:true); };
+window.amCancel=()=>_amClose(null);
+function _amClose(v){ $('appModal').style.display='none'; const r=_amRes; _amRes=null; if(r) r(v); }
+function _appModal({title,message,okText,cancelText,danger,input}){
+  $('amTitle').textContent=title||''; $('amTitle').style.display=title?'':'none';
+  const msg=$('amMsg'); msg.textContent=message||''; msg.style.display=message?'':'none';
+  const inp=$('amInput');
+  if(input){ inp.style.display=''; inp.type=input.type||'text'; inp.value=input.value!=null?input.value:''; inp.placeholder=input.placeholder||''; inp.inputMode=input.inputMode||''; }
+  else inp.style.display='none';
+  const ok=$('amOk'); ok.textContent=okText||'ตกลง'; ok.className=danger?'ghost danger':'ok';
+  const cancel=$('amCancel'); cancel.textContent=cancelText||'ยกเลิก'; cancel.style.display=(cancelText==='')?'none':'';  // '' = info-only (OK only)
+  $('appModal').style.display='flex';
+  if(input) setTimeout(()=>{ try{ inp.focus(); inp.select(); }catch(e){} },60);
+  return new Promise(res=>{ _amRes=res; }); }
+// appPrompt → resolves the typed string, or null if cancelled.
+window.appPrompt=({title='',message='',value='',placeholder='',type='text',inputMode='',okText='ตกลง',cancelText='ยกเลิก'}={})=>
+  _appModal({title,message,okText,cancelText,input:{value,placeholder,type,inputMode}}).then(v=> v===null?null:String(v));
+// appConfirm → resolves true on OK, false on cancel.
+window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
+  _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
+// "เพิ่มเติม" overflow menu: show the secondary actions stashed for this ticket (built in renderZone).
+window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('moreMenu').style.display='flex'; };
+window.closeMoreMenu=()=>{ $('moreMenu').style.display='none'; };
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
-// HH:MM in Bangkok time. Timestamps are stored UTC, so slicing the raw string showed times 7h off.
-function fmtTime(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
-  return d.toLocaleTimeString('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}); }
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
 window.toggleAdmin=(e)=>{ if(e) e.stopPropagation(); const m=$('adminMenu'); m.style.display=(m.style.display==='flex')?'none':'flex'; };
 window.closeAdmin=()=>{ const m=$('adminMenu'); if(m) m.style.display='none'; };
@@ -529,6 +634,23 @@ const IC={
   print:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>',
   kitchen:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 13.5V21h12v-7.5"/><path d="M5 9a4 4 0 0 1 4-4 3.5 3.5 0 0 1 6 0 4 4 0 0 1 4 4 3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/></svg>',
   slip:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg>',
+  edit:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  loyalty:'<svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>',
+  discount:'<svg class="ic" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 3 12.2V5a2 2 0 0 1 2-2h7.2a2 2 0 0 1 1.4.6l7 7a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>',
+  partial:'<svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
+  split:'<svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+  more:'<svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
+  ticket:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M13 7v10"/></svg>',
+  shield:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7-7 8-4-1-7-3.5-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+  clock:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  bell:'<svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  trash:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>',
+  chart:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>',
+  check:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
+  serve:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 11h18M12 11V7a3 3 0 0 1 6 0M5 11a7 7 0 0 1 14 0M2 15h20M4 15l1 4a2 2 0 0 0 2 1.6h10A2 2 0 0 0 19 19l1-4"/></svg>',
+  wallet:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="17" cy="14" r="1.2"/></svg>',
+  card:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
+  cup:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -645,7 +767,7 @@ window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'
 // Backfill a past day's sales row (e.g. recover a night the auto-archive failed). Idempotent.
 window.archivePastDay=async()=>{
   const y=new Date(Date.now()+7*3600*1000-86400*1000).toISOString().slice(0,10); // yesterday (BKK)
-  const d=prompt('บันทึกยอดของวันที่ (YYYY-MM-DD):', y); if(!d) return;
+  const d=await appPrompt({title:'บันทึกยอดย้อนหลัง',message:'ใส่วันที่ที่ต้องการบันทึก (YYYY-MM-DD)',value:y,placeholder:'2026-06-21',okText:'บันทึก'}); if(!d) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ toast('รูปแบบวันที่ไม่ถูกต้อง (เช่น 2026-06-21)'); return; }
   try{ const r=await api('/api/archive-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:d.trim()})});
     toast(r.saved?('บันทึกยอดวันที่ '+d.trim()+' แล้ว'):('วันที่ '+d.trim()+' ไม่มียอดขาย'));
@@ -666,7 +788,7 @@ function renderSales(){
   const lab = salesView==='daily'?'วันที่' : salesView==='weekly'?'สัปดาห์' : salesView==='monthly'?'เดือน':'ปี';
   const keyOf=(r)=> salesView==='daily'? r.date : r.period;
   if(!rows.length){ box.innerHTML='<p class="muted">ยังไม่มีข้อมูล — กด “บันทึกวันนี้” หรือรอระบบบันทึกอัตโนมัติตอนเที่ยงคืน</p>'; return; }
-  // Trend chart (oldest→newest) — net profit per period, the "แนวโน้มการขาย" view.
+  // Trend chart (oldest→newest) — net profit per period, the "แนวโน้มการขาย" view the owner asked for.
   const span = salesView==='daily'?14 : salesView==='weekly'?12 : salesView==='monthly'?12 : 6;
   const trendRows = rows.slice(0,span).reverse().map(r=>({ label:keyOf(r), sub:shortPeriod(keyOf(r)), value:Math.round(r.net||0) }));
   const trend=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 10px 6px;margin-bottom:14px">
@@ -680,7 +802,7 @@ function renderSales(){
     <span style="${o.muted?'color:var(--muted);font-size:12px':''}">${l}</span>
     <span style="${o.neg?'color:var(--danger)':''};font-weight:${o.bold?800:600}">${o.neg?'−':''}${baht(v)}</span></div>`;
   const summary=`<div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:12px 14px;margin-bottom:14px">
-    <div class="row between" style="margin-bottom:4px"><b>สรุป P&L · ${rows.length} ${lab}</b><span class="muted" style="font-size:12px">${T.cups.toLocaleString('en-US')} แก้ว</span></div>
+    <div class="row between" style="margin-bottom:4px"><b>สรุป P&L · ${rows.length} ${lab}</b><span class="muted" style="font-size:12px">${T.cups.toLocaleString('en-US')} ${unit()}</span></div>
     ${line('ยอดขาย', T.revenue)}
     ${T.cogs?line('− วัตถุดิบ + แพ็กเกจ', T.cogs, {neg:true,muted:true}):''}
     ${line('กำไรขั้นต้น', T.gross, {bd:true,bold:true})}
@@ -747,7 +869,7 @@ window.saveStaffForm=async()=>{ const errEl=$('sf_err'); if(errEl) errEl.textCon
       toast('บันทึกแล้ว'); await refreshStaff(_selStaffId);
     }
   }catch(e){ const m=err(e); if(errEl) errEl.textContent=m==='pin_taken'?'PIN นี้ถูกใช้แล้ว':(m==='pin_must_be_4_8_digits'?'PIN ต้องเป็นตัวเลข 4-8 หลัก':(m==='cannot_remove_last_owner'?'ต้องมีเจ้าของร้านอย่างน้อย 1 คน':m)); } };
-window.removeStaff=async(id,name)=>{ if(!confirm('ปิดใช้งานพนักงาน '+name+'?')) return;
+window.removeStaff=async(id,name)=>{ if(!(await appConfirm({title:'ปิดใช้งานพนักงาน',message:'ปิดใช้งาน '+name+'? (เข้าระบบไม่ได้จนกว่าจะเปิดใช้ใหม่)',okText:'ปิดใช้งาน',danger:true}))) return;
   try{ await api('/api/staff/'+id,{method:'DELETE'}); toast('ปิดใช้งานแล้ว'); await refreshStaff(id); }
   catch(e){ toast(err(e)==='cannot_remove_last_owner'?'ต้องมีเจ้าของร้านอย่างน้อย 1 คน':err(e)); } };
 window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:1})}); toast('เปิดใช้งานแล้ว'); await refreshStaff(id); }catch(e){ toast(err(e)); } };
@@ -802,7 +924,7 @@ function renderDetail(){
     const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
     const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
     box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=fmtTime(r.paid_at||r.created_at);
+      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=(r.paid_at||r.created_at||'').slice(11,16);
         return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
@@ -825,10 +947,19 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     const vlabel=(k)=> k==='refund'?'คืนเงิน':k==='waste'?'ของเสีย':'ยกเลิก';
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)}) · 🗑️ ของเสีย ${vt.waste?.count||0} (${baht2(vt.waste?.amount||0)})</div>`+
-      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${fmtTime(v.voided_at)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
   } else if(t==='chan'){
+    // Order-source mix first (how orders came in: LINE vs walk-in vs delivery), then channel revenue.
+    const srcs=(DET.sources||[]); const stot=DET.sourceTotalOrders||0; const sMax=Math.max(...srcs.map(s=>s.orders),1);
+    const srcSection=`<div style="margin-bottom:6px"><b>${IC.chart}ช่องทางการสั่งซื้อ</b> <span class="muted" style="font-size:12px">· ${stot} ออเดอร์วันนี้ (ไม่รวมยกเลิก)</span></div>`+
+      (srcs.length? srcs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0">
+          <div style="width:160px;font-size:13px">${esc(s.label)}</div>
+          <div style="flex:1;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:22px;width:${Math.round((s.orders/sMax)*100)}%;background:var(--navy,#1e3a5f);min-width:3px;border-radius:6px"></div></div>
+          <div style="width:128px;text-align:right;font-size:13px"><b>${s.pct}%</b> <span class="muted">· ${s.orders} ออเดอร์ · ${baht2(s.revenue)}</span></div>
+        </div>`).join('') : '<p class="muted" style="font-size:13px">ยังไม่มีออเดอร์วันนี้</p>')
+      +`<div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>`;
     const rows=(DET.channels||[]); const ct=DET.channelTotals||{gross:0,commission:0,net:0};
-    box.innerHTML=`<div style="margin-bottom:10px">ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
+    box.innerHTML=srcSection+`<div style="margin-bottom:10px"><b>${IC.cash}รายได้ตามช่องทาง</b> · ยอดขาย ${baht2(ct.gross)} · ค่าคอม −${baht2(ct.commission)} · <b>กำไรหลังหักคอม ${baht2(ct.net)}</b></div>`+
       (rows.length?detTable([{t:'#',r:1},{t:'ช่องทาง'},{t:'ออเดอร์',r:1},{t:'ยอดขาย',r:1},{t:'ค่าคอม',r:1},{t:'สุทธิ',r:1}], rows.map((c,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${esc(c.channel)}${c.commission_pct?` <span class="muted" style="font-size:11px">${c.commission_pct}%</span>`:''}</td><td style="text-align:right">${c.orders}</td><td style="text-align:right">${baht2(c.gross)}</td><td style="text-align:right;color:var(--danger)">${c.commission?('−'+baht2(c.commission)):'—'}</td><td style="text-align:right"><b>${baht2(c.net)}</b></td></tr>`).join('')):'<p class="muted">ยังไม่มียอดขาย</p>');
   } else if(t==='disc'){
     const rows=(DET.discounts||[]); box.innerHTML=`<div style="margin-bottom:10px"><b>ส่วนลดรวม ${baht2(DET.discountTotal)}</b> · ${rows.length} ออเดอร์</div>`+
@@ -904,11 +1035,11 @@ window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); R
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
     const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
-    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} แก้ว)</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
+    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} ${unit()})</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสมแก้วแล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
@@ -920,7 +1051,7 @@ function renderLoyLookup(b){ const box=$('loyLookupResult');
   const opts=REWARDS.filter(r=>r.active&&b.points>=r.cost_points);
   box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:12px"><b style="font-size:20px">${b.points} ดวง</b> <span class="muted">(สะสมตลอด ${b.lifetime})</span>
     ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">ดวงยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
-window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!confirm('ยืนยันแลก “'+name+'” ให้ลูกค้า?')) return;
+window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ยืนยันแลก “'+name+'” ให้ลูกค้า?',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock(); }catch(e){ toast(err(e)); } };
 let _selIngId=null;
@@ -1017,7 +1148,7 @@ function renderCash(){
 }
 window.openDrawer=async()=>{ const f=Number($('openFloatInp').value)||0; try{ await api('/api/cash/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({openFloat:f})}); toast('เปิดรอบแล้ว'); loadCash(); }catch(e){ toast(err(e)==='session_already_open'?'มีรอบที่เปิดอยู่แล้ว':err(e)); } };
 window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(counted>=0)){ toast('ใส่จำนวนเงินที่นับได้'); return; }
-  if(!confirm('ปิดรอบและบันทึกการนับเงิน?')) return;
+  if(!(await appConfirm({title:'ปิดรอบเงินสด',message:'ปิดรอบและบันทึกการนับเงิน?',okText:'ปิดรอบ'}))) return;
   try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note:$('cashNote').value.trim()})}); renderCashResult(r); }catch(e){ toast(err(e)); } };
 function renderCashResult(r){
   const z=r.zreport||{}; const os=r.overShort;
@@ -1042,7 +1173,7 @@ function renderStoreBtn(){ if(!STORE) return; const open=STORE.is_open!==0;
   b.innerHTML=(open?'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>ร้านเปิด'
                   :'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>ร้านปิด'); }
 window.toggleStore=async()=>{ if(!STORE) return; const next=STORE.is_open!==0?0:1;
-  if(!confirm(next?'เปิดร้าน (ทุกโซน)?':'ปิดร้าน? ลูกค้าจะเห็นสถานะ "ปิด" ทุกโซน')) return;
+  if(!(await appConfirm({title:next?'เปิดร้าน':'ปิดร้าน',message:next?'เปิดร้าน (ทุกโซน) ให้ลูกค้าสั่งได้?':'ปิดร้าน? ลูกค้าจะเห็นสถานะ "ปิด" ทุกโซน',okText:next?'เปิดร้าน':'ปิดร้าน',danger:!next}))) return;
   try{ await api('/api/store/'+STORE.id+'/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:next})});
     STORE.is_open=next; renderStoreBtn(); toast(next?'เปิดร้านแล้ว':'ปิดร้านแล้ว');
   }catch(e){ toast(err(e)); } };
@@ -1097,7 +1228,7 @@ async function renderCharts(){
   $('chartsBody').innerHTML =
     card('📈 ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
-      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' แก้ว'))+
+      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
       card('💳 ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
     `</div>`+
     card('🕐 ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v)) +
@@ -1105,8 +1236,12 @@ async function renderCharts(){
     (mo.length?card('🗓️ แนวโน้มรายเดือน (กำไรสุทธิ · 12 เดือน)', chartCols(mo, baht)):'') +
     (yr.length?card('📆 แนวโน้มรายปี (กำไรสุทธิ)', chartCols(yr, baht)):'');
 }
+let _reportDate='';   // '' = today (live); 'YYYY-MM-DD' = a past Bangkok day (from the durable orders table)
+const bkkToday=()=> new Date(Date.now()+7*3600*1000).toISOString().slice(0,10);
+window.setReportDate=(d)=>{ _reportDate=(d&&d!==bkkToday())?d:''; showReport(); };
 window.showReport=async()=>{
-  try{ const r=await api('/api/report'); const p=r.pnl||{};
+  try{ const r=await api('/api/report'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); const p=r.pnl||{};
+    const di=$('reportDateInp'); if(di) di.value=_reportDate||bkkToday();
     const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
     const pl=(label,val,o={})=>`<div class="qitem" style="${o.navy?'background:var(--navy);':o.accent?'background:#e9f8fb;':''}padding:8px 12px">
       <span style="${o.bold?'font-weight:800;':''}${o.navy?'color:#fff':''}">${label}</span>
@@ -1119,11 +1254,11 @@ window.showReport=async()=>{
       </div>`).join('');
     $('reportBody').innerHTML =
       `<div class="row" style="gap:8px;background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
-        kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi('แก้ว',(p.cups||0))+
+        kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi(unit(),(p.cups||0))+
       `</div>`+
       `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
-        <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> แก้ว · รวม <b>${money(r.revenue)}</b></span>
-        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> แก้ว</span>
+        <span>ขายได้ <b style="color:#16876f">${p.cups||0}</b> ${unit()} · รวม <b>${money(r.revenue)}</b></span>
+        <span>ยกเลิก <b>${r.voided?.cancelled?.orders||0}</b> · คืนเงิน <b style="color:#c43a4b">${r.voided?.refunded?.orders||0}</b> ${r.voided?.refunded?.amount?`<span class="muted">(${money(r.voided.refunded.amount)})</span>`:''} · 🗑️ ของเสีย <b style="color:#c43a4b">${r.voided?.waste?.cups||0}</b> ${unit()}</span>
       </div>`+
       `<h2>กำไร–ขาดทุน (วันนี้)</h2><div class="queue-list" style="gap:4px">`+
         pl('ยอดเครื่องดื่ม',p.drinkSales,{pct:r.revenue?p.drinkSales/r.revenue:0})+
@@ -1137,7 +1272,7 @@ window.showReport=async()=>{
         pl('กำไรสุทธิ',p.netProfit,{bold:true,navy:true,pct:p.netMargin})+
       `</div>`+
       (p.breakEvenCups!=null?`<div class="row between" style="font-size:12px;margin-top:8px;background:var(--surface);border-radius:10px;padding:8px 12px">
-        <span class="muted">จุดคุ้มทุน ~<b style="color:var(--navy)">${p.breakEvenCups}</b> แก้ว/วัน เพื่อครอบคลุมต้นทุน</span>
+        <span class="muted">จุดคุ้มทุน ~<b style="color:var(--navy)">${p.breakEvenCups}</b> ${unit()}/วัน เพื่อครอบคลุมต้นทุน</span>
         <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">ขายแล้ว ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· เหลืออีก '+(p.breakEvenCups-(p.cups||0))}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">เป้าหมายวันนี้ ${money(p.targetDaily)} · ส่วนต่าง <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
       `<div style="margin-top:10px;background:#eef7fb;border:1px solid var(--line);border-radius:12px;padding:12px">
@@ -1188,7 +1323,7 @@ function renderFinance(){
   $('financeBox').innerHTML=`<div class="row between"><b>สมมติฐานต้นทุน</b><span class="muted" style="font-size:11px">ใช้คำนวณกำไร–ขาดทุน</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
       ${f('ingredientPct','วัตถุดิบ % (0.32 = 32%)','0.01')}
-      ${f('packagingPerCup','แพ็กเกจ ฿/แก้ว','0.5')}
+      ${f('packagingPerCup','แพ็กเกจ ฿/'+unit(),'0.5')}
       ${f('daysPerMonth','วันขาย / เดือน','1')}
       ${f('targetRevenue','เป้ายอดขาย/เดือน ฿ (0=ปิด)','1000')}
       ${f('rent','ค่าเช่า / เดือน ฿')}
@@ -1208,9 +1343,9 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
   const m=Math.max(0,Math.min(0.95,(Number($('goalMargin').value)||0)/100));
   const denom=GOAL.refAvg*(1-GOAL.ing-m)-GOAL.pack;
   if(!(GOAL.refAvg>0)){ out.innerHTML='<span class="muted">เพิ่มราคาเมนูก่อนเพื่อคำนวณ</span>'; return; }
-  if(denom<=0){ out.innerHTML=`<span style="color:#c43a4b">ทำไม่ได้ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)}/แก้ว — ต้องขึ้นราคาหรือลดต้นทุน</span>`; return; }
+  if(denom<=0){ out.innerHTML=`<span style="color:#c43a4b">ทำไม่ได้ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)}/${unit()} — ต้องขึ้นราคาหรือลดต้นทุน</span>`; return; }
   const perDay=Math.ceil(GOAL.opexDaily/denom), perMonth=Math.ceil(perDay*GOAL.days);
-  out.innerHTML=`ต้องขายประมาณ <b style="color:var(--navy);font-size:16px">${perDay}</b> แก้ว/วัน (~<b>${perMonth.toLocaleString()}</b>/เดือน) ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)} จึงได้กำไรสุทธิ <b>${(m*100).toFixed(0)}%</b>`;
+  out.innerHTML=`ต้องขายประมาณ <b style="color:var(--navy);font-size:16px">${perDay}</b> ${unit()}/วัน (~<b>${perMonth.toLocaleString()}</b>/เดือน) ที่ราคาเฉลี่ย ฿${GOAL.refAvg.toFixed(0)} จึงได้กำไรสุทธิ <b>${(m*100).toFixed(0)}%</b>`;
 };
 
 // ---------- Menu management ----------
@@ -1299,11 +1434,11 @@ function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img
     const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
     resolve(c.toDataURL('image/jpeg',0.82)); };
   img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('bad image')); }; img.src=url; }); }
-window.delItem=async(id)=>{ if(!confirm('ลบเมนูนี้?')) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
+window.delItem=async(id)=>{ if(!(await appConfirm({title:'ลบเมนู',message:'ลบเมนูนี้ออกถาวร?',okText:'ลบ',danger:true}))) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
 let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null;
-let _kitchenStatus={};  // ticketId -> null | 'making' | 'done'
+let _kitchenStatus={};  // "ticketId:lineIndex" -> null | 'making' | 'done' (per drink line)
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
   if(!CHANNELS.length){ sel.style.display='none'; return; } sel.style.display='';
@@ -1336,7 +1471,7 @@ function renderOrderMenu(){
   // (still sells at the counter), unlike the customer; only manual soldout disables it here.
   const mk=(m)=>{ if(m.makeable==null) return '';
     if(m.stockSoldout) return `<div class="men" style="color:var(--danger);font-weight:700">วัตถุดิบหมด · ขายต่อได้</div>`;
-    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} แก้ว</div>`; };
+    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} ${unit()}</div>`; };
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     <div class="mimg" style="font-size:38px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
@@ -1462,8 +1597,8 @@ function renderBasket(){
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
 }
-window.cancelBasket=()=>{ if(!cart.length) return;
-  if(!confirm('ล้างรายการทั้งหมดในบิล?')) return; cart=[]; renderBasketCount(); };
+window.cancelBasket=async()=>{ if(!cart.length) return;
+  if(!(await appConfirm({title:'ล้างบิล',message:'ล้างรายการทั้งหมดในบิล?',okText:'ล้างบิล',danger:true}))) return; cart=[]; renderBasketCount(); };
 // Short confirmation beep (Web Audio) — instant audio feedback the moment a bill is sent,
 // so the cashier feels "done" before the network round-trip finishes. Safe no-op if blocked.
 let _ac=null;
@@ -1484,7 +1619,7 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
 function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
-  if(payMethod) body.pay=payMethod; else body.hold=true;   // no tender = พักบิล → park in รอชำระเงิน (don't take a queue number yet)
+  if(payMethod) body.pay=payMethod;   // no tender = พักบิล (held); queue number follows the เข้าคิวทันที setting
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if
 // a "failed" send actually reached the server, the retry returns the SAME order (never a duplicate).
@@ -1539,7 +1674,7 @@ async function boot(){
   // without opening the report. Hidden for cashiers (revenue is owner-facing).
   const mgr=(!ME||['owner','manager'].includes(ME.role));
   zones=[]; let html = mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
-    + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">📊 สรุปวันนี้ ▾</button>'
+    + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">'+IC.chart+'สรุปวันนี้ ▾</button>'
     + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
@@ -1548,7 +1683,7 @@ async function boot(){
   }
   $('dash').innerHTML = html;
   if(mgr){ let open=false; try{ open=localStorage.getItem('yodee_today_open')==='1'; }catch(e){}
-    if(open){ $('todayChips').style.display='flex'; $('todayToggle').textContent='📊 สรุปวันนี้ ▴'; loadTodayStats(); }
+    if(open){ $('todayChips').style.display='flex'; $('todayToggle').innerHTML=IC.chart+'สรุปวันนี้ ▴'; loadTodayStats(); }
     if(window._todayTimer) clearInterval(window._todayTimer); window._todayTimer=setInterval(loadTodayStats,60000); }  // self-skips when collapsed
   streams.forEach(s=>s.close()); streams=[];
   for(const z of zones){
@@ -1572,27 +1707,27 @@ async function boot(){
 // Toggle the pulse strip open/closed (manager preference, remembered). Collapsed by default.
 window.toggleToday=()=>{ const c=$('todayChips'), b=$('todayToggle'); if(!c) return;
   const open=c.style.display==='none'; c.style.display=open?'flex':'none';
-  if(b) b.textContent='📊 สรุปวันนี้ '+(open?'▴':'▾');
+  if(b) b.innerHTML=IC.chart+'สรุปวันนี้ '+(open?'▴':'▾');
   try{ localStorage.setItem('yodee_today_open', open?'1':'0'); }catch(e){}
   if(open) loadTodayStats(); };
 async function loadTodayStats(){
   const el=$('todayChips'); if(!el || el.style.display==='none') return;   // only fetch when expanded
   try{
     const r=await api('/api/report');
-    const chip=(label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
-      <div style="font-size:11px;color:var(--muted);white-space:nowrap">${label}</div>
+    const chip=(icon,label,val,color)=>`<div style="flex:1;min-width:92px;background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:12px;padding:8px 12px">
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:4px">${icon}${label}</div>
       <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
     let chips =
-      chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
-      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' แก้ว') +   // cups SOLD (drink units) — matches the P&L report
-      chip('🍦 เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
-      chip('🎫 ออกคิว', r.issued||0) +
-      chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
-      chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
+      chip(IC.cash,'ยอดวันนี้', baht2(r.revenue||0)) +
+      chip(IC.cup,'ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +   // cups SOLD (drink units) — matches the P&L report
+      chip(IC.serve,'เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
+      chip(IC.ticket,'ออกคิว', r.issued||0) +
+      chip(IC.clock,'รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
+      chip(IC.loyalty,'เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
     // Target progress — only when the owner has set a daily target (FIN_TARGET_REVENUE).
     const tgt=r.pnl&&r.pnl.targetDaily;
     if(tgt&&tgt>0){ const pct=Math.round(((r.revenue||0)/tgt)*100);
-      chips += chip('🎯 เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
+      chips += chip(IC.chart,'เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
     el.innerHTML = chips;
   }catch(e){ /* leave the strip as-is on a transient error; the toggle controls visibility */ }
 }
@@ -1662,16 +1797,19 @@ function detectCancelRequests(zoneId, tickets){
 window.startMaking=async(tid)=>{ try{ await api('/api/tickets/'+tid+'/start-making',{method:'POST'}); toast('🍳 เริ่มทำ — ลูกค้ายกเลิกเองไม่ได้แล้ว'); }catch(e){ toast(err(e)); } };
 window.askPay=async(tid)=>{ try{ const r=await api('/api/tickets/'+tid+'/ask-pay',{method:'POST'}); toast(r.ok?'📣 ส่งข้อความขอให้ลูกค้าชำระแล้ว':'ออเดอร์นี้ไม่ใช่ลูกค้าไลน์'); }catch(e){ toast(err(e)); } };
 window.keepOrder=async(tid)=>{ try{ await api('/api/tickets/'+tid+'/dismiss-cancel',{method:'POST'}); toast('เก็บออเดอร์ไว้ — ทำต่อได้'); }catch(e){ toast(err(e)); } };
-// Kitchen progress mark: cycle null → 'making' → 'done' → null per order. Client-side only (resets on refresh).
-window.toggleKitchen=(tid)=>{
-  const s=_kitchenStatus[tid];
-  _kitchenStatus[tid]=s==null?'making':s==='making'?'done':null;
-  const ns=_kitchenStatus[tid];
-  const btn=document.getElementById('kbtn-'+tid), card=document.getElementById('kcard-'+tid);
-  if(btn){ btn.textContent=ns==='making'?'🔥 กำลังทำ':ns==='done'?'✅ เสร็จ':'○ มาร์ค';
-    btn.style.background=ns==='making'?'rgba(243,157,18,.25)':ns==='done'?'rgba(22,135,111,.25)':'';
-    btn.style.color=ns==='making'?'#a35e00':ns==='done'?'#16876f':'var(--navy)'; }
-  if(card){ card.style.background=ns==='making'?'rgba(243,157,18,.18)':ns==='done'?'rgba(22,135,111,.12)':''; } };
+// Per-line kitchen mark: cycle ○ → 🔥 กำลังทำ → ✅ เสร็จ → ○ for one drink line. When every line of an
+// order is done the whole card turns green (ready to serve). Client-side only (resets on refresh).
+window.toggleKitchen=(tid,i)=>{
+  const key=tid+':'+i, s=_kitchenStatus[key];
+  _kitchenStatus[key]=s==null?'making':s==='making'?'done':null;
+  const ns=_kitchenStatus[key];
+  const chip=document.getElementById('kbtn-'+tid+'-'+i), line=document.getElementById('kline-'+tid+'-'+i);
+  if(chip){ chip.textContent=ns==='making'?'🔥':ns==='done'?'✅':'○'; chip.className='kmark'+(ns?(' '+ns):''); }
+  if(line){ line.style.background=ns==='making'?'rgba(243,157,18,.16)':ns==='done'?'rgba(22,135,111,.12)':''; }
+  const card=document.getElementById('kcard-'+tid);
+  if(card){ const n=Number(card.dataset.klines||0); let done=0,making=0;
+    for(let j=0;j<n;j++){ const st=_kitchenStatus[tid+':'+j]; if(st==='done')done++; else if(st==='making')making++; }
+    card.style.background=(n>0&&done===n)?'rgba(22,135,111,.16)':making>0?'rgba(243,157,18,.12)':''; } };
 function renderZone(snap){
   if(!snap||!snap.zone) return;
   const z=snap.zone, id=z.id, open=z.is_open===1;
@@ -1699,18 +1837,21 @@ function renderZone(snap){
   };
   const ord=(t)=>{
     if(t.order_lines&&t.order_lines.length){
-      return `<div style="font-size:12px;margin-top:3px">`+t.order_lines.map(l=>{
+      return `<div style="font-size:14px;margin-top:4px">`+t.order_lines.map((l,i)=>{
         const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line
         const nm=m?m[1]:l.name;
-        const sw=m?`<div class="muted" style="margin-left:12px">• ${esc(m[2])}</div>`:'';
-        return `<div><b>${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
-          l.toppings.map(tp=>`<div class="muted" style="margin-left:12px">- ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div>`;
-      }).join('')+`<div style="font-weight:700;color:var(--navy)">รวม ฿${t.order_total}</div></div>`;
+        const sw=m?`<div class="muted" style="margin-left:14px;font-size:13px">• ${esc(m[2])}</div>`:'';
+        const ks=_kitchenStatus[t.id+':'+i];
+        const chip=`<button id="kbtn-${t.id}-${i}" class="kmark${ks?(' '+ks):''}" onclick="event.stopPropagation();toggleKitchen(${t.id},${i})" title="แตะเพื่อมาร์ค: กำลังทำ → เสร็จ">${ks==='making'?'🔥':ks==='done'?'✅':'○'}</button>`;
+        const lbg=ks==='making'?'background:rgba(243,157,18,.16);':ks==='done'?'background:rgba(22,135,111,.12);':'';
+        return `<div id="kline-${t.id}-${i}" style="display:flex;align-items:flex-start;gap:6px;padding:4px 4px;border-radius:8px;${lbg}">${chip}<div style="flex:1"><b style="font-size:15px">${l.qty}× ${esc(nm)}</b> <span class="muted">฿${l.price*l.qty}</span>`+sw+
+          l.toppings.map(tp=>`<div class="muted" style="margin-left:2px;font-size:13px">+ ${esc(tp.name)} ฿${tp.price*tp.qty}</div>`).join('')+`</div></div>`;
+      }).join('')+`<div style="font-weight:700;color:var(--navy);margin-top:4px;font-size:14px">รวม ฿${t.order_total}</div></div>`;
     }
     if(!t.order_summary) return '';
     const net=(t.order_net!=null?t.order_net:t.order_total);
     const amt=(t.order_discount>0)?`<b>฿${net}</b> <span style="text-decoration:line-through;opacity:.6">฿${t.order_total}</span> <span style="color:var(--danger)">(ลด ฿${t.order_discount})</span>`:`฿${t.order_total}`;
-    return `<div class="muted" style="font-size:12px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
+    return `<div class="muted" style="font-size:13.5px;margin-top:2px">${esc(t.order_summary)} · ${amt}</div>`;
   };
   // Date+time shown ABOVE the queue number (no clock icon).
   const tsTop=(t)=> t.order_created_at ? `<div class="muted" style="font-size:11px;line-height:1.3">${fmtDT(t.order_created_at)}${t.order_paid_at?(' · ชำระ '+fmtDT(t.order_paid_at)):''}</div>` : '';
@@ -1738,12 +1879,19 @@ function renderZone(snap){
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">${IC.qr}QR</button>` : '';
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">ลด</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">${IC.discount}ลด</button>` : '';
   // Loyalty redeem: shown only when this LINE customer has enough stamps for a free drink.
   const redeemBtn=(t)=> (t.loy_points!=null && t.loy_points>=(CFG.loyaltyStamps||10) && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
+  // Phone-keyed loyalty (Pkg 1, no LINE): attach a phone to a walk-in ticket so it earns stamps
+  // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
+  const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
+    ? (t.loy_phone
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.loyalty}แต้ม</button>`) : '';
+  // Collect payment on a queued (already-numbered) order that's still unpaid → marks it paid in place.
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
-    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">฿ ชำระแล้ว</button>` : '';
+    ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน</button>` : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
@@ -1766,43 +1914,57 @@ function renderZone(snap){
   const paidPill=(t)=> ((t.order_paid||0)>0 && t.payment_status!=='paid')
     ? ` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800">จ่ายแล้ว ฿${t.order_paid} · เหลือ ฿${remainOf(t)}</span>` : '';
   const partBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
-    ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">✂️ บางส่วน</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="payPartialStart(${t.id},${remainOf(t)},${t.order_paid||0},${netOf(t)})" title="รับเงินทีละส่วน (แยกบิลตามเงิน)">${IC.partial}บางส่วน</button>` : '';
   // แยกตามรายการ: only for a multi-line bill — pick items, pay their subtotal as a partial.
   const splitBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && (t.order_lines||[]).length>=2)
-    ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">🧾 แยกรายการ</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">${IC.split}แยกรายการ</button>` : '';
   // แก้ไขออเดอร์: change drink/topping/sweet in place instead of cancel+rekey (unpaid, no partial).
   const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && !(t.order_paid>0))
-    ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">✏️ แก้ไข</button>` : '';
+    ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">${IC.edit}แก้ไข</button>` : '';
+  // "เพิ่มเติม" overflow: collect the occasional actions into one menu so the card row stays tidy.
+  // Each card passes its own applicable secondary buttons (pending vs waiting differ); openMoreMenu shows them.
+  window._moreCache = window._moreCache || {};
+  const moreBtn=(t, sec)=>{ window._moreCache[t.id]=sec||'';
+    return (sec&&sec.trim()) ? `<button class="ghost" style="padding:8px 12px" onclick="openMoreMenu(${t.id})">${IC.more}เพิ่มเติม</button>` : ''; };
   // Kitchen progress marks: colour helpers + toggle button per order card.
-  const kitchenBg=(t)=>{const s=_kitchenStatus[t.id];return s==='making'?'rgba(243,157,18,.18)':s==='done'?'rgba(22,135,111,.12)':'';};
+  // Kitchen marks are PER drink line (a cook batches the same item across orders). Card tint is derived:
+  // all drink lines done → green (ready to serve), any line being made → amber.
+  const allLinesDone=(t)=>{const n=(t.order_lines||[]).length;if(!n)return false;for(let j=0;j<n;j++){if(_kitchenStatus[t.id+':'+j]!=='done')return false;}return true;};
+  const anyLineMaking=(t)=>{const n=(t.order_lines||[]).length;for(let j=0;j<n;j++){if(_kitchenStatus[t.id+':'+j]==='making')return true;}return false;};
+  const kitchenBg=(t)=> allLinesDone(t)?'rgba(22,135,111,.16)':anyLineMaking(t)?'rgba(243,157,18,.12)':'';
   const pendingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):('background:'+(kitchenBg(t)||(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)')));
   const waitingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):(kitchenBg(t)?'background:'+kitchenBg(t):'');
-  const kitchenBtn=(t)=>{const s=_kitchenStatus[t.id];const lbl=s==='making'?'🔥 กำลังทำ':s==='done'?'✅ เสร็จ':'○ มาร์ค';const bg=kitchenBg(t);const col=s==='making'?'#a35e00':s==='done'?'#16876f':'';return `<button id="kbtn-${t.id}" class="ghost" style="padding:8px 10px${bg?';background:'+bg:''}${col?';color:'+col:''}" onclick="toggleKitchen(${t.id})">${lbl}</button>`;};
+  // Big contextual PRIMARY action (full-width, top of the action stack): collect payment while the
+  // order is unpaid → then "เสิร์ฟแล้ว" once paid. One prominent button guides the cashier pay → serve.
+  const payOrServe=(t)=>{ if(t.order_total==null) return '';
+    return (t.payment_status!=='paid')
+      ? `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
+      : `<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;background:var(--accent2);color:#06281f" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
+  // Card layout: order info on the LEFT, the action group (big primary + secondary row) on the RIGHT.
+  // Wraps to a stack on a narrow phone. flex-basis keeps the action column a sensible width on iPad.
+  const actionCol=(big, secondary)=> `<div style="display:flex;flex-direction:column;gap:8px;flex:1 1 210px;max-width:320px">${big}<div class="row" style="gap:6px;align-items:center">${secondary}</div></div>`;
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
-      <div id="kcard-${t.id}" class="qitem" style="${pendingCardBg(t)}"><div>${tsTop(t)}<div>
+      <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${pendingCardBg(t)}">
+        <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
-        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
-        <div class="row" style="gap:6px;flex-wrap:wrap">${kitchenBtn(t)}${editBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${partBtn(t)}${splitBtn(t)}
-          <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
-          ${voidBtn(t)}</div></div>`).join('')+`</div>`
+        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
+        ${actionCol(`<button class="ok" style="width:100%;padding:13px 16px;font-size:16px;font-weight:800" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
-    <div id="kcard-${t.id}" class="qitem" style="${waitingCardBg(t)}"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
-      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap">${kitchenBtn(t)}${makeBtns(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
-        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button></div></div>`).join('')
+    <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
+      <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
+      ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t)+slipViewBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
-    <div class="qitem"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div>
-      <div class="row" style="gap:6px">${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}${payBtn(t)}${printBtn(t)}${voidBtn(t)}
-        <button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>
-        ${serveBtn(t)}
-      </div></div>`).join('')
+    <div class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
+      <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div></div>
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+slipViewBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`).join('')
     : '<p class="muted">—</p>';
 }
 
@@ -1818,14 +1980,16 @@ window.act=async(tid,action)=>{ try{ await api('/api/tickets/'+tid+'/'+action,{m
 // (เงินสด / 6040 ไทยช่วยไทย+ / K PLUS Shop …); online tenders are taken via the customer flow.
 let _payRes=null;
 const TENDER_EMOJI={cash:'💵','6040':'🟦',kplus:'🟩',online:'🌐',linepay:'💚',promptpay:'📱',reward:'🎁',other:'💳'};
+const TENDER_IC=()=>({cash:IC.cash,'6040':IC.wallet,kplus:IC.qr,online:IC.qr,linepay:IC.wallet,promptpay:IC.qr,reward:IC.loyalty,other:IC.card});
 function renderPayButtons(){
   const box=$('payMethodBtns'); if(!box) return;
   let list=(TENDERS||[]).filter(t=>t.kind==='counter'&&t.active!==0);
   if(!list.length) list=[{code:'cash',label:'เงินสด'},{code:'promptpay',label:'พร้อมเพย์ / โอน'}];
-  // One full-width tap target per tender (big, well-spaced) so a fast tap can't hit the wrong one.
-  box.innerHTML=list.map(t=>`<button class="ok" style="padding:16px 18px;text-align:left;font-size:16px;font-weight:700;min-height:56px" onclick="choosePayMethod('${esc(t.code)}')">${TENDER_EMOJI[t.code]||'💳'} ${esc(t.label)}</button>`).join('')
-    +`<button class="ghost" style="padding:16px 18px;text-align:left;font-size:15px;min-height:52px" onclick="choosePayMethod('other')">💳 อื่น ๆ</button>`
-    +`<button class="ghost" style="padding:12px;text-align:center;color:var(--muted);margin-top:8px;border-top:1px solid var(--line)" onclick="choosePayMethod(null)">ยกเลิก</button>`;
+  const ICm=TENDER_IC(); const items=list.concat([{code:'other',label:'อื่น ๆ'}]);
+  // 2-column grid of square tender buttons (icon over label) → tidy + fewer mis-taps, then ยกเลิก full-width.
+  box.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">`+
+    items.map(t=>`<button class="${t.code==='other'?'ghost':'ok'}" style="padding:14px 10px;font-size:15px;font-weight:700;min-height:74px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;line-height:1.2" onclick="choosePayMethod('${esc(t.code)}')">${ICm[t.code]||IC.card}<span>${esc(t.label)}</span></button>`).join('')
+    +`</div><button class="ghost" style="width:100%;padding:13px;text-align:center;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);border-radius:0 0 12px 12px" onclick="choosePayMethod(null)">ยกเลิก</button>`;
 }
 let _payAmt=0;
 function pickPayMethod(amount){ _payAmt=Number(amount)||0; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
@@ -1857,7 +2021,7 @@ window.markPaid=async(tid,status,amount)=>{
   // actually arrived in the bank app before confirming — a tap is not proof of payment.
   let method;
   if(status==='claimed'){
-    if(!confirm('⚠️ ตรวจสอบในแอปธนาคาร (K PLUS/KShop) ว่าเงิน ฿'+amount+' เข้าบัญชีร้านแล้วจริง?\n\nกด OK เฉพาะเมื่อเห็นเงินเข้าจริงเท่านั้น — สลิปในมือถือลูกค้าปลอมได้')) return;
+    if(!(await appConfirm({title:'⚠️ ตรวจสอบเงินเข้าจริง',message:'เช็กในแอปธนาคาร (K PLUS / KShop) ว่าเงิน ฿'+amount+' เข้าบัญชีร้านแล้วจริง?\n\nสลิปในมือถือลูกค้าปลอมได้ — ยืนยันเฉพาะเมื่อเห็นเงินเข้าจริงเท่านั้น',okText:'เห็นเงินเข้าแล้ว ✓',cancelText:'ยังไม่ยืนยัน'}))) return;
     method='promptpay';
   } else {
     method=await pickPayMethod(amount);
@@ -1882,8 +2046,9 @@ window.payMerge=async()=>{
     _mergeSel.clear(); renderMergeBar(); if(CFG.printEnabled) ids.forEach(printKitchen);
   }catch(e){ toast(err(e)); } };
 // ---------- แยกจ่ายตามเงิน: take a partial payment toward a bill; repeat until balance = 0 ----------
-window.payPartialStart=async(tid, remain)=>{
-  const s=prompt('รับเงินงวดนี้กี่บาท? (ยอดคงเหลือ ฿'+remain+')', remain);
+window.payPartialStart=async(tid, remain, paid=0, net=0)=>{
+  const info = (paid>0) ? ('ยอดเต็ม ฿'+net+' · จ่ายแล้ว ฿'+paid+' · เหลือ ฿'+remain) : ('ยอดคงเหลือ ฿'+remain);
+  const s=await appPrompt({title:'แบ่งจ่าย (บางส่วน)',message:'รับเงินงวดนี้กี่บาท?\n'+info,type:'number',inputMode:'decimal',value:String(remain),okText:'ถัดไป'});
   if(s===null) return; const amt=Math.round((Number(s)||0)*100)/100;
   if(!(amt>0)){ toast('จำนวนเงินไม่ถูกต้อง'); return; }
   const method=await pickPayMethod(amt); if(method===null) return;   // reuses the cash keypad for this slice
@@ -1975,40 +2140,42 @@ window.printKitchen=async(tid)=>{
 window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
-  const row=(key,on,title,desc,disabled)=>`
-    <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
-      <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
-      <button class="${on?'ok':'ghost'}" ${disabled?'disabled style="opacity:.5"':''} style="padding:8px 14px;min-width:64px" onclick="toggleFeature('${key}',${on?0:1})">${on?'เปิด':'ปิด'}</button>
+  // Each feature row: line icon + title/desc + an iOS-style on/off switch (consistent theme, no emoji).
+  const row=(key,on,icon,title,desc,disabled)=>`
+    <div class="feat-row">
+      ${icon}
+      <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px;margin-top:2px">${desc}</div></div>
+      <button class="tgl ${on?'on':'off'}" ${disabled?'disabled':''} onclick="toggleFeature('${key}',${on?0:1})" aria-label="${title}" role="switch" aria-checked="${on?'true':'false'}"></button>
     </div>`;
   $('featuresBody').innerHTML=
-    row('queueFirst', f.queueFirst, '🎫 เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
-    row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
-    row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
-    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>⌛ ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div>
-      <div class="row" style="gap:8px;align-items:center"><input id="pendVoidInp" type="number" inputmode="numeric" min="0" value="${f.pendingVoidMinutes!=null?f.pendingVoidMinutes:30}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิด)</span>
+    row('queueFirst', f.queueFirst, IC.ticket, 'เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
+    row('printEnabled', f.printEnabled, IC.print, 'พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
+    row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div></div></div>
+      <div class="row" style="gap:8px;align-items:center;width:100%"><input id="pendVoidInp" type="number" inputmode="numeric" min="0" value="${f.pendingVoidMinutes!=null?f.pendingVoidMinutes:30}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิด)</span>
         <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="savePendVoid()">บันทึก</button></div>
     </div>`+
-    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>📲 แจ้งเตือนเจ้าของทาง LINE</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div>
-      <div class="row" style="gap:6px"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.bell}</span><div><b>แจ้งเตือนเจ้าของทาง LINE</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div></div></div>
+      <div class="row" style="gap:6px;width:100%"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
-      <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
+      <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
-    `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
-    `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
-      <b style="color:var(--danger)">🧹 ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div>
+    `<div class="muted" style="font-size:12px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px">เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
+    `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start;color:var(--danger)"><span style="flex:none">${IC.trash}</span><div><b style="color:var(--danger)">ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div></div></div>
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
   $('featuresPop').style.display='flex';
 };
 window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
 window.resetTransactions=async()=>{
-  if(!confirm('⚠️ ล้างข้อมูลทดสอบทั้งหมด?\n\nลบ: ออเดอร์ · ยอดขาย · คิว · รอบเงินสด · ประวัติทั้งหมด\nเก็บ: เมนู · สาขา · พนักงาน · ตั้งค่า · สูตร · สต๊อก\n\nใช้ตอนเลิกทดสอบ เพื่อเริ่มนับยอดจริงจาก 0 — ย้อนกลับไม่ได้!')) return;
-  const c=prompt('ยืนยันครั้งสุดท้าย: พิมพ์  CLEAR  (ตัวพิมพ์ใหญ่)'); if(c!=='CLEAR'){ toast('ยกเลิก — ไม่ได้ล้างข้อมูล'); return; }
+  if(!(await appConfirm({title:'⚠️ ล้างข้อมูลทดสอบทั้งหมด',message:'ลบ: ออเดอร์ · ยอดขาย · คิว · รอบเงินสด · ประวัติทั้งหมด\nเก็บ: เมนู · สาขา · พนักงาน · ตั้งค่า · สูตร · สต๊อก\n\nใช้ตอนเลิกทดสอบ เพื่อเริ่มนับยอดจริงจาก 0 — ย้อนกลับไม่ได้!',okText:'ดำเนินการต่อ',danger:true}))) return;
+  const c=await appPrompt({title:'ยืนยันครั้งสุดท้าย',message:'พิมพ์  CLEAR  (ตัวพิมพ์ใหญ่) เพื่อยืนยันการล้างข้อมูล',placeholder:'CLEAR',okText:'ล้างข้อมูล'}); if(c!=='CLEAR'){ toast('ยกเลิก — ไม่ได้ล้างข้อมูล'); return; }
   try{ const r=await api('/api/admin/reset-transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'CLEAR'})});
     const n=Object.values(r.removed||{}).reduce((a,b)=>a+(typeof b==='number'?b:0),0);
     toast('🧹 ล้างข้อมูลทดสอบแล้ว ('+n+' รายการ) · เริ่มนับยอดจริงได้เลย!');
@@ -2018,12 +2185,12 @@ window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
-window.sweepPending=async()=>{ if(!confirm('ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?')) return;
+window.sweepPending=async()=>{ if(!(await appConfirm({title:'เคลียร์ค้างชำระ',message:'ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?',okText:'ยกเลิกทั้งหมด',danger:true}))) return;
   try{ const r=await api('/api/pending/sweep',{method:'POST'}); toast(r.voided?('เคลียร์ค้างชำระ '+r.voided+' รายการ'):'ไม่มีรายการค้างเกินเวลา'); }catch(e){ toast(err(e)); } };
 window.testOwnerSummary=async()=>{
   try{ const r=await api('/api/admin/owner-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
     toast(r.sent?'✅ ส่งสรุปเข้า LINE แล้ว':'ℹ️ ยังไม่ได้ตั้ง LINE เจ้าของ (หรือ LINE ปิดบน UAT)');
-    alert('ข้อความสรุปที่จะส่ง:\n\n'+(r.text||'')); }catch(e){ toast(err(e)); } };
+    await appConfirm({title:'ข้อความสรุปที่จะส่ง',message:(r.text||'(ว่าง)'),okText:'ปิด',cancelText:''}); }catch(e){ toast(err(e)); } };
 window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
@@ -2072,11 +2239,17 @@ window.voidTicket=async(tid)=>{
   try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock})});
     toast(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
-  const a=prompt('ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด'); if(a===null) return;
+  const a=await appPrompt({title:'ลดราคา',message:'ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด',type:'number',inputMode:'decimal',placeholder:'0'}); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  const reason=(prompt('เหตุผลส่วนลด (ไม่บังคับ) เช่น สมาชิก, โปรโมชั่น')||'').trim();
+  const reason=((await appPrompt({title:'เหตุผลส่วนลด',message:'ไม่บังคับ — เช่น สมาชิก, โปรโมชั่น',placeholder:'เหตุผล (เว้นว่างได้)',okText:'บันทึก'}))||'').trim();
   try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
-window.redeemOrder=async(tid)=>{ if(!confirm('ใช้แต้มลูกค้าแลกเครื่องดื่มฟรี 1 แก้ว?\n(หักดวง + ลดราคาออเดอร์นี้)')) return;
+// Phone-keyed loyalty: ask for the customer's phone, attach it to the ticket so this order earns
+// stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
+window.attachPhone=async(tid)=>{ const phone=await appPrompt({title:'📱 สะสมแต้มด้วยเบอร์โทร',message:'ใส่เบอร์ลูกค้าเพื่อสะสมแต้มออเดอร์นี้',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+  try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
+    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')); }
+  catch(e){ const m=err(e); toast(m==='loyalty_off'?'ยังไม่เปิดสะสมแต้ม':(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m))); } };
+window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };
 window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'POST',

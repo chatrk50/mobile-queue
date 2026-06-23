@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting, DURABLE, reconnectDb } from './db.js';
-import { seedDemo } from '../scripts/seed.js';
+import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
@@ -22,6 +22,20 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
 const THRESHOLD = Number(process.env.NOTIFY_THRESHOLD || 2);
 const WAIT_PER_GROUP = Number(process.env.WAIT_PER_GROUP_MIN || 4); // est. minutes per group ahead
+// White-label brand config — defaults to YO-DEE so existing deploys are unchanged; a new brand just
+// sets these env vars (+ drops its own /assets/logo.png). The frontends read it from /api/brand.
+const BRAND = {
+  name: process.env.BRAND_NAME || 'YO-DEE Yogurt',
+  short: process.env.BRAND_SHORT || 'YO-DEE',
+  theme: process.env.BRAND_THEME || '#1e3a5f',
+  logo: process.env.BRAND_LOGO || '/assets/logo.png',
+  unit: process.env.BRAND_UNIT || 'แก้ว',
+  // White-label package: 'line' (full — customer LINE self-order + loyalty + online pay)
+  // or 'pos' (mobile POS only — staff ring orders, queue + counter pay, NO customer LINE UI).
+  package: (process.env.PACKAGE || 'line').toLowerCase() === 'pos' ? 'pos' : 'line',
+};
+// Package-1 (POS-only) hides every customer-facing LINE feature regardless of token presence.
+const POS_ONLY = BRAND.package === 'pos';
 const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
@@ -102,6 +116,20 @@ app.use((req, res, next) => {
   if (pinPresent(req) && pinLocked(ipOf(req))) return res.status(429).json({ error: 'too_many_attempts' });
   next();
 });
+// PWA manifest built from the brand config (so the home-screen app name/icon/colour follow the
+// brand). Registered before express.static so it wins over the static file.
+app.get('/manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').json({
+    name: BRAND.name, short_name: BRAND.short, description: `${BRAND.name}`,
+    start_url: '/cashier/', scope: '/', display: 'standalone', orientation: 'any',
+    background_color: '#ffffff', theme_color: BRAND.theme, lang: 'th',
+    icons: [
+      { src: BRAND.logo, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: BRAND.logo, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: BRAND.logo, sizes: 'any', type: 'image/png', purpose: 'maskable' },
+    ],
+  });
+});
 app.use(express.static(join(__dirname, '..', 'public')));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.
@@ -119,8 +147,10 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst() });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
 });
+// White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
+app.get('/api/brand', (req, res) => res.json(BRAND));
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {
@@ -391,6 +421,7 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 // Customer self-order (no PIN) — from the LINE app: build a cart, get a queue
 // number, then pay at the counter. Order is tagged source='customer', unpaid.
 app.post('/api/zones/:zoneId/order', (req, res) => {
+  if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',
@@ -538,7 +569,7 @@ app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
   if (order.payment_status === 'paid') return res.json({ ok: true, already: true });
   try {
     const confirmUrl = `${PUBLIC_BASE_URL}/api/linepay/confirm?ticketId=${encodeURIComponent(ticketId)}`;
-    const r = await linepayReserve({ amount: order.total, orderId: order.id, productName: 'YO-DEE order', confirmUrl, cancelUrl: `${PUBLIC_BASE_URL}/liff/` });
+    const r = await linepayReserve({ amount: order.total, orderId: order.id, productName: `${BRAND.short} order`, confirmUrl, cancelUrl: `${PUBLIC_BASE_URL}/liff/` });
     if (!r.ok) return res.status(400).json({ error: 'linepay_reserve_failed', code: r.code, message: r.message });
     res.json({ ok: true, paymentUrl: r.paymentUrl });
   } catch (e) { res.status(502).json({ error: 'linepay_unreachable', detail: e.message }); }
@@ -572,6 +603,22 @@ app.post('/api/tickets/:ticketId/discount', (req, res) => {
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Phone-keyed loyalty (Package 1 — no LINE): attach a phone to a pending ticket so it earns
+// stamps on payment, and look up a phone's balance. Cashier-gated; before the /:action route.
+app.post('/api/tickets/:ticketId/customer', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.attachCustomerToTicket(req.params.ticketId, req.body?.phone, req.body?.name || null);
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/loyalty/phone/:phone', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.loyaltyByPhone(req.params.phone)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
@@ -691,7 +738,10 @@ app.post('/api/reset', (req, res) => {
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null));
+  // ?date=YYYY-MM-DD → P&L for that past Bangkok day (recomputed from the durable orders table);
+  // omitted/invalid → today. dailyReport validates the date format itself.
+  const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : null;
+  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null, date));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
@@ -811,7 +861,7 @@ app.get('/api/report.xlsx', async (req, res) => {
   try {
     const { buildReportWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
-    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || 'YO-DEE Yogurt' });
+    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || BRAND.name });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
@@ -826,7 +876,7 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
     const { buildDetailedWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
     const data = Q.detailedReports({ date, branchId });
-    const buf = await buildDetailedWorkbook(data, { store: stores?.name || 'YO-DEE Yogurt', date: date || new Date().toISOString().slice(0, 10) });
+    const buf = await buildDetailedWorkbook(data, { store: stores?.name || BRAND.name, date: date || new Date().toISOString().slice(0, 10) });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="YO-DEE_Detailed_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
@@ -858,8 +908,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     const actorId = req.staff?.id || null;
     const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId,
       channelId: req.body?.channelId ? Number(req.body.channelId) : null,
-      clientToken: req.body?.clientToken ? String(req.body.clientToken).slice(0, 64) : null,
-      hold: !!req.body?.hold });   // พักบิล → keep in รอชำระเงิน even under queue-first mode
+      clientToken: req.body?.clientToken ? String(req.body.clientToken).slice(0, 64) : null });
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
     // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid
@@ -936,10 +985,19 @@ setInterval(() => {
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
 
+// White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
+// (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:
+// only fires when explicitly set, so YO-DEE (no SEED) is untouched.
+if ((process.env.SEED || '').toLowerCase() === 'blank') {
+  try {
+    const r = seedBlank();
+    if (r.seeded) console.log(`[seed] Blank brand boot — created store "${r.store}" + 1 zone (no menu).`);
+  } catch (e) { console.error('[seed] blank seed skipped:', e.message); }
+}
 // Ephemeral (non-durable) deploys — the UAT sandbox — start with an empty DB on every boot.
 // Auto-seed the demo store/menu so the app is immediately usable. No-op when durable (prod:
 // Turso keeps the real data) or when a store already exists.
-if (!DURABLE) {
+else if (!DURABLE) {
   try {
     const r = seedDemo();
     if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);

@@ -5,7 +5,7 @@
 </head><body>
 <div class="wrap wide">
   <div class="row between">
-    <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> YO-DEE Yogurt <span class="muted" style="font-weight:500">· <span id="title">จอแสดงคิว</span></span></div>
+    <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> <span data-brand-name>YO-DEE Yogurt</span> <span class="muted" style="font-weight:500">· <span id="title">จอแสดงคิว</span></span></div>
     <div class="row">
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <select id="zoneSel" style="width:auto" onchange="switchZone()"></select>
@@ -79,4 +79,5 @@ function render(snap){
 if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{};
 boot();
 </script>
+<script src="/assets/brand.js"></script>
 </body></html>

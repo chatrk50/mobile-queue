@@ -39,7 +39,7 @@
   </div>
   <div class="poster" id="poster" style="display:none">
     <img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('pbrand');if(f)f.style.display=''" alt="">
-    <div class="brandname" id="pbrand" style="display:none">YO-DEE Yogurt</div>
+    <div class="brandname" id="pbrand" data-brand-name style="display:none">YO-DEE Yogurt</div>
     <div class="branch" id="branch">—</div>
     <div class="zone" id="zone">—</div>
     <div class="cta">สแกนเพื่อรับหมายเลขคิว</div>
@@ -57,6 +57,8 @@ const $=(id)=>document.getElementById(id);
 const zoneId=new URLSearchParams(location.search).get('zone');
 (async()=>{
   const cfg=await (await fetch('/api/config')).json();
+  // Package 1 (POS only): no LINE-scan queue, so the QR poster doesn't apply.
+  if(cfg.posOnly){ $('err').style.display=''; $('err').innerHTML='<b>โหมด POS เท่านั้น</b> — ไม่มีการสแกน QR รับคิวผ่านไลน์ในแพ็กเกจนี้'; return; }
   const stores=await (await fetch('/api/stores')).json();
   const links=[];
   for(const s of stores){
@@ -74,4 +76,5 @@ const zoneId=new URLSearchParams(location.search).get('zone');
   $('qr').innerHTML=`<img alt="QR" style="width:300px;height:300px;border-radius:12px" src="/api/qr/${zoneId}">`;
 })().catch(e=>{ $('err').style.display=''; $('err').textContent='เกิดข้อผิดพลาด: '+e.message; });
 </script>
+<script src="/assets/brand.js"></script>
 </body></html>

@@ -450,6 +450,7 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
+  `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
@@ -607,7 +608,9 @@ try {
   if (!have('print:enabled')) db.prepare(`INSERT INTO settings(key,value) VALUES('print:enabled','0')`).run();
   // Starter raw materials (from the shop's Makro receipts) — only when the table is empty, so
   // it's a one-time editable seed. Stock left at 0 (owner counts/fills later); cost = price/unit.
-  if (!db.prepare('SELECT COUNT(*) c FROM ingredients').get().c) {
+  // Skipped for white-label blank brands (SEED=blank) — they add their own ingredients/reward.
+  const BLANK_BRAND = (process.env.SEED || '').toLowerCase() === 'blank';
+  if (!BLANK_BRAND && !db.prepare('SELECT COUNT(*) c FROM ingredients').get().c) {
     const ins = db.prepare('INSERT INTO ingredients (name, unit, avg_cost, low_threshold, stock_qty) VALUES (?,?,?,?,0)');
     for (const [n, u, c, lt] of [
       ['โยเกิร์ตรสธรรมชาติ (ดัชชี/เอ ไวร์)', 'กก.', 53, 2],
@@ -620,7 +623,7 @@ try {
     ]) ins.run(n, u, c, lt);
     console.log('[db] Seeded starter raw materials from Makro (stock 0, editable).');
   }
-  if (!db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
+  if (!BLANK_BRAND && !db.prepare('SELECT COUNT(*) c FROM rewards').get().c) {
     db.prepare(`INSERT INTO rewards (name, cost_points, active, sort, image) VALUES ('เครื่องดื่มฟรี 1 แก้ว (ไม่เกิน 49฿)', 10, 1, 0, '/assets/menu/1-Original.png')`).run();
     console.log('[db] Seeded loyalty stamp card (disabled) + free-drink reward.');
   }

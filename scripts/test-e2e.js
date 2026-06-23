@@ -57,6 +57,12 @@ ok(gr && near(gr.gross, 100) && near(gr.commission, 30) && near(gr.net, 70),
   `INVARIANT channel net-after-commission: Grab 100→70 — got ${JSON.stringify(gr)}`);
 ok(near(det.channelTotals.gross, det.paidTotal), `INVARIANT Σchannel gross==paidTotal (${det.channelTotals.gross})`);
 
+// ---- Order-source mix (how orders came in: walk-in vs LINE vs delivery), share of the day ----
+ok(det.sourceTotalOrders === 3, `INVARIANT source mix counts non-void orders (3) — got ${det.sourceTotalOrders}`);
+const counterSrc = det.sources.find((s) => s.key === 'counter');
+ok(counterSrc && counterSrc.orders === 2, `walk-in counter = 2 orders (S1,S2) — got ${JSON.stringify(counterSrc)}`);
+ok(near(det.sources.reduce((s, x) => s + x.pct, 0), 100), `INVARIANT source % sum to ~100 — got ${det.sources.reduce((s, x) => s + x.pct, 0)}`);
+
 const refund = det.voidTotals.refund;
 ok(refund && refund.count === 1 && near(refund.amount, 50), 'S4 recorded as a refund (1 × 50)');
 
@@ -122,6 +128,9 @@ const sp = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
 const p1r = Q.payPartial(sp.ticket.id, 40, { method: 'cash' });
 ok(p1r.settled === false && near(p1r.remaining, 60), `INVARIANT partial pay leaves a balance, no settle (paid ${p1r.paid}, remaining ${p1r.remaining})`);
 ok(db.prepare('SELECT payment_status FROM orders WHERE ticket_id=?').get(sp.ticket.id).payment_status === 'unpaid', 'INVARIANT order stays UNPAID (no queue number) until fully covered');
+// The cashier board reads paid-so-far via orderForTicket → must expose paid_amount so the "จ่ายแล้ว/เหลือ"
+// pill shows and the next partial dialog defaults to the REMAINING balance (not the full total).
+ok(near(Q.orderForTicket(sp.ticket.id).paid_amount, 40), `INVARIANT orderForTicket exposes paid_amount after a partial (${Q.orderForTicket(sp.ticket.id).paid_amount})`);
 const p2r = Q.payPartial(sp.ticket.id, 60, { method: 'cash' });
 ok(p2r.settled === true && p2r.code, `INVARIANT covering the balance settles + issues a queue number (${p2r.code})`);
 ok(db.prepare('SELECT payment_status FROM orders WHERE ticket_id=?').get(sp.ticket.id).payment_status === 'paid', 'order is now paid');
@@ -179,12 +188,10 @@ console.log('\n== Queue-first model ==');
 Q.setQueueFirst(true);
 const qf = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
 ok(qf.ticket.number > 0 && qf.ticket.status === 'waiting', `INVARIANT queue number issued at creation (number ${qf.ticket.number}, status ${qf.ticket.status})`);
-// A held bill ("พักบิล") must stay in รอชำระเงิน (pending, no number) EVEN in queue-first mode,
-// then take a real number only when the cashier collects payment later.
-const held = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { hold: true });
-ok(held.ticket.number === 0 && held.ticket.status === 'pending', `INVARIANT held bill stays pending under queue-first (number ${held.ticket.number}, status ${held.ticket.status})`);
-const heldPaid = Q.setOrderPaid(held.ticket.id, { method: 'cash' });
-ok(heldPaid.number > 0, `INVARIANT paying a held bill issues its queue number (${heldPaid.number})`);
+// The เข้าคิวทันที (queue-first) toggle is the single source of truth: with it ON, EVERY new order —
+// including a held/unpaid "พักบิล" — gets a queue number immediately (it waits in the queue, unpaid).
+const held = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+ok(held.ticket.number > 0 && held.ticket.status === 'waiting', `INVARIANT held bill is numbered under queue-first (number ${held.ticket.number}, status ${held.ticket.status})`);
 let qfServed = false; try { Q.setStatus(qf.ticket.id, 'served'); qfServed = true; } catch (e) { /* order_unpaid */ }
 ok(!qfServed, 'INVARIANT an unpaid queued order canNOT be served (pay-before-serve preserved)');
 Q.setOrderPaid(qf.ticket.id, { method: 'cash' });

@@ -4,6 +4,8 @@ import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
+// White-label: product unit label in owner/customer LINE messages (แก้ว / ถ้วย / ชิ้น / จาน …).
+const UNIT = process.env.BRAND_UNIT || 'แก้ว';
 
 /** Append to the immutable sale_events audit trail — DEFERRED off the request path. These rows
  *  are pure audit (never read for reports/correctness), but writing them synchronously inside the
@@ -505,11 +507,39 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   });
   const channelTotals = channelsReport.reduce((a, r) => ({ gross: a.gross + r.gross, commission: a.commission + r.commission, net: a.net + r.net }), { gross: 0, commission: 0, net: 0 });
 
+  // Order-source mix: how the day's orders came in — LINE self-order (source='customer') vs walk-in
+  // counter (cashier, no delivery channel) vs each delivery channel (Grab/LINE MAN…). Share of orders,
+  // void excluded. Answers "กี่ % มาจากไลน์ / หน้าร้าน / ช่องทางอื่น ต่อวัน".
+  const srcRows = db.prepare(
+    `SELECT o.source AS src, c.name AS channel, COALESCE(c.commission_pct,0) AS fee,
+            COUNT(*) AS orders, SUM(o.total - COALESCE(o.discount,0)) AS revenue
+       FROM orders o
+       JOIN tickets t ON t.id = o.ticket_id
+       LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status != 'void' AND date(COALESCE(o.paid_at, o.created_at), '+7 hours') = ${DAY} AND ${BR}
+      GROUP BY o.source, c.name, c.commission_pct`
+  ).all(D, ...b);
+  const srcBuckets = new Map();
+  for (const r of srcRows) {
+    let key, label;
+    if (r.src === 'customer') { key = 'line'; label = '📱 ลูกค้าสั่งผ่าน LINE'; }
+    else if (r.channel && r.fee > 0) { key = 'ch:' + r.channel; label = r.channel; }   // delivery platform
+    else { key = 'counter'; label = '🏪 หน้าร้าน'; }                                     // walk-in counter
+    const bkt = srcBuckets.get(key) || { key, label, orders: 0, revenue: 0 };
+    bkt.orders += r.orders; bkt.revenue += r.revenue || 0;
+    srcBuckets.set(key, bkt);
+  }
+  const sourceTotalOrders = [...srcBuckets.values()].reduce((s, x) => s + x.orders, 0);
+  const sources = [...srcBuckets.values()]
+    .map((s) => ({ key: s.key, label: s.label, orders: s.orders, revenue: Math.round(s.revenue * 100) / 100,
+                   pct: sourceTotalOrders ? Math.round((s.orders / sourceTotalOrders) * 1000) / 10 : 0 }))
+    .sort((a, b) => b.orders - a.orders);
+
   const voidTotals = {};
   for (const v of voids) { const k = v.void_kind || 'void'; (voidTotals[k] = voidTotals[k] || { count: 0, amount: 0 }); voidTotals[k].count++; voidTotals[k].amount += v.total || 0; }
   const paidTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidOrders = payments.reduce((s, p) => s + (p.orders || 0), 0);
-  return { date: D, transactions, payments, paidTotal, paidOrders, cups, toppings, discounts, discountTotal, channels: channelsReport, channelTotals, voids, voidTotals, addons, hourly, topItems };
+  return { date: D, transactions, payments, paidTotal, paidOrders, cups, toppings, discounts, discountTotal, channels: channelsReport, channelTotals, sources, sourceTotalOrders, voids, voidTotals, addons, hourly, topItems };
 }
 
 // ---------- Cash drawer / Z-report (end-of-day cash-up) ----------
@@ -1054,10 +1084,10 @@ export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text)
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
   const lines = [
-    '📊 สรุปยอดวันนี้ — YO-DEE Yogurt',
-    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} แก้ว)`,
+    `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
-    `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} แก้ว`,
+    `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
   return lines.join('\n');
@@ -1102,6 +1132,43 @@ export function loyaltyBalance(key) {
   const lifetime = c ? (c.lifetime_points || 0) : 0;
   return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
+// ---- Phone-keyed loyalty (Package 1 — no LINE) ----
+// A walk-in customer is identified by phone; the loyalty key is 'tel:<digits>'. The cashier
+// attaches it to the pending ticket BEFORE payment so awardPoints earns under that key.
+/** Normalise a Thai phone to digits; returns null if it isn't 9–10 digits. */
+export function normalizePhone(s) {
+  const d = String(s || '').replace(/\D/g, '');
+  return (d.length === 9 || d.length === 10) ? d : null;
+}
+/** Look up a phone customer's stamp balance (no side effects). */
+export function loyaltyByPhone(phone) {
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  const key = 'tel:' + d;
+  const b = loyaltyBalance(key);
+  return { ...b, phone: d, history: loyaltyHistory(key, 10) };
+}
+/** Attach a phone (loyalty key) + optional name to a pending ticket, creating the customer row.
+ *  Returns the balance so the till can show it. Rejected once the order is paid. */
+export function attachCustomerToTicket(ticketId, phone, name = null) {
+  if (!loyaltyEnabled()) throw new Error('loyalty_off');
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_line_customer');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const key = 'tel:' + d;
+  const nm = (name || '').toString().trim().slice(0, 80) || null;
+  db.transaction(() => {
+    db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm);
+    db.prepare('UPDATE tickets SET customer_key=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
+  })();
+  const b = loyaltyBalance(key);
+  return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
+}
+
 /** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
  *  and when that friend completes their FIRST paid order both sides get bonus stamps. */
 export function getReferralBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:referral_bonus', '5')) || 0)); }
@@ -1148,8 +1215,10 @@ export function awardPoints(orderId) {
   if (!loyaltyEnabled()) return null;
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
   if (!order) return null;
-  const t = db.prepare('SELECT line_user_id, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
-  if (!t || !t.line_user_id) return null;
+  const t = db.prepare('SELECT line_user_id, customer_key, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
+  // Loyalty key = LINE userId (Pkg 2) OR a phone key 'tel:…' attached at the counter (Pkg 1).
+  const loyKey = t && (t.line_user_id || t.customer_key);
+  if (!t || !loyKey) return null;
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
   // 1 stamp per drink cup (non-topping lines); sweetened drink names don't match the menu
   // catalog so they COALESCE to 'drink' — counted, which is correct.
@@ -1158,7 +1227,7 @@ export function awardPoints(orderId) {
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
   ).get(orderId).c;
   if (pts <= 0) return null;
-  const key = t.line_user_id;
+  const key = loyKey;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
   // First-ever LINE order for this customer? Grant a one-time welcome head-start.
   const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
@@ -1404,7 +1473,7 @@ export function editOrderItems(ticketId, items) {
 }
 
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, hold = false } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -1491,10 +1560,10 @@ export function createOrder(zoneId, items, opts = {}) {
   }
 
   // Queue-first: issue the queue number now (at order creation) so it joins the line immediately —
-  // even before payment. Pay-first leaves it 'pending' until payment confirms the number.
-  // A HELD bill ("พักบิล / จ่ายทีหลัง") always stays in 'pending' (รอชำระเงิน) regardless of mode:
-  // the cashier explicitly parked it to collect payment later, so it must not consume a queue number.
-  if (getQueueFirst() && !hold && r.ticket && r.ticket.number === 0) {
+  // even before payment, INCLUDING a held bill ("พักบิล / จ่ายทีหลัง"). The เข้าคิวทันที toggle is the
+  // single source of truth: ON → every order gets a number now (unpaid ones wait in the queue with a
+  // "ค้างชำระ" badge); OFF (pay-first) → number is issued only when payment is confirmed.
+  if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
     try { r.ticket = assignQueueNumber(r.ticket.id); } catch { /* lost a race → stays pending, harmless */ }
   }
 
@@ -1569,8 +1638,8 @@ export function setOrderPaid(ticketId, opts = {}) {
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
       msg += free >= 1
-        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับเครื่องดื่มฟรีได้เลยในออเดอร์ถัดไป`
-        : `\n🥤 อีก ${per - bal} แก้ว ได้ฟรี 1 แก้ว!`;
+        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
+        : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`;
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
@@ -1675,14 +1744,15 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
  *  already carries the customer's line_user_id, so no QR/id handshake is needed at the counter —
  *  the cashier just taps "แลกฟรี" on the customer's order. One redemption per order. */
 export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
-  const t = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ticketId);
-  if (!t || !t.line_user_id) throw new Error('not_line_order');
+  const t = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(ticketId);
+  const loyKey = t && (t.line_user_id || t.customer_key);
+  if (!t || !loyKey) throw new Error('no_customer');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') throw new Error('order_already_paid');
   if (order.payment_status === 'void') throw new Error('order_void');
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='redeem'").get(order.id)) throw new Error('already_redeemed');
-  const key = t.line_user_id;
+  const key = loyKey;
   const reward = rewardId
     ? db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(rewardId)
     : db.prepare('SELECT * FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get();
@@ -1847,7 +1917,7 @@ export function orderForTicket(ticketId) {
     if (r.category === 'topping' && lines.length) lines[lines.length - 1].toppings.push({ name: r.name, price: r.price, qty: r.qty });
     else lines.push({ name: r.name, price: r.price, qty: r.qty, toppings: [] });
   }
-  return { total: order.total, discount: order.discount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, paid_amount: order.paid_amount || 0, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 // Generic, non-personal labels we never need to mask.
@@ -1897,10 +1967,12 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
     }
-    // Cashier-only: attach the LINE customer's stamp balance so staff can redeem on the spot.
+    // Cashier-only: attach the customer's stamp balance (LINE userId or a phone key) so staff
+    // can redeem on the spot.
     if (reveal && loyaltyEnabled()) {
-      const li = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(t.id)?.line_user_id;
-      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; }
+      const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
+      const li = r && (r.line_user_id || r.customer_key);
+      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
     }
     return t;
   };

@@ -31,12 +31,12 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
 <div class="wrap">
-  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
     <h1>เพิ่มเพื่อนใน LINE 💬</h1>
-    <p class="muted" style="margin-top:8px">กรุณาเพิ่ม <b>YO-DEE Yogurt</b> เป็นเพื่อนใน LINE เพื่อรับหมายเลขคิวและรับแจ้งเตือนเมื่อถึงคิวของคุณ</p>
+    <p class="muted" style="margin-top:8px">กรุณาเพิ่ม <b data-brand-name>YO-DEE Yogurt</b> เป็นเพื่อนใน LINE เพื่อรับหมายเลขคิวและรับแจ้งเตือนเมื่อถึงคิวของคุณ</p>
     <button style="width:100%;margin-top:16px" onclick="addFriend()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>เพิ่มเพื่อน LINE</button>
     <button class="ghost" style="width:100%;margin-top:10px" onclick="recheckFriend()">เพิ่มแล้ว — ดำเนินการต่อ</button>
   </div>
@@ -63,7 +63,7 @@
     <!-- Loyalty points (filled by loadLoyalty); shown once the customer has earned anything -->
     <div id="loyaltyCard" style="display:none;background:linear-gradient(135deg,#1e3a5f,#2c5a8f);color:#fff;border-radius:16px;padding:16px;margin:0 0 14px;text-align:left">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:13px;opacity:.85">⭐ สะสมแก้วของคุณ <span id="loyBadge" style="display:none;background:rgba(255,255,255,.22);border-radius:99px;padding:2px 9px;font-weight:800;margin-left:4px;font-size:12px"></span></div>
+        <div style="font-size:13px;opacity:.85">⭐ สะสม<span data-unit>แก้ว</span>ของคุณ <span id="loyBadge" style="display:none;background:rgba(255,255,255,.22);border-radius:99px;padding:2px 9px;font-weight:800;margin-left:4px;font-size:12px"></span></div>
         <div style="font-size:11px;opacity:.7" id="loyRate"></div>
       </div>
       <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">ดวง</span></div>
@@ -184,8 +184,21 @@
 </div>
 <div id="toast" class="toast"></div>
 
+<!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
+<div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0">
+    <h1 id="amTitle" style="margin:0 0 6px"></h1>
+    <p id="amMsg" class="muted" style="font-size:14px;line-height:1.45;margin:0 0 6px;white-space:pre-line"></p>
+    <input id="amInput" onkeydown="if(event.key==='Enter')amOk()" style="display:none;width:100%;box-sizing:border-box;margin:8px 0 2px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;color:var(--ink)">
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button id="amCancel" class="ghost" style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
+      <button id="amOk" class="ok" style="flex:1.4;min-height:48px" onclick="amOk()">ตกลง</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOPPING PICKER (per drink) -->
-<div id="topPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
+<div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <h1 id="topPopTitle">ท็อปปิ้ง</h1>
     <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
@@ -198,7 +211,7 @@
 </div>
 
 <!-- SWEETNESS PICKER (step 3) -->
-<div id="sweetPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
+<div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
     <h1 id="sweetTitle">ความหวาน</h1>
     <p class="muted">เลือกระดับความหวาน</p>
@@ -207,7 +220,7 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
-<div id="basketPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
+<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
@@ -228,12 +241,47 @@ let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = nul
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// In-app modal: appPrompt (text input) + appConfirm (yes/no) — replaces native prompt()/confirm().
+let _amRes=null;
+window.amOk=()=>{ const inp=$('amInput'); const shown=inp.style.display!=='none'; _amClose(shown?inp.value:true); };
+window.amCancel=()=>_amClose(null);
+function _amClose(v){ $('appModal').style.display='none'; const r=_amRes; _amRes=null; if(r) r(v); }
+function _appModal({title,message,okText,cancelText,danger,input}){
+  $('amTitle').textContent=title||''; $('amTitle').style.display=title?'':'none';
+  const msg=$('amMsg'); msg.textContent=message||''; msg.style.display=message?'':'none';
+  const inp=$('amInput');
+  if(input){ inp.style.display=''; inp.type=input.type||'text'; inp.value=input.value!=null?input.value:''; inp.placeholder=input.placeholder||''; inp.inputMode=input.inputMode||''; }
+  else inp.style.display='none';
+  const ok=$('amOk'); ok.textContent=okText||'ตกลง'; ok.className=danger?'ghost danger':'ok';
+  const cancel=$('amCancel'); cancel.textContent=cancelText||'ยกเลิก'; cancel.style.display=(cancelText==='')?'none':'';
+  $('appModal').style.display='flex';
+  if(input) setTimeout(()=>{ try{ inp.focus(); inp.select(); }catch(e){} },60);
+  return new Promise(res=>{ _amRes=res; }); }
+window.appPrompt=({title='',message='',value='',placeholder='',type='text',inputMode='',okText='ตกลง',cancelText='ยกเลิก'}={})=>
+  _appModal({title,message,okText,cancelText,input:{value,placeholder,type,inputMode}}).then(v=> v===null?null:String(v));
+window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
+  _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
+// White-label: apply brand name/theme/logo (defaults to YO-DEE server-side → no-op for this shop).
+async function applyBrand(){
+  try{ const b=await (await fetch('/api/brand')).json(); window.BRAND=b;
+    if(b.theme){ document.documentElement.style.setProperty('--navy', b.theme); document.querySelector('meta[name=theme-color]')?.setAttribute('content', b.theme); }
+    if(b.logo) document.querySelectorAll('img.logo,[data-brand-logo]').forEach(el=>{ el.src=b.logo; });
+    document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=b.name);
+    if(b.unit && b.unit!=='แก้ว') document.querySelectorAll('[data-unit]').forEach(el=>el.textContent=b.unit);
+    if(b.name) document.title=document.title.replace(/YO-DEE Yogurt/g,b.name).replace(/YO-DEE/g,b.short||b.name);
+  }catch(e){}
+}
+applyBrand();
+// Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
+function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
 function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=msg;}
 
 async function initLiff(){
   cfg = await api('/api/config');
+  // Package 1 (POS only): customer LINE ordering is disabled — show a clean notice, don't render the order UI.
+  if (cfg.posOnly){ err('ระบบนี้ไม่เปิดสั่งผ่านไลน์ · กรุณาสั่งที่เคาน์เตอร์'); return; }
   if (cfg.liffId && window.liff){
     try{
       await liff.init({ liffId: cfg.liffId });
@@ -345,13 +393,13 @@ function updateNudges(){
   const per=_loyPer||10, now=_loyPts||0, inCart=cartDrinkCount(), projected=now+inCart;
   const inCycle=now%per, toGo=(per-inCycle)%per;
   // Subtle chip while browsing: progress in the current cycle (hidden if far away).
-  if(chip){ if(now>0 && toGo<=3 && toGo>0){ chip.textContent='⭐ '+inCycle+'/'+per+' · อีก '+toGo+' แก้ว ได้ฟรี 1 แก้ว!'; chip.style.display=''; } else chip.style.display='none'; }
+  if(chip){ if(now>0 && toGo<=3 && toGo>0){ chip.textContent='⭐ '+inCycle+'/'+per+' · อีก '+toGo+' '+unit()+' ได้ฟรี 1 '+unit()+'!'; chip.style.display=''; } else chip.style.display='none'; }
   // Cart nudge (the hero): celebrate when this cart crosses a reward, else nudge only when close.
   if(nudge){
     const earnsNew = Math.floor(projected/per) > Math.floor(now/per);
     const needFromProjected = (per-(projected%per))%per;
     if(inCart>0 && earnsNew){ nudge.innerHTML='🎉 ตะกร้านี้ทำให้คุณครบ '+per+' ดวง — รอบหน้าแลกฟรีได้เลย!'; nudge.style.background='rgba(47,194,166,.16)'; nudge.style.color='#178a72'; nudge.style.display=''; }
-    else if(needFromProjected>0 && needFromProjected<=2){ nudge.innerHTML='🥤 เพิ่มอีก '+needFromProjected+' แก้ว ได้ฟรี 1 แก้ว!'; nudge.style.background='rgba(243,203,85,.20)'; nudge.style.color='#946f00'; nudge.style.display=''; }
+    else if(needFromProjected>0 && needFromProjected<=2){ nudge.innerHTML='🥤 เพิ่มอีก '+needFromProjected+' '+unit()+' ได้ฟรี 1 '+unit()+'!'; nudge.style.background='rgba(243,203,85,.20)'; nudge.style.color='#946f00'; nudge.style.display=''; }
     else nudge.style.display='none';
   }
 }
@@ -368,14 +416,14 @@ async function loadLoyalty(){
     if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;    // only show once they've earned
     const per = conf.stampsPerReward||10, have = bal.points||0;
     $('loyPoints').textContent = have;
-    $('loyRate').textContent = 'ครบ '+per+' แก้ว = ฟรี 1 แก้ว';
+    $('loyRate').textContent = 'ครบ '+per+' '+unit()+' = ฟรี 1 '+unit();
     const badge=$('loyBadge'); if(bal.tier){ badge.textContent=bal.tier.emoji+' '+bal.tier.label; badge.style.display=''; } else if(badge){ badge.style.display='none'; }
     const inCycle = have % per, toGo = (per - inCycle) % per, free = Math.floor(have/per);
-    if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' แก้ว! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' แก้วได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
-    else { $('loyNext').textContent='อีก '+toGo+' แก้ว รับเครื่องดื่มฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
+    if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' '+unit()+'! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' '+unit()+'ได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
+    else { $('loyNext').textContent='อีก '+toGo+' '+unit()+' รับของรางวัลฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
     $('loyRewards').innerHTML = (conf.rewards||[]).map(r=>{
       const tile=`<div style="position:relative;width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#00b5d8,#2fc2a6);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none">🥤${r.image?`<img src="${esc(r.image)}" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px">`:''}</div>`;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)">${tile}<span style="flex:1">${esc(r.name)}</span><span style="font-weight:800;white-space:nowrap">${r.cost_points} แก้ว</span></div>`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)">${tile}<span style="flex:1">${esc(r.name)}</span><span style="font-weight:800;white-space:nowrap">${r.cost_points} ${unit()}</span></div>`;
     }).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">—</div>';
     renderBday(bal);
     show('loyaltyCard', true);
@@ -385,7 +433,7 @@ window.toggleRewards=()=>{ const r=$('loyRewards'); if(r) r.style.display = (r.s
 // Birthday capture (optional) + greeting in the loyalty card.
 function renderBday(bal){
   const box=$('loyBday'); if(!box) return; box.style.display='';
-  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! วันนี้สั่งผ่านไลน์ รับเครื่องดื่มฟรี 1 แก้ว</div>'; return; }
+  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! วันนี้สั่งผ่านไลน์ รับของรางวัลฟรี 1 '+unit()+'</div>'; return; }
   if(bal.birthday){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML=`<div style="background:rgba(255,255,255,.1);border-radius:12px;padding:10px">
     <div style="font-size:12px;opacity:.9;margin-bottom:6px">🎂 เพิ่มวันเกิด รับเครื่องดื่มฟรีในวันเกิด <span style="opacity:.7">(ไม่บังคับ)</span></div>
@@ -415,7 +463,7 @@ async function loadReferral(){
     $('referralBody').innerHTML = html; show('referralCard', true);
   }catch(e){ /* never block ordering */ }
 }
-window.shareRef=(code)=>{ const msg='มาสะสมแก้วฟรีกับ YO-DEE Yogurt! 🥤 ใช้โค้ด '+code+' ครั้งแรก รับดวงฟรีทั้งคู่';
+window.shareRef=(code)=>{ const bn=(window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt'; const msg='มาสะสม'+unit()+'ฟรีกับ '+bn+'! 🥤 ใช้โค้ด '+code+' ครั้งแรก รับดวงฟรีทั้งคู่';
   try{ if(window.liff && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')){ liff.shareTargetPicker([{type:'text',text:msg}]).catch(()=>copyRef(msg)); return; } }catch(e){}
   copyRef(msg); };
 function copyRef(msg){ try{ navigator.clipboard.writeText(msg); if(window.toast) toast('คัดลอกข้อความชวนเพื่อนแล้ว ✅'); }catch(e){ if(window.toast) toast('คัดลอกไม่ได้ — ลองจดโค้ดส่งเพื่อน'); } }
@@ -497,15 +545,15 @@ function renderBasket(){
       <div class="row between"><b>${g.qty}× ${esc(e.name)}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
       ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 แก้ว" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
+      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 ${unit()}" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
   $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
   $('basketConfirm').disabled = !cart.length;
   updateNudges();
 }
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
-window.cancelBasket=()=>{ if(!cart.length){ closeOrderUI(); return; }
-  if(!confirm('ยกเลิกออเดอร์ทั้งหมด?')) return; cart=[]; renderBasketCount(); closeOrderUI(); };
+window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
+  if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
 window.confirmBasket=async()=>{
   if(submitting) return;
@@ -543,7 +591,7 @@ function showWow(loy){
     <div style="background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:14px;padding:14px">
       <div style="font-size:13px;opacity:.9">คุณได้รับ</div>
       <div style="font-size:34px;font-weight:900;line-height:1.1">+${loy.bonus} ดวงต้อนรับ 🎁</div>
-      <div style="font-size:13px;margin-top:4px;opacity:.95">สะสมแล้ว ${bal} ดวง · อีก ${toGo} แก้ว ได้ฟรี 1 แก้ว!</div>
+      <div style="font-size:13px;margin-top:4px;opacity:.95">สะสมแล้ว ${bal} ดวง · อีก ${toGo} ${unit()} ได้ฟรี 1 ${unit()}!</div>
     </div>
     <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow()">เยี่ยมเลย!</button>
   </div>`;
@@ -637,7 +685,7 @@ function applyPayChoice(){
   if(p||k) setQrFor(k);
 }
 window.requestRefund=async()=>{
-  const reason=prompt('แจ้งเหตุผลขอคืนเงิน (ถ้ามี):','')||'';
+  const reason=await appPrompt({title:'ขอคืนเงิน',message:'แจ้งเหตุผลขอคืนเงิน (ถ้ามี)',placeholder:'เหตุผล (เว้นว่างได้)',okText:'ส่งคำขอ'});
   if(reason===null) return;
   const b=$('refundReqBtn'); b.disabled=true;
   try{ await api('/api/tickets/'+ticketId+'/request-refund',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,reason})});
@@ -778,7 +826,7 @@ async function tick(){
 function startPolling(){ tick(); poll=setInterval(tick,3000); }
 
 window.cancelTicket = async ()=>{
-  if(!confirm('ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ')) return;
+  if(!(await appConfirm({title:'ขอยกเลิกออเดอร์',message:'ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ',okText:'ขอยกเลิก',danger:true}))) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
     toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');   // poll will refresh the button to "ส่งคำขอแล้ว"
   }catch(e){ const m=String(e.message||'');
