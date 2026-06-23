@@ -5,9 +5,9 @@
   <div class="brand"><img class="logo" src="/assets/logo.png" onerror="this.remove()" alt=""> <span data-brand-name>YO-DEE Yogurt</span></div>
   <div class="card"><h1>ระบบคิว</h1>
     <p class="muted">ระบบสแกนรับคิวพร้อมแจ้งเตือนทาง LINE · เลือกหน้าจอ:</p>
-    <div class="grid" style="margin-top:14px">
-      <a class="btn" href="/cashier/"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>แคชเชียร์</a>
-      <a class="btn ok" href="/display/"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>จอแสดงคิว</a>
+    <div class="grid" style="margin-top:14px" id="navGrid">
+      <a class="btn" id="lnkCashier" href="/cashier/"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>แคชเชียร์</a>
+      <a class="btn ok" id="lnkDisplay" href="/display/"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>จอแสดงคิว</a>
       <a class="btn ghost" id="printBtn" href="/print/"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>พิมพ์โปสเตอร์</a>
     </div>
     <p class="muted" style="margin-top:16px;font-size:13px">โดยปกติลูกค้าจะเข้ามาโดยสแกน QR ที่พิมพ์ไว้ที่ร้าน (ไฟล์อยู่ที่ <code>public/assets/qr/</code> · รัน <code>npm run qr</code> เพื่อสร้าง)</p>
@@ -16,18 +16,20 @@
 <script>
 // One "Customer · <zone>" button per zone (inserted before Print), so every zone is reachable.
 (async()=>{
+  const b=(location.pathname.match(/^(\/b\/[^/]+)/)||['',''])[1];
+  if(b){ document.getElementById('lnkCashier').href=b+'/cashier/'; document.getElementById('lnkDisplay').href=b+'/display/'; document.getElementById('printBtn').href=b+'/print/'; }
   const ic='<svg class="ic" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>';
   // Package 1 (POS only): no customer LINE ordering / QR poster — hide those entry points.
-  try{ const b=await (await fetch('/api/brand')).json(); if(b&&b.package==='pos'){ const pb=document.getElementById('printBtn'); if(pb) pb.style.display='none'; return; } }catch(e){}
+  try{ const r=await (await fetch('/api/brand')).json(); if(r&&r.package==='pos'){ const pb=document.getElementById('printBtn'); if(pb) pb.style.display='none'; return; } }catch(e){}
   try{
     const stores=await (await fetch('/api/stores')).json();
     const sid=(stores[0]&&stores[0].id)||1;
     const zones=await (await fetch('/api/stores/'+sid+'/zones')).json();
     const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const html=zones.map(z=>`<a class="btn ghost" href="/liff/?zone=${z.id}">${ic}ลูกค้า · ${esc(z.name)}</a>`).join('');
+    const html=zones.map(z=>`<a class="btn ghost" href="${b}/liff/?zone=${z.id}">${ic}ลูกค้า · ${esc(z.name)}</a>`).join('');
     document.getElementById('printBtn').insertAdjacentHTML('beforebegin', html);
   }catch(e){
-    document.getElementById('printBtn').insertAdjacentHTML('beforebegin',`<a class="btn ghost" href="/liff/?zone=1">${ic}ลูกค้า (โซน 1)</a>`);
+    document.getElementById('printBtn').insertAdjacentHTML('beforebegin',`<a class="btn ghost" href="${b}/liff/?zone=1">${ic}ลูกค้า (โซน 1)</a>`);
   }
 })();
 </script>

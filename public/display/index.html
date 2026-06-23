@@ -33,6 +33,7 @@
 <script type="module">
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+(function(){ const b=(location.pathname.match(/^(\/b\/[^/]+)/)||['',''])[1]; if(b){ const el=document.querySelector('a[href="/"]'); if(el) el.href=b+'/'; } })();
 let zones=[], zoneId=null, es=null, soundOn=false, lastNow=null;
 
 async function boot(){

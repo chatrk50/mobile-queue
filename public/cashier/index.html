@@ -521,6 +521,7 @@ async function applyBrand(){
   }catch(e){}
 }
 applyBrand();
+(function(){ const b=(location.pathname.match(/^(\/b\/[^/]+)/)||['',''])[1]; if(b){ const el=document.querySelector('a[href="/"]'); if(el) el.href=b+'/'; } })();
 // Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
