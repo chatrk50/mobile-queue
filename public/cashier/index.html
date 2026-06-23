@@ -428,6 +428,15 @@
   #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
   #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
   #moreMenuBody .ic{width:19px;height:19px}
+  /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
+  .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  .tgl.on{background:var(--accent2,#2fc2a6)}
+  .tgl.off{background:#ccd6df}
+  .tgl::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(16,40,70,.3)}
+  .tgl.on::after{left:25px}
+  .tgl:disabled{opacity:.45;cursor:not-allowed}
+  .feat-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card,#fff)}
+  .feat-row .ic{width:22px;height:22px;color:var(--navy);flex:none}
 </style>
 <div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
@@ -614,6 +623,12 @@ const IC={
   partial:'<svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
   split:'<svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
   more:'<svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
+  ticket:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M13 7v10"/></svg>',
+  shield:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7-7 8-4-1-7-3.5-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+  clock:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  bell:'<svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  trash:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>',
+  chart:'<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>',
 };
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
@@ -2091,32 +2106,34 @@ window.printKitchen=async(tid)=>{
 window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
-  const row=(key,on,title,desc,disabled)=>`
-    <div class="row between" style="align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px">
-      <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px">${desc}</div></div>
-      <button class="${on?'ok':'ghost'}" ${disabled?'disabled style="opacity:.5"':''} style="padding:8px 14px;min-width:64px" onclick="toggleFeature('${key}',${on?0:1})">${on?'เปิด':'ปิด'}</button>
+  // Each feature row: line icon + title/desc + an iOS-style on/off switch (consistent theme, no emoji).
+  const row=(key,on,icon,title,desc,disabled)=>`
+    <div class="feat-row">
+      ${icon}
+      <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:12px;margin-top:2px">${desc}</div></div>
+      <button class="tgl ${on?'on':'off'}" ${disabled?'disabled':''} onclick="toggleFeature('${key}',${on?0:1})" aria-label="${title}" role="switch" aria-checked="${on?'true':'false'}"></button>
     </div>`;
   $('featuresBody').innerHTML=
-    row('queueFirst', f.queueFirst, '🎫 เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
-    row('printEnabled', f.printEnabled, '🖨️ พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
-    row('slipAuto', f.slipAuto, '🤖 ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
-    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>⌛ ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div>
-      <div class="row" style="gap:8px;align-items:center"><input id="pendVoidInp" type="number" inputmode="numeric" min="0" value="${f.pendingVoidMinutes!=null?f.pendingVoidMinutes:30}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิด)</span>
+    row('queueFirst', f.queueFirst, IC.ticket, 'เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
+    row('printEnabled', f.printEnabled, IC.print, 'พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
+    row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div></div></div>
+      <div class="row" style="gap:8px;align-items:center;width:100%"><input id="pendVoidInp" type="number" inputmode="numeric" min="0" value="${f.pendingVoidMinutes!=null?f.pendingVoidMinutes:30}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิด)</span>
         <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="savePendVoid()">บันทึก</button></div>
     </div>`+
-    `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
-      <b>📲 แจ้งเตือนเจ้าของทาง LINE</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div>
-      <div class="row" style="gap:6px"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.bell}</span><div><b>แจ้งเตือนเจ้าของทาง LINE</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ใส่ LINE userId ของเจ้าของ → รับแจ้งของใกล้หมด + สรุปยอดได้ ${f.lineReady?'':'<span style="color:var(--danger)">(บน UAT ส่งจริงไม่ได้ — LINE ปิด · ใช้บน prod)</span>'}</div></div></div>
+      <div class="row" style="gap:6px;width:100%"><input id="ownerLineIdInp" placeholder="Uxxxxxxxx... (LINE userId)" value="${esc(f.ownerLineId||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
-      <button class="ghost" style="width:100%;margin-top:8px;padding:8px" onclick="testOwnerSummary()">📊 ส่งสรุปยอดวันนี้ทดสอบ</button>
+      <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
-    `<div class="muted" style="font-size:12px;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px">⏰ เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
-    `<div style="border:1px solid var(--danger);border-radius:12px;padding:12px;margin-top:4px">
-      <b style="color:var(--danger)">🧹 ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div>
+    `<div class="muted" style="font-size:12px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px">เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
+    `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start;color:var(--danger)"><span style="flex:none">${IC.trash}</span><div><b style="color:var(--danger)">ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div></div></div>
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
   $('featuresPop').style.display='flex';
