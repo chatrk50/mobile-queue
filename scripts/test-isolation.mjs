@@ -218,5 +218,36 @@ const cAfter  = runWithTenant(C.id, () => {
 ok(aAfter === 0, 'clearTx: A\'s tickets gone after clear');
 ok(cAfter >= cBefore && cBefore >= 1, 'clearTx: C\'s tickets untouched by A\'s clear');
 
+// --- Tier-up detection (adopt-backlog #1: configurable membership tiers) ---
+// Tests that loyaltyTier() correctly transitions when lifetime_points crosses a threshold,
+// and that the pre/post comparison logic used by awardPoints() would fire tierUp correctly.
+runWithTenant(A.id, () => {
+  Q.setLoyaltyEnabled(true);
+  Q.setTiers([
+    { emoji: '🥉', label: 'Bronze', min: 5, perk: 'ส่วนลด 5%' },
+    { emoji: '🥇', label: 'Gold', min: 20, perk: 'ส่วนลด 15%' },
+  ]);
+});
+const t1 = runWithTenant(A.id, () => Q.loyaltyTier(0));
+const t2 = runWithTenant(A.id, () => Q.loyaltyTier(4));
+const t3 = runWithTenant(A.id, () => Q.loyaltyTier(5));
+const t4 = runWithTenant(A.id, () => Q.loyaltyTier(19));
+const t5 = runWithTenant(A.id, () => Q.loyaltyTier(20));
+ok(t1 === null, 'tier-up: below first threshold → no tier');
+ok(t2 === null, 'tier-up: just below Bronze min (4) → no tier');
+ok(t3 && t3.label === 'Bronze', 'tier-up: exactly at Bronze min (5) → Bronze tier');
+ok(t4 && t4.label === 'Bronze', 'tier-up: between thresholds (19) → still Bronze');
+ok(t5 && t5.label === 'Gold', 'tier-up: exactly at Gold min (20) → Gold tier');
+// Simulate the pre/post comparison in awardPoints: 19 stamps → +2 → crosses Gold threshold.
+const prevTierSim = runWithTenant(A.id, () => Q.loyaltyTier(19));
+const newTierSim  = runWithTenant(A.id, () => Q.loyaltyTier(21));
+const tierUpSim = (newTierSim && (!prevTierSim || newTierSim.label !== prevTierSim.label)) ? newTierSim : null;
+ok(tierUpSim && tierUpSim.label === 'Gold', 'tier-up: awarding stamp that crosses Gold threshold fires tierUp');
+// No tier-up when staying in same tier.
+const stayPrev = runWithTenant(A.id, () => Q.loyaltyTier(10));
+const stayNew  = runWithTenant(A.id, () => Q.loyaltyTier(12));
+const noTierUp = (stayNew && (!stayPrev || stayNew.label !== stayPrev.label)) ? stayNew : null;
+ok(noTierUp === null, 'tier-up: award within same tier does NOT fire tierUp');
+
 console.log(`\n${fail ? '❌' : '✅'} isolation: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

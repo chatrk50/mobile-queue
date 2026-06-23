@@ -1199,7 +1199,12 @@ app.post('/api/tickets/:ticketId/redeem', (req, res) => {
 function notifyLoyalty(r) {
   const l = r && r.loyalty;
   if (l && l.awarded > 0 && l.key) {
-    pushText(l.key, `🎉 คุณได้รับ +${l.awarded} ดวง! สะสมรวม ${l.balance} ดวง\nสะสมครบแลกเครื่องดื่มฟรีได้เลยครับ`).catch(() => {});
+    let msg = `🎉 คุณได้รับ +${l.awarded} ดวง! สะสมรวม ${l.balance} ดวง\nสะสมครบแลกเครื่องดื่มฟรีได้เลยครับ`;
+    if (l.tierUp) {
+      msg += `\n\n🏅 ยินดีด้วย! คุณเลื่อนระดับเป็น ${l.tierUp.emoji} ${l.tierUp.label} แล้ว!`;
+      if (l.tierUp.perk) msg += `\nสิทธิพิเศษ: ${l.tierUp.perk}`;
+    }
+    pushText(l.key, msg).catch(() => {});
   }
 }
 // Cashier marks an order paid (PIN). Defined before the generic /:action route.

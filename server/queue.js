@@ -1316,6 +1316,9 @@ export function awardPoints(orderId) {
   const referrerKey = (isFirst && cust && cust.referred_by) ? cust.referred_by : null;
   const refBonus = referrerKey ? getReferralBonus() : 0;
   const total = pts + bonus + bdayBonus + refBonus;
+  // Snapshot lifetime before the transaction so we can detect a tier upgrade afterwards.
+  const preTx = db.prepare('SELECT lifetime_points FROM customers WHERE line_user_id=?').get(key);
+  const prevLifetime = preTx ? (preTx.lifetime_points || 0) : 0;
   db.transaction(() => {
     db.prepare(
       `INSERT INTO customers (line_user_id, name, points, lifetime_points)
@@ -1335,7 +1338,12 @@ export function awardPoints(orderId) {
     }
   })();
   if (refBonus > 0 && referrerKey) pushQueue(referrerKey, `👫 เพื่อนที่คุณชวนสั่งครั้งแรกแล้ว! รับ +${refBonus} ดวง 🎉`, null);
-  return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
+  // Detect tier upgrade: compare tier before vs after the stamp award.
+  const newLifetime = prevLifetime + total;
+  const prevTier = loyaltyTier(prevLifetime);
+  const newTierObj = loyaltyTier(newLifetime);
+  const tierUp = (newTierObj && (!prevTier || newTierObj.label !== prevTier.label)) ? newTierObj : null;
+  return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points, tierUp };
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {
