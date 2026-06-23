@@ -137,10 +137,15 @@
 
   <!-- Shop URL -->
   <div class="card" style="padding:16px">
-    <div style="font-size:12.5px;font-weight:600;color:var(--mut);margin-bottom:8px">URL ร้านของคุณ (บุ๊กมาร์กเลย)</div>
+    <div style="font-size:12.5px;font-weight:600;color:var(--mut);margin-bottom:8px">🔑 URL ร้านของคุณ (บุ๊กมาร์กเลย)</div>
     <div class="urlbox">
       <code id="shopUrl">กำลังโหลด…</code>
       <button onclick="copyUrl()">ก๊อป</button>
+    </div>
+    <div style="font-size:12.5px;font-weight:600;color:var(--mut);margin:12px 0 8px">🌐 หน้าร้านสำหรับลูกค้า (แชร์ให้ลูกค้าได้เลย)</div>
+    <div class="urlbox">
+      <code id="shareUrl">กำลังโหลด…</code>
+      <button onclick="copyShare()">ก๊อป</button>
     </div>
   </div>
 
@@ -161,14 +166,23 @@
 <script>
 const slug = (location.pathname.match(/\/b\/([^/]+)\//) || [])[1] || '';
 const cashierUrl = slug ? `/b/${slug}/cashier/` : '/cashier/';
+const shareUrl = slug ? `/b/${slug}/share/` : '';
 document.getElementById('ctaBtn').href = cashierUrl;
 document.getElementById('shopUrl').textContent = location.origin + cashierUrl;
+if(shareUrl) document.getElementById('shareUrl').textContent = location.origin + shareUrl;
 
 function copyUrl(){
   const u = location.origin + cashierUrl;
   navigator.clipboard.writeText(u).then(() => {
-    const b = document.querySelector('.urlbox button');
+    const b = document.querySelectorAll('.urlbox button')[0];
     b.textContent = 'ก๊อปแล้ว'; setTimeout(() => { b.textContent = 'ก๊อป'; }, 1800);
+  }).catch(() => {});
+}
+function copyShare(){
+  const u = location.origin + shareUrl;
+  navigator.clipboard.writeText(u).then(() => {
+    const b = document.querySelectorAll('.urlbox button')[1];
+    b.textContent = 'ก๊อปแล้ว!'; setTimeout(() => { b.textContent = 'ก๊อป'; }, 1800);
   }).catch(() => {});
 }
 

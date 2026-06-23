@@ -64,6 +64,7 @@
     <div class="shop-body">
       <h1 class="shop-name" id="shopName">กำลังโหลด…</h1>
       <p class="shop-sub" id="shopAddr" style="display:none"></p>
+      <p class="shop-sub" id="shopAbout" style="display:none;font-style:italic"></p>
       <div id="openBadge"></div>
       <div id="hoursCard" style="display:none" class="hours">
         <div id="hoursBody"></div>
@@ -147,6 +148,7 @@ async function copyShareUrl(){
     // Address
     if(profile.address){ $('shopAddr').textContent = profile.address; $('shopAddr').style.display=''; }
     else if(profile.phone){ $('shopAddr').textContent = 'โทร ' + profile.phone; $('shopAddr').style.display=''; }
+    if(profile.about){ $('shopAbout').textContent = profile.about; $('shopAbout').style.display=''; }
 
     // Open/closed badge
     const badge=$('openBadge');
