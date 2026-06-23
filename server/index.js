@@ -151,29 +151,34 @@ app.use((req, res, next) => {
   let html; try { html = readFileSync(file, 'utf8'); } catch { return next(); }
   const b = JSON.stringify(req.tenantBase);
   const shim = `<script>(function(){var b=${b};var pfx=function(u){return (typeof u==='string'&&(u.indexOf('/api/')===0||u.indexOf('/line/')===0||u==='/manifest.webmanifest'))?b+u:u;};var f=window.fetch;window.fetch=function(u,o){return f.call(this,pfx(u),o);};if(window.EventSource){var E=window.EventSource;var W=function(u,o){return new E(pfx(u),o);};W.prototype=E.prototype;W.CONNECTING=0;W.OPEN=1;W.CLOSED=2;window.EventSource=W;}})();</script>`;
-  // For the share page, inject social OG meta tags with the tenant's brand so link previews on
-  // LINE/Facebook/etc. show the shop name and about text instead of the generic platform defaults.
-  let ogInject = '';
+  // Fetch tenant brand once; used for OG tags (share page) and iOS meta tag replacement (all pages).
+  let tenantBrandCache = null;
+  try { tenantBrandCache = brandFor(req); } catch { /* leave null */ }
+  const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let out = html;
+
+  // iOS "Add to Home Screen" app title — overwrite the static "YO-DEE" fallback with tenant short name.
+  if (tenantBrandCache) {
+    const shortName = esc(tenantBrandCache.short || tenantBrandCache.name || '');
+    if (shortName) out = out.replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*(")/,  `$1${shortName}$2`);
+  }
+
+  // Social OG meta tags for the share page so link previews on LINE/Facebook show the shop brand.
   if (p === '/share/' || p === '/share/index.html') {
     try {
-      const brand = brandFor(req);
+      const brand = tenantBrandCache || brandFor(req);
       const about = getSetting('brand:about', '') || '';
-      const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const title = esc(brand.name || 'ร้านของเรา');
       const desc = esc(about || 'สั่งออเดอร์และรับคิวผ่าน LINE ได้เลย');
       const img = brand.logo && brand.logo.startsWith('http') ? esc(brand.logo) : null;
-      ogInject = `<meta property="og:title" content="${title}"><meta property="og:description" content="${desc}"><meta property="og:url" content="${esc(PUBLIC_BASE_URL + req.tenantBase + '/share/')}">` + (img ? `<meta property="og:image" content="${img}">` : '');
+      const ogInject = `<meta property="og:title" content="${title}"><meta property="og:description" content="${desc}"><meta property="og:url" content="${esc(PUBLIC_BASE_URL + req.tenantBase + '/share/')}">` + (img ? `<meta property="og:image" content="${img}">` : '');
+      out = out.replace('<meta property="og:image" content="/assets/logo.png">', ogInject + '<meta property="og:image" content="/assets/logo.png">');
+      const shopName = esc(brand.name || 'ร้านของเรา');
+      out = out.replace('<title>ร้านของเรา — KhaiDee</title>', `<title>${shopName} — KhaiDee</title>`);
     } catch { /* keep static defaults */ }
   }
-  let out = html;
-  if (ogInject) {
-    out = out.replace('<meta property="og:image" content="/assets/logo.png">', ogInject + '<meta property="og:image" content="/assets/logo.png">');
-    try {
-      const esc2 = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const shopName = esc2(brandFor(req).name || 'ร้านของเรา');
-      out = out.replace('<title>ร้านของเรา — KhaiDee</title>', `<title>${shopName} — KhaiDee</title>`);
-    } catch { /* keep static title */ }
-  }
+
   out = out.replace('href="/manifest.webmanifest"', `href="${req.tenantBase}/manifest.webmanifest"`);
   res.type('html').send(out.includes('</head>') ? out.replace('</head>', shim + '</head>') : shim + out);
 });
