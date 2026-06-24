@@ -1390,6 +1390,22 @@ export function deleteMenuItem(id) {
   return { ok: true };
 }
 
+/** Reorder a menu item up/down WITHIN its category (drinks among drinks, toppings among toppings).
+ *  This is the order the customer/cashier see in the ordering grid (listMenu ORDER BY sort, id).
+ *  Normalizes the whole category's sort to 0..n-1 on each move so ties never block a swap. */
+export function moveMenuItem(id, dir) {
+  const item = db.prepare('SELECT id, category FROM menu_items WHERE id=?').get(id);
+  if (!item) throw new Error('not_found');
+  const list = db.prepare('SELECT id FROM menu_items WHERE category=? ORDER BY sort, id').all(item.category).map((r) => r.id);
+  const idx = list.indexOf(Number(id));
+  const swap = dir === 'up' ? idx - 1 : idx + 1;
+  if (idx < 0 || swap < 0 || swap >= list.length) return { ok: true, moved: false };   // already at the edge
+  [list[idx], list[swap]] = [list[swap], list[idx]];
+  const tx = db.transaction(() => { const upd = db.prepare('UPDATE menu_items SET sort=? WHERE id=?'); list.forEach((mid, i) => upd.run(i, mid)); });
+  tx();
+  return { ok: true, moved: true };
+}
+
 // ---------- Customers: remember LINE customers for reorder suggestions ----------
 /** Upsert a LINE customer's profile + counters after they place an order. Best-effort:
  *  never block the order on a customer-record failure. */

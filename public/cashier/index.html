@@ -1380,17 +1380,24 @@ let _selMenuId=null;
 // Left pane: clickable item list, grouped by Menu (เครื่องดื่ม) and Topping.
 function renderMenuMgr(){
   if(!MENU.length){ $('menuMgr').innerHTML='<p class="muted">ยังไม่มีเมนู</p>'; return; }
-  const row=(m)=>`
+  const row=(m,i,n)=>`
     <div class="ms-item ${m.id===_selMenuId?'sel':''}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
       <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
       <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>
         <div class="muted" style="font-size:12px">฿${m.price}${m.soldout?' · หมด':''}${m.active?'':' · ซ่อน'}</div></div>
-      <svg class="ic" viewBox="0 0 24 24" style="opacity:.35;margin:0"><path d="M9 18l6-6-6-6"/></svg>
+      <div style="display:flex;flex-direction:column;gap:2px;flex:none">
+        <button class="ghost" style="padding:3px 8px;min-width:0;${i===0?'opacity:.3;pointer-events:none':''}" title="เลื่อนขึ้น" onclick="event.stopPropagation();moveMenu(${m.id},'up')"><svg class="ic" viewBox="0 0 24 24" style="margin:0;width:16px;height:16px"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button class="ghost" style="padding:3px 8px;min-width:0;${i===n-1?'opacity:.3;pointer-events:none':''}" title="เลื่อนลง" onclick="event.stopPropagation();moveMenu(${m.id},'down')"><svg class="ic" viewBox="0 0 24 24" style="margin:0;width:16px;height:16px"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
     </div>`;
   const drinks=MENU.filter(m=>m.category!=='topping'), tops=MENU.filter(m=>m.category==='topping');
-  const sec=(title,items)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length})</div>`+items.map(row).join(''):'';
+  const sec=(title,items)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length}) — ใช้ ▲▼ จัดลำดับการแสดงผล</div>`+items.map((m,i)=>row(m,i,items.length)).join(''):'';
   $('menuMgr').innerHTML = sec('🥤 เครื่องดื่ม · Menu', drinks)+(tops.length?'<div style="height:8px"></div>':'')+sec('🍫 ท็อปปิ้ง · Topping', tops);
 }
+// Reorder a menu item up/down (within its category) → changes the order in the customer + cashier grid.
+window.moveMenu=async(id,dir)=>{
+  try{ const r=await api('/api/menu/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});
+    if(r.moved){ await loadMenu(); renderMenuMgr(); } }catch(e){ toast(err(e)); } };
 // Right pane: full edit form for the selected item (or a new one).
 window.editMenuForm=(id)=>{
   _selMenuId=id; const isNew=id==='new';
