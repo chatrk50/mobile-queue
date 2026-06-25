@@ -255,6 +255,17 @@ ok(sh.daily.length >= 1 && Array.isArray(sh.weekly) && Array.isArray(sh.monthly)
 ok(sh.yearly.length >= 1 && near(sh.yearly[0].net, sh.daily.reduce((s, d) => s + (d.net || 0), 0)), 'INVARIANT yearly net rolls up the daily nets');
 ok(sh.weekly.length >= 1 && near(sh.weekly.reduce((s, w) => s + (w.net || 0), 0), sh.daily.reduce((s, d) => s + (d.net || 0), 0)), 'INVARIANT weekly nets sum to the daily nets');
 
+// ---- Menu reorder: arrange the order customers/cashier see (listMenu ORDER BY sort) ----
+console.log('\n== Menu reorder ==');
+const d1 = Q.addMenuItem({ name: 'ReorderA', price: 10, category: 'drink' });
+const d2 = Q.addMenuItem({ name: 'ReorderB', price: 10, category: 'drink' });
+const before = Q.listMenu().filter((m) => m.category !== 'topping').map((m) => m.id);
+ok(before.indexOf(d1.id) < before.indexOf(d2.id), 'new items append in creation order (A before B)');
+Q.moveMenuItem(d2.id, 'up');
+const after = Q.listMenu().filter((m) => m.category !== 'topping').map((m) => m.id);
+ok(after.indexOf(d2.id) < after.indexOf(d1.id), 'INVARIANT moveMenuItem(up) reorders the grid (B now before A)');
+ok(Q.moveMenuItem(after[0], 'up').moved === false, 'INVARIANT moving the top item up is a no-op (edge)');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

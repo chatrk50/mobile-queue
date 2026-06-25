@@ -662,7 +662,7 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort FROM menu_items ORDER BY sort, id').all();
+  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge FROM menu_items ORDER BY sort, id').all();
   // Per-branch overrides: drop items this branch disabled; apply the branch's soldout.
   if (branchId) {
     const ov = new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]));
@@ -1362,17 +1362,21 @@ export function channelNet(amount, channelId) {
   const pct = ch?.commission_pct || 0;
   return Math.round((amount * (1 - pct / 100) + Number.EPSILON) * 100) / 100;
 }
-export function addMenuItem({ name, name_en, price, image, category }) {
+// Merchandising badge shown on the tile (decorative; '' clears it). Validated against a fixed set.
+const VALID_BADGES = ['new', 'promo', 'hot'];
+const normBadge = (b) => (VALID_BADGES.includes(b) ? b : null);
+
+export function addMenuItem({ name, name_en, price, image, category, badge }) {
   const n = (name || '').toString().trim().slice(0, 80);
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
   const cat = category === 'topping' ? 'topping' : 'drink';
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
-  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort) VALUES (?,?,?,?,?,?)')
-    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s);
+  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort, badge) VALUES (?,?,?,?,?,?,?)')
+    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category }) {
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
@@ -1382,12 +1386,29 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const cat = category != null ? (category === 'topping' ? 'topping' : 'drink') : cur.category;
   const a = active != null ? (active ? 1 : 0) : cur.active;
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=? WHERE id=?').run(n, en, p, img, cat, a, so, id);
+  const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, id);
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {
   db.prepare('DELETE FROM menu_items WHERE id=?').run(id);
   return { ok: true };
+}
+
+/** Reorder a menu item up/down WITHIN its category (drinks among drinks, toppings among toppings).
+ *  This is the order the customer/cashier see in the ordering grid (listMenu ORDER BY sort, id).
+ *  Normalizes the whole category's sort to 0..n-1 on each move so ties never block a swap. */
+export function moveMenuItem(id, dir) {
+  const item = db.prepare('SELECT id, category FROM menu_items WHERE id=?').get(id);
+  if (!item) throw new Error('not_found');
+  const list = db.prepare('SELECT id FROM menu_items WHERE category=? ORDER BY sort, id').all(item.category).map((r) => r.id);
+  const idx = list.indexOf(Number(id));
+  const swap = dir === 'up' ? idx - 1 : idx + 1;
+  if (idx < 0 || swap < 0 || swap >= list.length) return { ok: true, moved: false };   // already at the edge
+  [list[idx], list[swap]] = [list[swap], list[idx]];
+  const tx = db.transaction(() => { const upd = db.prepare('UPDATE menu_items SET sort=? WHERE id=?'); list.forEach((mid, i) => upd.run(i, mid)); });
+  tx();
+  return { ok: true, moved: true };
 }
 
 // ---------- Customers: remember LINE customers for reorder suggestions ----------

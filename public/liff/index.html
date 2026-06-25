@@ -496,9 +496,12 @@ async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[];
 window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
+  const MENU_BADGE={ new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'} };
+  const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:1;line-height:1.5">${b.t}</span>`:''; };
   const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
-    return `<button class="menu-btn" ${out?'disabled style="opacity:.5;filter:grayscale(1)"':`onclick="pickDrink(${m.id})"`}>
-    <div class="mimg" style="font-size:41px">${itemImg(m)}</div>
+    const st='position:relative'+(out?';opacity:.5;filter:grayscale(1)':'');
+    return `<button class="menu-btn" style="${st}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
+    ${badge(m)}<div class="mimg" style="font-size:41px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
     <div class="mpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
