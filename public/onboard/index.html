@@ -107,7 +107,7 @@
       <div class="step-body">
         <b>ลองรับออเดอร์หน้าร้าน</b>
         <span>กดสั่งเมนู คิดเงิน รับชำระ — ทดสอบก่อนเปิดร้านจริง</span>
-        <div><span class="pill-todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>ทำหลังใส่เมนูแล้ว</span></div>
+        <div id="s2status"><span class="pill-todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>ทำหลังใส่เมนูแล้ว</span></div>
       </div>
     </div>
     <!-- Step 3: LINE -->
@@ -240,6 +240,13 @@ async function applyTemplate(id, btn) {
     if (d.referralCode) {
       document.getElementById('refCodeDisplay').textContent = d.referralCode;
       document.getElementById('refCard').style.display = '';
+    }
+
+    // Step 2: first order
+    if (d.hasOrders) {
+      document.getElementById('ico2').className = 'ico done';
+      document.getElementById('s2status').innerHTML =
+        '<span class="pill-done"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>รับออเดอร์แล้ว</span>';
     }
 
     // Step 3: LINE

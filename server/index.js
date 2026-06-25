@@ -64,7 +64,6 @@ function logAppError(err, ctx = {}) {
 const COOKIE_SECURE = SAAS ? '; Secure' : '';
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   // Hardened CSP: allowlist the few real external origins (Google sign-in, Omise, LINE SDK, fonts)
@@ -233,6 +232,8 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   for (const ev of events) {
     if (ev.type === 'follow') {
       await replyText(ev.replyToken, 'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
+    } else if (ev.type === 'message') {
+      await replyText(ev.replyToken, 'ขอบคุณที่ทักมาค่ะ 😊 กรุณาสแกน QR ที่หน้าร้านเพื่อดูเมนูและรับหมายเลขคิวได้เลยนะคะ');
     }
   }
   res.sendStatus(200);
@@ -397,9 +398,10 @@ app.get('/api/onboard', (req, res) => {
   const lineOk = !!(getSetting('line:token', '') || getSetting('liff:id', ''));
   const stores = Q.listStores();
   const hasHours = stores.some((s) => s.hours_open);
+  const hasOrders = Q.monthOrderCount() > 0;
   const tenant = getTenant(req.tenantId);
   const referralCode = tenant?.referral_code || null;
-  res.json({ name: brand.name, menuCount, lineOk, hasHours, templates: listTemplates(), referralCode });
+  res.json({ name: brand.name, menuCount, lineOk, hasHours, hasOrders, templates: listTemplates(), referralCode });
 });
 
 // ---------- SaaS self-registration (Phase B) ----------
