@@ -1,4 +1,4 @@
-import { db, getSetting, setSetting } from './db.js';
+import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
@@ -1610,8 +1610,12 @@ export function createOrder(zoneId, items, opts = {}) {
   // even before payment, INCLUDING a held bill ("พักบิล / จ่ายทีหลัง"). The เข้าคิวทันที toggle is the
   // single source of truth: ON → every order gets a number now (unpaid ones wait in the queue with a
   // "ค้างชำระ" badge); OFF (pay-first) → number is issued only when payment is confirmed.
+  // RESILIENT: on prod (Turso) a stale write-stream can make assignQueueNumber throw — previously this
+  // was silently swallowed, stranding the order in "รอชำระเงิน" against the toggle. Now we reconnect +
+  // retry once (mirrors the midnight reset) and LOG if it still fails, so the toggle is honoured.
   if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
-    try { r.ticket = assignQueueNumber(r.ticket.id); } catch { /* lost a race → stays pending, harmless */ }
+    const numbered = assignQueueNumberResilient(r.ticket.id);
+    if (numbered) r.ticket = numbered;
   }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
@@ -1626,6 +1630,26 @@ export function createOrder(zoneId, items, opts = {}) {
     pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
   }
   return r;
+}
+
+// A dropped Turso/libSQL Hrana write-stream surfaces as these on the next write (the free instance's
+// embedded-replica stream expires while idle). Same matcher the midnight reset uses.
+const STREAM_STALE = /stream not found|stream expired|hrana|stream_expired|not found|404/i;
+/** Issue the queue number, surviving a stale Turso write-stream: reconnect + retry once, then LOG if
+ *  it still fails (returns null) so a queue-first order is never silently stranded in "รอชำระเงิน".
+ *  No-op overhead on local (node:sqlite) — reconnectDb returns false there. */
+function assignQueueNumberResilient(ticketId) {
+  try { return assignQueueNumber(ticketId); }
+  catch (e) {
+    const msg = String((e && e.message) || '');
+    if (DURABLE && STREAM_STALE.test(msg)) {
+      console.error('[order] queue-first numbering hit a stale Turso stream — reconnecting + retrying once:', msg);
+      try { reconnectDb(); return assignQueueNumber(ticketId); }
+      catch (e2) { console.error('[order] queue-first numbering STILL failed after reconnect — order stays in รอชำระเงิน:', String((e2 && e2.message) || e2)); return null; }
+    }
+    console.error('[order] queue-first numbering failed — order stays in รอชำระเงิน:', msg);
+    return null;
+  }
 }
 
 /** Pay-first: issue the real queue number for a 'pending' ticket (called once payment is
@@ -1662,9 +1686,9 @@ export function setOrderPaid(ticketId, opts = {}) {
     .run(actorId, method, order.id);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
-  let ticket = null;
-  try { ticket = assignQueueNumber(Number(ticketId)); }
-  catch { ticket = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId); }
+  // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
+  // without a number; falls back to the current ticket row if numbering ultimately fails.
+  let ticket = assignQueueNumberResilient(Number(ticketId)) || db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   // Auto-deduct ingredient stock per recipe (dormant until recipes are defined).
   deductStockForOrder(order);
   // Auto-earn loyalty stamps for a paid LINE order (no-op for cashier/walk-in or if disabled).
