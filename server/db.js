@@ -16,6 +16,7 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
+import { createHash, randomBytes } from 'node:crypto';
 import { hashPin, verifyPin } from './auth.js';
 import { currentTenantId, slugify } from './tenant.js';
 
@@ -538,6 +539,17 @@ try {
   );`);
 } catch { /* already exists */ }
 
+// Password-reset tokens — single-use, expire in 1 hour, raw token hashed (SHA-256) in the DB.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id  INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0
+  );`);
+} catch { /* already exists */ }
+
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
 // so it runs at most once; existing rows are assigned to branch 1.
@@ -955,6 +967,35 @@ export function updateTenantBrand(tenantId, { name, short, theme, unit, logo } =
   if (logo !== undefined) { sets.push('brand_logo=?'); vals.push(logo ? String(logo).slice(0, 400000) : null); } // data URL ok
   if (sets.length) { vals.push(tenantId); db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id=?`).run(...vals); }
   return getTenant(tenantId);
+}
+
+// ---------- Password-reset tokens ----------
+/** Create a single-use reset token for a tenant (1-hour TTL). Returns the raw token. */
+export function createResetToken(tenantId) {
+  const raw = randomBytes(32).toString('hex');  // 64-char hex — 256 bits of entropy
+  const hash = createHash('sha256').update(raw).digest('hex');
+  const expires = new Date(Date.now() + 3600 * 1000).toISOString();
+  // One active token per tenant — replace any existing one.
+  db.prepare('DELETE FROM password_reset_tokens WHERE tenant_id=?').run(tenantId);
+  db.prepare('INSERT INTO password_reset_tokens (tenant_id, token_hash, expires_at) VALUES (?,?,?)').run(tenantId, hash, expires);
+  return raw;
+}
+/** Validate a raw token. Returns the tenant_id or null (expired / used / not found). */
+export function validateResetToken(raw) {
+  if (!raw) return null;
+  const hash = createHash('sha256').update(String(raw)).digest('hex');
+  const row = db.prepare('SELECT tenant_id, expires_at, used FROM password_reset_tokens WHERE token_hash=?').get(hash);
+  if (!row || row.used || new Date(row.expires_at) < new Date()) return null;
+  return row.tenant_id;
+}
+/** Consume (mark used) a valid token, then set the new password. Returns false if invalid. */
+export function consumeResetToken(raw, newPassword) {
+  const tenantId = validateResetToken(raw);
+  if (!tenantId) return false;
+  const hash = createHash('sha256').update(String(raw)).digest('hex');
+  db.prepare('UPDATE password_reset_tokens SET used=1 WHERE token_hash=?').run(hash);
+  setOwnerPassword(tenantId, String(newPassword));
+  return true;
 }
 
 /** Brand config for a tenant (DB row → falls back to env defaults for tenant 1). */

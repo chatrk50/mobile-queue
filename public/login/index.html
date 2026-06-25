@@ -44,7 +44,24 @@
     <div class="err" id="err"></div>
     <button class="go" id="go" onclick="login()">เข้าสู่ระบบ</button>
     <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--mut)">ยังไม่มีร้าน? <a href="/signup/">เปิดร้านใหม่</a></p>
-    <p style="text-align:center;margin-top:6px;font-size:13px;color:var(--mut)">เข้าระบบไม่ได้? <a href="/help/">ศูนย์ช่วยเหลือ</a></p>
+    <p style="text-align:center;margin-top:6px;font-size:13px"><a href="#" onclick="showForgot(event)">ลืมรหัสผ่าน?</a></p>
+  </div>
+
+  <div class="card" id="forgot-form" style="display:none">
+    <h2 style="font-size:17px;font-weight:600;margin:0 0 14px">รีเซ็ตรหัสผ่าน</h2>
+    <label>อีเมลที่ใช้สมัคร</label>
+    <input id="forgot-email" type="email" placeholder="you@email.com" autocomplete="email">
+    <div class="err" id="forgot-err"></div>
+    <button class="go" id="forgot-go" onclick="forgotPw()">ส่งลิงก์รีเซ็ต</button>
+    <p style="text-align:center;margin-top:12px;font-size:13px"><a href="#" onclick="showLogin(event)">← กลับ</a></p>
+  </div>
+
+  <div class="card" id="reset-form" style="display:none">
+    <h2 style="font-size:17px;font-weight:600;margin:0 0 14px">ตั้งรหัสผ่านใหม่</h2>
+    <label>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</label>
+    <input id="new-pw" type="password" placeholder="รหัสผ่านใหม่" autocomplete="new-password">
+    <div class="err" id="reset-err"></div>
+    <button class="go" id="reset-go" onclick="resetPw()">บันทึกรหัสผ่าน</button>
   </div>
 
   <div class="card" id="chooser" style="display:none">
@@ -71,6 +88,33 @@ window.login=async()=>{ const email=$('email').value.trim(), password=$('passwor
   }catch(e){ $('err').textContent = e.message==='no_match'?'อีเมลหรือรหัสผ่านไม่ถูกต้อง':e.message==='too_many'?'พยายามบ่อยเกินไป ลองใหม่ภายหลัง':('เข้าไม่ได้: '+e.message); $('go').disabled=false; $('go').textContent='เข้าสู่ระบบ'; }
   };
 $('password').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
+function showLogin(e){ if(e) e.preventDefault(); $('form').style.display=''; $('forgot-form').style.display='none'; $('reset-form').style.display='none'; }
+function showForgot(e){ if(e) e.preventDefault(); $('form').style.display='none'; $('forgot-form').style.display=''; $('forgot-err').textContent=''; $('forgot-email').value=''; setTimeout(()=>$('forgot-email').focus(),50); }
+window.forgotPw=async()=>{
+  const email=$('forgot-email').value.trim(); $('forgot-err').textContent='';
+  if(!email){ $('forgot-err').textContent='กรอกอีเมล'; return; }
+  $('forgot-go').disabled=true; $('forgot-go').textContent='กำลังส่ง…';
+  try{ await fetch('/api/owner/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    $('forgot-form').innerHTML='<p style="text-align:center;padding:10px 0">✅ หากอีเมลนี้มีบัญชีอยู่ในระบบ ลิงก์รีเซ็ตจะถูกส่งไปยัง<br><b>'+email+'</b><br><br><small>กรุณาตรวจสอบกล่องขาเข้า (และโฟลเดอร์ Spam)</small></p>';
+  }catch(e){ $('forgot-err').textContent='ส่งไม่สำเร็จ ลองใหม่'; $('forgot-go').disabled=false; $('forgot-go').textContent='ส่งลิงก์รีเซ็ต'; }
+};
+window.resetPw=async()=>{
+  const pw=$('new-pw').value; $('reset-err').textContent='';
+  if(pw.length<6){ $('reset-err').textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'; return; }
+  $('reset-go').disabled=true; $('reset-go').textContent='กำลังบันทึก…';
+  const token=new URLSearchParams(location.search).get('reset');
+  try{ const r=await fetch('/api/owner/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password:pw})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'failed');
+    $('reset-form').innerHTML='<p style="text-align:center;padding:10px 0">✅ ตั้งรหัสผ่านใหม่สำเร็จ<br><br><a href="/login/">เข้าสู่ระบบ</a></p>';
+  }catch(e){ $('reset-err').textContent=e.message==='token_invalid_or_expired'?'ลิงก์หมดอายุหรือใช้ไปแล้ว — ขอลิงก์ใหม่':'บันทึกไม่สำเร็จ'; $('reset-go').disabled=false; $('reset-go').textContent='บันทึกรหัสผ่าน'; }
+};
+// Auto-show reset form when ?reset=<token> is present in URL.
+(()=>{ const token=new URLSearchParams(location.search).get('reset'); if(!token) return;
+  fetch('/api/owner/reset-check?token='+encodeURIComponent(token)).then(r=>r.json()).then(d=>{
+    if(d.ok){ $('form').style.display='none'; $('reset-form').style.display=''; }
+    else { $('err').textContent='ลิงก์รีเซ็ตหมดอายุหรือไม่ถูกต้อง — ขอลิงก์ใหม่ด้านล่าง'; }
+  }).catch(()=>{});
+})();
 (async()=>{ try{ const c=await (await fetch('/api/owner/config')).json(); if(!c.googleClientId) return;
   const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true;
   s.onload=()=>{ try{ google.accounts.id.initialize({ client_id:c.googleClientId, callback:async(resp)=>{

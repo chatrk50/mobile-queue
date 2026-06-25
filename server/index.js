@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats, createResetToken, validateResetToken, consumeResetToken } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -494,6 +494,40 @@ app.post('/api/owner/change-password', (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
   setOwnerPassword(req.tenantId, password);
   logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.change_password', ip: ipOf(req) });
+  res.json({ ok: true });
+});
+// Forgot-password flow: request a reset link (always returns ok — no account enumeration).
+app.post('/api/owner/forgot-password', async (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  res.json({ ok: true });   // respond immediately — timing-safe, no enumeration
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!email) return;
+  const matches = ownerTenantsByEmail(email);
+  for (const m of matches) {
+    try {
+      const token = createResetToken(m.tenantId);
+      const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+      await sendEmail({
+        to: email, subject: 'รีเซ็ตรหัสผ่าน — MobileQueue',
+        text: `คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):\n${base}/login/?reset=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
+        html: `<p>คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):</p><a href="${base}/login/?reset=${token}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ตั้งรหัสผ่านใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
+      });
+    } catch { /* non-fatal */ }
+  }
+});
+// Validate a reset token (GET with ?token= for pre-flight check).
+app.get('/api/owner/reset-check', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const tenantId = validateResetToken(req.query?.token);
+  res.json({ ok: !!tenantId });
+});
+// Consume a reset token and set the new password.
+app.post('/api/owner/reset-password', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const password = String(req.body?.password || '');
+  if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+  const ok = consumeResetToken(req.body?.token, password);
+  if (!ok) return res.status(400).json({ error: 'token_invalid_or_expired' });
   res.json({ ok: true });
 });
 function adminTry(req) {                                  // PIN-on-every-request path (used when 2FA off)
