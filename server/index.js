@@ -251,8 +251,11 @@ app.use((req, res, next) => {
       // branchIds are re-read from DB (not the token) so restriction changes apply immediately,
       // not after up to SESSION_HOURS when the cookie would expire.
       if (s && s.active && s.tenant_id === req.tenantId) {
-        const branchIds = s.role === 'owner' ? []
-          : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(s.id).map((r) => r.branch_id);
+        // Re-read branchIds from DB (not the token) so restriction changes apply immediately.
+        // Only in SAAS mode — single-tenant has no branch restriction concept.
+        const branchIds = (SAAS && s.role !== 'owner')
+          ? db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(s.id).map((r) => r.branch_id)
+          : [];
         req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds };
       }
     }
@@ -877,12 +880,17 @@ app.post('/api/staff/login', (req, res) => {
   if (!pin) return res.status(400).json({ error: 'pin_required' });
   // Match only staff of THIS tenant — the same PIN at another brand is a different person.
   const staff = db.prepare('SELECT * FROM staff WHERE active=1 AND tenant_id=?').all(req.tenantId).find((s) => verifyPin(pin, s.pin_hash));
-  if (!staff) { countPinFail(ip); return res.status(401).json({ error: 'bad_pin' }); }
+  if (!staff) {
+    countPinFail(ip);
+    logAudit({ tenantId: req.tenantId, actor: 'unknown', action: 'staff.login_fail', ip });
+    return res.status(401).json({ error: 'bad_pin' });
+  }
   pinFails.delete(ip);
   const branchIds = staff.role === 'owner' ? []
     : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
   const token = signSession({ staffId: staff.id, role: staff.role, tenantId: staff.tenant_id, branchIds, exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
   res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${COOKIE_SECURE}`);
+  logAudit({ tenantId: staff.tenant_id, actor: 'staff:' + staff.id, action: 'staff.login', detail: 'role=' + staff.role, ip });
   res.json({ ok: true, staff: { id: staff.id, name: staff.name, role: staff.role } });
 });
 app.post('/api/staff/logout', (req, res) => {
