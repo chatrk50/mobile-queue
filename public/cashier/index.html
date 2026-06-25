@@ -781,7 +781,7 @@ window.saveStaffForm=async()=>{ const errEl=$('sf_err'); if(errEl) errEl.textCon
   if(!name){ if(errEl) errEl.textContent='กรอกชื่อ'; return; }
   try{
     if(_selStaffId==='new'){ if(!pin){ if(errEl) errEl.textContent='กรอก PIN'; return; }
-      await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[1]})});
+      await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[]})});
       toast('เพิ่มพนักงานแล้ว'); await refreshStaff('new');
     } else { const body={name,role}; if(pin) body.pin=pin;
       await api('/api/staff/'+_selStaffId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
