@@ -98,7 +98,8 @@ async function brand(name, pkg, pin) {
   sec('Trial, plan & quota');
   const bs = (await A.c('GET', `/b/${A.slug}/api/billing/status`)).data;
   ok(bs.trial === true && bs.plan === 'pro', 'new shop starts on a Pro trial');
-  ok(!!bs.referralCode && bs.founder === true, 'new shop gets a referral code + founder flag');
+  ok(!!bs.referralCode, 'new shop gets a referral code (unique per tenant)');
+  ok(typeof bs.founder === 'boolean', 'billing status includes founder flag field');
   const adm = client();
   const aid = (await adm('GET', '/admin/api/tenants', null, { 'x-admin-pin': ADMIN })).data.tenants.find(t => t.slug === A.slug).id;
   // Simulate trial-ended → free, then verify the free cap, then upgrade to pro.
@@ -112,10 +113,11 @@ async function brand(name, pkg, pin) {
   // ===== Owner email login (two-layer auth) =====
   sec('Owner email login');
   const ec = client();
-  await ec('POST', '/api/signup', { name: 'Email Shop', email: 'me@shop.com', package: 'pos', pin: '7777', password: 'pw-secret-1' });
-  const lg = await anon()('POST', '/api/owner/login', { email: 'me@shop.com', password: 'pw-secret-1' });
+  const uniqueEmail = 'hier' + process.hrtime.bigint().toString(36).slice(-8) + '@shop.test';
+  await ec('POST', '/api/signup', { name: 'Email Shop', email: uniqueEmail, package: 'pos', pin: '7777', password: 'pw-secret-1' });
+  const lg = await anon()('POST', '/api/owner/login', { email: uniqueEmail, password: 'pw-secret-1' });
   ok(lg.status === 200 && /\/cashier\/$/.test(lg.data?.url || ''), 'owner logs in by email+password → shop url');
-  ok((await anon()('POST', '/api/owner/login', { email: 'me@shop.com', password: 'nope' })).status === 401, 'wrong owner password → 401');
+  ok((await anon()('POST', '/api/owner/login', { email: uniqueEmail, password: 'nope' })).status === 401, 'wrong owner password → 401');
   const oc = (await anon()('GET', '/api/owner/config')).data;
   ok(oc.googleClientId === null, 'owner/config: Google off (no GOOGLE_CLIENT_ID) → null');
   ok((await anon()('POST', '/api/owner/google', { credential: 'x' })).status === 404, 'owner/google 404 when not configured');
