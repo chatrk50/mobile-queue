@@ -1174,7 +1174,7 @@ app.post('/api/admin/reset-transactions', (req, res) => {
   if (req.body?.confirm !== 'CLEAR') return res.status(400).json({ error: 'confirm_required' });
   try {
     const removed = Q.clearTransactions();
-    try { for (const z of db.prepare('SELECT id FROM zones').all()) emit(z.id, 'update', (reveal) => Q.zoneSnapshot(z.id, { reveal })); } catch { /* refresh best-effort */ }
+    try { for (const z of db.prepare('SELECT z.id FROM zones z JOIN stores s ON s.id=z.store_id WHERE s.tenant_id=?').all(req.tenantId)) emit(z.id, 'update', (reveal) => Q.zoneSnapshot(z.id, { reveal })); } catch { /* refresh best-effort */ }
     res.json({ ok: true, removed });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
