@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats, createResetToken, validateResetToken, consumeResetToken } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, getTenantByReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats, createResetToken, validateResetToken, consumeResetToken } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -395,11 +395,21 @@ app.post('/api/signup', (req, res) => {
     // Every new shop starts on a full-Pro free trial; a referral code extends both sides.
     const TRIAL_DAYS = Math.max(0, parseInt(process.env.TRIAL_DAYS || '60', 10) || 60);
     const trialUntil = startTrial(t.id, TRIAL_DAYS);
-    const referred = req.body?.ref ? applyTenantReferral(t.id, req.body.ref) : false;
+    // Look up the referrer before applying so we can notify them on success.
+    const refCode = String(req.body?.ref || '').trim();
+    const referrer = refCode ? getTenantByReferral(refCode) : null;
+    const referred = referrer ? applyTenantReferral(t.id, refCode) : false;
     const rec = signupHits.get(ip) && signupHits.get(ip).until > now ? signupHits.get(ip) : { count: 0, until: now + SIGNUP_WINDOW };
     rec.count += 1; signupHits.set(ip, rec);
     issueOwnerSession(res, t.id); // auto-login: lets onboard page call protected APIs immediately
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
+    // Referral notification to the referrer — fire-and-forget.
+    if (referred && referrer?.owner_email) {
+      sendEmail({ to: referrer.owner_email, subject: 'มีร้านใหม่สมัครผ่านลิงก์แนะนำของคุณ!',
+        text: `ร้าน "${name}" สมัคร MobileQueue ผ่านลิงก์แนะนำของคุณ\nคุณได้รับการขยายเวลาใช้งาน 30 วันเรียบร้อยแล้ว`,
+        html: `<p>ร้าน <b>${name}</b> สมัคร MobileQueue ผ่านลิงก์แนะนำของคุณ 🎉</p><p>คุณได้รับการขยายเวลาใช้งาน <b>30 วัน</b> เรียบร้อยแล้ว</p>`,
+      }).catch(() => {});
+    }
     // Welcome email — fire-and-forget, never blocks the response.
     if (email) {
       const base = (process.env.BASE_URL || '').replace(/\/$/, '');
