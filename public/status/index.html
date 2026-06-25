@@ -96,6 +96,8 @@
       <li><b>customerRequestCancel tenant scope</b> — lineUserId check เพียงพอไม่พอ; เพิ่ม store_id IN (stores WHERE tenant_id=?)</li>
       <li><b>ticketView tenant scope</b> — initial ticket read scoped; downstream getZone เคย scope แต่ raw read ยังรั่ว</li>
       <li><b>priceFor menu_items tenant scope</b> — defense-in-depth: item lookup เพิ่ม AND tenant_id=?</li>
+      <li><b>deleteReward DELETE tenant scope</b> — DELETE เพิ่ม AND tenant_id=? ให้ตรงกับ SELECT guard</li>
+      <li><b>markPromoSent/Failed/cancelPromo tenant scope</b> — UPDATE promos เพิ่ม AND tenant_id=?; scheduler ใช้ runWithTenant(p.tenant_id)</li>
     </ul>
   </div>
 
