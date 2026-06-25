@@ -543,7 +543,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   const chanRows = db.prepare(
     `SELECT COALESCE(c.name, 'หน้าร้าน') AS channel, COALESCE(c.commission_pct, 0) AS commission_pct,
             COUNT(*) AS orders, SUM(o.total - COALESCE(o.discount,0)) AS gross
-       FROM orders o LEFT JOIN channels c ON c.id = o.channel_id
+       FROM orders o LEFT JOIN channels c ON c.id = o.channel_id AND c.tenant_id=${TID()}
       WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
       GROUP BY o.channel_id ORDER BY gross DESC`
   ).all(D, ...b);
@@ -838,13 +838,15 @@ export function getRecipe(menuItemId) {
 }
 /** Replace a menu item's recipe with the given {ingredientId, qty} rows (qty>0 kept). */
 export function setRecipe(menuItemId, rows = []) {
-  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(menuItemId, TID())) throw new Error('item_not_found');
+  const tid = TID();
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(menuItemId, tid)) throw new Error('item_not_found');
+  const checkIng = db.prepare('SELECT 1 FROM ingredients WHERE id=? AND tenant_id=?');
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(menuItemId);
     const ins = db.prepare('INSERT INTO recipes(menu_item_id, ingredient_id, qty) VALUES(?,?,?)');
     for (const r of rows) {
       const q = Number(r.qty) || 0; const ing = Number(r.ingredientId);
-      if (q > 0 && ing) ins.run(menuItemId, ing, q);
+      if (q > 0 && ing && checkIng.get(ing, tid)) ins.run(menuItemId, ing, q);
     }
   });
   tx();
