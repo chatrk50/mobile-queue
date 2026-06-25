@@ -225,7 +225,10 @@
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" class="queue-list" style="margin:12px 0"></div>
-    <div class="row between" style="align-items:center;margin-bottom:12px"><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
+    <div style="margin-bottom:12px">
+      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:6px"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div class="row between" style="align-items:center"><span class="muted" style="font-size:13px;font-weight:700">ยอดชำระ</span><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
+    </div>
     <div class="row" style="gap:8px">
       <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก</button>
       <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยันสั่ง</button>
@@ -542,15 +545,24 @@ window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount();
 // difference in sweetness or toppings keeps them on separate lines.
 function entrySig(e){ return e.name+'|'+(e.sweet==null?100:e.sweet)+'|'+(e.toppings||[]).map(t=>t.name+'x'+t.qty).sort().join(','); }
 function cartGroups(){ const g=[]; cart.forEach(e=>{ const sig=entrySig(e); let x=g.find(o=>o.sig===sig); if(!x){ x={sig,e,qty:0}; g.push(x); } x.qty++; }); return g; }
+// Items/toppings flagged badge='free' on the menu are given away: shown with a ฟรี tag, their value
+// summed into a "ส่วนลดของแถม" discount row, and netted out of the payable total. Mirrors the
+// server's authoritative freeGiveawayDiscount so the cart shows exactly what the till will charge.
+function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge==='free') s.add(m.name); }); return s; }
+const FREE_TAG='<span style="background:#7c3aed;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle">ฟรี</span>';
 function renderBasket(){
-  const groups=cartGroups();
+  const groups=cartGroups(); const FREE=freeNameSet();
   $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e;
     return `<div class="qitem"><div style="flex:1">
-      <div class="row between"><b>${g.qty}× ${esc(e.name)}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
+      <div class="row between"><b>${g.qty}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
+      ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 ${unit()}" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
-  $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
+  const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
+  let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
+  disc=Math.min(disc,sub); const net=sub-disc;
+  const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
+  $('basketTotal').textContent = net;
   $('basketConfirm').disabled = !cart.length;
   updateNudges();
 }
@@ -610,8 +622,11 @@ function renderOrderBlock(v){
     `<div class="row between"><span>${l.qty}× ${esc(l.name)}</span><span class="muted">฿${l.price*l.qty}</span></div>`+
     (l.toppings||[]).map(t=>`<div class="row between" style="margin-left:12px;color:var(--muted)"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')
   ).join('');
-  $('tOrderTotal').textContent = '฿'+v.order.total;
-  const pill=$('tPayPill'), st=v.order.status, total=v.order.total;
+  const disc=v.order.discount||0;
+  if(disc>0){ $('tOrderItems').innerHTML += `<div class="row between" style="color:#7c3aed;font-weight:800;margin-top:4px"><span>ส่วนลดของแถม (ฟรี)</span><span>-฿${disc}</span></div>`; }
+  const net=Math.max(0, v.order.total - disc);
+  $('tOrderTotal').textContent = '฿'+net;
+  const pill=$('tPayPill'), st=v.order.status, total=net;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
   if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
