@@ -565,6 +565,12 @@ const IC=(function(){
     cup:    mk('<path d="M7 2h10l2 10H5z"/><path d="M5 12a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/>'),
     card:   mk('<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>'),
     target: mk('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'),
+    bell:   mk('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'),
+    check:  mk('<polyline points="20 6 9 17 4 12"/>'),
+    phone:  mk('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.07 8.74 19.79 19.79 0 0 1 1 2.24 2 2 0 0 1 3 .06h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/>'),
+    ticket: mk('<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/>'),
+    star:   mk('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+    timer:  mk('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 15 15"/>'),
   };
 })();
 
@@ -1687,16 +1693,16 @@ async function loadTodayStats(){
       <div style="font-size:11px;color:var(--muted);white-space:nowrap">${label}</div>
       <div style="font-size:18px;font-weight:800;color:${color||'var(--navy,#1e3a5f)'}">${val}</div></div>`;
     let chips =
-      chip('💰 ยอดวันนี้', baht2(r.revenue||0)) +
-      chip('🥤 ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +   // cups SOLD (drink units) — matches the P&L report
-      chip('🍦 เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +          // orders handed over (operational, distinct from cups)
-      chip('🎫 ออกคิว', r.issued||0) +
-      chip('⏱ รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
-      chip('⭐ เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
+      chip(IC.cash+'ยอดวันนี้', baht2(r.revenue||0)) +
+      chip(IC.cup+'ขายแล้ว', (((r.pnl&&r.pnl.cups)||0))+' '+unit()) +
+      chip(IC.cup+'เสิร์ฟแล้ว', (r.cupsSold||0)+' ออเดอร์') +
+      chip(IC.ticket+'ออกคิว', r.issued||0) +
+      chip(IC.timer+'รอเฉลี่ย', r.avgWaitMin!=null?(r.avgWaitMin+' น.'):'—') +
+      chip(IC.star+'เรตติ้ง', r.avgRating!=null?(r.avgRating+' ('+r.ratingCount+')'):'—');
     // Target progress — only when the owner has set a daily target (FIN_TARGET_REVENUE).
     const tgt=r.pnl&&r.pnl.targetDaily;
     if(tgt&&tgt>0){ const pct=Math.round(((r.revenue||0)/tgt)*100);
-      chips += chip('🎯 เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
+      chips += chip(IC.target+'เป้าวันนี้', '฿'+Math.round(tgt)+' · '+pct+'%', pct>=100?'#16876f':'var(--navy,#1e3a5f)'); }
     el.innerHTML = chips;
   }catch(e){ /* leave the strip as-is on a transient error; the toggle controls visibility */ }
 }
@@ -1833,11 +1839,11 @@ function renderZone(snap){
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="keepOrder(${t.id})">เก็บไว้ / ทำต่อ</button></div>`
     : '';
   const cancelCardStyle=(t)=> t.cancel_requested ? 'border:2px solid var(--danger);border-top:none;border-radius:0 0 12px 12px;background:rgba(220,38,38,.06)' : '';
-  const makingPill=(t)=> t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '';
+  const makingPill=(t)=> t.making_at ? ` <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">${IC.kitchen}กำลังทำ</span>` : '';
   // Queue-first: an unpaid order not yet being made → start-making (locks the customer cancel) + nudge to pay.
   const makeBtns=(t)=> (CFG.queueFirst && t.order_total!=null && t.payment_status!=='paid' && !t.making_at)
-    ? `<button class="ghost" style="padding:8px 10px" onclick="startMaking(${t.id})">🍳 เริ่มทำ</button>`+
-      (t.order_source==='customer'?`<button class="ghost" style="padding:8px 10px" onclick="askPay(${t.id})">📣 ขอให้จ่ายก่อน</button>`:'')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="startMaking(${t.id})">${IC.kitchen}เริ่มทำ</button>`+
+      (t.order_source==='customer'?`<button class="ghost" style="padding:8px 10px" onclick="askPay(${t.id})">${IC.bell}ขอให้จ่ายก่อน</button>`:'')
     : '';
   const ppBtn=(t)=> (CFG.promptPay && t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ghost" style="padding:8px 10px" onclick="showPromptPay(${netOf(t)})">${IC.qr}QR</button>` : '';
@@ -1850,8 +1856,8 @@ function renderZone(snap){
   // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
   const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
     ? (t.loy_phone
-        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">📱 ${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
-        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">📱 แต้ม</button>`) : '';
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${IC.phone}${esc(t.loy_phone)} · ${t.loy_points||0} ดวง</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.phone}แต้ม</button>`) : '';
   const voidBtn=(t)=> t.order_total!=null
     ? `<button class="ghost danger" style="padding:8px 10px" onclick="voidTicket(${t.id})">ยกเลิก</button>` : '';
   // Printing (only when the owner enabled it + order is paid): kitchen ticket (what to make)
@@ -1869,7 +1875,7 @@ function renderZone(snap){
   const kitchenBg=(t)=>{const s=_kitchenStatus[t.id];return s==='making'?'rgba(243,157,18,.18)':s==='done'?'rgba(22,135,111,.12)':'';};
   const pendingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):('background:'+(kitchenBg(t)||(isStale(t)?'rgba(229,91,107,.10)':'rgba(243,203,85,.10)')));
   const waitingCardBg=(t)=>t.cancel_requested?cancelCardStyle(t):(kitchenBg(t)?'background:'+kitchenBg(t):'');
-  const kitchenBtn=(t)=>{const s=_kitchenStatus[t.id];const lbl=s==='making'?'🔥 กำลังทำ':s==='done'?'✅ เสร็จ':'○ มาร์ค';const bg=kitchenBg(t);const col=s==='making'?'#a35e00':s==='done'?'#16876f':'';return `<button id="kbtn-${t.id}" class="ghost" style="padding:8px 10px${bg?';background:'+bg:''}${col?';color:'+col:''}" onclick="toggleKitchen(${t.id})">${lbl}</button>`;};
+  const kitchenBtn=(t)=>{const s=_kitchenStatus[t.id];const lbl=s==='making'?IC.kitchen+'กำลังทำ':s==='done'?IC.check+'เสร็จ':'○ มาร์ค';const bg=kitchenBg(t);const col=s==='making'?'#a35e00':s==='done'?'#16876f':'';return `<button id="kbtn-${t.id}" class="ghost" style="padding:8px 10px${bg?';background:'+bg:''}${col?';color:'+col:''}" onclick="toggleKitchen(${t.id})">${lbl}</button>`;};
   // Pay-first: orders awaiting payment (no queue number yet). Confirm payment here to issue it.
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
@@ -1877,8 +1883,8 @@ function renderZone(snap){
     `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
       <div id="kcard-${t.id}" class="qitem" style="${pendingCardBg(t)}"><div>${tsTop(t)}<div>
-        <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
-        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div>
+        <span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">${IC.clock}รอชำระ ฿${netOf(t)}</span>${agePill(t)}${nm(t)}
+        ${t.payment_status==='claimed'?` <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">${IC.bell}ลูกค้าแจ้งชำระ — ตรวจสอบ</span>`:''}</div>${ord(t)}</div>
         <div class="row" style="gap:6px">${kitchenBtn(t)}${phoneBtn(t)}${ppBtn(t)}${slipViewBtn(t)}${discBtn(t)}${redeemBtn(t)}
           <button class="ok" style="padding:8px 12px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>
           ${voidBtn(t)}</div></div>`).join('')+`</div>`
