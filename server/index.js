@@ -153,35 +153,6 @@ const pinOK = (req) => {
 app.get('/api/config', (req, res) => {
   res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
 });
-// TEMP diagnostic for the queue-first numbering incident (orders stalling in "รอชำระเงิน" on prod).
-// READ-ONLY: the write-path probe runs inside a transaction that ALWAYS rolls back, so live data is
-// never modified. Remove once diagnosed.
-app.get('/api/_diag/qf', (req, res) => {
-  const out = { queueFirst: Q.getQueueFirst(), durable: DURABLE };
-  try {
-    out.tickets_cols = db.prepare('PRAGMA table_info(tickets)').all().map((c) => c.name);
-    out.zones_cols = db.prepare('PRAGMA table_info(zones)').all().map((c) => c.name);
-    out.pending = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status='pending' AND number=0").get().n;
-    out.waiting = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status='waiting'").get().n;
-    const z = db.prepare('SELECT id, last_number, prefix FROM zones ORDER BY id LIMIT 1').get();
-    out.zone = z || null;
-    // Reproduce the assignQueueNumber WRITE path, then force a rollback so nothing persists. If the
-    // write throws (stale stream / schema / constraint), we surface the real error here.
-    try {
-      db.transaction(() => {
-        const cur = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(z.id);
-        const next = cur.last_number + 1;
-        db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, z.id);
-        const tk = db.prepare("SELECT id FROM tickets WHERE status='pending' AND number=0 ORDER BY id DESC LIMIT 1").get();
-        if (tk) db.prepare("UPDATE tickets SET number=?, code=?, status='waiting', numbered_at=datetime('now') WHERE id=? AND number=0")
-          .run(next, cur.prefix + String(next).padStart(3, '0'), tk.id);
-        throw new Error('__rollback__');
-      })();
-    } catch (e) { out.write_path = (e.message === '__rollback__') ? 'OK — numbering write+rollback succeeded' : ('WRITE FAILED: ' + e.message); }
-  } catch (e) { out.err = e.message; }
-  res.json(out);
-});
-
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
 
