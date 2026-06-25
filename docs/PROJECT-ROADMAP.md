@@ -90,11 +90,15 @@ tenant + billing + restore + totp + 2fa + hierarchy + dryrun + secret scanning).
 **Done:** PDPA customer export/erasure + /privacy + /terms; no fund custody. **Tenant-level**
 export + hard-erasure (admin-gated, slug-confirmed, audit-logged; verified zero-orphan across 25
 tables) — commit da7a4ca.
-**Must:** [ ] register a legal entity to invoice/collect · [ ] DPA template for tenants ·
+**Must:** [ ] register a legal entity to invoice/collect · [x] DPA template for tenants
+      (`/dpa/` — Thai DPA between MobileQueue processor + shop controller; editable fields +
+      print/PDF; linked from /privacy/ and cashier PDPA section) ·
 [ ] VAT registration trigger plan (>฿1.8M/yr).
 **Should:** [x] cookie/consent notice (PDPA banner — shared /assets/consent.js, localStorage
-      dismissal, injected on landing/signup/login/liff/status/cashier) · [x] tenant erasure capability (manual admin-initiated;
-auto-purge-on-close still optional) · [x] written data-retention policy doc — [`DATA-RETENTION.md`](DATA-RETENTION.md).
+      dismissal, injected on landing/signup/login/liff/status/cashier) · [x] tenant erasure capability —
+      owner self-service `POST /api/owner/close-account` (slug-confirmed, full 25-table PDPA erasure,
+      goodbye email, session clear, audit log; cashier ⚠ ปิดบัญชีฯ button) + manual admin-initiated. ·
+      [x] written data-retention policy doc — [`DATA-RETENTION.md`](DATA-RETENTION.md).
 
 ## 6. GTM / growth
 **Done:** pricing, trial, founder, referral, landing/pricing mockup.

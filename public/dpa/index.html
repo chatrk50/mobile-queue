@@ -1,0 +1,160 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>สัญญาประมวลผลข้อมูล (DPA) — MobileQueue</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.wrap{max-width:760px;margin:0 auto;padding:24px 20px;line-height:1.8}
+h1{color:var(--navy);font-size:22px}h2{color:var(--navy);font-size:16px;margin-top:24px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.muted{color:var(--muted);font-size:13px}
+.fill{display:inline-block;min-width:180px;border-bottom:1px solid #6366f1;padding:0 4px;color:#6366f1;font-weight:500}
+.note{background:#f0f4ff;border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;margin:12px 0}
+.badge{display:inline-block;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:6px;font-size:12px;padding:2px 8px;margin-left:6px}
+ul{padding-left:1.4em}li{margin:4px 0}
+.actions{display:flex;gap:10px;margin:24px 0}
+@media print{.no-print{display:none}.wrap{padding:0}h1{font-size:18px}}
+</style>
+</head><body><div class="wrap">
+  <div class="no-print" style="margin-bottom:20px">
+    <a href="/privacy/" style="font-size:13px;color:var(--muted)">← นโยบายความเป็นส่วนตัว</a>
+  </div>
+  <h1>สัญญาการประมวลผลข้อมูลส่วนบุคคล <span class="badge">PDPA-compliant</span></h1>
+  <p class="muted">Data Processing Agreement (DPA) ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 มาตรา 40–41 · เวอร์ชัน 1.0 · 2026</p>
+
+  <div class="note">
+    <b>วิธีใช้:</b> สัญญานี้เป็นแม่แบบสำหรับเจ้าของร้านที่ใช้ MobileQueue — กรอกชื่อร้าน วันที่ และชื่อผู้มีอำนาจลงนาม
+    จากนั้นพิมพ์ (Ctrl+P) หรือบันทึกเป็น PDF เก็บไว้เป็นหลักฐาน · สัญญานี้ใช้คู่กับ
+    <a href="/terms/">ข้อกำหนดการใช้บริการ</a> และ <a href="/privacy/">นโยบายความเป็นส่วนตัว</a>
+  </div>
+
+  <div class="actions no-print">
+    <button onclick="window.print()" style="padding:10px 20px;background:var(--ind,#6366f1);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:inherit">🖨 พิมพ์ / บันทึก PDF</button>
+  </div>
+
+  <hr style="margin:20px 0;border:none;border-top:1px solid var(--line)">
+
+  <p style="font-size:15px"><b>สัญญาฉบับนี้ทำขึ้นระหว่าง</b></p>
+
+  <p><b>ผู้ประมวลผลข้อมูล (Data Processor):</b><br>
+  ผู้ให้บริการระบบ MobileQueue · ให้บริการผ่านทาง <b>mobilequeueth.com</b> (หรือโดเมนที่กำหนด)
+  </p>
+
+  <p><b>ผู้ควบคุมข้อมูล (Data Controller):</b><br>
+  ชื่อร้านค้า / บริษัท: <span class="fill" contenteditable="true" id="shopName">_________________________</span><br>
+  ที่อยู่: <span class="fill" contenteditable="true" id="shopAddr">_________________________</span><br>
+  ผู้มีอำนาจลงนาม: <span class="fill" contenteditable="true" id="signerName">_________________________</span><br>
+  วันที่มีผลบังคับใช้: <span class="fill" contenteditable="true" id="effDate">_________________________</span>
+  </p>
+
+  <h2>1. คำนิยาม</h2>
+  <ul>
+    <li><b>"ข้อมูลส่วนบุคคล"</b> — ข้อมูลที่ระบุตัวตนลูกค้าได้ เช่น ชื่อ เบอร์โทร LINE user id ประวัติออเดอร์ คะแนนสะสม</li>
+    <li><b>"ผู้ควบคุมข้อมูล"</b> — เจ้าของร้านผู้กำหนดวัตถุประสงค์และวิธีการประมวลผล</li>
+    <li><b>"ผู้ประมวลผลข้อมูล"</b> — MobileQueue ผู้ประมวลผลตามคำสั่งของผู้ควบคุมเท่านั้น</li>
+    <li><b>"บริการ"</b> — ระบบ POS · คิวสั่งซื้อ · สะสมแต้ม · LINE Order · รายงานและวิเคราะห์ยอดขาย</li>
+  </ul>
+
+  <h2>2. วัตถุประสงค์และขอบเขตการประมวลผล</h2>
+  <p>ผู้ประมวลผลดำเนินการประมวลผลข้อมูลส่วนบุคคลเฉพาะเพื่อ:</p>
+  <ul>
+    <li>ให้บริการตามที่ผู้ควบคุมสั่ง (รับออเดอร์ แจ้งคิว สะสมแต้ม รายงานยอดขาย)</li>
+    <li>ปรับปรุงความเสถียรและความปลอดภัยของบริการ</li>
+    <li>ปฏิบัติตามกฎหมายที่ใช้บังคับ</li>
+  </ul>
+  <p>ผู้ประมวลผล<b>จะไม่</b>นำข้อมูลไปใช้เพื่อวัตถุประสงค์อื่นโดยไม่ได้รับอนุญาตเป็นลายลักษณ์อักษร</p>
+
+  <h2>3. ประเภทข้อมูลและเจ้าของข้อมูล</h2>
+  <ul>
+    <li>ข้อมูลลูกค้าของร้าน: ชื่อ เบอร์โทร LINE user id รายการสั่งซื้อ คะแนนสะสม ระดับสมาชิก</li>
+    <li>ข้อมูลการทำธุรกรรม: วันเวลา จำนวนเงิน วิธีชำระ รายการสินค้า</li>
+    <li>ข้อมูลพนักงาน: ชื่อ บทบาท บันทึกการเข้าระบบ (เพื่อความปลอดภัย)</li>
+  </ul>
+
+  <h2>4. หน้าที่ของผู้ประมวลผล</h2>
+  <ul>
+    <li>ประมวลผลตามคำสั่งของผู้ควบคุมเท่านั้น ไม่เกินขอบเขตที่กำหนด</li>
+    <li>รักษาความลับและความปลอดภัยของข้อมูล (การเข้ารหัส การแบ่งแยกผู้เช่า การควบคุมการเข้าถึง)</li>
+    <li>แจ้งผู้ควบคุมโดยไม่ชักช้าเมื่อพบเหตุละเมิดข้อมูลส่วนบุคคล (ภายใน 72 ชั่วโมงตามความเป็นไปได้)</li>
+    <li>ลบหรือส่งคืนข้อมูลเมื่อสัญญาสิ้นสุดตามที่ผู้ควบคุมร้องขอ</li>
+    <li>ให้ความช่วยเหลือผู้ควบคุมในการตอบสนองต่อการใช้สิทธิของเจ้าของข้อมูล (ส่งออก/ลบ)</li>
+    <li>ไม่เปิดเผยข้อมูลแก่บุคคลที่สามโดยไม่ได้รับอนุญาต ยกเว้นตามที่กฎหมายกำหนด</li>
+  </ul>
+
+  <h2>5. หน้าที่ของผู้ควบคุมข้อมูล</h2>
+  <ul>
+    <li>แจ้งลูกค้าเกี่ยวกับการเก็บรวบรวมและการใช้ข้อมูล (นโยบายความเป็นส่วนตัวของร้าน)</li>
+    <li>ขอความยินยอมจากลูกค้าก่อนเก็บข้อมูล หรือมีฐานทางกฎหมายอื่นที่เหมาะสม</li>
+    <li>จัดการคำร้องสิทธิของลูกค้า (ใช้ฟีเจอร์ "ส่งออก" และ "ลบข้อมูลลูกค้า" ในระบบ)</li>
+    <li>แจ้งผู้ประมวลผลเมื่อต้องการลบข้อมูลหรือยกเลิกบัญชี</li>
+  </ul>
+
+  <h2>6. ผู้ประมวลผลย่อย (Sub-processors)</h2>
+  <p>ผู้ประมวลผลใช้ผู้ให้บริการภายนอกดังต่อไปนี้ ภายใต้ข้อกำหนดการประมวลผลที่เทียบเท่า:</p>
+  <ul>
+    <li><b>Turso / libSQL</b> — ฐานข้อมูล (เซิร์ฟเวอร์ภายใน EU/US)</li>
+    <li><b>Render</b> — โฮสติ้งแอปพลิเคชัน</li>
+    <li><b>SendGrid (Twilio)</b> — ส่งอีเมลแจ้งเตือน</li>
+    <li><b>Omise (Opn Payments)</b> — ประมวลผลการชำระค่าบริการ (ไม่เก็บเลขบัตรในระบบของเรา)</li>
+  </ul>
+  <p>ผู้ประมวลผลจะแจ้งผู้ควบคุมเมื่อมีการเปลี่ยนแปลงผู้ประมวลผลย่อยที่มีสาระสำคัญ</p>
+
+  <h2>7. การรักษาความปลอดภัย</h2>
+  <ul>
+    <li>การเข้ารหัส: รหัสผ่านใช้ scrypt · การส่งข้อมูลผ่าน TLS 1.2+</li>
+    <li>การแบ่งแยกข้อมูล: ข้อมูลแต่ละร้านถูกแยกด้วย tenant_id ในทุก query</li>
+    <li>การควบคุมการเข้าถึง: RBAC (เจ้าของ/ผู้จัดการ/แคชเชียร์) + PIN hash + session ลงนาม HMAC</li>
+    <li>Security headers: HSTS · CSP · X-Frame-Options · nosniff</li>
+    <li>การตรวจสอบ: บันทึก audit log ทุกการกระทำสำคัญ</li>
+  </ul>
+
+  <h2>8. การโอนข้อมูลไปต่างประเทศ</h2>
+  <p>ข้อมูลอาจถูกประมวลผลในเซิร์ฟเวอร์นอกประเทศไทย (EU/US) ผ่านผู้ให้บริการที่ได้มาตรฐาน GDPR/ISO 27001
+  ซึ่งถือว่ามีมาตรการคุ้มครองที่เพียงพอตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคลฯ มาตรา 29</p>
+
+  <h2>9. ระยะเวลาและการสิ้นสุดสัญญา</h2>
+  <p>สัญญานี้มีผลตราบเท่าที่ผู้ควบคุมใช้บริการ MobileQueue · เมื่อสัญญาสิ้นสุด (ยกเลิกบัญชีหรือหมดอายุ)
+  ผู้ประมวลผลจะลบข้อมูลภายใน <b>30 วัน</b> นับจากวันที่สัญญาสิ้นสุด เว้นแต่มีข้อกำหนดทางกฎหมายให้เก็บรักษาต่อ
+  · ผู้ควบคุมสามารถส่งออกข้อมูลด้วยตนเองก่อนปิดบัญชีผ่านปุ่ม "ส่งออก (JSON)" ในหน้าตั้งค่า</p>
+
+  <h2>10. ข้อพิพาทและกฎหมายที่ใช้บังคับ</h2>
+  <p>สัญญานี้อยู่ภายใต้กฎหมายแห่งราชอาณาจักรไทย · ข้อพิพาทให้ระงับโดยการเจรจา หากไม่สำเร็จให้ยื่นต่อ
+  ศาลที่มีเขตอำนาจในประเทศไทย</p>
+
+  <hr style="margin:28px 0;border:none;border-top:1px solid var(--line)">
+
+  <p style="font-size:14px"><b>ลงนามโดย</b></p>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <tr>
+      <td style="width:50%;padding:8px;vertical-align:top">
+        <b>ผู้ประมวลผลข้อมูล</b><br>
+        MobileQueue<br><br>
+        ลายมือชื่อ: ___________________<br>
+        ชื่อ: ผู้มีอำนาจ MobileQueue<br>
+        วันที่: ___________________
+      </td>
+      <td style="width:50%;padding:8px;vertical-align:top">
+        <b>ผู้ควบคุมข้อมูล</b><br>
+        <span id="shopNameSig"></span><br><br>
+        ลายมือชื่อ: ___________________<br>
+        ชื่อ: <span id="signerNameSig"></span><br>
+        วันที่: <span id="effDateSig"></span>
+      </td>
+    </tr>
+  </table>
+
+  <p class="muted" style="margin-top:28px;font-size:12px">
+    เอกสารนี้เป็นแม่แบบ (template) — ควรตรวจสอบและปรับแต่งโดยนักกฎหมายที่เชี่ยวชาญ PDPA ก่อนใช้งานจริง ·
+    <a href="/privacy/">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/">ข้อกำหนดการใช้บริการ</a>
+  </p>
+
+  <script>
+  // Mirror editable fields to the signature block.
+  ['shopName','signerName','effDate'].forEach(id=>{
+    const src=document.getElementById(id), dst=document.getElementById(id+'Sig');
+    if(!src||!dst) return;
+    dst.textContent=src.textContent;
+    src.addEventListener('input',()=>{ dst.textContent=src.textContent; });
+  });
+  </script>
+</div>
+<script defer src="/assets/consent.js"></script>
+</body></html>
