@@ -131,6 +131,32 @@ async function brand(name, pkg, pin) {
   for (let i = 0; i < 6; i++) await a('POST', '/admin/api/login', { adminPin: 'WRONG' + i });
   ok((await a('POST', '/admin/api/login', { adminPin: 'WRONG' })).status === 429, 'platform-admin PIN locks out after repeated failures (429)');
 
+  // ===== Forgot-password / reset flow =====
+  sec('Forgot-password flow (token-based, no account enumeration)');
+  ok((await anon()('GET', '/api/owner/reset-check?token=invalid')).data?.ok === false, 'reset-check: unknown token → { ok: false }');
+  ok((await anon()('POST', '/api/owner/reset-password', { token: 'bad', password: 'newpw123' })).status === 400, 'reset-password: bad token → 400');
+  ok((await anon()('POST', '/api/owner/forgot-password', { email: 'nobody@x.com' })).data?.ok === true, 'forgot-password: always ok (no enumeration)');
+
+  // ===== Email-change verification flow =====
+  sec('Email-change verification (two-step, token-gated)');
+  const ecShop = await brand('EC Test Shop', 'pos', '6868');
+  ok((await anon()('POST', `/b/${ecShop.slug}/api/owner/request-email-change`, { email: 'x@y.com' })).status === 403, 'request-email-change: no session → 403');
+  ok((await ecShop.c('POST', `/b/${ecShop.slug}/api/owner/request-email-change`, { email: 'bad' })).status === 400, 'request-email-change: invalid email → 400');
+  const ecr = await ecShop.c('POST', `/b/${ecShop.slug}/api/owner/request-email-change`, { email: 'valid@test.com' });
+  ok(ecr.status === 200 && ecr.data?.pending === true, 'request-email-change: valid email → { pending: true }');
+  const vr = await fetch(BASE + '/api/owner/verify-email-change?token=badbadtoken', { redirect: 'manual' });
+  ok(vr.status === 302 && (vr.headers.get('location') || '').includes('email_verify_failed'), 'verify-email-change: bad token → redirect to error');
+
+  // ===== Close-account (self-service PDPA erasure) =====
+  sec('Close-account (PDPA self-service)');
+  const caShop = await brand('Close Acct Shop', 'pos', '5959');
+  ok((await anon()('POST', `/b/${caShop.slug}/api/owner/close-account`, { confirmSlug: caShop.slug })).status === 403, 'close-account: no session → 403');
+  ok((await caShop.c('POST', `/b/${caShop.slug}/api/owner/close-account`, { confirmSlug: 'wrong' })).status === 400, 'close-account: wrong slug → 400 (slug_mismatch)');
+  ok((await caShop.c('POST', `/b/${caShop.slug}/api/owner/close-account`, { confirmSlug: '' })).status === 400, 'close-account: empty slug → 400');
+  const closeRes = await caShop.c('POST', `/b/${caShop.slug}/api/owner/close-account`, { confirmSlug: caShop.slug });
+  ok(closeRes.status === 200 && closeRes.data?.ok === true, 'close-account: correct slug → ok + 200');
+  ok((await anon()('GET', `/b/${caShop.slug}/api/config`)).status === 404, 'close-account: tenant inaccessible after deletion');
+
   console.log(`\n${fail ? '❌ HIERARCHY CHECK FAILED' : '✅ HIERARCHY VERIFIED'} — ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('crashed:', e); process.exit(2); });
