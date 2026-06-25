@@ -422,6 +422,37 @@ function checkOrderBurst(tenantId) {
   b.count++;
   return b.count > ORDER_BURST_MAX;
 }
+// Promo broadcast: max 5 per hour per tenant (protects LINE API quota from abuse).
+const promoHits = new Map(); // tenantId -> { count, windowStart }
+const PROMO_MAX = Math.max(1, parseInt(process.env.PROMO_RATE || '5', 10) || 5);
+const PROMO_WINDOW = 60 * 60 * 1000;
+function checkPromoBurst(tenantId) {
+  const now = Date.now();
+  let b = promoHits.get(tenantId);
+  if (!b || now - b.windowStart >= PROMO_WINDOW) { b = { count: 0, windowStart: now }; promoHits.set(tenantId, b); }
+  b.count++;
+  return b.count > PROMO_MAX;
+}
+// PDPA export: max 10 per 5 minutes per tenant (prevents DB hammering via full-tenant dumps).
+const exportHits = new Map(); // tenantId -> { count, windowStart }
+const EXPORT_WINDOW = 5 * 60 * 1000;
+function checkExportBurst(tenantId) {
+  const now = Date.now();
+  let b = exportHits.get(tenantId);
+  if (!b || now - b.windowStart >= EXPORT_WINDOW) { b = { count: 0, windowStart: now }; exportHits.set(tenantId, b); }
+  b.count++;
+  return b.count > 10;
+}
+// PDPA forget-customer: max 30 per hour per tenant (prevents bulk-erasure abuse).
+const pdpaHits = new Map(); // tenantId -> { count, windowStart }
+const PDPA_WINDOW = 60 * 60 * 1000;
+function checkPdpaBurst(tenantId) {
+  const now = Date.now();
+  let b = pdpaHits.get(tenantId);
+  if (!b || now - b.windowStart >= PDPA_WINDOW) { b = { count: 0, windowStart: now }; pdpaHits.set(tenantId, b); }
+  b.count++;
+  return b.count > 30;
+}
 app.post('/api/signup', (req, res) => {
   if (!SAAS) return res.status(404).json({ error: 'not_available' });
   const ip = ipOf(req), now = Date.now();
@@ -952,6 +983,7 @@ app.get('/api/promos', (req, res) => {
 });
 app.post('/api/promos', async (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (SAAS && checkPromoBurst(req.tenantId)) return res.status(429).json({ error: 'too_many_promos' });
   const { message, imageUrl, linkUrl, linkLabel, sendAt, sendNow } = req.body || {};
   let promo;
   try { promo = Q.createPromo({ message, imageUrl, linkUrl, linkLabel, sendAt: sendAt || null }); }
@@ -990,12 +1022,14 @@ app.get('/api/admin/usage', (req, res) => {
 // ---- PDPA: data portability + erasure (owner only) ----
 app.get('/api/admin/export', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (SAAS && checkExportBurst(req.tenantId)) return res.status(429).json({ error: 'too_many_requests' });
   res.setHeader('Content-Disposition', `attachment; filename="data-export-${brandFor(req).slug || req.tenantId}.json"`);
   logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'pdpa.export', ip: ipOf(req) });
   res.json(exportTenant(req.tenantId));
 });
 app.post('/api/admin/forget-customer', (req, res) => {       // body: { phone } or { key } — PDPA erasure
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (SAAS && checkPdpaBurst(req.tenantId)) return res.status(429).json({ error: 'too_many_requests' });
   try { const r = forgetCustomer(req.tenantId, { phone: req.body?.phone || null, key: req.body?.key || null });
     logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'pdpa.forget', detail: 'found=' + !!r.found, ip: ipOf(req) });   // never log the phone/key itself
     res.json(r); }
@@ -1950,6 +1984,9 @@ setInterval(() => {
   for (const [k, v] of forgotHits) { if (v.until < now) forgotHits.delete(k); }
   for (const [k, v] of signupHits) { if (v.until < now) signupHits.delete(k); }
   for (const [k, v] of orderBurst) { if (now - v.windowStart >= ORDER_BURST_WINDOW) orderBurst.delete(k); }
+  for (const [k, v] of promoHits) { if (now - v.windowStart >= PROMO_WINDOW) promoHits.delete(k); }
+  for (const [k, v] of exportHits) { if (now - v.windowStart >= EXPORT_WINDOW) exportHits.delete(k); }
+  for (const [k, v] of pdpaHits) { if (now - v.windowStart >= PDPA_WINDOW) pdpaHits.delete(k); }
 }, 3600 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
