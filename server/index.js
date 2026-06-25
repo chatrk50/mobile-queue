@@ -497,8 +497,12 @@ app.post('/api/owner/change-password', (req, res) => {
   res.json({ ok: true });
 });
 // Forgot-password flow: request a reset link (always returns ok — no account enumeration).
+const forgotHits = new Map(); // ip -> { count, until } — 5 requests per 15 min
 app.post('/api/owner/forgot-password', async (req, res) => {
   if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const ip = ipOf(req), now = Date.now();
+  const fh = forgotHits.get(ip); if (fh && fh.until > now && fh.count >= 5) return res.json({ ok: true }); // silently rate-limit
+  const nfh = fh && fh.until > now ? fh : { count: 0, until: now + 15 * 60000 }; nfh.count++; forgotHits.set(ip, nfh);
   res.json({ ok: true });   // respond immediately — timing-safe, no enumeration
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (!email) return;
@@ -1714,6 +1718,14 @@ if (BILLING_ON) setInterval(async () => {
     }
   } catch {}
 }, 6 * 3600 * 1000);
+
+// Hourly cleanup: purge expired password-reset tokens and stale in-memory rate-limit entries.
+setInterval(() => {
+  try { db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < datetime('now') OR used=1").run(); } catch {}
+  const now = Date.now();
+  for (const [k, v] of ownerHits) { if (v.until < now) ownerHits.delete(k); }
+  for (const [k, v] of forgotHits) { if (v.until < now) forgotHits.delete(k); }
+}, 3600 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
 // (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:
