@@ -295,6 +295,14 @@ app.get('/manifest.webmanifest', (req, res) => {
     ],
   });
 });
+// Sitemap for the public marketing pages (uses request host so it works on any domain).
+app.get('/sitemap.xml', (req, res) => {
+  const base = `${req.protocol}://${req.get('host')}`;
+  const pages = ['/', '/landing/', '/signup/', '/login/', '/help/', '/help/line/', '/privacy/', '/terms/', '/dpa/', '/status/'];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.map(p => `  <url><loc>${base}${p}</loc></url>`).join('\n')}\n</urlset>`;
+  res.set('Content-Type', 'application/xml').send(xml);
+});
+
 app.use(express.static(join(__dirname, '..', 'public')));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.
