@@ -1678,7 +1678,18 @@ app.get('/api/reports/insights', (req, res) => {
   res.json(Q.customerInsights());
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
-const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+// Resolve the branch (store id) for cash-drawer routes. Explicit ?branchId wins; in SaaS mode
+// without an explicit id we fall back to the tenant's first store rather than global store 1,
+// so single-zone tenants whose store has id >1 still get correct cash session behaviour.
+const cashBranch = (req) => {
+  const explicit = Number(req.query.branchId || req.body?.branchId);
+  if (explicit) return explicit;
+  if (SAAS) {
+    const s = db.prepare('SELECT id FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(req.tenantId);
+    return s ? s.id : 1;
+  }
+  return 1;
+};
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));
