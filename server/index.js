@@ -1907,10 +1907,10 @@ setInterval(async () => {
     for (const p of due) {
       try {
         const result = await multicastToCustomers(p.tenant_id, { message: p.message, imageUrl: p.image_url, linkUrl: p.link_url, linkLabel: p.link_label });
-        Q.markPromoSent(p.id, { recipients: result.sent });
+        runWithTenant(p.tenant_id, () => Q.markPromoSent(p.id, { recipients: result.sent }));
         console.log(`[promo] sent id=${p.id} tenant=${p.tenant_id} → ${result.sent} recipients`);
       } catch (e) {
-        Q.markPromoFailed(p.id);
+        runWithTenant(p.tenant_id, () => Q.markPromoFailed(p.id));
         console.error(`[promo] failed id=${p.id}:`, e.message);
       }
     }

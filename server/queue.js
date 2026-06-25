@@ -1433,9 +1433,10 @@ export function updateReward(id, { name, cost_points, active, image } = {}) {
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
 }
 export function deleteReward(id) {
-  const cur = db.prepare('SELECT id FROM rewards WHERE id=? AND tenant_id=?').get(id, TID());
+  const tid = TID();
+  const cur = db.prepare('SELECT id FROM rewards WHERE id=? AND tenant_id=?').get(id, tid);
   if (!cur) throw new Error('reward_not_found');
-  db.prepare('DELETE FROM rewards WHERE id=?').run(id);
+  db.prepare('DELETE FROM rewards WHERE id=? AND tenant_id=?').run(id, tid);
   return { ok: true };
 }
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
@@ -2159,20 +2160,21 @@ export function listPromos() {
 /** Mark a promo as sent with results. */
 export function markPromoSent(id, { recipients }) {
   const now = Math.floor(Date.now() / 1000);
-  db.prepare("UPDATE promos SET status='sent', sent_at=?, recipients=? WHERE id=?").run(now, recipients, id);
+  db.prepare("UPDATE promos SET status='sent', sent_at=?, recipients=? WHERE id=? AND tenant_id=?").run(now, recipients, id, TID());
 }
 
 /** Mark a promo as failed. */
 export function markPromoFailed(id) {
-  db.prepare("UPDATE promos SET status='failed' WHERE id=?").run(id);
+  db.prepare("UPDATE promos SET status='failed' WHERE id=? AND tenant_id=?").run(id, TID());
 }
 
 /** Cancel a scheduled promo (cannot cancel already-sent ones). */
 export function cancelPromo(id) {
-  const p = db.prepare('SELECT id, status FROM promos WHERE id=? AND tenant_id=?').get(id, TID());
+  const tid = TID();
+  const p = db.prepare('SELECT id, status FROM promos WHERE id=? AND tenant_id=?').get(id, tid);
   if (!p) throw new Error('promo_not_found');
   if (p.status === 'sent') throw new Error('already_sent');
-  db.prepare("UPDATE promos SET status='cancelled' WHERE id=?").run(id);
+  db.prepare("UPDATE promos SET status='cancelled' WHERE id=? AND tenant_id=?").run(id, tid);
   return { ok: true };
 }
 
