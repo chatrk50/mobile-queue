@@ -19,7 +19,7 @@
 
 import { request as httpsRequest } from 'node:https';
 
-const FROM = process.env.EMAIL_FROM || 'noreply@mobilequeue.app';
+const FROM = process.env.EMAIL_FROM || 'noreply@khai-dee.com';
 const SENDGRID_KEY = process.env.SENDGRID_API_KEY || '';
 
 /**
