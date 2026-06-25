@@ -525,6 +525,19 @@ try {
   `);
 } catch { /* already exists */ }
 
+// Dunning email log — tracks which event was sent to which tenant to prevent duplicates.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS dunning_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   INTEGER NOT NULL,
+    event       TEXT NOT NULL,   -- 'trial_7d' | 'trial_3d' | 'trial_1d' | 'lapsed'
+    sent_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    dry_run     INTEGER NOT NULL DEFAULT 0,
+    to_email    TEXT,
+    UNIQUE (tenant_id, event)    -- one send per event per tenant; reset on plan change
+  );`);
+} catch { /* already exists */ }
+
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
 // so it runs at most once; existing rows are assigned to branch 1.

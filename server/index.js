@@ -14,7 +14,8 @@ import { listTemplates, templateItems } from './menu-templates.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
-import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook, billingConfig } from './billing.js';
+import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook, billingConfig, getDunningCandidates, logDunningSend, clearDunningLog } from './billing.js';
+import { sendEmail } from './email.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
@@ -559,6 +560,29 @@ app.post('/admin/api/tenants/:id/reset-pin', adminGate, (req, res) => {
 });
 // Audit trail (platform admin): recent sensitive actions, optionally scoped ?tenantId=N.
 app.get('/admin/api/errors', adminGate, (_req, res) => res.json({ errors: _APP_ERRORS }));
+
+// Dunning email management (admin-only).
+app.get('/admin/api/dunning/preview', adminGate, (_req, res) => {
+  const candidates = getDunningCandidates();
+  res.json({ candidates, count: candidates.length });
+});
+app.post('/admin/api/dunning/send', adminGate, async (_req, res) => {
+  const candidates = getDunningCandidates();
+  const results = [];
+  const TEMPLATES = {
+    trial_7d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} เหลือ 7 วัน`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดอายุใน 7 วัน\nเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก\n\nขอบคุณที่ใช้ MobileQueue` }),
+    trial_3d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} เหลือ 3 วัน`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดอายุใน 3 วัน\nเพิ่มบัตรเครดิตเพื่อใช้งานต่อ\n\nขอบคุณที่ใช้ MobileQueue` }),
+    trial_1d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} หมดพรุ่งนี้!`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดพรุ่งนี้\nเพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก\n\nขอบคุณที่ใช้ MobileQueue` }),
+    lapsed:   (name) => ({ subject: `[MobileQueue] แพ็กเกจ ${name} หมดอายุแล้ว`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจของคุณหมดอายุแล้ว ร้านของคุณยังใช้งานได้ในโหมดฟรี\nอัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ\n\nขอบคุณที่ใช้ MobileQueue` }),
+  };
+  for (const c of candidates) {
+    const tmpl = TEMPLATES[c.event]?.(c.name) || { subject: `[MobileQueue] แจ้งเตือน ${c.event}`, text: `สวัสดีคุณ ${c.name}` };
+    const result = await sendEmail({ to: c.email, ...tmpl });
+    logDunningSend(c.tenantId, c.event, { dryRun: result.dryRun || false, toEmail: c.email });
+    results.push({ ...c, ...result });
+  }
+  res.json({ sent: results.length, results });
+});
 app.get('/admin/api/audit', adminGate, (req, res) => {
   const tid = req.query.tenantId ? Number(req.query.tenantId) : null;
   res.json({ events: listAudit({ tenantId: tid, limit: Number(req.query.limit) || 200 }) });
@@ -814,8 +838,11 @@ app.get('/api/billing/status', (req, res) => {
 });
 app.post('/api/billing/subscribe', async (req, res) => {       // body: { token, plan, interval, email }
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null })); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const r = await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null });
+    clearDunningLog(req.tenantId); // fresh start on renewal — allow future dunning cycle
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/billing/cancel', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });

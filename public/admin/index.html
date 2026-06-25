@@ -41,6 +41,7 @@
         <button class="btn ghost" style="padding:6px 12px" onclick="loadHealth()"><span data-ic="chart" data-sz="15"></span> สุขภาพร้าน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()"><span data-ic="gift" data-sz="15"></span> แนะนำเพื่อน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()"><span data-ic="doc" data-sz="15"></span> บันทึกการใช้งาน</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadDunning()">📧 Dunning</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadErrors()">⚠ Error log</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="load()"><span data-ic="refresh" data-sz="15"></span> รีเฟรช</button>
       </div>
@@ -71,6 +72,15 @@
       <h2 style="font-size:14px;margin:10px 0 4px">ใกล้หมดอายุ (≤7 วัน) · ไม่มีออเดอร์เดือนนี้</h2>
       <table><thead><tr><th>ร้าน</th><th>แพลน</th><th>เหลือ (วัน)</th><th>ต่ออัตโนมัติ</th><th>ออเดอร์/เดือน</th></tr></thead>
         <tbody id="healthRows"></tbody></table>
+    </div>
+    <div id="dunningPanel" style="display:none;margin-top:18px">
+      <div class="bar"><h1 style="font-size:18px">📧 Dunning emails <span class="muted" id="dunningCount" style="font-size:13px;font-weight:400"></span></h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn" style="padding:6px 12px;background:#6366f1;color:#fff" onclick="sendDunning()">ส่งอีเมลทั้งหมด</button>
+          <button class="btn ghost" style="padding:6px 12px" onclick="$('dunningPanel').style.display='none'">ปิด</button>
+        </div></div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">แสดงร้านที่ต้องส่งอีเมลแจ้งเตือน (trial ใกล้หมด / lapsed) · หากไม่ได้ตั้งค่า SENDGRID_API_KEY จะ dry-run (log console)</div>
+      <div id="dunningRows"></div>
     </div>
     <div id="errorsPanel" style="display:none;margin-top:18px">
       <div class="bar"><h1 style="font-size:18px">⚠ Error log <span class="muted" id="errCount" style="font-size:13px;font-weight:400"></span></h1>
@@ -184,6 +194,17 @@ window.loadAudit=async()=>{ try{ const d=await api('/admin/api/audit?limit=200')
     return `<tr><td style="white-space:nowrap">${esc(ts)}</td><td>${tName(e.tenant_id)}</td><td>${esc(e.actor)}</td><td><code>${esc(e.action)}</code></td><td>${esc(e.detail||'')}</td><td class="muted">${esc(e.ip||'')}</td></tr>`;
   }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:12px">ยังไม่มีบันทึก</td></tr>';
   $('auditPanel').style.display=''; $('auditPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
+const EVENT_TH={trial_7d:'ทดลอง 7 วัน',trial_3d:'ทดลอง 3 วัน',trial_1d:'ทดลอง 1 วัน',lapsed:'หมดอายุแล้ว'};
+window.loadDunning=async()=>{ try{ const d=await api('/admin/api/dunning/preview'); const cs=d.candidates||[];
+  $('dunningCount').textContent='('+cs.length+' ร้าน)';
+  $('dunningRows').innerHTML = cs.length ? cs.map(c=>`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;display:flex;gap:12px;align-items:center">
+    <div style="flex:1"><b>${esc(c.name)}</b> <span style="font-size:12px;color:var(--muted)">${esc(c.email)}</span></div>
+    <span style="background:#ede9fe;color:#4338ca;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">${esc(EVENT_TH[c.event]||c.event)}</span>
+    <span style="color:var(--muted);font-size:12px">${c.daysLeft!=null?c.daysLeft+' วัน':''}</span>
+  </div>`).join('') : '<p style="color:var(--muted);text-align:center;padding:12px">ไม่มีร้านที่ต้องส่ง dunning — ดีมาก!</p>';
+  $('dunningPanel').style.display=''; $('dunningPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
+window.sendDunning=async()=>{ if(!confirm('ส่งอีเมล dunning ทั้งหมดเลยไหม?')) return;
+  try{ const d=await api('/admin/api/dunning/send',{method:'POST'}); alert('ส่งแล้ว '+d.sent+' อีเมล (ดูรายละเอียดใน error log / console)'); loadDunning(); }catch(e){ $('err').textContent=e.message; } };
 window.loadErrors=async()=>{ try{ const d=await api('/admin/api/errors'); const errs=d.errors||[];
   $('errCount').textContent='('+errs.length+')';
   $('errRows').innerHTML = errs.length ? errs.map(e=>`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px">

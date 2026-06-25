@@ -129,3 +129,58 @@ export async function handleWebhook(eventId) {
   const ev = await omise('GET', `/events/${eventId}`);
   return { ok: true, ...applyEvent(ev) };
 }
+
+// ---------- Dunning email scaffolding ----------
+
+/** Return tenants that need a dunning email, with the event type and suggested message. */
+export function getDunningCandidates() {
+  const now = Date.now();
+  const sent = new Set(
+    db.prepare('SELECT tenant_id||":"||event k FROM dunning_log').all().map((r) => r.k)
+  );
+  const tenants = db.prepare(
+    `SELECT id, name, owner_email, plan_name, plan_until, auto_renew, omise_customer_id
+     FROM tenants WHERE id>1 AND active=1`
+  ).all();
+
+  const candidates = [];
+  for (const t of tenants) {
+    if (!t.owner_email) continue;
+    const msLeft = t.plan_until ? new Date(t.plan_until).getTime() - now : null;
+    const daysLeft = msLeft != null ? Math.ceil(msLeft / 86400000) : null;
+    const isFree = t.plan_name === 'free';
+    const hasCard = Boolean(t.omise_customer_id);
+
+    // Trial/plan ending warnings (only when NOT auto-renewing or no card on file).
+    if (!isFree && daysLeft != null && (!t.auto_renew || !hasCard)) {
+      for (const [event, maxDays, minDays] of [
+        ['trial_7d', 8, 4],
+        ['trial_3d', 4, 1],
+        ['trial_1d', 2, 0],
+      ]) {
+        if (daysLeft <= maxDays && daysLeft >= minDays && !sent.has(`${t.id}:${event}`)) {
+          candidates.push({ tenantId: t.id, name: t.name, email: t.owner_email, event, daysLeft, plan: t.plan_name });
+        }
+      }
+    }
+
+    // Lapsed: was paid, now free (plan_until in the past).
+    if (isFree && t.plan_until && new Date(t.plan_until).getTime() < now && !sent.has(`${t.id}:lapsed`)) {
+      candidates.push({ tenantId: t.id, name: t.name, email: t.owner_email, event: 'lapsed', daysLeft: 0, plan: 'free' });
+    }
+  }
+  return candidates;
+}
+
+/** Mark a dunning event as sent (or dry-run) to prevent duplicates. */
+export function logDunningSend(tenantId, event, { dryRun = false, toEmail = null } = {}) {
+  db.prepare(
+    `INSERT OR REPLACE INTO dunning_log (tenant_id, event, dry_run, to_email, sent_at)
+     VALUES (?, ?, ?, ?, datetime('now'))`
+  ).run(tenantId, event, dryRun ? 1 : 0, toEmail);
+}
+
+/** Reset dunning log for a tenant (e.g. on plan renewal — allow fresh dunning cycle). */
+export function clearDunningLog(tenantId) {
+  db.prepare('DELETE FROM dunning_log WHERE tenant_id=?').run(tenantId);
+}
