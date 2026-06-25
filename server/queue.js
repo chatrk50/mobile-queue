@@ -1384,7 +1384,12 @@ export function loyaltyHistory(key, limit = 30) {
  */
 export function awardPoints(orderId) {
   if (!loyaltyEnabled()) return null;
-  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  const tid = TID();
+  // Defense-in-depth: validate the order belongs to this tenant even though setOrderPaid already
+  // checks this — guards against future call sites that might skip the outer validation.
+  const order = db.prepare(
+    'SELECT o.* FROM orders o JOIN stores s ON s.id=o.branch_id WHERE o.id=? AND s.tenant_id=?'
+  ).get(orderId, tid);
   if (!order) return null;
   const t = db.prepare('SELECT line_user_id, customer_key, customer_name FROM tickets WHERE id=?').get(order.ticket_id);
   // Loyalty key = LINE userId (Pkg 2) OR a phone key 'tel:…' attached at the counter (Pkg 1).
@@ -1405,7 +1410,6 @@ export function awardPoints(orderId) {
   const bonus = isFirst ? getWelcomeBonus() : 0;
   // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
   // customer orders on their birthday (and has saved one).
-  const tid = TID();
   const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, tid);
   const yr = bkkYear();
   const bdayBonus = (cust && isBirthdayToday(cust.birthday) && !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?").get(key, 'birthday ' + yr))

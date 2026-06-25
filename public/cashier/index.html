@@ -742,48 +742,59 @@ function renderSales(){
 // ---------- Staff management (owner) ----------
 const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
 window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
-window.showStaff=async()=>{ try{ const list=await api('/api/staff');
-  $('staffCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; if($('promoCard'))$('promoCard').style.display='none';
-  renderStaff(list);
-}catch(e){ toast(err(e)); } };
-let STAFF=[], _selStaffId=null;
+let STAFF=[], _selStaffId=null, _staffBranches=null;
+async function loadStaffBranches(){ if(_staffBranches) return _staffBranches; try{ _staffBranches=await api('/api/branches'); }catch(e){ _staffBranches=[]; } return _staffBranches; }
+function branchCheckboxesHtml(assignedIds=[]){ if(!_staffBranches||_staffBranches.length<=1) return ''; const ids=assignedIds||[]; return `<label class="ff" style="margin-top:4px">สาขาที่รับผิดชอบ <span class="muted" style="font-weight:400">(ไม่เลือก = ทุกสาขา)</span><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">`+_staffBranches.map(b=>`<label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer"><input type="checkbox" class="sf_branch" value="${b.id}"${ids.includes(b.id)?' checked':''}> ${esc(b.name||b.code||'สาขา '+b.id)}</label>`).join('')+`</div></label>`; }
+function readBranchCheckboxes(){ const cbs=document.querySelectorAll('.sf_branch:checked'); return cbs.length?[...cbs].map(c=>Number(c.value)):null; }
 function renderStaff(list){ STAFF=list||[];
   if(!STAFF.length){ $('staffBody').innerHTML='<p class="muted">ยังไม่มีพนักงาน</p>'; return; }
   $('staffBody').innerHTML=STAFF.map(s=>`<div class="ms-item${_selStaffId===s.id?' sel':''}" style="${s.active?'':'opacity:.55'}" onclick="editStaffForm(${s.id})">
     <div style="flex:1"><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิด</span>'}</div></div>`).join('');
 }
 async function refreshStaff(sel){ renderStaff(await api('/api/staff')); if(sel!==undefined) editStaffForm(sel); }
+window.showStaff=async()=>{ try{ const list=await api('/api/staff');
+  if(CFG.saas) await loadStaffBranches();
+  $('staffCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; if($('promoCard'))$('promoCard').style.display='none';
+  renderStaff(list);
+}catch(e){ toast(err(e)); } };
 window.editStaffForm=(id)=>{ _selStaffId=id;
   document.querySelectorAll('#staffBody .ms-item').forEach(el=>el.classList.remove('sel'));
+  const showBranches=CFG.saas&&_staffBranches&&_staffBranches.length>1;
   if(id==='new'){
     $('staffEditForm').innerHTML=`<h2 style="margin:0 0 12px;font-size:16px">เพิ่มพนักงานใหม่</h2>
       <label class="ff">ชื่อ<input id="sf_name" placeholder="ชื่อพนักงาน"></label>
       <label class="ff">PIN (ตัวเลข 4-8 หลัก)<input id="sf_pin" inputmode="numeric" placeholder="เช่น 1234"></label>
-      <label class="ff">ตำแหน่ง<select id="sf_role"><option value="cashier">แคชเชียร์</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของร้าน</option></select></label>
+      <label class="ff">ตำแหน่ง<select id="sf_role" onchange="toggleBranchSection(this.value)">${roleOptions('')}</select></label>
+      <div id="sf_branch_wrap">${branchCheckboxesHtml([])}</div>
       <p id="sf_err" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
       <button class="ok" style="width:100%" onclick="saveStaffForm()">เพิ่มพนักงาน</button>`;
+    if(!showBranches) { const w=$('sf_branch_wrap'); if(w) w.style.display='none'; }
     return;
   }
   const s=(STAFF||[]).find(x=>x.id===id); if(!s) return;
   const el=document.querySelector(`#staffBody .ms-item[onclick*="(${id})"]`); if(el) el.classList.add('sel');
   $('staffEditForm').innerHTML=`<h2 style="margin:0 0 4px;font-size:16px">${esc(s.name)} <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px;vertical-align:middle">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px;vertical-align:middle">ปิดใช้งานอยู่</span>'}</h2>
     <label class="ff">ชื่อ<input id="sf_name" value="${esc(s.name)}"></label>
-    <label class="ff">ตำแหน่ง<select id="sf_role"><option value="cashier"${s.role==='cashier'?' selected':''}>แคชเชียร์</option><option value="manager"${s.role==='manager'?' selected':''}>ผู้จัดการ</option><option value="owner"${s.role==='owner'?' selected':''}>เจ้าของร้าน</option></select></label>
+    <label class="ff">ตำแหน่ง<select id="sf_role" onchange="toggleBranchSection(this.value)">${roleOptions(s.role)}</select></label>
     <label class="ff">เปลี่ยน PIN <span class="muted" style="font-weight:400">(เว้นว่าง = คงเดิม)</span><input id="sf_pin" inputmode="numeric" placeholder="ตัวเลข 4-8 หลัก"></label>
+    <div id="sf_branch_wrap"${(!showBranches||s.role==='owner')?' style="display:none"':''}>${branchCheckboxesHtml(s.branchIds||[])}</div>
     <p id="sf_err" class="muted" style="color:var(--danger);font-size:13px;min-height:16px"></p>
     <div class="row" style="gap:8px">
       <button class="ok" style="flex:1" onclick="saveStaffForm()">บันทึก</button>
       ${s.active?`<button class="ghost danger" style="flex:1" onclick="removeStaff(${s.id},'${esc(s.name)}')">ปิดใช้งาน</button>`:`<button class="ghost" style="flex:1" onclick="reactivateStaff(${s.id})">เปิดใช้งาน</button>`}
     </div>`;
 };
+function roleOptions(cur){ return ['cashier','manager','owner'].map(r=>`<option value="${r}"${cur===r?' selected':''}>${ROLE_TH[r]||r}</option>`).join(''); }
+window.toggleBranchSection=(role)=>{ const w=$('sf_branch_wrap'); if(w) w.style.display=(role==='owner'||!CFG.saas||!_staffBranches||_staffBranches.length<=1)?'none':''; };
 window.saveStaffForm=async()=>{ const errEl=$('sf_err'); if(errEl) errEl.textContent='';
   const name=$('sf_name').value.trim(), role=$('sf_role').value, pin=$('sf_pin').value.trim();
   if(!name){ if(errEl) errEl.textContent='กรอกชื่อ'; return; }
+  const branchIds=readBranchCheckboxes();
   try{
     if(_selStaffId==='new'){ if(!pin){ if(errEl) errEl.textContent='กรอก PIN'; return; }
-      await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:[]})});
+      await api('/api/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin,role,branchIds:branchIds||[]})});
       toast('เพิ่มพนักงานแล้ว'); await refreshStaff('new');
-    } else { const body={name,role}; if(pin) body.pin=pin;
+    } else { const body={name,role}; if(pin) body.pin=pin; if(branchIds!==null) body.branchIds=branchIds;
       await api('/api/staff/'+_selStaffId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       toast('บันทึกแล้ว'); await refreshStaff(_selStaffId);
     }
