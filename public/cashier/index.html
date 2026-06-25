@@ -387,8 +387,9 @@
       </div>
     </div>
     <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin-bottom:14px"><span class="muted">รวมรายการนี้</span><b style="font-size:18px">฿<span id="detailLineTotal">0</span></b></div>
-    <button class="ghost" style="width:100%;padding:13px;margin-bottom:8px;color:#0e6b7e;border-color:#bfe3ec;box-sizing:border-box" onclick="detailEditOptions()">🧋 เปลี่ยนท็อปปิ้ง / ความหวาน</button>
-    <button class="ghost danger" style="width:100%;padding:13px;box-sizing:border-box" onclick="detailRemove()">🗑️ ลบรายการนี้</button>
+    <button class="ghost" style="width:100%;padding:13px;margin-bottom:8px;color:#0e6b7e;border-color:#bfe3ec;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailEditOptions()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>เปลี่ยนท็อปปิ้ง / ความหวาน</button>
+    <button class="ghost danger" style="width:100%;padding:13px;margin-bottom:12px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailRemove()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>ลบรายการนี้</button>
+    <button class="ok" style="width:100%;padding:14px;min-height:54px;font-size:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="confirmDetail()"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M20 6 9 17l-5-5"/></svg>ยืนยันการแก้ไข</button>
   </div>
 </div>
 
@@ -1623,6 +1624,9 @@ window.openItemDetail=(i)=>{ const e=cart[i]; if(!e) return; _detailIdx=i;
   $('detailQty').textContent=e.qty||1; $('detailLineTotal').textContent=entryTotal(e);
   $('itemDetailPop').style.display='flex'; };
 window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx=null; };
+// Explicit "done" for the item editor — changes already apply live; this gives clear closure
+// (and a confirmation toast) so the cashier knows the edit is finished and returns to the bill.
+window.confirmDetail=()=>{ closeItemDetail(); toast('อัปเดตรายการแล้ว'); };
 window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
   $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
 window.detailRemove=()=>{ if(_detailIdx==null) return; cart.splice(_detailIdx,1); closeItemDetail(); renderBasketCount(); toast('ลบรายการแล้ว'); };
