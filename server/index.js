@@ -928,7 +928,16 @@ app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interva
 });
 app.post('/api/billing/cancel', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(cancelSubscription(req.tenantId));
+  const result = cancelSubscription(req.tenantId);
+  res.json(result);
+  // Cancellation confirmation — fire-and-forget.
+  const to = getTenant(req.tenantId)?.owner_email; if (to) {
+    const until = result.planUntil ? new Date(result.planUntil).toLocaleDateString('th-TH') : '';
+    sendEmail({ to, subject: 'ยืนยันการยกเลิกต่ออายุ — MobileQueue',
+      text: `รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว\nคุณยังใช้งานได้ถึง: ${until}\nหากต้องการกลับมาใช้ อัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ`,
+      html: `<p>รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว</p><p>คุณยังใช้งานได้ถึง: <b>${until}</b></p><p>หากต้องการกลับมาใช้ สามารถอัปเกรดได้ที่ ⚙ ตั้งค่า &gt; แพ็กเกจ</p>`,
+    }).catch(() => {});
+  }
 });
 // Omise account-level webhook (one URL for the whole platform). Authenticity is verified by
 // re-fetching the event from Omise inside billingWebhook; the tenant is found via the charge's
@@ -1730,6 +1739,13 @@ if (BILLING_ON) setInterval(async () => {
       sendEmail({ to: r.email, subject: `ใบเสร็จต่ออายุ — ${planLabel}`,
         text: `ต่ออายุ ${planLabel} สำเร็จ\nยอดชำระ: ${paid}\nใช้งานได้ถึง: ${until}`,
         html: `<p>ต่ออายุ <b>${planLabel}</b> สำเร็จ</p><p>ยอดชำระ: <b>${paid}</b></p><p>ใช้งานได้ถึง: <b>${until}</b></p>`,
+      }).catch(() => {});
+    }
+    for (const d of (result.downgrades || [])) {
+      const prevLabel = d.prevPlan === 'business' ? 'Business' : 'Pro';
+      sendEmail({ to: d.email, subject: `แพ็กเกจ ${prevLabel} หมดอายุ — ร้านของคุณกลับสู่ Free`,
+        text: `แพ็กเกจ ${prevLabel} ของคุณหมดอายุและไม่สามารถต่ออายุได้ ร้านยังใช้งานได้ในโหมด Free\nอัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ`,
+        html: `<p>แพ็กเกจ <b>${prevLabel}</b> หมดอายุแล้ว — ร้านของคุณกลับสู่โหมด Free</p><p>ยังใช้งานได้ในโหมดฟรี อัปเกรดได้ที่ ⚙ ตั้งค่า &gt; แพ็กเกจ</p>`,
       }).catch(() => {});
     }
   } catch {}

@@ -133,7 +133,7 @@ export async function renewDue() {
   const due = db.prepare(`SELECT id, omise_customer_id, plan_name, plan_interval, plan_until, owner_email FROM tenants
     WHERE plan_name IN ('pro','business') AND auto_renew=1 AND omise_customer_id IS NOT NULL AND (plan_until IS NULL OR plan_until <= ?)`).all(nowIso);
   let charged = 0, failed = 0;
-  const receipts = [];
+  const receipts = [], downgrades = [];
   for (const t of due) {
     try {
       const amount = priceForTenant(t.id, t.plan_name, t.plan_interval);
@@ -146,10 +146,13 @@ export async function renewDue() {
     } catch (e) {
       failed++;
       const graceCut = new Date(Date.now() - GRACE_MS).toISOString();
-      if (!t.plan_until || t.plan_until < graceCut) db.prepare("UPDATE tenants SET plan_name='free', auto_renew=0 WHERE id=?").run(t.id);
+      if (!t.plan_until || t.plan_until < graceCut) {
+        db.prepare("UPDATE tenants SET plan_name='free', auto_renew=0 WHERE id=?").run(t.id);
+        if (t.owner_email) downgrades.push({ email: t.owner_email, prevPlan: t.plan_name });
+      }
     }
   }
-  return { charged, failed, receipts };
+  return { charged, failed, receipts, downgrades };
 }
 
 /** Apply a (verified) Omise event to a tenant — mainly to downgrade on a refund. Exported pure
