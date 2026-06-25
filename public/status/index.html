@@ -101,6 +101,7 @@
       <li><b>Rate limit: promo broadcast</b> — max 5/hr/tenant (PROMO_RATE env); ป้องกัน LINE quota หมด</li>
       <li><b>Rate limit: PDPA export</b> — max 10/5min/tenant; ป้องกัน DB dump ซ้ำ</li>
       <li><b>Rate limit: forget-customer</b> — max 30/hr/tenant; ป้องกัน bulk erasure abuse</li>
+      <li><b>forgetCustomer cross-tenant fix</b> — UPDATE tickets เดิมลบ line_user_id ข้ามทุก tenant; เพิ่ม AND store_id IN (stores WHERE tenant_id=?) ให้ลบเฉพาะ tenant ที่ขอ</li>
     </ul>
   </div>
 
