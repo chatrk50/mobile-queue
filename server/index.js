@@ -2015,6 +2015,30 @@ function doDailyReset() {
             .catch(() => {});
         }
       } catch (_) { /* never block reset */ }
+      // Activation nudge: day-3 email for tenants with no orders yet (idempotent via setting key).
+      try {
+        for (const t of listTenants()) {
+          if (!t.owner_email) continue;
+          try {
+            const alreadySent = runWithTenant(t.id, () => getSetting('activation_nudge:sent', '') === '1');
+            if (alreadySent) continue;
+            // Only fire when the tenant is exactly 3 days old (±1 day tolerance).
+            const created = new Date(t.created_at).getTime();
+            const daysSince = (Date.now() - created) / 86400000;
+            if (daysSince < 2.5 || daysSince > 4.5) continue;
+            // Check lifetime order count (not just this month).
+            const totalOrders = db.prepare('SELECT COUNT(*) c FROM orders o JOIN stores s ON s.id=o.branch_id WHERE s.tenant_id=?').get(t.id).c;
+            if (totalOrders > 0) { runWithTenant(t.id, () => setSetting('activation_nudge:sent', '1')); continue; }
+            runWithTenant(t.id, () => setSetting('activation_nudge:sent', '1'));
+            sendEmail({
+              to: t.owner_email,
+              subject: `[ขายดี] ร้าน "${t.name}" ยังไม่ได้รับออเดอร์แรก — เริ่มกันเลย!`,
+              text: `สวัสดีร้าน "${t.name}"!\n\nคุณสมัครมา 3 วันแล้วแต่ยังไม่มีออเดอร์แรก\n\nขั้นตอนถัดไป:\n1. เพิ่มเมนูสินค้าของคุณ\n2. ตั้งค่า LINE OA เพื่อให้ลูกค้ากดสั่ง\n3. ทดลองสร้างออเดอร์แรกจากแคชเชียร์\n\nลิงก์แคชเชียร์: ${BASE_URL}/b/${t.slug}/cashier/\n\nมีคำถามติดต่อเราได้เลย — ทีม ขายดี KhaiDee`,
+              html: billingHtml(t.name, t.slug, [], { body: `ยังไม่มีออเดอร์แรกเลยนะ 😊 ลองเริ่มได้เลย:<br><br>1. <b>เพิ่มเมนู</b> ในหน้าจัดการเมนู<br>2. <b>ตั้งค่า LINE OA</b> ใน ⚙ ตั้งค่า > LINE<br>3. <b>ทดลองสั่ง</b> จากหน้าแคชเชียร์`, ctaLabel: 'เข้าระบบแคชเชียร์' }),
+            }).catch(() => {});
+          } catch (_) { /* never block per-tenant */ }
+        }
+      } catch (_) { /* never block reset */ }
     } else {
       try { Q.archiveTodaySales(ended); Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
     }
