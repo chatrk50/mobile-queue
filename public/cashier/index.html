@@ -2133,8 +2133,9 @@ window.showFeatures=async()=>{
           <button class="ghost" style="padding:8px" onclick="upgrade('business','month')">Business ฿${b(P.business.month)}/ด</button>
           <button class="ghost" style="padding:8px" onclick="upgrade('business','year')">Business ฿${b(P.business.year)}/ปี</button>
         </div>
-        ${bill.plan!=='free'&&bill.autoRenew?`<button class="ghost danger" style="width:100%;margin-top:6px" onclick="cancelSub()">ยกเลิกต่ออายุอัตโนมัติ</button>`:''}`
-        : `<div class="muted" style="font-size:12px">การชำระเงินออนไลน์ยังไม่เปิดบนระบบนี้ — ติดต่อผู้ดูแลเพื่ออัปเกรด</div>`}
+        ${bill.plan!=='free'&&bill.autoRenew?`<button class="ghost danger" style="width:100%;margin-top:6px" onclick="cancelSub()">ยกเลิกต่ออายุอัตโนมัติ</button>`:''}
+        <div style="text-align:center;margin-top:6px"><a href="/upgrade/" target="_blank" rel="noopener" style="font-size:12px;color:var(--muted)">เปรียบเทียบแพ็กเกจทั้งหมด →</a></div>`
+        : `<div class="muted" style="font-size:12px">การชำระเงินออนไลน์ยังไม่เปิดบนระบบนี้ — ติดต่อผู้ดูแลเพื่ออัปเกรด · <a href="/upgrade/" target="_blank" rel="noopener" style="color:var(--ind,#6366f1)">ดูแพ็กเกจ</a></div>`}
       ${bill.referralCode?(()=>{ const refUrl=location.origin+'/signup/?ref='+encodeURIComponent(bill.referralCode);
         return `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
         <div class="muted" style="font-size:12px;font-weight:600;margin-bottom:4px">🎁 แนะนำเพื่อน — รับฟรีคนละ 1 เดือน</div>
