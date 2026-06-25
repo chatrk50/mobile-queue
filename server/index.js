@@ -537,11 +537,12 @@ function issueOwnerSession(res, tenantId) {
   res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${COOKIE_SECURE}`);
   return true;
 }
-function ownerResult(res, matches, slug) {
+function ownerResult(res, matches, slug, { ip = '', via = 'password' } = {}) {
   if (!matches.length) return res.status(401).json({ error: 'no_match' });
   const pick = slug ? matches.find((m) => m.slug === slug) : (matches.length === 1 ? matches[0] : null);
   if (!pick) return res.json({ ok: true, choose: matches });        // multiple shops → let them pick
   issueOwnerSession(res, pick.tenantId);
+  logAudit({ tenantId: pick.tenantId, actor: 'owner', action: 'owner.login', detail: 'via=' + via, ip });
   return res.json({ ok: true, url: `/b/${pick.slug}/cashier/`, tenant: pick });
 }
 app.get('/api/owner/config', (req, res) => res.json({ saas: SAAS, googleClientId: GOOGLE_ON ? GOOGLE_CLIENT_ID : null, supportUrl: SUPPORT_LINE_URL || null }));
@@ -563,15 +564,16 @@ app.post('/api/owner/login', (req, res) => {
       }).catch(() => {});
     }
   }
-  return ownerResult(res, matches, req.body?.slug);
+  return ownerResult(res, matches, req.body?.slug, { ip, via: 'password' });
 });
 app.post('/api/owner/google', async (req, res) => {
   if (!SAAS || !GOOGLE_ON) return res.status(404).json({ error: 'google_off' });
+  const ip = ipOf(req);
   try {
     const { email } = await verifyGoogleIdToken(req.body?.credential);
     const matches = ownerTenantsByEmail(email);
     if (!matches.length) return res.status(404).json({ error: 'no_shop', email });   // verified, but owns nothing → signup
-    return ownerResult(res, matches, req.body?.slug);
+    return ownerResult(res, matches, req.body?.slug, { ip, via: 'google' });
   } catch (e) { res.status(401).json({ error: 'bad_google' }); }
 });
 
