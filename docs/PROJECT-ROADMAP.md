@@ -53,7 +53,8 @@ platform admin → owner email/Google login → PDPA export/erasure → security
 - [x] 2FA for the platform-admin console — optional RFC-6238 TOTP via SAAS_ADMIN_TOTP_SECRET
       (PIN + code → 8h admin session; PIN-alone rejected when on; brute-force lockout). Setup:
       scripts/admin-2fa-setup.mjs. Tests test:totp + test:2fa. (commit 6fc432d)
-- [ ] Alerting on suspicious owner-login patterns (lockout done; alerting needs a channel).
+- [x] Alerting on suspicious owner-login patterns — security alert email sent on 10th failed
+      login attempt (timing-safe; only when email is registered; fire-and-forget).
 - [x] Dependency scanning + full test suite in CI on every push/PR (`npm audit --audit-level=high`
       gate + e2e/tenant/isolation/billing/restore/totp/2fa/hierarchy/dryrun). `.github/workflows/ci.yml`
       (commit 19bd6d8). [x] secret scanning — gitleaks `secrets` job + .gitleaks.toml (commit 69bc2b6).

@@ -2094,8 +2094,8 @@ window.showFeatures=async()=>{
     </div>` : ''; })() : '')+
     (acct ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>${icon('user',{size:16})} บัญชีเจ้าของ</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">เปลี่ยนอีเมลล็อกอิน · ตั้งหรือเปลี่ยนรหัสผ่าน</div>
-      <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">อีเมล ${acct.email?`<span class="muted">(ปัจจุบัน: ${esc(acct.email)})</span>`:''}</label>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">เปลี่ยนอีเมลล็อกอิน (ต้องยืนยันผ่านลิงก์ที่ส่งไปอีเมลใหม่) · ตั้งหรือเปลี่ยนรหัสผ่าน</div>
+      <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">อีเมลใหม่ ${acct.email?`<span class="muted">(ปัจจุบัน: ${esc(acct.email)})</span>`:''}</label>
       <div class="row" style="gap:6px;margin-bottom:8px">
         <input id="acctEmailInp" type="email" placeholder="your@email.com" value="${esc(acct.email||'')}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <button class="ghost" style="padding:8px 12px;white-space:nowrap" onclick="saveAcctEmail()">บันทึก</button>
