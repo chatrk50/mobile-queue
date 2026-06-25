@@ -1363,7 +1363,7 @@ export function channelNet(amount, channelId) {
   return Math.round((amount * (1 - pct / 100) + Number.EPSILON) * 100) / 100;
 }
 // Merchandising badge shown on the tile (decorative; '' clears it). Validated against a fixed set.
-const VALID_BADGES = ['new', 'promo', 'hot'];
+const VALID_BADGES = ['new', 'promo', 'hot', 'rec'];
 const normBadge = (b) => (VALID_BADGES.includes(b) ? b : null);
 
 export function addMenuItem({ name, name_en, price, image, category, badge }) {
