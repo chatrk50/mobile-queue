@@ -257,20 +257,32 @@ app.use((req, res, next) => {
 // ---- Tenant boundary guards: a :zoneId / :ticketId in the URL must belong to the request's
 // tenant, else 404 (so a guessed id from another brand is invisible). SaaS-only — in
 // single-tenant mode tenant 1 owns everything, so these are pure pass-throughs. ----
+// Branch-restriction helper: returns true if the requesting staff member is allowed to access
+// the given store/branch. Owners (branchIds=[]) and legacy PIN sessions (req.staff=null) are
+// always allowed. Non-owner staff with an explicit branchIds list can only access those branches.
+const branchAllowed = (req, storeId) =>
+  !req.staff || req.staff.role === 'owner' || req.staff.branchIds.length === 0 ||
+  req.staff.branchIds.includes(Number(storeId));
+
 app.param('zoneId', (req, res, next, zoneId) => {
   if (!SAAS) return next();
-  const ok = db.prepare('SELECT 1 FROM zones z JOIN stores s ON s.id=z.store_id WHERE z.id=? AND s.tenant_id=?').get(zoneId, req.tenantId);
-  return ok ? next() : res.status(404).json({ error: 'not_found' });
+  const r = db.prepare('SELECT s.id AS storeId FROM zones z JOIN stores s ON s.id=z.store_id WHERE z.id=? AND s.tenant_id=?').get(zoneId, req.tenantId);
+  if (!r) return res.status(404).json({ error: 'not_found' });
+  if (!branchAllowed(req, r.storeId)) return res.status(403).json({ error: 'branch_not_assigned' });
+  next();
 });
 app.param('ticketId', (req, res, next, ticketId) => {
   if (!SAAS) return next();
-  const ok = db.prepare('SELECT 1 FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.id=? AND s.tenant_id=?').get(ticketId, req.tenantId);
-  return ok ? next() : res.status(404).json({ error: 'not_found' });
+  const r = db.prepare('SELECT s.id AS storeId FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.id=? AND s.tenant_id=?').get(ticketId, req.tenantId);
+  if (!r) return res.status(404).json({ error: 'not_found' });
+  if (!branchAllowed(req, r.storeId)) return res.status(403).json({ error: 'branch_not_assigned' });
+  next();
 });
 app.param('storeId', (req, res, next, storeId) => {
   if (!SAAS) return next();
-  const ok = db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(storeId, req.tenantId);
-  return ok ? next() : res.status(404).json({ error: 'not_found' });
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=? AND tenant_id=?').get(storeId, req.tenantId)) return res.status(404).json({ error: 'not_found' });
+  if (!branchAllowed(req, storeId)) return res.status(403).json({ error: 'branch_not_assigned' });
+  next();
 });
 
 // ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
