@@ -596,6 +596,41 @@ try {
   }
 } catch (e) { console.error('[db] sales_history rebuild skipped:', e.message); }
 
+// ---- One-time rebuild: customers gains composite PRIMARY KEY (line_user_id, tenant_id) so
+// the same LINE user ordering at two different SaaS brands gets separate loyalty records.
+// Guarded by pk-count: if only one column has pk>0 the old single-column PK is in use.
+try {
+  const pkCount = db.prepare(`PRAGMA table_info(customers)`).all().filter((c) => c.pk > 0).length;
+  if (pkCount === 1) {
+    db.exec(`
+      CREATE TABLE customers_new (
+        line_user_id    TEXT NOT NULL,
+        tenant_id       INTEGER NOT NULL DEFAULT 1,
+        name            TEXT,
+        first_seen      TEXT NOT NULL DEFAULT (datetime('now')),
+        last_order_at   TEXT,
+        order_count     INTEGER NOT NULL DEFAULT 0,
+        fav_items       TEXT,
+        birthday        TEXT,
+        referral_code   TEXT,
+        referred_by     TEXT,
+        points          INTEGER NOT NULL DEFAULT 0,
+        lifetime_points INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (line_user_id, tenant_id)
+      );
+      INSERT INTO customers_new
+        SELECT line_user_id, COALESCE(tenant_id,1), name, first_seen, last_order_at,
+               order_count, fav_items, birthday, referral_code, referred_by,
+               COALESCE(points,0), COALESCE(lifetime_points,0)
+        FROM customers;
+      DROP TABLE customers;
+      ALTER TABLE customers_new RENAME TO customers;
+      CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
+    `);
+    console.log('[db] customers table rebuilt with composite PK (line_user_id, tenant_id)');
+  }
+} catch (e) { console.error('[db] customers PK rebuild failed:', e.message); }
+
 // ---- Backfill the new denormalized/derived columns on existing rows (idempotent) ----
 try {
   // orders.branch_id ← the ticket's store_id

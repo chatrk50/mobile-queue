@@ -1198,13 +1198,13 @@ export function setCustomerBirthday(key, birthday) {
   if (!key) throw new Error('customer_required');
   if (!birthdayMD(birthday)) throw new Error('bad_birthday');
   const val = String(birthday).slice(0, 10);
-  db.prepare(`INSERT INTO customers (line_user_id, birthday) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET birthday=excluded.birthday`).run(key, val);
+  db.prepare(`INSERT INTO customers (line_user_id, tenant_id, birthday) VALUES (?,?,?) ON CONFLICT(line_user_id, tenant_id) DO UPDATE SET birthday=excluded.birthday`).run(key, TID(), val);
   return { ok: true, birthday: val, isBirthday: isBirthdayToday(val) };
 }
 /** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier + birthday. */
 export function loyaltyBalance(key) {
   if (!key) return { key, points: 0, lifetime: 0, tier: null, next: nextTier(0), birthday: null, isBirthday: false };
-  const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=?').get(key);
+  const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, TID());
   const lifetime = c ? (c.lifetime_points || 0) : 0;
   return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), next: nextTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
@@ -1238,7 +1238,7 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   const key = tenantKey('tel:' + d);   // stored on both the customer row and the ticket (storage form)
   const nm = (name || '').toString().trim().slice(0, 80) || null;
   db.transaction(() => {
-    db.prepare(`INSERT INTO customers (line_user_id, name, tenant_id) VALUES (?,?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm, TID());
+    db.prepare(`INSERT INTO customers (line_user_id, name, tenant_id) VALUES (?,?,?) ON CONFLICT(line_user_id, tenant_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm, TID());
     db.prepare('UPDATE tickets SET customer_key=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
   })();
   const b = loyaltyBalance(key);
@@ -1267,7 +1267,7 @@ function rowidFromRefCode(code) { const m = String(code || '').trim().toUpperCas
 function hasLoyaltyHistory(key) { return !!db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? LIMIT 1').get(key); }
 export function getReferralCode(key) {
   if (!key) return null;
-  const c = db.prepare('SELECT rowid, referral_code FROM customers WHERE line_user_id=?').get(key);
+  const c = db.prepare('SELECT rowid, referral_code FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, TID());
   if (!c) return null;
   if (c.referral_code) return c.referral_code;
   const code = refCodeFor(c.rowid);
@@ -1276,20 +1276,20 @@ export function getReferralCode(key) {
 }
 export function referralStatus(key) {
   if (!key) return { code: null, referredBy: null, eligible: false };
-  const c = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=?').get(key);
+  const c = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, TID());
   return { code: getReferralCode(key), referredBy: c ? (c.referred_by || null) : null, eligible: !(c && c.referred_by) && !hasLoyaltyHistory(key) };
 }
 export function applyReferralCode(key, code) {
   if (!key) throw new Error('customer_required');
   if (hasLoyaltyHistory(key)) throw new Error('not_new_customer');
-  const me = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=?').get(key);
+  const me = db.prepare('SELECT referred_by FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, TID());
   if (me && me.referred_by) throw new Error('already_referred');
   const rid = rowidFromRefCode(code);
   if (!rid) throw new Error('bad_code');
-  const ref = db.prepare('SELECT line_user_id FROM customers WHERE rowid=?').get(rid);
+  const ref = db.prepare('SELECT line_user_id FROM customers WHERE rowid=? AND tenant_id=?').get(rid, TID());
   if (!ref) throw new Error('code_not_found');
   if (ref.line_user_id === key) throw new Error('own_code');
-  db.prepare('INSERT INTO customers (line_user_id, referred_by) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET referred_by=excluded.referred_by').run(key, ref.line_user_id);
+  db.prepare('INSERT INTO customers (line_user_id, tenant_id, referred_by) VALUES (?,?,?) ON CONFLICT(line_user_id, tenant_id) DO UPDATE SET referred_by=excluded.referred_by').run(key, TID(), ref.line_user_id);
   return { ok: true };
 }
 export function loyaltyHistory(key, limit = 30) {
@@ -1324,7 +1324,8 @@ export function awardPoints(orderId) {
   const bonus = isFirst ? getWelcomeBonus() : 0;
   // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
   // customer orders on their birthday (and has saved one).
-  const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=?').get(key);
+  const tid = TID();
+  const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, tid);
   const yr = bkkYear();
   const bdayBonus = (cust && isBirthdayToday(cust.birthday) && !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?").get(key, 'birthday ' + yr))
     ? getStampsPerReward() : 0;
@@ -1333,23 +1334,23 @@ export function awardPoints(orderId) {
   const refBonus = referrerKey ? getReferralBonus() : 0;
   const total = pts + bonus + bdayBonus + refBonus;
   // Snapshot lifetime before the transaction so we can detect a tier upgrade afterwards.
-  const preTx = db.prepare('SELECT lifetime_points FROM customers WHERE line_user_id=?').get(key);
+  const preTx = db.prepare('SELECT lifetime_points FROM customers WHERE line_user_id=? AND tenant_id=?').get(key, tid);
   const prevLifetime = preTx ? (preTx.lifetime_points || 0) : 0;
   db.transaction(() => {
     db.prepare(
-      `INSERT INTO customers (line_user_id, name, points, lifetime_points)
-       VALUES (?,?,?,?)
-       ON CONFLICT(line_user_id) DO UPDATE SET
+      `INSERT INTO customers (line_user_id, tenant_id, name, points, lifetime_points)
+       VALUES (?,?,?,?,?)
+       ON CONFLICT(line_user_id, tenant_id) DO UPDATE SET
          points = customers.points + excluded.points,
          lifetime_points = customers.lifetime_points + excluded.points,
          name = COALESCE(customers.name, excluded.name)`
-    ).run(key, name, total, total);
+    ).run(key, tid, name, total, total);
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
     if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
     if (bdayBonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bdayBonus, orderId, 'birthday ' + yr);
     if (refBonus > 0 && referrerKey) {
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, refBonus, orderId, 'referral (เพื่อนชวน)');
-      db.prepare('UPDATE customers SET points=points+?, lifetime_points=lifetime_points+? WHERE line_user_id=?').run(refBonus, refBonus, referrerKey);
+      db.prepare('UPDATE customers SET points=points+?, lifetime_points=lifetime_points+? WHERE line_user_id=? AND tenant_id=?').run(refBonus, refBonus, referrerKey, tid);
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(referrerKey, refBonus, orderId, 'referral (เพื่อนที่ชวนสั่งครั้งแรก)');
     }
   })();
@@ -1390,7 +1391,7 @@ export function redeemReward(key, rewardId, actorId = null) {
   const bal = loyaltyBalance(key).points;
   if (bal < r.cost_points) throw new Error('insufficient_points');
   db.transaction(() => {
-    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(r.cost_points, key);
+    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=? AND tenant_id=?').run(r.cost_points, key, TID());
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`).run(key, -r.cost_points, `${r.name}${actorId ? ' (โดยพนักงาน #' + actorId + ')' : ''}`);
   })();
   return { ok: true, redeemed: r.name, cost: r.cost_points, balance: bal - r.cost_points };
@@ -1495,13 +1496,13 @@ function recordCustomerOrder(lineUserId, name) {
   if (!lineUserId) return;
   try {
     db.prepare(
-      `INSERT INTO customers (line_user_id, name, last_order_at, order_count)
-       VALUES (?,?,datetime('now'),1)
-       ON CONFLICT(line_user_id) DO UPDATE SET
+      `INSERT INTO customers (line_user_id, tenant_id, name, last_order_at, order_count)
+       VALUES (?,?,?,datetime('now'),1)
+       ON CONFLICT(line_user_id, tenant_id) DO UPDATE SET
          name = COALESCE(excluded.name, customers.name),
          last_order_at = datetime('now'),
          order_count = customers.order_count + 1`
-    ).run(lineUserId, name && !['LINE order', 'Order', 'Walk-in'].includes(name) ? name : null);
+    ).run(lineUserId, TID(), name && !['LINE order', 'Order', 'Walk-in'].includes(name) ? name : null);
   } catch { /* best-effort */ }
 }
 
@@ -1509,7 +1510,7 @@ function recordCustomerOrder(lineUserId, name) {
  *  (with current price/image) + their last order's lines for a one-tap repeat. */
 export function customerSuggestions(lineUserId) {
   if (!lineUserId) return { known: false };
-  const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=?').get(lineUserId);
+  const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=? AND tenant_id=?').get(lineUserId, TID());
   const favourites = db.prepare(
     `SELECT oi.name,
             SUM(oi.qty) AS qty,
@@ -1810,7 +1811,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = '🎁 แลกแต้ม: ' + reward.name;
   db.transaction(() => {
-    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, key);
+    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=? AND tenant_id=?').run(reward.cost_points, key, TID());
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'redeem', ?, ?, ?)`).run(key, -reward.cost_points, order.id, reason);
   })();
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
@@ -1859,7 +1860,7 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
   for (const key of Object.keys(byKey)) {
     const v = byKey[key];
     if (v.pts === 0 && v.life === 0) continue;
-    db.prepare('UPDATE customers SET points = MAX(0, points - ?), lifetime_points = MAX(0, lifetime_points - ?) WHERE line_user_id=?').run(v.pts, v.life, key);
+    db.prepare('UPDATE customers SET points = MAX(0, points - ?), lifetime_points = MAX(0, lifetime_points - ?) WHERE line_user_id=? AND tenant_id=?').run(v.pts, v.life, key, TID());
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'adjust', ?, ?, ?)`).run(key, -v.pts, orderId, 'ยกเลิกออเดอร์ — ปรับแต้มกลับ');
     if (key === ownerKey) returnedToOwner = -v.pts;   // -(net) : a net redeem (neg) returns positive points
   }
