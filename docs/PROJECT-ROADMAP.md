@@ -15,7 +15,7 @@ verification + close-account) · `dryrun` 32.
 Working end-to-end: signup → 60-day trial → self-serve pay (Omise, Pro/Business, monthly/yearly,
 founder, referral) → onboard → multi-tenant isolation → per-tenant LINE + brand + custom domain →
 platform admin → owner email/Google login → forgot-password (token, SHA-256) → email-change
-verification (two-step, 24h token) → PDPA export/erasure/close-account → DPA template → security hardening → SEO/social (OG tags + robots.txt + mobile nav).
+verification (two-step, 24h token) → PDPA export/erasure/close-account → DPA template → security hardening → SEO/social (OG + Twitter meta all public pages · robots.txt · sitemap.xml · SVG favicon · mobile nav · JSON-LD · noindex on private pages · 404 catch-all · theme-color).
 
 ---
 
