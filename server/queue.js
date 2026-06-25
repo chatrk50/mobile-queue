@@ -897,7 +897,16 @@ const branchIdsOf = (staffId) =>
 
 export function listStaff() {
   const rows = db.prepare('SELECT id, name, role, active FROM staff WHERE tenant_id=? ORDER BY role, name').all(TID());
-  return rows.map((s) => ({ ...s, branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id) }));
+  // Pull the most recent login timestamp per staff member from the audit trail (one round-trip).
+  const logins = db.prepare(
+    `SELECT actor, MAX(at) AS at FROM audit_log WHERE tenant_id=? AND action='staff.login' AND actor LIKE 'staff:%' GROUP BY actor`
+  ).all(TID());
+  const loginMap = Object.fromEntries(logins.map((r) => [r.actor, r.at]));
+  return rows.map((s) => ({
+    ...s,
+    branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id),
+    lastLoginAt: loginMap['staff:' + s.id] || null,
+  }));
 }
 // True if `pin` already belongs to another active staffer IN THIS TENANT (PINs identify the
 // user at login; the same PIN may safely exist at a different brand).

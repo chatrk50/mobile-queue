@@ -757,8 +757,10 @@ function branchCheckboxesHtml(assignedIds=[]){ if(!_staffBranches||_staffBranche
 function readBranchCheckboxes(){ const cbs=document.querySelectorAll('.sf_branch:checked'); return cbs.length?[...cbs].map(c=>Number(c.value)):null; }
 function renderStaff(list){ STAFF=list||[];
   if(!STAFF.length){ $('staffBody').innerHTML='<p class="muted">ยังไม่มีพนักงาน</p>'; return; }
+  const fmtLogin=(at)=>{ if(!at) return 'ยังไม่ได้ล็อกอิน'; const d=new Date(at); const now=Date.now(); const diff=now-at; if(diff<60000) return 'เมื่อกี้'; if(diff<3600000) return Math.floor(diff/60000)+' นาทีที่แล้ว'; if(diff<86400000) return Math.floor(diff/3600000)+' ชม.ที่แล้ว'; return d.toLocaleDateString('th-TH',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); };
   $('staffBody').innerHTML=STAFF.map(s=>`<div class="ms-item${_selStaffId===s.id?' sel':''}" style="${s.active?'':'opacity:.55'}" onclick="editStaffForm(${s.id})">
-    <div style="flex:1"><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิด</span>'}</div></div>`).join('');
+    <div style="flex:1"><b>${esc(s.name)}</b> <span class="pill ${s.role==='owner'?'open':(s.role==='manager'?'soon':'')}" style="font-size:11px">${ROLE_TH[s.role]||s.role}</span>${s.active?'':' <span class="pill closed" style="font-size:11px">ปิด</span>'}
+    <small style="display:block;color:var(--muted);font-size:11px;margin-top:2px">เข้าสู่ระบบล่าสุด: ${fmtLogin(s.lastLoginAt)}</small></div></div>`).join('');
 }
 async function refreshStaff(sel){ renderStaff(await api('/api/staff')); if(sel!==undefined) editStaffForm(sel); }
 window.showStaff=async()=>{ try{ const list=await api('/api/staff');
