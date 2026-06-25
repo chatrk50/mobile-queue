@@ -130,6 +130,7 @@ window.load=async()=>{ $('err').textContent='';
           : `<button class="btn ok" onclick="activate(${t.id})">เปิดใช้</button>`):''}
         <button class="btn ghost" onclick="setDomain(${t.id})">โดเมน</button>
         <button class="btn ghost" onclick="resetPin(${t.id})">รีเซ็ต PIN</button>
+        <button class="btn ghost" onclick="extendTrial(${t.id})">ต่ออายุ</button>
         ${t.id!==1?`<button class="btn ghost" onclick="exportTenant(${t.id})">${icon('download',{size:14})} ส่งออก</button>
         <button class="btn ghost danger" onclick="deleteTenant(${t.id})">${icon('trash',{size:14})} ลบถาวร</button>`:''}
       </td></tr>`).join('') || '<tr><td colspan="8" class="muted">ยังไม่มีแบรนด์</td></tr>';
@@ -145,6 +146,14 @@ window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate'
 window.resetPin=async(id)=>{ const name=tById(id).name||('#'+id); if(!confirm('รีเซ็ต PIN เจ้าของร้าน "'+name+'"?')) return;
   try{ const d=await api('/admin/api/tenants/'+id+'/reset-pin',{method:'POST',body:'{}'});
     alert('PIN ใหม่ของ "'+name+'": '+d.pin+'\nแจ้งเจ้าของร้านและให้เปลี่ยนทันที'); }catch(e){ $('err').textContent=e.message; } };
+window.extendTrial=async(id)=>{ const name=tById(id).name||('#'+id);
+  const raw=prompt('ต่ออายุ "'+name+'" กี่วัน? (1–365)\n(หากมีอายุเหลืออยู่ จะนับต่อจากวันหมดอายุ)');
+  if(raw===null) return;
+  const days=parseInt(raw,10);
+  if(!days||days<1||days>365){ $('err').textContent='จำนวนวันต้องเป็น 1–365'; return; }
+  try{ const d=await api('/admin/api/tenants/'+id+'/extend-trial',{method:'POST',body:JSON.stringify({days})});
+    $('err').textContent=''; alert('ต่ออายุแล้ว +'+d.daysAdded+' วัน → หมดอายุ '+esc(d.planUntil)); load(); }
+  catch(e){ $('err').textContent='ต่ออายุไม่ได้: '+e.message; } };
 // PDPA: download a tenant's full data as JSON (snapshot before deletion / portability request).
 window.exportTenant=async(id)=>{ const t=tById(id); try{ const data=await api('/admin/api/tenants/'+id+'/export');
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
