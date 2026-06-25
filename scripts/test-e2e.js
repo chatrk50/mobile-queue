@@ -288,6 +288,16 @@ ok(near(Q.orderForTicket(fe.ticket.id).discount, 0), 'a plain order has no givea
 Q.editOrderItems(fe.ticket.id, [{ name: 'Drink', price: 100, qty: 1 }, { name: 'FreeTop', price: 15, qty: 1 }]);
 ok(near(Q.orderForTicket(fe.ticket.id).discount, 15), 'INVARIANT editing to add a free item recomputes the giveaway discount (15)');
 
+// ---- "เรียกแล้ว" strip: the snapshot must return MORE than 5 called tickets (the cashier UI shows
+// 5 by default + a "แสดงทั้งหมด" toggle for the rest; the old LIMIT 5 hid the overflow entirely). ----
+console.log('\n== Called list returns all (not capped at 5) ==');
+const calledIds = [];
+for (let i = 0; i < 7; i++) { const c = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {}); Q.setOrderPaid(c.ticket.id, { method: 'cash' }); calledIds.push(c.ticket.id); }
+let calledN = 0, _c; while ((_c = Q.callNext(1)) && _c.called) calledN++;   // call every waiting ticket (callNext returns {called:null} when none left)
+const snapCalled = Q.zoneSnapshot(1, { reveal: true }).recentCalled;
+ok(calledN >= 7 && snapCalled.length >= 7, `INVARIANT snapshot returns ALL called tickets, not just 5 (called ${calledN}, snapshot ${snapCalled.length})`);
+ok(snapCalled.length === snapCalled.filter((t) => t.order_total != null).length, 'every called ticket still carries its order detail');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

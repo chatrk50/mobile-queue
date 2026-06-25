@@ -74,7 +74,7 @@ function render(snap){
   $('next').innerHTML = snap.waiting.slice(0,5).map(t=>`
     <div class="qitem"><span class="code">${t.code}</span></div>`).join('')
     || '<p class="muted">—</p>';
-  $('strip').innerHTML = snap.recentCalled.map(t=>`<div class="c">${t.code}</div>`).join('') || '<span class="muted">—</span>';
+  $('strip').innerHTML = snap.recentCalled.slice(0,5).map(t=>`<div class="c">${t.code}</div>`).join('') || '<span class="muted">—</span>';
 }
 if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{};
 boot();
