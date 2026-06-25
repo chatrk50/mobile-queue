@@ -1770,7 +1770,7 @@ export function requestRefund(ticketId, reason = null) {
 }
 /** The slip image a customer attached for this ticket's order, or null. */
 export function getSlip(ticketId) {
-  const order = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT id FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) return null;
   return db.prepare('SELECT image, at FROM slips WHERE order_id=?').get(order.id) || null;
 }
@@ -1778,7 +1778,7 @@ export function getSlip(ticketId) {
 /** Customer taps "I've paid (PromptPay)" — flags the order 'claimed' so the cashier
  *  knows to verify the incoming transfer in their bank app, then confirm Paid. */
 export function claimOrderPaid(ticketId) {
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT * FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') return { ok: true, already: true };
   db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
@@ -1788,7 +1788,7 @@ export function claimOrderPaid(ticketId) {
 /** Apply a bill-level discount to a ticket's order. amount is clamped to [0, subtotal].
  *  Net due = total − discount. Recorded as a 'discount' sale_event. */
 export function setOrderDiscount(ticketId, { amount, reason = null, actorId = null } = {}) {
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT * FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'void') throw new Error('order_void');
   let amt = Math.max(0, Number(amount) || 0);
@@ -1983,7 +1983,7 @@ export function sweepStalePending({ actorId = null } = {}) {
 }
 
 export function orderForTicket(ticketId) {
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT * FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) return null;
   const rows = db.prepare(
     `SELECT oi.name, oi.price, oi.qty, COALESCE(mi.category,'drink') AS category
