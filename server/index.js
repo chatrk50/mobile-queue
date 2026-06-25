@@ -400,6 +400,16 @@ app.post('/api/signup', (req, res) => {
     rec.count += 1; signupHits.set(ip, rec);
     issueOwnerSession(res, t.id); // auto-login: lets onboard page call protected APIs immediately
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
+    // Welcome email — fire-and-forget, never blocks the response.
+    if (email) {
+      const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+      sendEmail({
+        to: email,
+        subject: `ยินดีต้อนรับ "${name}" — ระบบคิว + POS พร้อมใช้งาน!`,
+        text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${base}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม MobileQueue`,
+        html: `<p>ร้าน <b>${name}</b> พร้อมใช้งานแล้ว!</p><p>ทดลองใช้ฟรี <b>${TRIAL_DAYS} วัน</b> (Pro) — ไม่ต้องใส่บัตร</p><a href="${base}/b/${t.slug}/cashier/" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">เข้าใช้งาน</a><br><br><span style="color:#6b7280;font-size:13px">ขอบคุณที่ใช้บริการ — ทีม MobileQueue</span>`,
+      }).catch(() => {});
+    }
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -426,7 +436,19 @@ app.post('/api/owner/login', (req, res) => {
   const ip = ipOf(req), now = Date.now(); const h = ownerHits.get(ip);
   if (h && h.until > now && h.count >= 10) return res.status(429).json({ error: 'too_many' });
   const matches = ownerLoginMatches(req.body?.email, req.body?.password);
-  if (!matches.length) { const a = h && h.until > now ? h : { count: 0, until: now + 15 * 60000 }; a.count++; ownerHits.set(ip, a); }
+  if (!matches.length) {
+    const a = h && h.until > now ? h : { count: 0, until: now + 15 * 60000 }; a.count++; ownerHits.set(ip, a);
+    // Send a security alert email the first time the lockout threshold is crossed.
+    if (a.count === 10 && req.body?.email) {
+      // Only alert if the email is actually registered (avoids sending alert for junk attempts).
+      const alertEmail = ownerTenantsByEmail(req.body.email).length ? req.body.email : null;
+      if (alertEmail) sendEmail({
+        to: alertEmail, subject: 'แจ้งเตือน: มีการพยายามเข้าสู่ระบบหลายครั้งผิดปกติ',
+        text: `มีการพยายามเข้าสู่ระบบบัญชี ${alertEmail} ผิดพลาดหลายครั้งจาก IP ${ip}\nบัญชีถูกล็อกชั่วคราว 15 นาที หากไม่ใช่คุณ กรุณาเปลี่ยนรหัสผ่าน`,
+        html: `<p>มีการพยายามเข้าสู่ระบบบัญชี <b>${alertEmail}</b> ผิดพลาดหลายครั้งจาก IP <code>${ip}</code></p><p>บัญชีถูกล็อกชั่วคราว 15 นาที หากไม่ใช่คุณ กรุณาเปลี่ยนรหัสผ่านทันที</p>`,
+      }).catch(() => {});
+    }
+  }
   return ownerResult(res, matches, req.body?.slug);
 });
 app.post('/api/owner/google', async (req, res) => {
@@ -842,6 +864,12 @@ app.post('/api/billing/subscribe', async (req, res) => {       // body: { token,
     const r = await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null });
     clearDunningLog(req.tenantId); // fresh start on renewal — allow future dunning cycle
     res.json(r);
+    // Payment receipt — fire-and-forget.
+    const to = getTenant(req.tenantId)?.owner_email; if (to) {
+      const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
+      const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
+      sendEmail({ to, subject: `ใบเสร็จ — ${planLabel}`, text: `ขอบคุณสำหรับการสมัคร ${planLabel}\nใช้งานได้ถึง: ${until}`, html: `<p>ขอบคุณสำหรับการสมัคร <b>${planLabel}</b></p><p>ใช้งานได้ถึง: <b>${until}</b></p>` }).catch(() => {});
+    }
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interval } — card already on file
@@ -850,6 +878,14 @@ app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interva
     const r = await prorateUpgrade(req.tenantId, { plan: req.body?.plan, interval: req.body?.interval });
     clearDunningLog(req.tenantId);
     res.json(r);
+    // Payment receipt — fire-and-forget.
+    const to = getTenant(req.tenantId)?.owner_email; if (to) {
+      const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
+      const charged = '฿' + Math.round((r.charged || 0) / 100).toLocaleString('en-US');
+      const credit = r.credit ? ' (ส่วนลดตามสัดส่วน ฿' + Math.round(r.credit / 100).toLocaleString('en-US') + ')' : '';
+      const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
+      sendEmail({ to, subject: `ใบเสร็จอัปเกรด — ${planLabel}`, text: `อัปเกรดเป็น ${planLabel} สำเร็จ\nยอดชำระ: ${charged}${credit}\nใช้งานได้ถึง: ${until}`, html: `<p>อัปเกรดเป็น <b>${planLabel}</b> สำเร็จ</p><p>ยอดชำระ: <b>${charged}</b>${credit}</p><p>ใช้งานได้ถึง: <b>${until}</b></p>` }).catch(() => {});
+    }
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/billing/cancel', (req, res) => {
