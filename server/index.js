@@ -130,7 +130,11 @@ app.get('/manifest.webmanifest', (req, res) => {
     ],
   });
 });
-app.use(express.static(join(__dirname, '..', 'public')));
+app.use(express.static(join(__dirname, '..', 'public'), {
+  // HTML must always revalidate so a redeploy reaches the LINE in-app browser / iPad immediately
+  // (LIFF caching otherwise serves a stale page); other assets (css/js/img) can cache normally.
+  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate'); },
+}));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.
 const pinOK = (req) => {
