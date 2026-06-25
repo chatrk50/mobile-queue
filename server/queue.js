@@ -1049,6 +1049,7 @@ export function updateTender(id, { label, active, fee_pct, sort } = {}) {
  * Any paid orders whose method isn't a known tender (legacy promptpay/slip/other) are listed too.
  */
 export function tenderRecon({ date = null, branchId = null } = {}) {
+  const tid = TID();
   const DAY = "COALESCE(?, date('now','+7 hours'))";
   const BR = "(? IS NULL OR o.branch_id = ?)";
   const rows = db.prepare(
@@ -1056,8 +1057,9 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
             COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
        FROM orders o
       WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND ${BR}
+        AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=?)
       GROUP BY code`
-  ).all(date, branchId, branchId);
+  ).all(date, branchId, branchId, tid);
   const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
   const tenders = listTenders();
   const lines = tenders.map((t) => {
