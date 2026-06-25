@@ -1511,6 +1511,7 @@ function recordCustomerOrder(lineUserId, name) {
 export function customerSuggestions(lineUserId) {
   if (!lineUserId) return { known: false };
   const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=? AND tenant_id=?').get(lineUserId, TID());
+  const tid = TID();
   const favourites = db.prepare(
     `SELECT oi.name,
             SUM(oi.qty) AS qty,
@@ -1519,17 +1520,20 @@ export function customerSuggestions(lineUserId) {
      FROM order_items oi
      JOIN orders o  ON o.id = oi.order_id
      JOIN tickets t ON t.id = o.ticket_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
+     JOIN stores  s ON s.id = t.store_id AND s.tenant_id = ?
+     LEFT JOIN menu_items mi ON mi.name = oi.name AND mi.tenant_id = ?
      WHERE t.line_user_id = ? AND oi.kind = 'base' AND o.payment_status != 'void'
      GROUP BY oi.name
      ORDER BY qty DESC, times DESC
      LIMIT 5`
-  ).all(lineUserId).filter((f) => f.active == null || f.active === 1);
+  ).all(tid, tid, lineUserId).filter((f) => f.active == null || f.active === 1);
   // Last order (most recent ticket) grouped into drink + nested toppings, for "reorder the same".
   const lastTicket = db.prepare(
-    `SELECT t.id FROM tickets t JOIN orders o ON o.ticket_id=t.id
+    `SELECT t.id FROM tickets t
+     JOIN orders o ON o.ticket_id=t.id
+     JOIN stores s ON s.id = t.store_id AND s.tenant_id = ?
      WHERE t.line_user_id=? AND o.payment_status!='void' ORDER BY t.id DESC LIMIT 1`
-  ).get(lineUserId);
+  ).get(tid, lineUserId);
   const lastOrder = lastTicket ? orderForTicket(lastTicket.id) : null;
   const known = !!cust || favourites.length > 0;
   return {
