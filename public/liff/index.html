@@ -496,8 +496,9 @@ async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[];
 window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
-  const MENU_BADGE={ new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, rec:{t:'แนะนำ',bg:'#16a34a'} };
-  const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
+  const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
+  const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;background:${b.bg};color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
+  window._BADGE=badge;   // reuse for the topping picker
   const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
     const st='position:relative'+(out?';opacity:.5;filter:grayscale(1)':'');
     return `<button class="menu-btn" style="${st}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
@@ -513,7 +514,7 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>
+    return `<button class="menu-btn" style="position:relative${on?';border-color:var(--accent);background:#e9f8fb':''}${m.soldout?';opacity:.55':''}" ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
       <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
       <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';

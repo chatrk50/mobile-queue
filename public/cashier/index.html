@@ -1417,7 +1417,7 @@ window.editMenuForm=(id)=>{
       </div>
       <div class="row" style="gap:10px">
         <label class="ff" style="flex:1">หมวด<select id="mf_cat"><option value="drink"${m.category!=='topping'?' selected':''}>เครื่องดื่ม</option><option value="topping"${m.category==='topping'?' selected':''}>ท็อปปิ้ง</option></select></label>
-        <label class="ff" style="flex:1">ป้ายกำกับ<select id="mf_badge"><option value="">— ไม่มี —</option><option value="rec"${m.badge==='rec'?' selected':''}>⭐ แนะนำ</option><option value="new"${m.badge==='new'?' selected':''}>✨ ใหม่</option><option value="promo"${m.badge==='promo'?' selected':''}>🏷️ โปรโมชั่น</option><option value="hot"${m.badge==='hot'?' selected':''}>🔥 ขายดี</option></select></label>
+        <label class="ff" style="flex:1">ป้ายกำกับ<select id="mf_badge"><option value="">— ไม่มี —</option><option value="rec"${m.badge==='rec'?' selected':''}>⭐ แนะนำ</option><option value="new"${m.badge==='new'?' selected':''}>✨ ใหม่</option><option value="promo"${m.badge==='promo'?' selected':''}>🏷️ โปรโมชั่น</option><option value="hot"${m.badge==='hot'?' selected':''}>🔥 ขายดี</option><option value="free"${m.badge==='free'?' selected':''}>🎁 ฟรี</option></select></label>
       </div>
       <label class="ff">ลิงก์รูป<input id="mf_img" value="${esc(m.image||'')}" placeholder="https://... หรืออัปโหลด"></label>
       ${isNew?'':`<button class="ghost" style="width:100%" onclick="uploadImg(${m.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>อัปโหลดรูปจากเครื่อง</button>
@@ -1488,7 +1488,7 @@ function itemImg(m){
   return fb;
 }
 // Merchandising badges shown on a menu tile (decorative, doesn't disable). Sold-out stays its own pill.
-const MENU_BADGE={ new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, rec:{t:'แนะนำ',bg:'#16a34a'} };
+const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
 function menuBadge(m){ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="background:${b.bg}">${b.t}</span>`:''; }
 function renderOrderMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
@@ -1549,7 +1549,7 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>
+    return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>${menuBadge(m)}
       <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
       <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
