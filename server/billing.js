@@ -130,23 +130,26 @@ export function cancelSubscription(tenantId) {
 export async function renewDue() {
   if (!BILLING_ON) return { charged: 0, failed: 0, skipped: 'billing_off' };
   const nowIso = new Date().toISOString();
-  const due = db.prepare(`SELECT id, omise_customer_id, plan_name, plan_interval, plan_until FROM tenants
+  const due = db.prepare(`SELECT id, omise_customer_id, plan_name, plan_interval, plan_until, owner_email FROM tenants
     WHERE plan_name IN ('pro','business') AND auto_renew=1 AND omise_customer_id IS NOT NULL AND (plan_until IS NULL OR plan_until <= ?)`).all(nowIso);
   let charged = 0, failed = 0;
+  const receipts = [];
   for (const t of due) {
     try {
       const amount = priceForTenant(t.id, t.plan_name, t.plan_interval);
       const ch = await omise('POST', '/charges', { amount, currency: CURRENCY, customer: t.omise_customer_id, description: `${t.plan_name} renewal` });
       if (!ch.paid) throw new Error('not_paid');
-      setPlan(t.id, t.plan_name, addPeriod(t.plan_until && t.plan_until > nowIso ? t.plan_until : nowIso, t.plan_interval), t.plan_interval, t.omise_customer_id);
+      const until = addPeriod(t.plan_until && t.plan_until > nowIso ? t.plan_until : nowIso, t.plan_interval);
+      setPlan(t.id, t.plan_name, until, t.plan_interval, t.omise_customer_id);
       charged++;
+      if (t.owner_email) receipts.push({ email: t.owner_email, plan: t.plan_name, interval: t.plan_interval, planUntil: until, amount });
     } catch (e) {
       failed++;
       const graceCut = new Date(Date.now() - GRACE_MS).toISOString();
       if (!t.plan_until || t.plan_until < graceCut) db.prepare("UPDATE tenants SET plan_name='free', auto_renew=0 WHERE id=?").run(t.id);
     }
   }
-  return { charged, failed };
+  return { charged, failed, receipts };
 }
 
 /** Apply a (verified) Omise event to a tenant — mainly to downgrade on a refund. Exported pure

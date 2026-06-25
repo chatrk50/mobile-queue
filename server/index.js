@@ -1666,7 +1666,20 @@ setInterval(async () => {
 
 // Billing: recurring-charge sweep — renews pro tenants whose paid-through has passed (and
 // downgrades after the grace window). Tenant-agnostic; only active when Omise is configured.
-if (BILLING_ON) setInterval(() => { renewDue().catch(() => {}); }, 6 * 3600 * 1000);
+if (BILLING_ON) setInterval(async () => {
+  try {
+    const result = await renewDue();
+    for (const r of (result.receipts || [])) {
+      const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
+      const paid = '฿' + Math.round((r.amount || 0) / 100).toLocaleString('en-US');
+      const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
+      sendEmail({ to: r.email, subject: `ใบเสร็จต่ออายุ — ${planLabel}`,
+        text: `ต่ออายุ ${planLabel} สำเร็จ\nยอดชำระ: ${paid}\nใช้งานได้ถึง: ${until}`,
+        html: `<p>ต่ออายุ <b>${planLabel}</b> สำเร็จ</p><p>ยอดชำระ: <b>${paid}</b></p><p>ใช้งานได้ถึง: <b>${until}</b></p>`,
+      }).catch(() => {});
+    }
+  } catch {}
+}, 6 * 3600 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
 // (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:
