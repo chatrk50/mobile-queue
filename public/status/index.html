@@ -128,8 +128,10 @@
       <li><b>Rate-limit map cleanup ครบชุด</b> — hourly sweep เพิ่ม pinFails + adminFails ที่ขาดอยู่; Maps ทุกตัวถูก prune อัตโนมัติเมื่อหมดอายุ ป้องกัน memory leak ใน long-running SaaS</li>
       <li><b>Platform admin signup notification</b> — ตั้ง PLATFORM_ADMIN_EMAIL → รับอีเมลแจ้งทุกครั้งที่มีร้านใหม่สมัคร (ชื่อ, slug, email, package, ref code) เพื่อ monitor growth</li>
       <li><b>Day-3 activation nudge email</b> — ร้านที่สมัครมา 3 วันแล้วยังไม่มีออเดอร์เลยจะได้รับอีเมล setup guide (เพิ่มเมนู · ตั้ง LINE · ทดลองแคชเชียร์); idempotent ด้วย settings key; ช่วย activation rate</li>
-      <li><b>Admin: extend trial endpoint</b> — POST /admin/api/tenants/:id/extend-trial {days} ต่ออายุทดลอง/แผนสำหรับ support case; ต่อจาก expiry ที่มีอยู่ หรือจาก now ถ้าหมดแล้ว; audit-logged</li>
+      <li><b>Admin: extend trial (endpoint + ปุ่ม UI)</b> — POST /admin/api/tenants/:id/extend-trial {days} ต่ออายุทดลอง/แผนสำหรับ support case; ต่อจาก expiry ที่มีอยู่ หรือจาก now ถ้าหมดแล้ว; audit-logged; มีปุ่ม "ต่ออายุ" ในแถวร้านของ Platform Admin console</li>
       <li><b>Landing page plan limits ถูกต้อง</b> — หน้า pricing Free plan แสดงขีดจำกัดจริง: 50 เมนู · 5 พนักงาน · 500 ออเดอร์/เดือน ตรงกับ backend enforcement</li>
+      <li><b>โดเมนของร้านเอง (self-service · Business)</b> — เจ้าของแผน Business ตั้ง/ลบโดเมนเองได้ใน ⚙ แพ็กเกจ (POST /api/owner/domain, gated ด้วย plan capability + ตรวจ format/ซ้ำ); แสดงคำแนะนำตั้ง DNS CNAME → โฮสต์; แผน Free/Pro ได้ 402 plan_required</li>
+      <li><b>หน้าเปรียบเทียบแพ็กเกจ /upgrade/</b> — หน้าสาธารณะแสดง 3 แพ็กเกจ + ตารางเปรียบเทียบฟีเจอร์ละเอียด (ตรงกับ quota จริง); รองรับ ?slug= เพื่อ deep-link CTA กลับเข้าแคชเชียร์ของร้าน; ลิงก์จากแผง ⚙ แพ็กเกจ</li>
     </ul>
   </div>
 
