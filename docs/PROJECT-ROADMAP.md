@@ -64,22 +64,27 @@ platform admin → owner email/Google login → PDPA export/erasure → security
 ## 2. Product / functionality
 **Must:** (all built) POS, queue, LINE order, loyalty, inventory/BOM, P&L, multi-branch, packages.
 **Should:**
-- [ ] Modernise the **cashier/LIFF UI** to the new theme (only signup/login done so far).
-- [ ] Owner **dashboard** (KPIs, trends) as the post-login home.
+- [x] Modernise the **cashier/LIFF UI** — full SVG icon set (IC registry: cash, cup, clock, kitchen,
+      bell, check, phone, ticket, target, star, timer); all queue-board + today-stats emoji replaced.
+- [x] Owner **dashboard** (KPIs, trends) as the post-login home — 5-chip KPI row (revenue, gross,
+      net, margin, cups) + history charts; owners/managers land here on login.
 - [ ] Receipt **printer** support (ESC/POS) — code prepared, needs hardware test.
 **Could:** delivery integration (Grab/LINEMAN), e-Tax invoices, owner mobile app, vouchers/promos.
 
 ## 3. Billing / monetisation
 **Done:** Free/Pro/Business × monthly/yearly, 60-day trial, founder, referral, quota, dunning banner.
 **Must:** [ ] **Live Omise test** with real test keys (card charge end-to-end).
-**Should:** [ ] Email dunning + receipts/e-Tax (needs email + tax provider) · [ ] proration on
-upgrade · [ ] Stripe alternative for non-TH.
+**Should:** [x] Email dunning scaffolding (SendGrid REST, dry-run fallback, dunning_log idempotency,
+admin preview/send panel) · [x] proration on upgrade (prorateUpgrade — credit = remaining days ×
+daily rate; cashier routes card-holders to /api/billing/upgrade directly) · [ ] Stripe alternative.
 
 ## 4. Infra / reliability
 **Must:** [ ] **Always-on hosting** (Render Starter — free tier sleeps) · [ ] DB backups (§1) ·
-[ ] uptime monitor + status page · [ ] error tracking (Sentry-style).
+[x] uptime monitor + status page (/health plain-text + /status JSON; live widget on /status page) ·
+[x] error tracking (in-process ring buffer _APP_ERRORS 200 entries; /admin/api/errors panel).
 **Should:** [ ] staging for the SaaS branch · [ ] DB scaling plan (Turso paid tier triggers) ·
-[ ] CI running the test suite on every push.
+[x] CI running the test suite on every push (.github/workflows/ci.yml — audit + e2e + isolation +
+tenant + billing + restore + totp + 2fa + hierarchy + dryrun + secret scanning).
 
 ## 5. Legal / compliance (TH)
 **Done:** PDPA customer export/erasure + /privacy + /terms; no fund custody. **Tenant-level**
@@ -87,7 +92,8 @@ export + hard-erasure (admin-gated, slug-confirmed, audit-logged; verified zero-
 tables) — commit da7a4ca.
 **Must:** [ ] register a legal entity to invoice/collect · [ ] DPA template for tenants ·
 [ ] VAT registration trigger plan (>฿1.8M/yr).
-**Should:** [ ] cookie/consent notice · [x] tenant erasure capability (manual admin-initiated;
+**Should:** [x] cookie/consent notice (PDPA banner — shared /assets/consent.js, localStorage
+      dismissal, injected on landing/signup/login/liff/status/cashier) · [x] tenant erasure capability (manual admin-initiated;
 auto-purge-on-close still optional) · [x] written data-retention policy doc — [`DATA-RETENTION.md`](DATA-RETENTION.md).
 
 ## 6. GTM / growth
