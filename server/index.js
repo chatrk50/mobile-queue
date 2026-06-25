@@ -1810,9 +1810,13 @@ function doDailyReset() {
     if (SAAS) {
       for (const t of listTenants()) {
         try {
-          const zoneIds = runWithTenant(t.id, () => Q.resetAllZones());
-          for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
-          totalZones += zoneIds.length;
+          // Keep emit() inside runWithTenant so AsyncLocalStorage propagates into setImmediate.
+          const zoneCount = runWithTenant(t.id, () => {
+            const zoneIds = Q.resetAllZones();
+            for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
+            return zoneIds.length;
+          });
+          totalZones += zoneCount;
         } catch (_) { /* never block reset */ }
       }
     } else {
