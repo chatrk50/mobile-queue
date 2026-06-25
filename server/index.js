@@ -1443,7 +1443,7 @@ app.get('/api/tickets/:ticketId', (req, res) => {
 // unless the request carries the cashier PIN. Stops cancel/rate on a guessed ticket id.
 const ownsTicket = (req) => {
   if (pinValueOK(req)) return true;
-  const t = db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(req.params.ticketId);
+  const t = db.prepare('SELECT t.line_user_id FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.id=? AND s.tenant_id=?').get(req.params.ticketId, req.tenantId);
   if (!t) return false;
   return !!t.line_user_id && t.line_user_id === (req.body?.lineUserId || null);
 };

@@ -1768,7 +1768,7 @@ export function createOrder(zoneId, items, opts = {}) {
  *  confirmed). Idempotent — a ticket that already has a number is returned unchanged, so it
  *  is safe to call from every payment path (online/LINE Pay/cashier) without double-issuing. */
 export function assignQueueNumber(ticketId) {
-  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare(`SELECT t.* FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN stores s ON s.id=z.store_id WHERE t.id=? AND s.tenant_id=${TID()}`).get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   if (t.number > 0) return t;            // already issued — never re-number
   return db.transaction(() => {
@@ -1835,7 +1835,7 @@ export function setOrderPaid(ticketId, opts = {}) {
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
  *  order is flagged 'claimed' so the cashier knows to verify + confirm. */
 export function attachSlip(ticketId, imageData) {
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT * FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') return { ok: true, already: true };
   db.prepare(`INSERT INTO slips (order_id, ticket_id, image) VALUES (?,?,?)
@@ -1846,7 +1846,7 @@ export function attachSlip(ticketId, imageData) {
 /** Customer asks for a refund (paid online but can't come). Flags the order so the cashier
  *  sees it in history and processes the refund. */
 export function requestRefund(ticketId, reason = null) {
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const order = db.prepare(`SELECT * FROM orders WHERE ticket_id=? AND branch_id IN (SELECT id FROM stores WHERE tenant_id=${TID()}) ORDER BY id DESC LIMIT 1`).get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status !== 'paid') throw new Error('not_paid');
   if (order.void_kind) return { ok: true, already: true };
