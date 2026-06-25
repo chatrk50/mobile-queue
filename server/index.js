@@ -248,7 +248,13 @@ app.use((req, res, next) => {
     if (p && p.staffId) {
       const s = db.prepare('SELECT id, name, role, tenant_id, active FROM staff WHERE id=?').get(p.staffId);
       // A session is only valid within its own tenant — a cookie from brand A can't drive brand B.
-      if (s && s.active && s.tenant_id === req.tenantId) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
+      // branchIds are re-read from DB (not the token) so restriction changes apply immediately,
+      // not after up to SESSION_HOURS when the cookie would expire.
+      if (s && s.active && s.tenant_id === req.tenantId) {
+        const branchIds = s.role === 'owner' ? []
+          : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(s.id).map((r) => r.branch_id);
+        req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds };
+      }
     }
   } catch { /* ignore bad cookie */ }
   next();
@@ -852,6 +858,15 @@ const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
 const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || legacyAdminPin(req);
 // Audit-trail actor label for an owner/manager request (session staff id, else legacy 'owner').
 const ownerActor = (req) => (req.staff?.id ? 'owner:' + req.staff.id : 'owner');
+// For branch-restricted staff: return the effective branchId for a report request.
+// If the staff has branch restrictions (non-empty branchIds), the requested branch must be one of
+// theirs; if none requested, default to their first branch. Owners and legacy PIN pass through.
+const clampBranchId = (req, rawBranchId) => {
+  const allowed = req.staff?.branchIds;
+  if (!allowed || allowed.length === 0) return rawBranchId; // owner or legacy — no restriction
+  if (rawBranchId != null && allowed.includes(rawBranchId)) return rawBranchId;
+  return allowed[0] ?? null; // default to first allowed branch; null only if somehow empty
+};
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
@@ -947,7 +962,7 @@ app.post('/api/tenders/:id', (req, res) => {
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
+  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: clampBranchId(req, req.query.branchId ? Number(req.query.branchId) : null) }));
 });
 
 // ---------- Loyalty points (our own) ----------
@@ -1663,14 +1678,15 @@ app.post('/api/reset', (req, res) => {
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
 app.get('/api/report', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null));
+  const branchId = clampBranchId(req, req.query.branchId ? Number(req.query.branchId) : null);
+  res.json(Q.dailyReport(branchId));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
 app.get('/api/reports/detailed', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const branchId = clampBranchId(req, req.query.branchId ? Number(req.query.branchId) : null);
   res.json(Q.detailedReports({ date, branchId }));
 });
 app.get('/api/reports/insights', (req, res) => {
@@ -1723,11 +1739,11 @@ app.post('/api/archive-now', (req, res) => {
 // Financial settings used by the P&L (manager/owner): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.getFinanceSettings(req.query.branchId ? Number(req.query.branchId) : null));
+  res.json(Q.getFinanceSettings(clampBranchId(req, req.query.branchId ? Number(req.query.branchId) : null)));
 });
 app.post('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.setFinanceSettings(req.body || {}, req.body?.branchId ? Number(req.body.branchId) : null));
+  res.json(Q.setFinanceSettings(req.body || {}, clampBranchId(req, req.body?.branchId ? Number(req.body.branchId) : null)));
 });
 // ---------- Branch management (owner) ----------
 app.get('/api/branches', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranches()); });
@@ -1794,7 +1810,7 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-    const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+    const branchId = clampBranchId(req, req.query.branchId ? Number(req.query.branchId) : null);
     const { buildDetailedWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores WHERE tenant_id=? ORDER BY id LIMIT 1').get(currentTenantId());
     const storeName = stores?.name || brandFor(req).name || BRAND.name;
