@@ -41,7 +41,12 @@ const billingHtml = (name, slug, rows, { body = '', ctaLabel = '', ctaUrl = '' }
 };
 
 const app = express();
-app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
+// Trust EXACTLY the number of proxy hops in front of us — NOT `true`. `true` trusts the whole
+// X-Forwarded-For chain, so any client can forge req.ip (prepend a fake XFF) and rotate it to
+// bypass every IP-based defense (signup throttle, PIN lockout, owner-login limiter, SSE cap).
+// Render is a single proxy hop → 1. Set TRUST_PROXY_HOPS=2 if you add a CDN (e.g. Cloudflare).
+const TRUST_PROXY_HOPS = /^\d+$/.test(process.env.TRUST_PROXY_HOPS || '') ? parseInt(process.env.TRUST_PROXY_HOPS, 10) : 1;
+app.set('trust proxy', TRUST_PROXY_HOPS); // real client IP from XFF without letting clients spoof it
 const PORT = process.env.PORT || 3000;
 app.disable('x-powered-by');   // don't advertise Express
 
