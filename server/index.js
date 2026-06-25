@@ -14,7 +14,7 @@ import { listTemplates, templateItems } from './menu-templates.js';
 import { subscribe, emit } from './events.js';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, lineConfigured, verifyMessagingToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
-import { BILLING_ON, billingStatus, subscribeTenant, cancelSubscription, renewDue, handleWebhook as billingWebhook, billingConfig, getDunningCandidates, logDunningSend, clearDunningLog } from './billing.js';
+import { BILLING_ON, billingStatus, subscribeTenant, prorateUpgrade, cancelSubscription, renewDue, handleWebhook as billingWebhook, billingConfig, getDunningCandidates, logDunningSend, clearDunningLog } from './billing.js';
 import { sendEmail } from './email.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -841,6 +841,14 @@ app.post('/api/billing/subscribe', async (req, res) => {       // body: { token,
   try {
     const r = await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null });
     clearDunningLog(req.tenantId); // fresh start on renewal — allow future dunning cycle
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interval } — card already on file
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const r = await prorateUpgrade(req.tenantId, { plan: req.body?.plan, interval: req.body?.interval });
+    clearDunningLog(req.tenantId);
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

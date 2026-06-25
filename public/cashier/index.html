@@ -2169,12 +2169,20 @@ window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
 // Self-service billing (SaaS): Omise hosted card popup → token → subscribe. Card never touches us.
 let _bill=null;
 function loadOmise(cb){ if(window.OmiseCard) return cb(); const s=document.createElement('script'); s.src='https://cdn.omise.co/omise.js'; s.onload=cb; s.onerror=()=>toast('โหลดหน้าชำระเงินไม่ได้'); document.head.appendChild(s); }
-window.upgrade=(plan,interval)=>{ if(!_bill||!_bill.publicKey){ toast('ยังไม่เปิดการชำระเงิน'); return; }
+window.upgrade=async(plan,interval)=>{ if(!_bill||!_bill.publicKey){ toast('ยังไม่เปิดการชำระเงิน'); return; }
   const amount=((_bill.prices||{})[plan]||{})[interval]; if(!amount){ toast('ไม่พบราคาแพ็กเกจ'); return; }
   const name=(plan==='business'?'Business':'Pro')+' '+(interval==='year'?'รายปี':'รายเดือน');
+  // If the tenant already has a card on file, charge the prorated amount directly (no card popup).
+  if(_bill.hasCard && _bill.plan!=='free'){
+    if(!confirm('อัปเกรดเป็น '+name+'?\n(คิดค่าบริการตามสัดส่วนที่เหลือของรอบปัจจุบัน)')) return;
+    try{ const r=await api('/api/billing/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan,interval})});
+      const paid='฿'+Math.round((r.charged||0)/100).toLocaleString('en-US');
+      toast('อัปเกรด '+name+' แล้ว (ชำระ '+paid+')'); showFeatures(); }catch(e){ toast(err(e)); }
+    return;
+  }
   loadOmise(()=>{ try{ OmiseCard.configure({ publicKey:_bill.publicKey, currency:_bill.currency });
     OmiseCard.open({ amount, currency:_bill.currency, frameLabel:name, submitLabel:'จ่าย ฿'+Math.round(amount/100).toLocaleString('en-US'), buttonLabel:'อัปเกรด',
-      onCreateTokenSuccess: async (token)=>{ try{ await api('/api/billing/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,plan,interval})}); toast('🎉 อัปเกรด '+name+' แล้ว!'); showFeatures(); }catch(e){ toast(err(e)); } } });
+      onCreateTokenSuccess: async (token)=>{ try{ await api('/api/billing/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,plan,interval})}); toast('อัปเกรด '+name+' แล้ว!'); showFeatures(); }catch(e){ toast(err(e)); } } });
   }catch(e){ toast('เปิดหน้าชำระเงินไม่ได้'); } }); };
 window.cancelSub=async()=>{ if(!confirm('ยกเลิกต่ออายุอัตโนมัติ?\n(ยังใช้ Pro ได้จนหมดรอบที่จ่ายไว้ แล้วค่อยกลับเป็น Free)')) return;
   try{ await api('/api/billing/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); toast('ยกเลิกต่ออายุแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };

@@ -82,6 +82,43 @@ export async function subscribeTenant(tenantId, token, { plan = 'pro', interval 
   return { ok: true, plan, interval, planUntil: until };
 }
 
+/** Prorated mid-cycle upgrade for a tenant that already has a card on file.
+ *  Credit = (remaining days / period days) × current plan price (satang).
+ *  New charge = max(2000, newPrice - credit). Extends plan_until by a full new period. */
+export async function prorateUpgrade(tenantId, { plan, interval } = {}) {
+  if (!BILLING_ON) throw new Error('billing_off');
+  plan = normPlan(plan); interval = normInterval(interval);
+  const t = db.prepare(
+    'SELECT plan_name, plan_interval, plan_until, omise_customer_id, founder FROM tenants WHERE id=?'
+  ).get(tenantId);
+  if (!t) throw new Error('tenant_not_found');
+  if (!t.omise_customer_id) throw new Error('no_card');
+
+  // Credit for unused portion of current paid period.
+  let credit = 0;
+  const now = Date.now();
+  if (t.plan_name !== 'free' && t.plan_until) {
+    const until = new Date(t.plan_until).getTime();
+    if (until > now) {
+      const remainingDays = (until - now) / 86400000;
+      const periodDays = normInterval(t.plan_interval) === 'year' ? 365 : 30;
+      const currentPrice = priceForTenant(tenantId, t.plan_name, t.plan_interval);
+      credit = Math.floor((remainingDays / periodDays) * currentPrice);
+    }
+  }
+
+  const newPrice = priceForTenant(tenantId, plan, interval);
+  const chargeAmount = Math.max(2000, newPrice - credit); // Omise minimum 2000 satang (฿20)
+  const charge = await omise('POST', '/charges', {
+    amount: chargeAmount, currency: CURRENCY, customer: t.omise_customer_id,
+    description: `Upgrade to ${plan} (${interval}) — credit ฿${Math.round(credit / 100)} applied`,
+  });
+  if (!charge.paid) throw new Error('charge_failed');
+  const until = addPeriod(null, interval);
+  setPlan(tenantId, plan, until, interval, t.omise_customer_id);
+  return { ok: true, plan, interval, planUntil: until, charged: chargeAmount, credit };
+}
+
 /** Cancel auto-renew. Pro stays active until plan_until, then lapses to free. */
 export function cancelSubscription(tenantId) {
   db.prepare('UPDATE tenants SET auto_renew=0 WHERE id=?').run(tenantId);
