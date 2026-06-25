@@ -1930,6 +1930,8 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of ownerHits) { if (v.until < now) ownerHits.delete(k); }
   for (const [k, v] of forgotHits) { if (v.until < now) forgotHits.delete(k); }
+  for (const [k, v] of signupHits) { if (v.until < now) signupHits.delete(k); }
+  for (const [k, v] of orderBurst) { if (now - v.windowStart >= ORDER_BURST_WINDOW) orderBurst.delete(k); }
 }, 3600 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
