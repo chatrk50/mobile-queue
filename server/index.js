@@ -195,9 +195,16 @@ app.use((req, res, next) => {
   let out = html;
 
   // iOS "Add to Home Screen" app title — overwrite the static "YO-DEE" fallback with tenant short name.
+  // Also replace any "YO-DEE Yogurt" / "YO-DEE" in <title> and data-brand-name placeholders server-side
+  // so bots/crawlers and no-JS saves see the correct brand.
   if (tenantBrandCache) {
     const shortName = esc(tenantBrandCache.short || tenantBrandCache.name || '');
     if (shortName) out = out.replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*(")/,  `$1${shortName}$2`);
+    const fullName = esc(tenantBrandCache.name || '');
+    if (fullName && fullName !== 'YO-DEE Yogurt') {
+      out = out.replace(/(<title>[^<]*?)YO-DEE Yogurt([^<]*?<\/title>)/, `$1${fullName}$2`);
+      if (shortName && shortName !== 'YO-DEE') out = out.replace(/(<title>[^<]*?)YO-DEE([^<]*?<\/title>)/, `$1${shortName}$2`);
+    }
   }
 
   // Social OG meta tags for the share page so link previews on LINE/Facebook show the shop brand.
