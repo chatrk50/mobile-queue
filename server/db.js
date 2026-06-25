@@ -932,7 +932,9 @@ export function forgetCustomer(tenantId, { phone = null, key = null } = {}) {
   db.transaction(() => {
     db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(k);
     db.prepare('DELETE FROM customers WHERE line_user_id=? AND tenant_id=?').run(k, tenantId);
-    db.prepare('UPDATE tickets SET customer_name=NULL, customer_key=NULL, line_user_id=NULL WHERE customer_key=? OR line_user_id=?').run(k, k);
+    db.prepare(`UPDATE tickets SET customer_name=NULL, customer_key=NULL, line_user_id=NULL
+      WHERE (customer_key=? OR line_user_id=?)
+        AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)`).run(k, k, tenantId);
   })();
   return { erased: true, found: !!c, key: k };
 }
