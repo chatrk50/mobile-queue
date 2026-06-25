@@ -91,7 +91,11 @@
       <li><b>DELETE /api/rewards/:id endpoint</b> — ลบ reward ได้จาก UI (tenant-owned guard)</li>
       <li><b>DELETE /api/price-tiers/:id</b> — ลบ tier ที่ไม่ใช่ default; cascade ลบ item_prices + null channels.tier_id (FK-safe)</li>
       <li><b>DELETE /api/channels/:id</b> — ลบช่องทางขาย; scoped by tenant; orders เดิมเก็บ channel_id ไว้ใน history</li>
-      <li><b>Cashier UI: ปุ่มลบ tier & channel</b> — trash-icon พร้อม confirm dialog ในส่วน "ราคาเดลิเวอรี่ & ค่าคอม"</li>
+      <li><b>Cashier UI: ปุ่มลบ tier & channel + ฟอร์มเพิ่มใหม่</b> — CRUD ครบ; trash-icon + confirm + inline add form</li>
+      <li><b>setRating tenant scope</b> — ป้องกัน cross-tenant ticket ID enumeration ผ่าน rating endpoint</li>
+      <li><b>customerRequestCancel tenant scope</b> — lineUserId check เพียงพอไม่พอ; เพิ่ม store_id IN (stores WHERE tenant_id=?)</li>
+      <li><b>ticketView tenant scope</b> — initial ticket read scoped; downstream getZone เคย scope แต่ raw read ยังรั่ว</li>
+      <li><b>priceFor menu_items tenant scope</b> — defense-in-depth: item lookup เพิ่ม AND tenant_id=?</li>
     </ul>
   </div>
 
