@@ -17,9 +17,17 @@ DB**. The single-shop deployment (YO-DEE, `main`) is never touched.
    It provisions a `web` service `mobile-queue-saas` on the **`saas`** branch.
 2. When prompted, fill the `sync:false` env vars:
    - `SAAS_ADMIN_PIN` — long random string (your platform-admin console password)
-   - `SESSION_SECRET` — long random string
+   - `SESSION_SECRET` — long random string (app refuses to boot in SaaS without ≥16 chars)
    - `PUBLIC_BASE_URL` — your service URL, e.g. `https://mobile-queue-saas.onrender.com`
+   - `BASE_URL` — usually the same as `PUBLIC_BASE_URL` (used in email links)
+   - `SAAS_BASE` — your platform apex, e.g. `khai-dee.com` (reserves platform hostnames so no
+     brand can claim them — see Security note below)
    - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — from step 1
+   - **Recommended:** `SENDGRID_API_KEY` + `EMAIL_FROM` — without these, all transactional/billing
+     emails (welcome, receipts, dunning, password reset, activation nudges) only dry-run to the log.
+   - **Optional:** `PLATFORM_ADMIN_EMAIL` — get an email on every new brand signup.
+   - **Leave `TRUST_PROXY_HOPS` at its default (1).** Render is a single proxy hop. Only set it to
+     `2` if you put a CDN (e.g. Cloudflare) in front. (See Security note.)
 3. Deploy. Health check hits `/signup/`.
 
 ## 3. Smoke test (or run the automated dry run)
@@ -28,16 +36,33 @@ DB**. The single-shop deployment (YO-DEE, `main`) is never touched.
 - Open `PUBLIC_BASE_URL/admin` → enter `SAAS_ADMIN_PIN` → you should see the test brand.
 - Automated: `BASE=<PUBLIC_BASE_URL> SAAS_ADMIN_PIN=<pin> npm run dryrun` (32 checks).
 
-## 4. (Optional) Custom domains for brands
-For a brand that wants `shop.theirbrand.com`:
+## 4. (Optional) Custom domains for brands  — **Business plan**
+For a Business-plan brand that wants `shop.theirbrand.com`:
 1. The **brand owner** points DNS: a `CNAME` from `shop.theirbrand.com` → your Render host.
 2. In **Render → the service → Settings → Custom Domains**, add `shop.theirbrand.com` (Render
    issues the TLS cert).
-3. In **/admin**, click **โดเมน** on that brand and enter `shop.theirbrand.com`.
+3. Set the mapping — either path works:
+   - **Self-service (Business owners):** ⚙ ตั้งค่า → **แพ็กเกจ** → enter the domain (gated to
+     Business; Free/Pro get `plan_required`). The panel shows the CNAME instructions.
+   - **Admin:** in **/admin**, click **โดเมน** on that brand and enter the domain.
    → the brand now serves at the root of its own domain (no `/b/<slug>/`).
+> The platform's own hostnames (`SAAS_BASE`, `PUBLIC_BASE_URL`, `BASE_URL`, `www.*`, `localhost`)
+> are **reserved** — a brand attempting to claim one gets `reserved_domain`. This prevents a tenant
+> from poisoning Host→tenant routing.
 
-## 5. Plans & billing
-- New brands default to **free** (1 branch, 500 orders/month). **pro** = unlimited.
+## 5. Plans & quotas
+New brands start a **60-day Pro trial**, then default to **free** if they don't subscribe. Limits
+are enforced server-side (and shown as usage meters in ⚙ แพ็กเกจ):
+
+| Plan | Branches | Staff (non-owner) | Menu items | Orders/month | Custom domain |
+|------|---------|-------------------|-----------|--------------|---------------|
+| **Free** | 1 | 5 | 50 | 500 | — |
+| **Pro** | 3 | 20 | unlimited | unlimited | — |
+| **Business** | unlimited | unlimited | unlimited | unlimited | ✓ |
+
+Over-quota writes return HTTP **402** (`branch_limit` / `staff_limit` / `menu_limit` /
+`order_limit`). Admins can set any plan from **/admin** (plan dropdown) and extend a
+trial/plan with the **ต่ออายุ** button.
 
 **Option A — manual:** leave Omise env blank. Upgrade a brand to pro from **/admin** (plan
 dropdown). Collect payment out-of-band.
@@ -54,6 +79,18 @@ dropdown). Collect payment out-of-band.
   refunds; events are re-verified against the Omise API).
 - Test first with Omise **test keys** (`skey_test_…` / `pkey_test_…`) + a test card before going
   live. Quota enforcement (`branch_limit` / `order_limit`) is already in place.
+
+## Security note (read before go-live)
+- **`TRUST_PROXY_HOPS` must match your real infra.** It's how the true client IP is derived for
+  every IP-based defense (signup throttle, PIN lockout, owner-login limiter, SSE connection cap).
+  Render direct = `1` (the default). If you add a CDN/proxy in front, increase it by one per hop.
+  Too high → clients can forge `X-Forwarded-For` to bypass rate limits; too low → all clients may
+  share one bucket. When unsure, leave it at `1`.
+- **Reserved domains:** brands cannot map a custom domain to the platform's own hostnames
+  (`SAAS_BASE` / `PUBLIC_BASE_URL` / `BASE_URL` / `www.*` / `localhost`). This is enforced for both
+  the owner self-service and admin paths.
+- **Sessions** are HMAC-signed (timing-safe verify, expiry enforced) in `Secure; HttpOnly;
+  SameSite=Lax` cookies (Secure auto-on in SaaS mode). Keep `SESSION_SECRET` secret and stable.
 
 ## Operating notes
 - **Free plan spins down** after 15 min idle (cold start ~30s). Switch the service to `starter`

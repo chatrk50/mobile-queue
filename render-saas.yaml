@@ -27,6 +27,22 @@ services:
         sync: false             # signs staff sessions — long + random
       - key: PUBLIC_BASE_URL
         sync: false             # e.g. https://mobile-queue-saas.onrender.com (used in links/webhooks)
+      - key: BASE_URL
+        sync: false             # usually same as PUBLIC_BASE_URL — used in transactional email links
+      - key: SAAS_BASE
+        sync: false             # platform apex, e.g. khai-dee.com — reserves platform hostnames so no
+                                #   brand can claim them (Host->tenant routing-hijack guard)
+      - key: TRUST_PROXY_HOPS
+        value: "1"              # SECURITY: proxy hops in front of the app. Render = 1. CDN in front -> 2.
+                                #   Wrong value lets clients forge X-Forwarded-For to bypass rate limits.
+      # --- Transactional email (welcome, receipts, dunning, password reset, nudges) ---
+      #     Without these, emails only dry-run to the log. Strongly recommended for production.
+      - key: SENDGRID_API_KEY
+        sync: false             # from sendgrid.com (or compatible). Blank -> dry-run.
+      - key: EMAIL_FROM
+        sync: false             # verified sender, e.g. "ขายดี KhaiDee <no-reply@khai-dee.com>"
+      - key: PLATFORM_ADMIN_EMAIL
+        sync: false             # OPTIONAL — receives a note on every new brand signup
       # --- DURABLE STORAGE (REQUIRED for SaaS — brands' data must survive restarts) ---
       - key: TURSO_DATABASE_URL
         sync: false             # from a Turso DB (turso.tech). Required.
