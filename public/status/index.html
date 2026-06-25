@@ -76,6 +76,12 @@
       <li><b>อีเมลธุรกรรมครบชุด</b> — ยินดีต้อนรับ · ใบเสร็จ · แจ้งเตือนหมดอายุ · รีเซ็ตรหัสผ่าน — ทั้งหมด branded HTML</li>
       <li><b>หน้า Landing + Signup + Onboarding</b> — พร้อมรองรับลูกค้าใหม่</li>
       <li><b>Google Sign-In</b> — เข้าสู่ระบบด้วยบัญชี Google ได้</li>
+      <li><b>ชื่อร้านในหัวแคชเชียร์</b> — แสดงชื่อแบรนด์ tenant ถูกต้องทุกหน้า (data-brand-name + server-side rewrite)</li>
+      <li><b>DB Indexes SaaS</b> — เพิ่ม 6 indexes สำหรับ hot-path multi-tenant query (tenant_id scoping)</li>
+      <li><b>อีเมล dunning รวมศูนย์</b> — ลบ HTML generator ซ้ำ 3 ตัว → ใช้ billingHtml ตัวเดียว</li>
+      <li><b>แจ้งเตือน LINE auto-reply</b> — ลูกค้าทักมา LINE OA ได้รับ reply อัตโนมัติ ชี้ไปสแกน QR</li>
+      <li><b>Onboarding wizard</b> — Step 2 (รับออเดอร์แรก) ติ๊กถูกอัตโนมัติหลังรับออเดอร์จริงครั้งแรก</li>
+      <li><b>Plan quota meter</b> — ⚙ ตั้งค่า > แพ็กเกจ แสดง progress bar ออเดอร์ใช้ไปแล้ว/เดือน (Free plan)</li>
     </ul>
   </div>
 
