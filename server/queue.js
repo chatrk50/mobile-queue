@@ -1662,7 +1662,10 @@ export function createOrder(zoneId, items, opts = {}) {
   if (!zone.is_open) throw new Error('zone_closed');
   // Plan quota (SaaS only): cap orders per month. Idempotent retries (same clientToken) are
   // exempt so a retried-but-already-created order never trips the limit.
-  if (SAAS && !(opts.clientToken && db.prepare('SELECT 1 FROM tickets WHERE client_token=?').get(opts.clientToken))) {
+  // Scope the clientToken lookup to this tenant so a cross-tenant token can't bypass quota.
+  const _tid = TID();
+  const _ctTenantWhere = 'AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)';
+  if (SAAS && !(opts.clientToken && db.prepare(`SELECT 1 FROM tickets WHERE client_token=? ${_ctTenantWhere}`).get(opts.clientToken, _tid))) {
     const plan = tenantPlan();
     if (plan.maxOrdersPerMonth != null && monthOrderCount() >= plan.maxOrdersPerMonth) throw new Error('order_limit');
   }
@@ -1690,8 +1693,9 @@ export function createOrder(zoneId, items, opts = {}) {
   const dedup = source === 'customer' && lineUserId;
   // Idempotency fast-path: a retried request carrying a token we've already accepted returns the
   // SAME order (no duplicate ticket). The conditional INSERT inside the tx closes the race window.
+  // Scope to tenant so a cross-tenant clientToken can't return another brand's ticket data.
   if (clientToken) {
-    const seen = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
+    const seen = db.prepare(`SELECT * FROM tickets WHERE client_token=? ${_ctTenantWhere}`).get(clientToken, _tid);
     if (seen) { const o = db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(seen.id);
       return { ticket: seen, total: o?.total ?? 0, idempotent: true }; }
   }
@@ -1700,12 +1704,12 @@ export function createOrder(zoneId, items, opts = {}) {
     // (double-tap / cold-start retry / reload) can never both create a ticket.
     let tinfo;
     if (clientToken && !dedup) {
-      // Idempotent on the bill token: create only if this token is unused.
+      // Idempotent on the bill token: create only if this token is unused within this tenant.
       tinfo = db.prepare(
         `INSERT INTO tickets (store_id, zone_id, number, code, party_size, line_user_id, customer_name, status, client_token)
          SELECT ?,?,0,'',1,?,?,'pending',?
-         WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE client_token=?)`
-      ).run(zone.store_id, zoneId, lineUserId, label, clientToken, clientToken);
+         WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE client_token=? ${_ctTenantWhere})`
+      ).run(zone.store_id, zoneId, lineUserId, label, clientToken, clientToken, _tid);
       if (tinfo.changes === 0) return { idempotent: true };   // token already used → return existing (below)
     } else if (dedup) {
       // LINE customer may hold only one open order: insert only if they have NO active order.
@@ -1735,7 +1739,7 @@ export function createOrder(zoneId, items, opts = {}) {
   });
   const r = tx();
   if (r.idempotent && !r.ticket) {   // token race lost inside the tx → return the winning order
-    const ex = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
+    const ex = db.prepare(`SELECT * FROM tickets WHERE client_token=? ${_ctTenantWhere}`).get(clientToken, _tid);
     const o = ex ? db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ex.id) : null;
     return { ticket: ex, total: o?.total ?? 0, idempotent: true };
   }
@@ -1936,9 +1940,11 @@ function returnStockForOrder(order) {
   try {
     const items = db.prepare('SELECT name, qty FROM order_items WHERE order_id=?').all(order.id);
     const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
+    // Resolve tenant from the order's branch so stock returns to the correct tenant's ingredients.
+    const orderTid = db.prepare('SELECT tenant_id FROM stores WHERE id=?').get(order.branch_id)?.tenant_id || TID();
     for (const it of items) {
       const base = String(it.name).split(' · ')[0];
-      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
+      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? AND tenant_id=? LIMIT 1').get(base, orderTid);
       if (!mi) continue;
       for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id)) {
         const back = (Number(r.qty) || 0) * (Number(it.qty) || 1);

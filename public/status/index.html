@@ -110,6 +110,8 @@
       <li><b>awardPoints tenant guard (defense-in-depth)</b> — SELECT orders ไม่มี tenant filter; เพิ่ม JOIN stores WHERE tenant_id=TID() ให้ฟังก์ชัน validate เอง แม้ setOrderPaid จะ validate ก่อนแล้ว — ป้องกัน future call site ที่อาจข้ามขั้นตอน</li>
       <li><b>Staff branch assignment UI (SaaS multi-branch)</b> — ใน SAAS mode ที่มี &gt;1 สาขา ฟอร์มเพิ่ม/แก้ไขพนักงานแสดง checkboxes เลือกสาขาที่รับผิดชอบ (ไม่เลือก = ทุกสาขา); role=owner ซ่อน checkboxes; ส่ง branchIds ไปพร้อม PUT ให้ server enforce ได้ทันที</li>
       <li><b>Cashier branch-filter UX (SaaS)</b> — แคชเชียร์ที่มี branchIds จำกัดเห็นเฉพาะ zone ของสาขาตัวเองใน dashboard (ME.branchIds filter ใน boot()); server-side app.param ยังเป็น hard boundary อยู่ — ฝั่ง client filter เพื่อ UX เท่านั้น</li>
+      <li><b>clientToken cross-tenant fix (SaaS)</b> — SELECT tickets WHERE client_token=? ไม่มี tenant filter ทำให้ tenant A อาจใช้ token ของ tenant B เพื่อ (1) bypass order quota หรือ (2) รับ ticket data ข้าม tenant กลับมา; เพิ่ม AND store_id IN (SELECT id FROM stores WHERE tenant_id=?) ให้ทุก 4 จุดที่ query ด้วย clientToken ใน createOrder()</li>
+      <li><b>returnStockForOrder tenant fix</b> — SELECT menu_items WHERE name=? ไม่มี tenant filter ทำให้ตอน void order อาจ return stock ให้ recipe ของ tenant อื่นที่มีเมนูชื่อเดียวกัน; เพิ่ม AND tenant_id=? โดย resolve จาก order.branch_id → stores.tenant_id</li>
     </ul>
   </div>
 
