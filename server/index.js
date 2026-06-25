@@ -1934,6 +1934,34 @@ function doDailyReset() {
           }
         } catch (_) { /* never block reset */ }
       }
+      // Free-plan quota warning at 80% usage — send once per calendar month (idempotent via setting).
+      try {
+        const monthKey = `quota_warn:${ended.slice(0, 7)}`; // "quota_warn:2026-06"
+        for (const t of listTenants()) {
+          if (!t.owner_email) continue;
+          try {
+            const u = runWithTenant(t.id, () => Q.tenantUsage(t.id));
+            if (u.plan !== 'free' || !u.maxOrdersPerMonth) continue;
+            if (u.ordersThisMonth < Math.ceil(u.maxOrdersPerMonth * 0.8)) continue;
+            const alreadySent = runWithTenant(t.id, () => getSetting(monthKey, '') === '1');
+            if (alreadySent) continue;
+            runWithTenant(t.id, () => setSetting(monthKey, '1'));
+            const pct = Math.round((u.ordersThisMonth / u.maxOrdersPerMonth) * 100);
+            sendEmail({
+              to: t.owner_email,
+              subject: `[ขายดี] ร้าน "${t.name}" ใช้ออเดอร์เดือนนี้ ${pct}% แล้ว (${u.ordersThisMonth}/${u.maxOrdersPerMonth})`,
+              text: `ร้าน "${t.name}" ใช้ออเดอร์แผน Free ไปแล้ว ${u.ordersThisMonth} จาก ${u.maxOrdersPerMonth} รายการ/เดือน\nอัปเกรดเป็น Pro เพื่อออเดอร์ไม่จำกัดที่ ${BASE_URL}/b/${t.slug}/cashier/`,
+              html: billingHtml(t.name, t.slug, [
+                ['ออเดอร์เดือนนี้', `${u.ordersThisMonth} / ${u.maxOrdersPerMonth}`],
+                ['ใช้ไปแล้ว', `${pct}%`],
+              ], {
+                body: `ร้านของคุณใช้ออเดอร์แผน Free ไปแล้ว <b>${pct}%</b> ในเดือนนี้<br>เมื่อครบ 500 รายการ ระบบจะหยุดรับออเดอร์ใหม่จนถึงเดือนหน้า`,
+                ctaLabel: 'อัปเกรดเป็น Pro',
+              }),
+            }).catch(() => {});
+          } catch (_) { /* never block per-tenant */ }
+        }
+      } catch (_) { /* never block reset */ }
       // Auto email-dunning sweep: send trial-expiry and lapsed emails (idempotent via dunning_log).
       const DUNNING_TMPLS = {
         trial_7d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" เหลือ 7 วัน`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก`, html: billingHtml(c.name, c.slug, [], { body: 'ทดลองใช้ Pro ของคุณ <b>เหลือ 7 วัน</b> — เพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก', ctaLabel: 'อัปเกรดเลย' }) }),

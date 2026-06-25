@@ -115,6 +115,8 @@
       <li><b>branchIds live-from-DB (SaaS)</b> — session middleware เดิมอ่าน branchIds จาก signed cookie ทำให้ owner ลด branch ของพนักงานแล้วแต่ยังต้องรอ session หมดอายุ (12 ชม.) ถึงจะมีผล; แก้ให้อ่าน staff_branches จาก DB ทุก request เพื่อให้การจำกัดสาขามีผลทันที</li>
       <li><b>clampBranchId — report branch-scope bypass (SaaS)</b> — manager ที่มี branchIds จำกัดสามารถส่ง ?branchId= ใด ๆ ของ tenant และดูข้อมูลสาขาอื่นได้; เพิ่ม clampBranchId() ครอบที่ /api/report, /api/reports/detailed, /api/reports/detailed.xlsx, /api/tender-recon, /api/finance</li>
       <li><b>Staff login audit trail</b> — บันทึก staff.login (สำเร็จ) และ staff.login_fail (ล้มเหลว) ใน audit_log พร้อม IP เพื่อ breach detection และ PDPA compliance; branchIds lookup จาก DB ในมิดเดิลแวร์ guard ด้วย SAAS flag เพื่อไม่ overhead ใน single-tenant mode</li>
+      <li><b>Quota warning email 80% (SaaS)</b> — แผน Free ที่ใช้ออเดอร์ถึง 80% (400/500) รายการ/เดือน จะได้รับอีเมลแจ้งเตือนอัตโนมัติครั้งเดียวต่อเดือน (idempotent ด้วย settings flag); มี CTA "อัปเกรดเป็น Pro"</li>
+      <li><b>sendBillRetry no-retry fix</b> — order_limit, branch_limit, too_many_requests ถูกจัดเป็น deterministic reject (ไม่ retry); ลด delay 1.8 วิ ก่อนแสดงข้อผิดพลาด + toast เห็น "ครบโควต้า" ทันที</li>
     </ul>
   </div>
 
