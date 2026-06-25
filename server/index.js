@@ -21,6 +21,7 @@ import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '');
 const app = express();
 app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
 const PORT = process.env.PORT || 3000;
@@ -420,7 +421,7 @@ app.post('/api/signup', (req, res) => {
     }
     // Welcome email — fire-and-forget, never blocks the response.
     if (email) {
-      const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+      const base = BASE_URL;
       sendEmail({
         to: email,
         subject: `ยินดีต้อนรับ "${name}" — ระบบคิว + POS พร้อมใช้งาน!`,
@@ -505,7 +506,7 @@ app.post('/api/owner/request-email-change', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
   const token = createEmailChangeToken(req.tenantId, email);
-  const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+  const base = BASE_URL;
   try {
     await sendEmail({
       to: email,
@@ -557,7 +558,7 @@ app.post('/api/owner/forgot-password', async (req, res) => {
   for (const m of matches) {
     try {
       const token = createResetToken(m.tenantId);
-      const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+      const base = BASE_URL;
       await sendEmail({
         to: email, subject: 'รีเซ็ตรหัสผ่าน — ขายดี KhaiDee',
         text: `คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):\n${base}/login/?reset=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
@@ -676,14 +677,27 @@ app.get('/admin/api/dunning/preview', adminGate, (_req, res) => {
 app.post('/admin/api/dunning/send', adminGate, async (_req, res) => {
   const candidates = getDunningCandidates();
   const results = [];
+  const dunningHtml = (name, slug, body, ctaLabel) => {
+    const url = slug ? `${BASE_URL}/b/${slug}/cashier/` : `${BASE_URL}/login/`;
+    return `<div style="font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:#f7f7fb;padding:24px 0">
+<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+  <div style="background:#6366f1;padding:20px 28px"><span style="font-family:Kanit,sans-serif;font-size:20px;font-weight:700;color:#fff">ขายดี KhaiDee</span></div>
+  <div style="padding:24px 28px">
+    <p style="margin:0 0 14px;font-size:15px;color:#1a1a2e">สวัสดีร้าน <b>${name}</b>,</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">${body}</p>
+    <a href="${url}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none">${ctaLabel} →</a>
+  </div>
+  <div style="padding:16px 28px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af">ขายดี KhaiDee · <a href="${BASE_URL}/cashier/" style="color:#6366f1">ระบบ POS + คิว + LINE</a></div>
+</div></div>`;
+  };
   const TEMPLATES = {
-    trial_7d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" เหลือ 7 วัน`, text: `ร้าน "${name}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
-    trial_3d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" เหลือ 3 วัน`, text: `ร้าน "${name}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
-    trial_1d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" หมดพรุ่งนี้!`, text: `ร้าน "${name}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
-    lapsed:   (name) => ({ subject: `[ขายดี] แพ็กเกจ "${name}" หมดอายุแล้ว`, text: `ร้าน "${name}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
+    trial_7d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" เหลือ 7 วัน`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee`, html: dunningHtml(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>เหลือ 7 วัน</b> — เพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก', 'อัปเกรดเลย') }),
+    trial_3d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" เหลือ 3 วัน`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee`, html: dunningHtml(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>เหลือ 3 วัน</b> — เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก', 'อัปเกรดเลย') }),
+    trial_1d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" หมดพรุ่งนี้!`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee`, html: dunningHtml(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>จะหมดพรุ่งนี้</b>! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้าของคุณ', 'อัปเกรดด่วน') }),
+    lapsed:   (c) => ({ subject: `[ขายดี] แพ็กเกจ "${c.name}" หมดอายุแล้ว`, text: `ร้าน "${c.name}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee`, html: dunningHtml(c.name, c.slug, 'แพ็กเกจของร้านคุณ<b>หมดอายุแล้ว</b> และกลับสู่โหมดฟรี — อัปเกรดเพื่อกลับมาใช้ LINE, รายงาน และฟีเจอร์ Pro ครบรูปแบบ', 'อัปเกรดเลย') }),
   };
   for (const c of candidates) {
-    const tmpl = TEMPLATES[c.event]?.(c.name) || { subject: `[ขายดี] แจ้งเตือน ${c.event}`, text: `สวัสดีคุณ ${c.name}` };
+    const tmpl = TEMPLATES[c.event]?.(c) || { subject: `[ขายดี] แจ้งเตือน ${c.event}`, text: `สวัสดีคุณ ${c.name}` };
     const result = await sendEmail({ to: c.email, ...tmpl });
     logDunningSend(c.tenantId, c.event, { dryRun: result.dryRun || false, toEmail: c.email });
     results.push({ ...c, ...result });
@@ -1749,16 +1763,17 @@ function doDailyReset() {
         } catch (_) { /* never block reset */ }
       }
       // Auto email-dunning sweep: send trial-expiry and lapsed emails (idempotent via dunning_log).
+      const _dh = (n, s, body, cta) => { const u=s?`${BASE_URL}/b/${s}/cashier/`:`${BASE_URL}/login/`; return `<div style="font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:#f7f7fb;padding:24px 0"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)"><div style="background:#6366f1;padding:20px 28px"><span style="font-family:Kanit,sans-serif;font-size:20px;font-weight:700;color:#fff">ขายดี KhaiDee</span></div><div style="padding:24px 28px"><p style="margin:0 0 14px;font-size:15px;color:#1a1a2e">สวัสดีร้าน <b>${n}</b>,</p><p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">${body}</p><a href="${u}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none">${cta} →</a></div><div style="padding:16px 28px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af">ขายดี KhaiDee · ระบบ POS + คิว + LINE</div></div></div>`; };
       const DUNNING_TMPLS = {
-        trial_7d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" เหลือ 7 วัน`, text: `ร้าน "${n}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก` }),
-        trial_3d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" เหลือ 3 วัน`, text: `ร้าน "${n}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก` }),
-        trial_1d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" หมดพรุ่งนี้!`, text: `ร้าน "${n}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า` }),
-        lapsed:   (n) => ({ subject: `[ขายดี] แพ็กเกจ "${n}" หมดอายุแล้ว`, text: `ร้าน "${n}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ` }),
+        trial_7d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" เหลือ 7 วัน`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก`, html: _dh(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>เหลือ 7 วัน</b> — เพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก', 'อัปเกรดเลย') }),
+        trial_3d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" เหลือ 3 วัน`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก`, html: _dh(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>เหลือ 3 วัน</b> — เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก', 'อัปเกรดเลย') }),
+        trial_1d: (c) => ({ subject: `[ขายดี] ทดลองใช้ "${c.name}" หมดพรุ่งนี้!`, text: `ร้าน "${c.name}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า`, html: _dh(c.name, c.slug, 'ทดลองใช้ Pro ของคุณ <b>จะหมดพรุ่งนี้</b>! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า', 'อัปเกรดด่วน') }),
+        lapsed:   (c) => ({ subject: `[ขายดี] แพ็กเกจ "${c.name}" หมดอายุแล้ว`, text: `ร้าน "${c.name}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ`, html: _dh(c.name, c.slug, 'แพ็กเกจของร้านคุณ<b>หมดอายุแล้ว</b> และกลับสู่โหมดฟรี — อัปเกรดเพื่อกลับมาใช้ LINE, รายงาน และฟีเจอร์ Pro ครบรูปแบบ', 'อัปเกรดเลย') }),
       };
       // Fire-and-forget — doDailyReset is sync; email promises resolve independently.
       try {
         for (const c of getDunningCandidates()) {
-          const tmpl = DUNNING_TMPLS[c.event]?.(c.name); if (!tmpl) continue;
+          const tmpl = DUNNING_TMPLS[c.event]?.(c); if (!tmpl) continue;
           sendEmail({ to: c.email, ...tmpl })
             .then((r) => logDunningSend(c.tenantId, c.event, { dryRun: r.dryRun || false, toEmail: c.email }))
             .catch(() => {});

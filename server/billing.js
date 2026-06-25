@@ -182,7 +182,7 @@ export function getDunningCandidates() {
     db.prepare('SELECT tenant_id||":"||event k FROM dunning_log').all().map((r) => r.k)
   );
   const tenants = db.prepare(
-    `SELECT id, name, owner_email, plan_name, plan_until, auto_renew, omise_customer_id
+    `SELECT id, slug, name, owner_email, plan_name, plan_until, auto_renew, omise_customer_id
      FROM tenants WHERE id>1 AND active=1`
   ).all();
 
@@ -202,14 +202,14 @@ export function getDunningCandidates() {
         ['trial_1d', 2, 0],
       ]) {
         if (daysLeft <= maxDays && daysLeft >= minDays && !sent.has(`${t.id}:${event}`)) {
-          candidates.push({ tenantId: t.id, name: t.name, email: t.owner_email, event, daysLeft, plan: t.plan_name });
+          candidates.push({ tenantId: t.id, slug: t.slug, name: t.name, email: t.owner_email, event, daysLeft, plan: t.plan_name });
         }
       }
     }
 
     // Lapsed: was paid, now free (plan_until in the past).
     if (isFree && t.plan_until && new Date(t.plan_until).getTime() < now && !sent.has(`${t.id}:lapsed`)) {
-      candidates.push({ tenantId: t.id, name: t.name, email: t.owner_email, event: 'lapsed', daysLeft: 0, plan: 'free' });
+      candidates.push({ tenantId: t.id, slug: t.slug, name: t.name, email: t.owner_email, event: 'lapsed', daysLeft: 0, plan: 'free' });
     }
   }
   return candidates;
