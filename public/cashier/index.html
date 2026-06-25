@@ -571,6 +571,9 @@
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 const zoneOpenState={};
+// "เรียกแล้ว" strip shows 5 by default; per-zone expand state + last snapshot so the
+// "แสดงทั้งหมด" toggle can re-render without waiting for the next SSE push.
+const _calledExpanded={}, _lastSnap={};
 window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   if(CFG.promptPayDynamic){ $('ppPopImg').src='/api/promptpay-qr?amount='+amount; $('ppPopNote').textContent='ยอด ฿'+amount+' ใส่ให้อัตโนมัติ · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว'; }
   else if(CFG.promptPayStatic){ $('ppPopImg').src=CFG.promptPayStatic; $('ppPopNote').textContent='ลูกค้าสแกนแล้วกรอกยอด ฿'+amount+' เอง · ตรวจยอดในแอปธนาคารแล้วกด ชำระแล้ว'; }
@@ -1849,6 +1852,7 @@ window.toggleKitchen=(tid,i)=>{
 function renderZone(snap){
   if(!snap||!snap.zone) return;
   const z=snap.zone, id=z.id, open=z.is_open===1;
+  _lastSnap[id]=snap;   // cache so toggleCalled() can re-render the "เรียกแล้ว" strip locally
   zoneOpenState[id]=open;
   detectNewLineOrders(id, snap.pending||[]);
   detectCancelRequests(id, [...(snap.waiting||[]), ...(snap.pending||[])]);
@@ -2004,12 +2008,25 @@ function renderZone(snap){
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
       ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
-  const zr=$('zr-'+id); if(zr) zr.innerHTML = snap.recentCalled.length ? snap.recentCalled.map(t=>`
+  const called=snap.recentCalled||[];
+  const calledCard=(t)=>`
     <div class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`).join('')
-    : '<p class="muted">—</p>';
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`;
+  const zr=$('zr-'+id);
+  if(zr){
+    if(!called.length){ zr.innerHTML='<p class="muted">—</p>'; }
+    else {
+      // Default: 5 most recent. If more, a "แสดงทั้งหมด (N)" toggle reveals the rest (per-zone state).
+      const exp=!!_calledExpanded[id];
+      const shown=exp?called:called.slice(0,5);
+      zr.innerHTML = shown.map(calledCard).join('')
+        + (called.length>5 ? `<button class="ghost" id="zrbtn-${id}" style="width:100%;margin-top:6px;font-size:13px;padding:9px;font-weight:700;color:var(--accent)" onclick="toggleCalled(${id})">${exp?'▴ ย่อรายการ (แสดง 5 ล่าสุด)':('▾ แสดงทั้งหมด ('+called.length+' ออเดอร์)')}</button>` : '');
+    }
+  }
 }
+// Toggle the "เรียกแล้ว" strip between 5-most-recent and all; re-render from the cached snapshot.
+window.toggleCalled=(id)=>{ _calledExpanded[id]=!_calledExpanded[id]; if(_lastSnap[id]) renderZone(_lastSnap[id]); };
 
 window.callNext=async(id)=>{ try{ const r=await api('/api/zones/'+id+'/call-next',{method:'POST'});
   toast(r.called?('เรียก '+r.called.code):'ไม่มีคิวรอ'); }catch(e){ toast(err(e)); } };

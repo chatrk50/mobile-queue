@@ -2019,9 +2019,12 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
+  // All currently-called (called but not yet served) tickets, newest first. The cashier UI shows the
+  // 5 most recent by default with a "แสดงทั้งหมด" toggle for the rest. Capped at 100 as a sane bound
+  // ('called' is transient — it clears on serve/no-show — so this is effectively unbounded in practice).
   const recentCalled = db.prepare(
     `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
-     WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 5`
+     WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 100`
   ).all(zoneId);
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
