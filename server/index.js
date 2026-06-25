@@ -910,18 +910,27 @@ app.get('/api/staff', (req, res) => {
 });
 app.post('/api/staff', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.createStaff(req.body || {})); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const r = Q.createStaff(req.body || {});
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'staff.create', detail: 'id=' + r.id + ' role=' + r.role, ip: ipOf(req) });
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/staff/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.updateStaff(req.params.id, req.body || {})); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const r = Q.updateStaff(req.params.id, req.body || {});
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'staff.update', detail: 'id=' + req.params.id + ' role=' + r.role, ip: ipOf(req) });
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.delete('/api/staff/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.deactivateStaff(req.params.id)); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const r = Q.deactivateStaff(req.params.id);
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'staff.deactivate', detail: 'id=' + req.params.id, ip: ipOf(req) });
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ---------- Menu (public read; management is PIN-protected below) ----------
@@ -1290,6 +1299,7 @@ app.post('/api/admin/reset-transactions', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   if (req.body?.confirm !== 'CLEAR') return res.status(400).json({ error: 'confirm_required' });
   try {
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.reset_transactions', ip: ipOf(req) });
     const removed = Q.clearTransactions();
     try { for (const z of db.prepare('SELECT z.id FROM zones z JOIN stores s ON s.id=z.store_id WHERE s.tenant_id=?').all(req.tenantId)) emit(z.id, 'update', (reveal) => Q.zoneSnapshot(z.id, { reveal })); } catch { /* refresh best-effort */ }
     res.json({ ok: true, removed });
