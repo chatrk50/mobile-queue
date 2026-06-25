@@ -753,8 +753,9 @@ app.post('/admin/api/tenants/:id/plan', adminGate, (req, res) => {
 // Extend a tenant's trial/plan by N days (admin support action).
 app.post('/admin/api/tenants/:id/extend-trial', adminGate, (req, res) => {
   const id = Number(req.params.id);
-  const days = Math.max(1, Math.min(365, Number(req.body?.days) || 0));
-  if (!days) return res.status(400).json({ error: 'days_required' });
+  const raw = Number(req.body?.days);
+  if (!Number.isFinite(raw) || raw < 1) return res.status(400).json({ error: 'days_required' }); // validate BEFORE clamping
+  const days = Math.min(365, Math.floor(raw));   // clamp upper bound only; lower bound already enforced
   const t = getTenant(id);
   if (!t) return res.status(404).json({ error: 'not_found' });
   const base = (t.plan_until && new Date(t.plan_until).getTime() > Date.now())
