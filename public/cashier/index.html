@@ -305,8 +305,11 @@
   <!-- OVERVIEW / CHARTS (owner/manager) -->
   <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>ภาพรวม / กราฟ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">ปิด</button>
+      <div><h1>ภาพรวมธุรกิจ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">KPI วันนี้ · แนวโน้มยอดขาย · เมนูขายดี · ช่วงเวลาพีค</p></div>
+      <div class="row" style="gap:8px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">← คิว</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="renderCharts()">↻</button>
+      </div>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
   </div>
@@ -601,10 +604,11 @@ window.login=async()=>{
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
-    $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
+    $('chartsBtn').style.display=mgr?'':'none'; $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; if($('promoBtn'))$('promoBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
+    if(mgr) showCharts();       // owners & managers land on the KPI dashboard
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
@@ -615,6 +619,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; if($('promoCard'))$('promoCard').style.display='none';
   $('adminBtn').style.display='none'; closeAdmin();
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
+  $('chartsBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
@@ -1170,10 +1175,24 @@ window.showCharts=async()=>{ $('adminMenu').style.display='none';
   $('dash').style.display='none'; $('chartsCard').style.display='';
   $('chartsBody').innerHTML='<p class="muted">กำลังโหลด…</p>'; renderCharts(); };
 async function renderCharts(){
-  let hist={}, det={};
-  try{ [hist,det]=await Promise.all([api('/api/sales-history'), api('/api/reports/detailed')]); }
+  let hist={}, det={}, today={};
+  try{ [hist,det,today]=await Promise.all([api('/api/sales-history'), api('/api/reports/detailed'), api('/api/report')]); }
   catch(e){ $('chartsBody').innerHTML='<p class="muted">โหลดข้อมูลไม่สำเร็จ — '+err(e)+'</p>'; return; }
   const baht=(n)=>'฿'+Math.round(Number(n)||0).toLocaleString('en-US');
+  // --- KPI summary row (today) ---
+  const p=today.pnl||{};
+  const kpiChip=(val,label,num,big)=>`<div style="background:var(--surface);border-radius:12px;padding:12px 10px;text-align:center;min-width:0">
+    <div style="font-size:${big?'22':'17'}px;font-weight:800;color:${num<0?'var(--danger)':'var(--navy)'}">${val}</div>
+    <div class="muted" style="font-size:11px;margin-top:2px">${label}</div></div>`;
+  const margin=today.revenue?Math.round((p.netProfit||0)/today.revenue*1000)/10:0;
+  const kpiRow=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">
+    ${kpiChip(baht(today.revenue||0),'ยอดขายวันนี้',today.revenue||0,true)}
+    ${kpiChip(baht(p.grossProfit||0),'กำไรขั้นต้น',p.grossProfit||0,false)}
+    ${kpiChip(baht(p.netProfit||0),'กำไรสุทธิ',p.netProfit||0,false)}
+    ${kpiChip(margin+'%','อัตรากำไร',margin,false)}
+    ${kpiChip((p.cups||0)+' '+unit(),'จำนวนขาย',1,false)}
+  </div>`;
+  // --- Charts ---
   const days=(hist.daily||[]).slice(0,7).reverse().map(d=>({ label:(d.date||'').slice(5), value:Math.round(d.net||d.revenue||0), sub:(d.date||'').slice(5) }));
   const trend=(arr,span)=>(arr||[]).slice(0,span).reverse().map(r=>({ label:r.period||r.date, sub:shortPeriod(r.period||r.date), value:Math.round(r.net||r.revenue||0) }));
   const wk=trend(hist.weekly,12), mo=trend(hist.monthly,12), yr=trend(hist.yearly,6);
@@ -1182,7 +1201,7 @@ async function renderCharts(){
   const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
   const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
-  $('chartsBody').innerHTML =
+  $('chartsBody').innerHTML = kpiRow +
     card(IC.trend+'ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
       card(IC.cup+'เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
