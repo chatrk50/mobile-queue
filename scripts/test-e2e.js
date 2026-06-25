@@ -216,6 +216,22 @@ db.prepare("UPDATE tickets SET created_at=datetime('now','-60 minutes') WHERE id
 Q.setPendingVoidMinutes(30);
 const swept = Q.sweepStalePending({});
 ok(swept.voided >= 1 && db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'cancelled', `INVARIANT stale unpaid WAITING order auto-voids (swept ${swept.voided})`);
+// The เข้าคิวทันที toggle must GOVERN numbering for EVERY channel (cashier + LINE) in BOTH states.
+// (Prod report: orders piled into "รอชำระเงิน" under queue-first; numbering is now Turso-resilient.)
+console.log('\n== Toggle governs queue numbering across all channels ==');
+Q.setQueueFirst(true);
+const onCash = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'cashier' });
+const onLine = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Utoggle1' });
+ok(onCash.ticket.number > 0 && onCash.ticket.status === 'waiting', `INVARIANT queue-first ON → cashier order numbered immediately (${onCash.ticket.number}/${onCash.ticket.status})`);
+ok(onLine.ticket.number > 0 && onLine.ticket.status === 'waiting', `INVARIANT queue-first ON → LINE order numbered immediately (${onLine.ticket.number}/${onLine.ticket.status})`);
+Q.setQueueFirst(false);
+const offCash = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'cashier' });
+const offLine = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Utoggle2' });
+ok(offCash.ticket.number === 0 && offCash.ticket.status === 'pending', `INVARIANT pay-first OFF → cashier order waits in รอชำระเงิน, no number (${offCash.ticket.status})`);
+ok(offLine.ticket.number === 0 && offLine.ticket.status === 'pending', `INVARIANT pay-first OFF → LINE order waits in รอชำระเงิน, no number (${offLine.ticket.status})`);
+const offPaid = Q.setOrderPaid(offCash.ticket.id, { method: 'cash' });
+ok(offPaid.number > 0 && db.prepare('SELECT status FROM tickets WHERE id=?').get(offCash.ticket.id).status === 'waiting', `INVARIANT paying a pay-first order then issues its number (${offPaid.number})`);
+
 Q.setPendingVoidMinutes(0); Q.setQueueFirst(false);   // restore pay-first default for the archive checks
 
 // ---- Customer cancel = sticky request; locks once the cashier starts making ----
