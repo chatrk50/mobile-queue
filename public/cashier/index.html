@@ -2067,6 +2067,12 @@ window.showFeatures=async()=>{
       <div class="muted" style="font-size:12px;margin:2px 0 8px">${bill.trial
         ? `🎁 ทดลองใช้ <b style="color:#7c3aed">${lbl(bill.plan)}</b> ฟรีถึง <b>${esc((bill.planUntil||'').slice(0,10))}</b> — กดอัปเกรดเพื่อใช้ต่อ`
         : `แพลน: <b style="color:${bill.plan!=='free'?'#7c3aed':'var(--navy)'}">${lbl(bill.plan)}</b>${bill.plan!=='free'&&bill.planUntil?` · ถึง ${esc(bill.planUntil.slice(0,10))}${bill.autoRenew?' · ต่ออายุอัตโนมัติ ✓':' · จะหมดอายุ (ยกเลิกแล้ว)'}`:' · จำกัด 1 สาขา / 500 ออเดอร์ต่อเดือน'}`}</div>
+      ${bill.plan==='free'&&bill.maxOrdersPerMonth!=null?(()=>{ const used=bill.ordersThisMonth||0,max=bill.maxOrdersPerMonth,pct=Math.min(100,Math.round(used/max*100)),warn=pct>=80;
+        return `<div style="margin:4px 0 8px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:${warn?'#c0394a':'var(--muted)'};margin-bottom:3px"><span>ออเดอร์เดือนนี้</span><span><b>${used}</b> / ${max}</span></div>
+        <div style="background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${warn?'#c0394a':'#6366f1'};border-radius:4px"></div></div>
+        ${warn&&pct<100?'<div style="color:#c0394a;font-size:11px;margin-top:3px">⚠ ใกล้ถึงขีดจำกัด — อัปเกรดเพื่อรับออเดอร์ไม่จำกัด</div>':''}
+        </div>`; })():''}
       ${bill.configured ? `
         <div class="muted" style="font-size:12px;margin-bottom:4px">เลือกอัปเกรด (ราคารวม VAT):</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">

@@ -1011,7 +1011,14 @@ app.get('/api/export/orders.csv', (req, res) => {
 // ---- Self-service billing (Omise subscription) ----
 app.get('/api/billing/status', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(billingStatus(req.tenantId));
+  const bs = billingStatus(req.tenantId);
+  // Attach order-quota usage so the cashier panel can warn free tenants approaching the 500/mo limit.
+  if (bs.plan === 'free' && bs.configured !== false) {
+    const u = Q.tenantUsage(req.tenantId);
+    bs.ordersThisMonth = u.ordersThisMonth;
+    bs.maxOrdersPerMonth = u.maxOrdersPerMonth;
+  }
+  res.json(bs);
 });
 app.post('/api/billing/subscribe', async (req, res) => {       // body: { token, plan, interval, email }
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
