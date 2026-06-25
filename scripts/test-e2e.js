@@ -266,6 +266,28 @@ const after = Q.listMenu().filter((m) => m.category !== 'topping').map((m) => m.
 ok(after.indexOf(d2.id) < after.indexOf(d1.id), 'INVARIANT moveMenuItem(up) reorders the grid (B now before A)');
 ok(Q.moveMenuItem(after[0], 'up').moved === false, 'INVARIANT moving the top item up is a no-op (edge)');
 
+// ---- Free-badge giveaway: items/toppings flagged badge='free' are recorded at real price but an
+// equal order-level discount nets them to ฿0. Server-authoritative (reads the menu badge). ----
+console.log('\n== Free-badge giveaway (auto-discount) ==');
+const fTop = Q.addMenuItem({ name: 'FreeTop', price: 15, category: 'topping', badge: 'free' });
+const fg = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }, { name: 'FreeTop', price: 15, qty: 1 }], {});
+const fgo = Q.orderForTicket(fg.ticket.id);
+ok(near(fgo.discount, 15) && near(fgo.total - fgo.discount, 100), `INVARIANT a free-badged topping auto-discounts to ฿0 (discount ${fgo.discount}, net ${fgo.total - fgo.discount})`);
+ok(fTop.id && db.prepare('SELECT price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.ticket_id=? AND oi.name=?').get(fg.ticket.id, 'FreeTop').price === 15, 'free item is still RECORDED at real price (gross revenue stays accurate)');
+// a free DRINK carries a sweetness suffix on the line name — the server must still match it
+Q.addMenuItem({ name: 'FreeDrink', price: 40, category: 'drink', badge: 'free' });
+const fg2 = Q.createOrder(1, [{ name: 'FreeDrink · หวาน 50%', price: 40, qty: 1 }, { name: 'Drink', price: 100, qty: 1 }], {});
+const fgo2 = Q.orderForTicket(fg2.ticket.id);
+ok(near(fgo2.discount, 40) && near(fgo2.total - fgo2.discount, 100), `INVARIANT a free drink at non-default sweetness still discounts (discount ${fgo2.discount}, net ${fgo2.total - fgo2.discount})`);
+// paying settles at NET — the free portion is never collected
+Q.setOrderPaid(fg.ticket.id, { method: 'cash' });
+ok(db.prepare('SELECT total - COALESCE(discount,0) AS net FROM orders WHERE ticket_id=?').get(fg.ticket.id).net === 100, 'INVARIANT free-giveaway order settles at net (100)');
+// editing to ADD a free item recomputes the giveaway discount; a plain order has none
+const fe = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], {});
+ok(near(Q.orderForTicket(fe.ticket.id).discount, 0), 'a plain order has no giveaway discount');
+Q.editOrderItems(fe.ticket.id, [{ name: 'Drink', price: 100, qty: 1 }, { name: 'FreeTop', price: 15, qty: 1 }]);
+ok(near(Q.orderForTicket(fe.ticket.id).discount, 15), 'INVARIANT editing to add a free item recomputes the giveaway discount (15)');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

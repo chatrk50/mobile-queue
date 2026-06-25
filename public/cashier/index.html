@@ -309,6 +309,7 @@
         <div id="billList" class="queue-list" style="min-height:160px"></div>
         <div class="pos-totals">
           <div class="row between" style="font-size:13px"><span class="muted">จำนวนรายการ</span><span id="billCount">0</span></div>
+          <div id="billDiscRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:#7c3aed;margin-top:4px"><span>ส่วนลดของแถม (ฟรี)</span><span>-฿<span id="billDisc">0</span></span></div>
           <div class="row between" style="font-size:24px;font-weight:800;color:var(--navy);margin-top:2px"><span>รวม</span><span>฿<span id="billTotal">0</span></span></div>
         </div>
         <div class="row" style="gap:8px;margin-top:12px">
@@ -1571,19 +1572,27 @@ window.chooseSweet=(s)=>{ const entry={ name:pendingDrink.name, price:pendingDri
 // Per-unit price + toppings, times the line quantity.
 function entryTotal(e){ return (e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0)) * (e.qty||1); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
+// Free-badge giveaway (mirrors the server's freeGiveawayDiscount): items/toppings flagged badge='free'
+// are shown with a ฟรี tag and netted out of the bill total so the till collects the right amount.
+const FREE_TAG='<span class="mbadge" style="background:#7c3aed;margin-left:6px">ฟรี</span>';
+function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge==='free') s.add(m.name); }); return s; }
+function cartFreeDiscount(){ const FREE=freeNameSet(); let d=0; cart.forEach(e=>{ const q=e.qty||1; if(FREE.has(e.name)) d+=e.price*q; e.toppings.forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty*q; }); });
+  const sub=cart.reduce((s,e)=>s+entryTotal(e),0); return Math.min(d, sub); }
 // Live bill (left pane of the split-screen order taker). Re-rendered on every cart change.
 function renderBill(){
   const list=$('billList'); if(!list) return;
+  const FREE=freeNameSet();
   list.innerHTML = cart.length ? cart.map((e,i)=>`
     <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
-      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
+      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
       <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('')
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
-  const total=cart.reduce((s,e)=>s+entryTotal(e),0);
-  const bt=$('billTotal'); if(bt) bt.textContent=total;
+  const sub=cart.reduce((s,e)=>s+entryTotal(e),0); const disc=cartFreeDiscount();
+  const dr=$('billDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; const dd=$('billDisc'); if(dd) dd.textContent=disc; } else dr.style.display='none'; }
+  const bt=$('billTotal'); if(bt) bt.textContent=sub-disc;
   const bc=$('billCount'); if(bc) bc.textContent=cart.length;
   const pay=$('billPayBtn'); if(pay) pay.disabled=!cart.length;
   const hold=$('billHoldBtn'); if(hold) hold.disabled=!cart.length;
@@ -1612,14 +1621,15 @@ window.detailEditOptions=()=>{ const e=cart[_detailIdx]; if(!e) return; const dr
   e.toppings.forEach(tp=>{ const m=MENU.find(x=>x.name===tp.name); if(m) pendingTops[m.id]={name:tp.name,price:tp.price,qty:tp.qty}; });
   $('topPopTitle').textContent=drink.name+' · ฿'+drink.price; renderTopPop(); $('topPop').style.display='flex'; };
 function renderBasket(){
+  const FREE=freeNameSet();
   $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
     <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
-      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
+      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
       ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
+      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
       <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
       <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('') : '<p class="muted">ตะกร้าว่าง — เพิ่มเครื่องดื่ม</p>';
-  $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0);
+  $('basketTotal').textContent = cart.reduce((s,e)=>s+entryTotal(e),0) - cartFreeDiscount();
   $('basketConfirm').disabled = !cart.length;
 }
 window.cancelBasket=async()=>{ if(!cart.length) return;
@@ -1664,8 +1674,9 @@ function tokenFor(snapshot){ return (_heldToken && _heldSig===billSig(snapshot))
 window.confirmBasket=async()=>{
   if(_editTicket){ return saveEdit(); }   // in edit mode, the action saves the order (no new bill)
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
-  // Pick the tender FIRST (popup shows instantly — no order created yet).
-  const total=cart.reduce((s,e)=>s+entryTotal(e),0);
+  // Pick the tender FIRST (popup shows instantly — no order created yet). Charge the NET of any
+  // free-giveaway discount so the cash keypad / change calc matches what the server will settle.
+  const total=cart.reduce((s,e)=>s+entryTotal(e),0) - cartFreeDiscount();
   const method=await pickPayMethod(total); if(method===null) return;
   // OPTIMISTIC: clear the UI + beep INSTANTLY (0ms perceived) and return to the queue, then send in
   // the background with retry. On total failure the bill is restored so a network blip never loses a sale.

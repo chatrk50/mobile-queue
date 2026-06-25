@@ -1489,11 +1489,33 @@ export function editOrderItems(ticketId, items) {
     db.prepare('DELETE FROM order_items WHERE order_id=?').run(order.id);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(order.id, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
-    db.prepare('UPDATE orders SET total=? WHERE id=?').run(total, order.id);
+    // Recompute the free-giveaway discount for the new item set. Don't clobber a manual bill
+    // discount the cashier set by hand — only re-manage the auto 'ของแถมฟรี' one (or a clean bill).
+    const keepManual = (order.discount || 0) > 0 && order.discount_reason !== FREE_GIVEAWAY_REASON;
+    const freeDisc = freeGiveawayDiscount(lines, total);
+    const newDisc = keepManual ? Math.min(order.discount, total) : freeDisc;
+    const newReason = keepManual ? order.discount_reason : (freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
+    db.prepare('UPDATE orders SET total=?, discount=?, discount_reason=? WHERE id=?').run(total, newDisc, newReason, order.id);
   });
   tx();
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, meta: {} });
   return { ok: true, total, ticketId: Number(ticketId) };
+}
+
+// Free-badge giveaway: any menu item / topping flagged badge='free' is recorded at its REAL price
+// (so gross item + topping revenue and cup/topping counts stay accurate) but an equal order-level
+// discount nets it to ฿0 for the customer. Server-authoritative — it reads the menu badge, never a
+// client-supplied flag — so it can't be spoofed. Clamped to the order total so net can't go negative.
+const FREE_GIVEAWAY_REASON = 'ของแถมฟรี';
+function freeGiveawayDiscount(lines, total) {
+  const freeNames = db.prepare("SELECT name FROM menu_items WHERE badge='free'").all().map((r) => r.name);
+  if (!freeNames.length) return 0;
+  // A drink line carries a sweetness suffix ("Name · หวาน 50%"); toppings are sent bare. Match the
+  // bare name OR a "Name · …" prefix so a free drink at non-default sweetness is still detected.
+  const isFree = (nm) => freeNames.some((fn) => nm === fn || nm.startsWith(fn + ' · '));
+  let d = 0;
+  for (const it of lines) if (isFree(it.name)) d += it.price * it.qty;
+  return Math.min(Math.round(d * 100) / 100, Math.max(0, total));
 }
 
 export function createOrder(zoneId, items, opts = {}) {
@@ -1569,8 +1591,9 @@ export function createOrder(zoneId, items, opts = {}) {
          VALUES (?,?,?,?,?,?,?,'pending',?)`
       ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label, clientToken);
     }
-    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id) VALUES (?,?,?,?,?,?)')
-      .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId);
+    const freeDisc = freeGiveawayDiscount(lines, total);
+    const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id, discount, discount_reason) VALUES (?,?,?,?,?,?,?,?)')
+      .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId, freeDisc, freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
     logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });

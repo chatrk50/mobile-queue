@@ -1023,9 +1023,10 @@ else if (!DURABLE) {
   try {
     const r = seedDemo();
     if (r.seeded) console.log(`[seed] Ephemeral boot — seeded demo store + ${r.drinks} drinks (UAT sandbox).`);
-    // Loyalty rewards are exercised on the UAT sandbox only; prod stays OFF until the owner
-    // flips it on in ⚙ จัดการ (seed default is '0', so a prod cutover never auto-enables it).
-    Q.setLoyaltyEnabled(true);
+    // UAT now MIRRORS prod config (loyalty OFF) so sandbox testing reflects real prod behavior.
+    // Prod stays OFF too (seed default '0' + this whole block is skipped when DURABLE). Owner can
+    // still flip loyalty on per-environment in ⚙ จัดการ; this just sets the UAT boot default.
+    Q.setLoyaltyEnabled(false);
     // Queue-first model is exercised on UAT only; prod stays pay-first (seed '0') until the owner
     // flips it on in ⚙ จัดการ after testing here.
     Q.setQueueFirst(true);
