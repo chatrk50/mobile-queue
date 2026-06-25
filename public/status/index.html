@@ -98,6 +98,9 @@
       <li><b>priceFor menu_items tenant scope</b> — defense-in-depth: item lookup เพิ่ม AND tenant_id=?</li>
       <li><b>deleteReward DELETE tenant scope</b> — DELETE เพิ่ม AND tenant_id=? ให้ตรงกับ SELECT guard</li>
       <li><b>markPromoSent/Failed/cancelPromo tenant scope</b> — UPDATE promos เพิ่ม AND tenant_id=?; scheduler ใช้ runWithTenant(p.tenant_id)</li>
+      <li><b>Rate limit: promo broadcast</b> — max 5/hr/tenant (PROMO_RATE env); ป้องกัน LINE quota หมด</li>
+      <li><b>Rate limit: PDPA export</b> — max 10/5min/tenant; ป้องกัน DB dump ซ้ำ</li>
+      <li><b>Rate limit: forget-customer</b> — max 30/hr/tenant; ป้องกัน bulk erasure abuse</li>
     </ul>
   </div>
 
