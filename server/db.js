@@ -507,6 +507,16 @@ for (const stmt of [
 }
 // Index the idempotency token (created after the ALTER so it exists on migrated DBs too).
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_client_token ON tickets(client_token)'); } catch { /* ignore */ }
+// Multi-tenant SaaS hot-path indexes — all post-migration (columns arrive via ALTER TABLE above).
+// These dramatically speed up the tenant-scoped SELECT/JOIN patterns that run on every request.
+for (const idx of [
+  'CREATE INDEX IF NOT EXISTS idx_stores_tenant   ON stores(tenant_id)',
+  'CREATE INDEX IF NOT EXISTS idx_staff_tenant    ON staff(tenant_id)',
+  'CREATE INDEX IF NOT EXISTS idx_menu_tenant     ON menu_items(tenant_id, active)',
+  'CREATE INDEX IF NOT EXISTS idx_ingredients_tenant ON ingredients(tenant_id)',
+  'CREATE INDEX IF NOT EXISTS idx_orders_branch_date ON orders(branch_id, created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id)',
+]) { try { db.exec(idx); } catch { /* already exists */ } }
 // Promo broadcasts (adopt-backlog #2): owner-composed LINE multicasts to owned customer base.
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS promos (
