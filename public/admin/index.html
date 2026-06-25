@@ -41,6 +41,7 @@
         <button class="btn ghost" style="padding:6px 12px" onclick="loadHealth()"><span data-ic="chart" data-sz="15"></span> สุขภาพร้าน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadReferrals()"><span data-ic="gift" data-sz="15"></span> แนะนำเพื่อน</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="loadAudit()"><span data-ic="doc" data-sz="15"></span> บันทึกการใช้งาน</button>
+        <button class="btn ghost" style="padding:6px 12px" onclick="loadErrors()">⚠ Error log</button>
         <button class="btn ghost" style="padding:6px 12px" onclick="load()"><span data-ic="refresh" data-sz="15"></span> รีเฟรช</button>
       </div>
     </div>
@@ -70,6 +71,12 @@
       <h2 style="font-size:14px;margin:10px 0 4px">ใกล้หมดอายุ (≤7 วัน) · ไม่มีออเดอร์เดือนนี้</h2>
       <table><thead><tr><th>ร้าน</th><th>แพลน</th><th>เหลือ (วัน)</th><th>ต่ออัตโนมัติ</th><th>ออเดอร์/เดือน</th></tr></thead>
         <tbody id="healthRows"></tbody></table>
+    </div>
+    <div id="errorsPanel" style="display:none;margin-top:18px">
+      <div class="bar"><h1 style="font-size:18px">⚠ Error log <span class="muted" id="errCount" style="font-size:13px;font-weight:400"></span></h1>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('errorsPanel').style.display='none'"><span data-ic="x" data-sz="15"></span> ปิด</button></div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">ข้อผิดพลาดที่เกิดในเซิร์ฟเวอร์ (in-memory, รีเซ็ตเมื่อ restart) · สูงสุด 200 รายการ</div>
+      <div id="errRows"></div>
     </div>
   </div>
 </div>
@@ -177,6 +184,14 @@ window.loadAudit=async()=>{ try{ const d=await api('/admin/api/audit?limit=200')
     return `<tr><td style="white-space:nowrap">${esc(ts)}</td><td>${tName(e.tenant_id)}</td><td>${esc(e.actor)}</td><td><code>${esc(e.action)}</code></td><td>${esc(e.detail||'')}</td><td class="muted">${esc(e.ip||'')}</td></tr>`;
   }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:12px">ยังไม่มีบันทึก</td></tr>';
   $('auditPanel').style.display=''; $('auditPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
+window.loadErrors=async()=>{ try{ const d=await api('/admin/api/errors'); const errs=d.errors||[];
+  $('errCount').textContent='('+errs.length+')';
+  $('errRows').innerHTML = errs.length ? errs.map(e=>`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px">
+    <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:var(--muted);white-space:nowrap">${esc(e.ts||'')}</span><b style="color:var(--danger)">${esc(e.message||'')}</b></div>
+    ${e.ctx&&Object.keys(e.ctx).length?`<div style="color:var(--muted);font-size:12px;margin-top:2px">${esc(JSON.stringify(e.ctx))}</div>`:''}
+    ${e.stack?`<pre style="margin:4px 0 0;font-size:11px;color:var(--muted);white-space:pre-wrap;overflow:auto;max-height:120px">${esc(e.stack)}</pre>`:''}
+  </div>`).join('') : '<p style="color:var(--muted);text-align:center;padding:12px">ไม่มี error — ดีมาก!</p>';
+  $('errorsPanel').style.display=''; $('errorsPanel').scrollIntoView({behavior:'smooth'}); }catch(e){ $('err').textContent=e.message; } };
 $('pin').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
 $('totp').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
 </script>

@@ -24,6 +24,21 @@ const app = express();
 app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
 const PORT = process.env.PORT || 3000;
 app.disable('x-powered-by');   // don't advertise Express
+
+// ---------- In-process error tracking ----------
+const _APP_ERRORS = [];   // ring buffer, capped at 200 entries
+const _ERR_CAP = 200;
+function logAppError(err, ctx = {}) {
+  const entry = {
+    ts: new Date().toISOString(),
+    message: err && (err.message || String(err)),
+    stack: err && err.stack,
+    ctx,
+  };
+  _APP_ERRORS.unshift(entry);
+  if (_APP_ERRORS.length > _ERR_CAP) _APP_ERRORS.length = _ERR_CAP;
+  console.error('[app-error]', entry.ts, entry.message, ctx);
+}
 // Security headers on every response: block MIME-sniffing, clickjacking (frame-ancestors),
 // referrer leakage, and force HTTPS (HSTS) in SaaS. Sessions get the Secure flag in SaaS too.
 const COOKIE_SECURE = SAAS ? '; Secure' : '';
@@ -294,6 +309,23 @@ const pinOK = (req) => {
   return ok;
 };
 
+// ---------- Health / uptime ----------
+// Minimal liveness probe — uptime monitors (UptimeRobot, etc.) ping /health.
+app.get('/health', (_req, res) => res.send('ok'));
+
+// Richer status — public JSON, safe to show; used by /public/status.html.
+const _startedAt = Date.now();
+app.get('/status', (_req, res) => {
+  let dbOk = false;
+  try { db.prepare('SELECT 1').get(); dbOk = true; } catch {}
+  res.json({
+    status: dbOk ? 'ok' : 'degraded',
+    db: dbOk ? 'ok' : 'error',
+    uptimeSeconds: Math.floor((Date.now() - _startedAt) / 1000),
+    ts: new Date().toISOString(),
+  });
+});
+
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
   const posOnly = posOnlyFor(req);
@@ -526,6 +558,7 @@ app.post('/admin/api/tenants/:id/reset-pin', adminGate, (req, res) => {
   res.json({ ok: true, pin: newPin });
 });
 // Audit trail (platform admin): recent sensitive actions, optionally scoped ?tenantId=N.
+app.get('/admin/api/errors', adminGate, (_req, res) => res.json({ errors: _APP_ERRORS }));
 app.get('/admin/api/audit', adminGate, (req, res) => {
   const tid = req.query.tenantId ? Number(req.query.tenantId) : null;
   res.json({ events: listAudit({ tenantId: tid, limit: Number(req.query.limit) || 200 }) });
@@ -1588,6 +1621,16 @@ else if (!DURABLE && !SAAS) {   // SaaS never auto-seeds the YO-DEE demo — ten
     Q.setQueueFirst(true);
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
+
+// Express error middleware — catches thrown errors in route handlers.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  logAppError(err, { method: req.method, url: req.url });
+  if (!res.headersSent) res.status(500).json({ error: 'internal_error' });
+});
+
+process.on('uncaughtException', (err) => logAppError(err, { source: 'uncaughtException' }));
+process.on('unhandledRejection', (reason) => logAppError(reason instanceof Error ? reason : new Error(String(reason)), { source: 'unhandledRejection' }));
 
 app.listen(PORT, () => {
   console.log(`Mobile Queue running on ${PUBLIC_BASE_URL}`);
