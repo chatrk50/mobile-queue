@@ -1035,6 +1035,12 @@ app.post('/api/admin/forget-customer', (req, res) => {       // body: { phone } 
     res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Owner: read their own tenant's audit trail (last 100 events, PDPA transparency).
+app.get('/api/owner/audit-log', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 100));
+  res.json({ events: listAudit({ tenantId: req.tenantId, limit }) });
+});
 // ---- Sales CSV export — owner/manager accounting download ----
 app.get('/api/export/orders.csv', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

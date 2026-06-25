@@ -2157,6 +2157,8 @@ window.showFeatures=async()=>{
         <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">${icon('download',{size:14})} ส่งออก (JSON)</button>
         <button class="ghost danger" style="flex:1;padding:8px" onclick="forgetCust()">ลบข้อมูลลูกค้า</button>
       </div>
+      <button class="ghost" style="width:100%;padding:8px;margin-top:8px" onclick="showAuditLog()">${icon('shield',{size:14})} ประวัติกิจกรรมบัญชี</button>
+      <div id="auditLogPanel" style="display:none;margin-top:8px"></div>
       <button class="ghost danger" style="width:100%;padding:8px;margin-top:8px" onclick="closeAccount()">⚠ ปิดบัญชีและลบข้อมูลทั้งหมด</button>
       <div class="muted" style="font-size:11px;margin-top:8px"><a href="/privacy/" target="_blank">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/" target="_blank">ข้อกำหนด</a> · <a href="/dpa/" target="_blank">สัญญา DPA</a></div>
     </div>` : '')+
@@ -2257,6 +2259,43 @@ window.saveAcctEmail=async()=>{
 window.saveAcctPass=async()=>{ const pw=($('acctPassInp')||{}).value||'';
   if(pw.length<6){ toast('รหัสผ่านต้องมีอย่างน้อย 6 ตัว'); return; }
   try{ await api('/api/owner/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})}); toast('เปลี่ยนรหัสผ่านแล้ว ✓'); if($('acctPassInp')) $('acctPassInp').value=''; }catch(e){ toast(err(e)); } };
+// Security audit log: show last 100 account events (visible to owner only).
+window.showAuditLog=async()=>{
+  const panel=$('auditLogPanel');
+  if(!panel) return;
+  if(panel.style.display==='block'){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  panel.innerHTML='<div class="muted" style="font-size:12px">กำลังโหลด…</div>';
+  try{
+    const {events=[]}=await api('/api/owner/audit-log');
+    if(!events.length){ panel.innerHTML='<div class="muted" style="font-size:12px">ไม่มีประวัติ</div>'; return; }
+    const fmtAct=(a)=>({
+      'owner.change_password':'เปลี่ยนรหัสผ่าน',
+      'owner.change_email':'เปลี่ยนอีเมล',
+      'owner.request_email_change':'ขอเปลี่ยนอีเมล',
+      'owner.email_changed':'ยืนยันเปลี่ยนอีเมลแล้ว',
+      'owner.close_account':'ปิดบัญชี',
+      'pdpa.export':'ส่งออกข้อมูล (PDPA)',
+      'pdpa.forget':'ลบข้อมูลลูกค้า (PDPA)',
+      'line.config':'แก้ไขการตั้งค่า LINE',
+      'tenant.reset_pin':'Admin รีเซ็ต PIN',
+      'tenant.export':'Admin ส่งออกข้อมูล',
+      'tenant.suspend':'Admin ระงับบัญชี',
+      'tenant.activate':'Admin เปิดบัญชีอีกครั้ง',
+      'tenant.domain':'Admin ตั้งค่าโดเมน',
+    }[a]||a);
+    panel.innerHTML=`<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:12px">`+
+      events.map((e,i)=>{
+        const d=new Date(e.at);
+        const ds=isNaN(d)?e.at:(d.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit'})+' '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));
+        return `<div style="display:flex;gap:8px;padding:6px 8px;${i?'border-top:1px solid var(--line)':''};background:${e.action.startsWith('tenant.')||e.action.includes('suspend')?'rgba(229,91,107,.06)':''}">
+          <span class="muted" style="white-space:nowrap;flex-shrink:0">${esc(ds)}</span>
+          <span style="flex:1">${esc(fmtAct(e.action))}</span>
+          <span class="muted" style="font-size:11px;text-align:right">${e.ip?esc(String(e.ip).slice(0,15)):''}</span>
+        </div>`;
+      }).join('')+`</div>`;
+  }catch(e){ panel.innerHTML=`<div class="muted" style="font-size:12px;color:var(--danger)">${esc(err(e))}</div>`; }
+};
 // PDPA: export tenant data (blob download via the shimmed fetch) + erase one customer.
 window.exportData=async()=>{ try{ const r=await fetch('/api/admin/export'); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||r.status);
   const blob=await r.blob(), u=URL.createObjectURL(blob), a=document.createElement('a'); a.href=u; a.download='data-export.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); toast('ส่งออกข้อมูลแล้ว'); }catch(e){ toast(err(e)); } };
