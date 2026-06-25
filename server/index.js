@@ -1548,8 +1548,15 @@ app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
 // Customer requests a refund (paid online, can't come) — flags it for the cashier in history.
 app.post('/api/tickets/:ticketId/request-refund', (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
-  try { res.json(Q.requestRefund(req.params.ticketId, (req.body?.reason || '').toString().slice(0, 200) || null)); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const reason = (req.body?.reason || '').toString().slice(0, 200) || null;
+    const r = Q.requestRefund(req.params.ticketId, reason);
+    if (!r.already) {
+      // Alert the owner via LINE so they don't miss a refund request (best-effort, non-fatal).
+      try { Q.notifyOwner(`💸 ลูกค้าขอคืนเงิน ออเดอร์ #${req.params.ticketId}${reason ? ' — ' + reason.slice(0, 80) : ''}\nตรวจสอบในประวัติ แล้วกด "คืนเงิน"`); } catch { /* LINE not configured → silent */ }
+    }
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier views the attached slip image to verify manually.
 app.get('/api/tickets/:ticketId/slip', (req, res) => {
@@ -2005,6 +2012,9 @@ function doDailyReset() {
       for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
       totalZones = zoneIds.length;
     }
+    // Prune audit_log entries older than 365 days — keeps the table bounded while satisfying
+    // typical PDPA/audit retention requirements. One bulk DELETE per night, negligible overhead.
+    try { db.prepare('DELETE FROM audit_log WHERE at < ?').run(Date.now() - 365 * 86400000); } catch { /* never block reset */ }
     console.log(`[reset] queue reset to 0 for ${totalZones} zones`);
   } catch (e) {
     // Never let a reset failure crash the process or stop the next night from being scheduled.

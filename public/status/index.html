@@ -120,6 +120,8 @@
       <li><b>Defense-in-depth: attachSlip / requestRefund / assignQueueNumber / ownsTicket</b> — 4 ฟังก์ชันนี้อาศัย app.param ticketId guard เพียงอย่างเดียว; เพิ่ม AND tenant_id=TID() ลงใน SQL ของแต่ละฟังก์ชันโดยตรง ป้องกัน cross-tenant ในกรณีที่มี call site ใหม่ในอนาคต</li>
       <li><b>Staff PIN lockout → owner LINE alert</b> — เมื่อ IP พยายาม PIN พนักงานผิดพลาดถึง 8 ครั้ง (ล็อก 10 นาที) แจ้ง LINE เจ้าของร้านทันที; ขนาน owner-login alert ที่มีอยู่แล้ว (email)</li>
       <li><b>Staff "last login" ใน UI จัดการพนักงาน</b> — listStaff() เพิ่ม lastLoginAt จาก audit_log (MAX per staff:id, one query); แสดงใต้ชื่อแต่ละคน "เข้าสู่ระบบล่าสุด: X นาทีที่แล้ว / ยังไม่ได้ล็อกอิน" เพื่อ audit + detect inactive accounts</li>
+      <li><b>Refund request → owner LINE alert</b> — เมื่อลูกค้ากด "ขอคืนเงิน" (จ่ายออนไลน์แล้วมาไม่ได้) ส่ง LINE แจ้งเจ้าของร้านทันทีพร้อมเหตุผล; ป้องกันรายการตกค้างในประวัติโดยไม่มีใครรู้</li>
+      <li><b>Audit log 365-day retention</b> — daily reset ลบ audit_log entries ที่เก่ากว่า 1 ปี อัตโนมัติ; ป้องกัน DB โตไม่หยุดใน SaaS long-running instance; เป็นไปตาม PDPA retention guideline</li>
     </ul>
   </div>
 
