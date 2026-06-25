@@ -302,8 +302,10 @@ function pinLocked(ip) { const a = pinFails.get(ip); return !!(a && a.until > Da
 function countPinFail(ip) {
   const a = pinFails.get(ip) || { count: 0, until: 0 };
   a.count++;
-  if (a.count >= PIN_MAX_FAILS) { a.until = Date.now() + PIN_LOCK_MS; a.count = 0; }
+  const lockedNow = a.count >= PIN_MAX_FAILS;
+  if (lockedNow) { a.until = Date.now() + PIN_LOCK_MS; a.count = 0; }
   pinFails.set(ip, a);
+  return lockedNow; // true on the exact call that triggers lockout
 }
 // A logged-in staff session counts as having the cashier PIN, so every existing
 // PIN-gated route accepts session auth without changing each call site.
@@ -883,8 +885,12 @@ app.post('/api/staff/login', (req, res) => {
   // Match only staff of THIS tenant — the same PIN at another brand is a different person.
   const staff = db.prepare('SELECT * FROM staff WHERE active=1 AND tenant_id=?').all(req.tenantId).find((s) => verifyPin(pin, s.pin_hash));
   if (!staff) {
-    countPinFail(ip);
+    const lockedNow = countPinFail(ip);
     logAudit({ tenantId: req.tenantId, actor: 'unknown', action: 'staff.login_fail', ip });
+    if (lockedNow) {
+      // Notify the owner via LINE when lockout threshold is hit — mirrors the owner-login alert.
+      try { runWithTenant(req.tenantId, () => Q.notifyOwner(`🚨 มีการพยายาม PIN พนักงานผิดพลาด ${PIN_MAX_FAILS} ครั้งจาก IP ${ip} — ระบบล็อก 10 นาที`)); } catch { /* non-fatal */ }
+    }
     return res.status(401).json({ error: 'bad_pin' });
   }
   pinFails.delete(ip);

@@ -118,6 +118,7 @@
       <li><b>Quota warning email 80% (SaaS)</b> — แผน Free ที่ใช้ออเดอร์ถึง 80% (400/500) รายการ/เดือน จะได้รับอีเมลแจ้งเตือนอัตโนมัติครั้งเดียวต่อเดือน (idempotent ด้วย settings flag); มี CTA "อัปเกรดเป็น Pro"</li>
       <li><b>sendBillRetry no-retry fix</b> — order_limit, branch_limit, too_many_requests ถูกจัดเป็น deterministic reject (ไม่ retry); ลด delay 1.8 วิ ก่อนแสดงข้อผิดพลาด + toast เห็น "ครบโควต้า" ทันที</li>
       <li><b>Defense-in-depth: attachSlip / requestRefund / assignQueueNumber / ownsTicket</b> — 4 ฟังก์ชันนี้อาศัย app.param ticketId guard เพียงอย่างเดียว; เพิ่ม AND tenant_id=TID() ลงใน SQL ของแต่ละฟังก์ชันโดยตรง ป้องกัน cross-tenant ในกรณีที่มี call site ใหม่ในอนาคต</li>
+      <li><b>Staff PIN lockout → owner LINE alert</b> — เมื่อ IP พยายาม PIN พนักงานผิดพลาดถึง 8 ครั้ง (ล็อก 10 นาที) แจ้ง LINE เจ้าของร้านทันที; ขนาน owner-login alert ที่มีอยู่แล้ว (email)</li>
     </ul>
   </div>
 
