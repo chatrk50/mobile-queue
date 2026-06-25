@@ -1144,6 +1144,7 @@ app.post('/api/billing/subscribe', async (req, res) => {       // body: { token,
   try {
     const r = await subscribeTenant(req.tenantId, req.body?.token, { plan: req.body?.plan, interval: req.body?.interval, email: req.body?.email || null });
     clearDunningLog(req.tenantId); // fresh start on renewal — allow future dunning cycle
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'billing.subscribe', detail: 'plan=' + r.plan + ' interval=' + r.interval, ip: ipOf(req) });
     res.json(r);
     // Payment receipt — fire-and-forget.
     const t0 = getTenant(req.tenantId); if (t0?.owner_email) {
@@ -1161,6 +1162,7 @@ app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interva
   try {
     const r = await prorateUpgrade(req.tenantId, { plan: req.body?.plan, interval: req.body?.interval });
     clearDunningLog(req.tenantId);
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'billing.upgrade', detail: 'plan=' + r.plan + ' interval=' + r.interval, ip: ipOf(req) });
     res.json(r);
     // Payment receipt — fire-and-forget.
     const t1 = getTenant(req.tenantId); if (t1?.owner_email) {
@@ -1178,6 +1180,7 @@ app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interva
 app.post('/api/billing/cancel', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const result = cancelSubscription(req.tenantId);
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'billing.cancel', detail: 'plan=' + result.plan, ip: ipOf(req) });
   res.json(result);
   // Cancellation confirmation — fire-and-forget.
   const tc = getTenant(req.tenantId); if (tc?.owner_email) {
