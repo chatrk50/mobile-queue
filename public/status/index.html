@@ -109,6 +109,7 @@
       <li><b>Per-tenant tender customisation (SaaS isolation)</b> — updateTender() แก้ global table ที่ใช้ร่วมกัน ทำให้ tenant A เปลี่ยน label/active ส่งผลถึง tenant B ด้วย; เพิ่ม listTendersForTenant() + updateTenderSetting() ที่ layer per-tenant overrides ผ่าน settings table (namespaced t&lt;N&gt;:tender:&lt;id&gt;:field); ใน SAAS mode routes เปลี่ยนมาใช้ฟังก์ชันใหม่, single-tenant ยังใช้ global table เหมือนเดิม; tenderRecon ก็ใช้ per-tenant tenders สำหรับ label/fee calc</li>
       <li><b>awardPoints tenant guard (defense-in-depth)</b> — SELECT orders ไม่มี tenant filter; เพิ่ม JOIN stores WHERE tenant_id=TID() ให้ฟังก์ชัน validate เอง แม้ setOrderPaid จะ validate ก่อนแล้ว — ป้องกัน future call site ที่อาจข้ามขั้นตอน</li>
       <li><b>Staff branch assignment UI (SaaS multi-branch)</b> — ใน SAAS mode ที่มี &gt;1 สาขา ฟอร์มเพิ่ม/แก้ไขพนักงานแสดง checkboxes เลือกสาขาที่รับผิดชอบ (ไม่เลือก = ทุกสาขา); role=owner ซ่อน checkboxes; ส่ง branchIds ไปพร้อม PUT ให้ server enforce ได้ทันที</li>
+      <li><b>Cashier branch-filter UX (SaaS)</b> — แคชเชียร์ที่มี branchIds จำกัดเห็นเฉพาะ zone ของสาขาตัวเองใน dashboard (ME.branchIds filter ใน boot()); server-side app.param ยังเป็น hard boundary อยู่ — ฝั่ง client filter เพื่อ UX เท่านั้น</li>
     </ul>
   </div>
 

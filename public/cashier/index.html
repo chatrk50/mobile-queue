@@ -1682,7 +1682,9 @@ async function boot(){
     + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">📊 สรุปวันนี้ ▾</button>'
     + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
   html = onboardingCard() + html;            // first-run activation checklist (empty SaaS shop)
+  const myBranches=CFG.saas&&ME&&ME.branchIds&&ME.branchIds.length>0?new Set(ME.branchIds):null;
   for(const s of stores){
+    if(myBranches&&!myBranches.has(s.id)) continue; // SaaS: skip branches not assigned to this staff
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     html += `<h2 style="margin:20px 2px 2px;font-size:15px;color:var(--accent)">${esc(s.name)}</h2>`;
     for(const z of zs){ zones.push(z); html += zonePanel(z); }
