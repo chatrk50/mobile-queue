@@ -30,6 +30,11 @@ const raw = async (method, path, bodyStr, headers = {}) => {
 async function setupBrand(name, pkg, unit, pin) {
   const c = client();
   const su = await c('POST', '/api/signup', { name, package: pkg, unit, pin });
+  if (su.data?.error === 'too_many_signups') {
+    throw new Error('signup rate limit hit — this harness registers ~6 brands from one IP, but '
+      + 'SIGNUP_MAX defaults to 5/hr. Boot the target server with SIGNUP_MAX=100 for the dry run '
+      + '(e.g. `SIGNUP_MAX=100 npm start`), then restore it after. See docs/SAAS-DEPLOY.md §3.');
+  }
   if (!su.data?.slug) throw new Error('signup failed: ' + JSON.stringify(su.data));
   const slug = su.data.slug;
   await c('POST', `/b/${slug}/api/staff/login`, { pin });            // owner session

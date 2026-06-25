@@ -34,7 +34,11 @@ DB**. The single-shop deployment (YO-DEE, `main`) is never touched.
 - Open `PUBLIC_BASE_URL/signup` → register a test brand → confirm it lands on
   `/b/<slug>/cashier/` and logs in with the PIN you chose.
 - Open `PUBLIC_BASE_URL/admin` → enter `SAAS_ADMIN_PIN` → you should see the test brand.
-- Automated: `BASE=<PUBLIC_BASE_URL> SAAS_ADMIN_PIN=<pin> npm run dryrun` (32 checks).
+- Automated: `BASE=<PUBLIC_BASE_URL> SAAS_ADMIN_PIN=<pin> npm run dryrun` (64 checks: full
+  two-brand lifecycle — signup→order→pay→loyalty→admin→referral→health→PDPA erasure→isolation).
+  > The harness registers ~6 brands from one IP, so the target server must be booted with a raised
+  > `SIGNUP_MAX` (e.g. `SIGNUP_MAX=100`) for the run, then restored. Best practice: run the dry run
+  > against a throwaway/staging instance, not the production service that real brands use.
 
 ## 4. (Optional) Custom domains for brands  — **Business plan**
 For a Business-plan brand that wants `shop.theirbrand.com`:
