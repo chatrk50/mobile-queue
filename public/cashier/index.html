@@ -97,6 +97,9 @@
     </div>
   </div>
 
+  <!-- TRIAL EXPIRY BANNER — shown when SaaS plan is expiring soon (owner only) -->
+  <div id="trialBanner" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;color:#c0394a;text-align:center;padding:10px 16px;font-size:13px;font-weight:600;margin:8px 0"></div>
+
   <!-- LOGIN -->
   <div id="loginCard" class="card" style="max-width:360px;margin:48px auto;text-align:center">
     <h1>เข้าสู่ระบบพนักงาน</h1>
@@ -619,7 +622,7 @@ window.login=async()=>{
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
-window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
+window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[]; const tb=$('trialBanner'); if(tb){ tb.style.display='none'; tb.innerHTML=''; }
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
@@ -1677,6 +1680,19 @@ async function boot(){
   }, 5000);
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
+  // Trial/plan expiry banner — only for owner on SaaS deployments.
+  if(CFG.saas && (!ME||ME.role==='owner')){
+    try{
+      const bill=await api('/api/billing/status');
+      const tb=$('trialBanner');
+      if(tb && bill && bill.expiringSoon){
+        const lbl=bill.plan==='business'?'Business':'Pro';
+        const msg=bill.trial?`ทดลองใช้ ${lbl} จะหมดใน <b>${bill.daysLeft} วัน</b>`:`แพ็กเกจ ${lbl} จะหมดใน <b>${bill.daysLeft} วัน</b>`;
+        tb.innerHTML=`⚠️ ${msg} — <button onclick="showFeatures()" style="background:none;border:none;color:inherit;font-weight:700;cursor:pointer;text-decoration:underline;padding:0;font-size:inherit">อัปเกรด/ต่ออายุ →</button>`;
+        tb.style.display='';
+      }
+    }catch(e){}
+  }
 }
 // Today-at-a-glance pulse strip (manager/owner). Reads /api/report (dailyReport); silently
 // hides for cashiers or on error. Refreshed on boot, every 60s, and after each completed sale.
