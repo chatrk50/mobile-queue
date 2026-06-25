@@ -428,13 +428,21 @@
 <style>
   /* Cash keypad: big touch targets + touch-action:manipulation kills the iPad 300ms double-tap
      delay that made taps feel like they "didn't register". user-select/none stops text-select on hold. */
-  .cashk,.cashq{min-height:62px;font-size:26px;font-weight:800;border-radius:13px;cursor:pointer;
+  /* Smart quick-cash tiles (exact + contextual notes) — the primary, one-tap path. */
+  .qcash{min-height:66px;border-radius:16px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--navy);
     -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;
-    display:flex;align-items:center;justify-content:center;transition:background .06s,transform .06s;border:1.5px solid var(--line)}
-  .cashk{background:#fff;color:var(--navy)}
-  .cashk:active{background:#e4ebf3;transform:scale(.96)}
-  .cashq{font-size:19px;background:#e9f8fb;border-color:#bfe3ec;color:#0e6b7e}
-  .cashq:active{background:#cfeef5;transform:scale(.96)}
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:800;transition:transform .06s,background .06s,border-color .06s}
+  .qcash:active{transform:scale(.97);background:#eef3f8}
+  .qcash .v{font-size:22px;line-height:1.1}
+  .qcash .t{font-size:11px;font-weight:700;color:var(--muted)}
+  .qcash.exact{background:rgba(47,194,166,.12);border-color:var(--accent2,#2fc2a6)}
+  .qcash.exact .v,.qcash.exact .t{color:#0c7a63}
+  .qcash.sel{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset}
+  /* Compact numpad — the exception, revealed only via "ระบุจำนวนเอง". */
+  .ckey{min-height:50px;font-size:22px;font-weight:800;border-radius:12px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--navy);
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;
+    display:flex;align-items:center;justify-content:center;transition:transform .06s,background .06s}
+  .ckey:active{transform:scale(.95);background:#e4ebf3}
   /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
   .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
     cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
@@ -462,31 +470,33 @@
 </style>
 <div id="cashPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:94vh;overflow:auto">
-    <div class="row between"><h1 style="margin:0">💵 รับเงินสด</h1><button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button></div>
-    <div class="row between" style="font-size:13px;margin:10px 2px 6px"><span class="muted">ยอดที่ต้องชำระ</span><b style="color:var(--navy);font-size:17px">฿<span id="cashDue">0</span></b></div>
-    <div style="background:var(--navy,#1e3a5f);color:#fff;border-radius:12px;padding:12px 18px;text-align:right;margin-bottom:10px">
-      <div style="font-size:11px;opacity:.7">รับเงินมา</div>
-      <div style="font-size:30px;font-weight:800;line-height:1.1">฿<span id="cashRecvDisp">0</span></div></div>
-    <!-- PRIMARY: tap the banknotes the customer handed (adds up) — covers almost every cash sale. -->
-    <div style="font-size:12px;color:var(--muted);margin:0 2px 5px">แตะธนบัตรที่ลูกค้าให้มา (กดเพิ่มได้)</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
-      <button class="cashq" onclick="addCash(20)">+฿20</button><button class="cashq" onclick="addCash(50)">+฿50</button><button class="cashq" onclick="addCash(100)">+฿100</button>
-      <button class="cashq" onclick="addCash(500)">+฿500</button><button class="cashq" onclick="addCash(1000)">+฿1000</button><button class="cashq" onclick="cashExact()" style="background:#d9f5ea;border-color:#9fe0cb;color:#0c5e48">พอดี ✓</button>
+    <div class="row between" style="margin-bottom:2px">
+      <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M6 12h.01M18 12h.01"/></svg>รับเงินสด</h1>
+      <button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button>
     </div>
-    <!-- SECONDARY: number pad for odd amounts / coins. -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
-      <button class="cashk" onclick="cashKey('7')">7</button><button class="cashk" onclick="cashKey('8')">8</button><button class="cashk" onclick="cashKey('9')">9</button>
-      <button class="cashk" onclick="cashKey('4')">4</button><button class="cashk" onclick="cashKey('5')">5</button><button class="cashk" onclick="cashKey('6')">6</button>
-      <button class="cashk" onclick="cashKey('1')">1</button><button class="cashk" onclick="cashKey('2')">2</button><button class="cashk" onclick="cashKey('3')">3</button>
-      <button class="cashk" onclick="cashKey('.')">.</button><button class="cashk" onclick="cashKey('0')">0</button><button class="cashk" onclick="cashClear()" style="color:var(--danger)">ล้าง C</button>
+    <!-- Hero: amount due -->
+    <div style="text-align:center;padding:8px 0 2px">
+      <div class="muted" style="font-size:13px">ต้องชำระ</div>
+      <div style="font-size:34px;font-weight:800;color:var(--navy);line-height:1.1">฿<span id="cashDue">0</span></div>
     </div>
-    <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin:12px 0">
-      <span class="muted" style="font-size:14px">เงินทอน</span>
-      <div id="cashChange" style="font-size:24px;font-weight:800;color:#16876f">฿0</div></div>
-    <div class="row" style="gap:8px">
-      <button class="ghost" style="flex:1" onclick="cashBack()">ย้อนกลับ</button>
-      <button class="ok" id="cashConfirmBtn" style="flex:2;min-height:52px" onclick="confirmCash()">ยืนยันรับเงิน</button>
+    <!-- PRIMARY: smart quick-cash — exact + the nearest notes above the bill (each shows its change). -->
+    <div id="cashQuick" style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0"></div>
+    <!-- EXCEPTION: compact numpad, hidden until "ระบุจำนวนเอง". -->
+    <div id="cashPadWrap" style="display:none;margin:8px 0">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+        <button class="ckey" onclick="cashKey('7')">7</button><button class="ckey" onclick="cashKey('8')">8</button><button class="ckey" onclick="cashKey('9')">9</button>
+        <button class="ckey" onclick="cashKey('4')">4</button><button class="ckey" onclick="cashKey('5')">5</button><button class="ckey" onclick="cashKey('6')">6</button>
+        <button class="ckey" onclick="cashKey('1')">1</button><button class="ckey" onclick="cashKey('2')">2</button><button class="ckey" onclick="cashKey('3')">3</button>
+        <button class="ckey" onclick="cashKey('0')">0</button><button class="ckey" onclick="cashKey('00')">00</button><button class="ckey" style="color:var(--danger)" onclick="cashClear()" aria-label="ลบ">⌫</button>
+      </div>
     </div>
+    <button class="ghost" id="cashToggle" style="width:100%;padding:8px;font-size:13px;font-weight:700;color:#0e7c93" onclick="toggleCashPad()">ระบุจำนวนเอง</button>
+    <!-- Received + change -->
+    <div style="background:var(--surface,#f1f5f9);border-radius:13px;padding:12px 16px;margin:8px 0 12px">
+      <div class="row between" style="align-items:baseline"><span class="muted" style="font-size:14px">รับมา</span><b style="font-size:20px;color:var(--navy)">฿<span id="cashRecvDisp">0</span></b></div>
+      <div class="row between" style="align-items:baseline;margin-top:6px"><span class="muted" style="font-size:14px" id="cashChangeLabel">เงินทอน</span><b id="cashChange" style="font-size:25px;color:#16876f">฿0</b></div>
+    </div>
+    <button class="ok" id="cashConfirmBtn" style="width:100%;min-height:54px;font-size:17px" onclick="confirmCash()">ยืนยันรับเงิน</button>
   </div>
 </div>
 <!-- Generic in-app modal (replaces the browser's native prompt()/confirm() so dialogs match the app
@@ -2057,25 +2067,42 @@ function pickPayMethod(amount){ _payAmt=Number(amount)||0; $('payMethodAmt').tex
 window.choosePayMethod=(m)=>{
   if(m==='cash'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
   $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
-// Cash received → change calculator (or leave blank for exact). Resolves the pay picker with 'cash'.
-// Keypad-driven cash entry. _cashRecv is the typed string ('' = treat as exact).
-let _cashRecv='';
+// Cash received → change. Pro POS pattern: lead with smart "quick cash" (exact + the nearest notes
+// above the bill, each showing its change); the numpad is the exception, hidden behind a toggle.
+// _cashRecv: '' = exact (received = due); otherwise the chosen/typed amount as a string.
+let _cashRecv='', _padOpen=false;
 const fmt0=(n)=>(Number(n)||0).toLocaleString('en-US');
-function openCashPop(){ _cashRecv=''; $('cashDue').textContent=fmt0(_payAmt); calcChange(); $('cashPop').style.display='flex'; }
-window.cashKey=(d)=>{
-  if(d==='.'){ if(_cashRecv.includes('.')) return; if(_cashRecv==='') _cashRecv='0'; }
-  if(_cashRecv.replace('.','').length>=9) return;            // sane cap
-  _cashRecv = (_cashRecv==='0' && d!=='.') ? d : (_cashRecv + d);
-  calcChange(); };
-window.cashClear=()=>{ _cashRecv=''; calcChange(); };
-window.setCash=(v)=>{ _cashRecv=String(v); calcChange(); };  // (legacy) replace with a fixed amount
-// Banknote tap: ADD the note to the running "received" total (tap each note the customer handed).
-window.addCash=(n)=>{ const cur=Number(_cashRecv)||0; _cashRecv=String(Math.round((cur+n)*100)/100); calcChange(); };
-window.cashExact=()=>{ _cashRecv=String(_payAmt); calcChange(); };
-window.calcChange=()=>{ const due=_payAmt, recv=_cashRecv===''?due:(Number(_cashRecv)||0), box=$('cashChange'), btn=$('cashConfirmBtn');
-  $('cashRecvDisp').textContent = _cashRecv==='' ? fmt0(due) : (_cashRecv==='.' ? '0.' : _cashRecv);
-  if(_cashRecv!=='' && recv<due){ box.textContent='ขาด ฿'+fmt0(due-recv); box.style.color='var(--danger)'; if(btn){btn.disabled=true;btn.style.opacity=.5;} }
-  else { box.textContent='฿'+fmt0(recv-due); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
+// The notes worth suggesting: standard Thai banknotes above the bill, plus round-ups so even a large
+// bill still offers a few sensible "customer handed this" options. Nearest 3, ascending.
+function quickCashOpts(due){
+  const set=new Set();
+  [20,50,100,500,1000].forEach((n)=>{ if(n>due) set.add(n); });
+  const up=(step)=>Math.floor(due/step)*step+step;   // next round number STRICTLY above due (never empty)
+  [up(100), up(500), up(1000)].forEach((v)=>set.add(v));
+  return [...set].sort((a,b)=>a-b).slice(0,3);
+}
+function renderCashQuick(){
+  const due=_payAmt, exactSel=(_cashRecv==='')?'sel':'';
+  let html=`<button class="qcash exact ${exactSel}" onclick="pickCash('')"><span class="v">พอดี</span><span class="t">฿${fmt0(due)}</span></button>`;
+  html+=quickCashOpts(due).map((v)=>`<button class="qcash ${(_cashRecv!==''&&Number(_cashRecv)===v)?'sel':''}" onclick="pickCash(${v})"><span class="v">฿${fmt0(v)}</span><span class="t">ทอน ฿${fmt0(Math.max(0,v-due))}</span></button>`).join('');
+  $('cashQuick').innerHTML=html;
+}
+function openCashPop(){ _cashRecv=''; _padOpen=false;
+  $('cashPadWrap').style.display='none'; $('cashQuick').style.display='grid'; $('cashToggle').textContent='ระบุจำนวนเอง';
+  $('cashDue').textContent=fmt0(_payAmt); renderCashQuick(); calcChange(); $('cashPop').style.display='flex'; }
+// Quick-cash tap SETS the received amount (one note / exact = one tap, the 90% case).
+window.pickCash=(v)=>{ _cashRecv = (v===''?'':String(v)); if(_padOpen) toggleCashPad(); renderCashQuick(); calcChange(); };
+// Toggle the numpad (the exception path) for odd amounts / combos.
+window.toggleCashPad=()=>{ _padOpen=!_padOpen;
+  $('cashPadWrap').style.display=_padOpen?'block':'none'; $('cashQuick').style.display=_padOpen?'none':'grid';
+  $('cashToggle').textContent=_padOpen?'← ปุ่มเงินด่วน':'ระบุจำนวนเอง';
+  if(_padOpen){ _cashRecv=''; } else { renderCashQuick(); } calcChange(); };
+window.cashKey=(d)=>{ if((_cashRecv+d).length>9) return; _cashRecv=(_cashRecv==='0'?'':_cashRecv)+d; calcChange(); };
+window.cashClear=()=>{ _cashRecv=_cashRecv.slice(0,-1); calcChange(); };   // ⌫ backspace one digit
+window.calcChange=()=>{ const due=_payAmt, recv=(_cashRecv==='')?due:(Number(_cashRecv)||0), box=$('cashChange'), lab=$('cashChangeLabel'), btn=$('cashConfirmBtn');
+  $('cashRecvDisp').textContent=fmt0(recv);
+  if(recv<due){ lab.textContent='ขาดอีก'; box.textContent='฿'+fmt0(due-recv); box.style.color='var(--danger)'; if(btn){btn.disabled=true;btn.style.opacity=.5;} }
+  else { lab.textContent='เงินทอน'; box.textContent='฿'+fmt0(recv-due); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
 window.confirmCash=()=>{ $('cashPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r('cash'); };
 window.cashBack=()=>{ $('cashPop').style.display='none'; $('payMethodPop').style.display='flex'; };   // back to tender picker
 window.markPaid=async(tid,status,amount)=>{
