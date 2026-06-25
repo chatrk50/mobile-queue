@@ -139,7 +139,7 @@ const tById=(id)=>TENANTS.find(t=>t.id===id)||{};
 window.setPlan=async(id,plan)=>{ try{ await api('/admin/api/tenants/'+id+'/plan',{method:'POST',body:JSON.stringify({plan})}); load(); }catch(e){ $('err').textContent=e.message; } };
 window.setDomain=async(id)=>{ const d=prompt('โดเมนของแบรนด์ (เช่น shop.brand.com) — ว่าง = ลบ\nอย่าลืมชี้ DNS (CNAME) มาที่โฮสต์นี้ + เพิ่มโดเมนใน Render', tById(id).domain||''); if(d===null) return;
   try{ const r=await api('/admin/api/tenants/'+id+'/domain',{method:'POST',body:JSON.stringify({domain:d})}); $('err').textContent=''; load(); }
-  catch(e){ $('err').textContent = e.message==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(e.message==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':e.message); } };
+  catch(e){ $('err').textContent = e.message==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(e.message==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':(e.message==='reserved_domain'?'โดเมนนี้สงวนไว้สำหรับระบบ — ใช้ไม่ได้':e.message)); } };
 window.suspend=async(id)=>{ if(!confirm('ระงับแบรนด์นี้? ร้านจะเข้าใช้งานไม่ได้')) return;
   try{ await api('/admin/api/tenants/'+id+'/suspend',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };
 window.activate=async(id)=>{ try{ await api('/admin/api/tenants/'+id+'/activate',{method:'POST',body:'{}'}); load(); }catch(e){ $('err').textContent=e.message; } };

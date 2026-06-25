@@ -2289,7 +2289,7 @@ window.saveDomain=async(domain)=>{ const d=(domain||'').trim();
   if(!d && !confirm('ลบโดเมนของร้าน? ลูกค้าจะกลับไปใช้ลิงก์เดิม (/b/ร้าน/)')) return;
   try{ const r=await api('/api/owner/domain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain:d})});
     toast(r.domain?('บันทึกโดเมน '+r.domain+' แล้ว — ตั้ง DNS CNAME → '+(r.cnameTarget||'โฮสต์นี้')):'ลบโดเมนแล้ว'); showFeatures(); }
-  catch(e){ const m=err(e); toast(m==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(m==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':(m==='plan_required'?'ต้องใช้แพ็กเกจ Business เพื่อใช้โดเมนของตัวเอง':m))); } };
+  catch(e){ const m=err(e); toast(m==='domain_taken'?'โดเมนนี้ถูกใช้แล้ว':(m==='bad_domain'?'รูปแบบโดเมนไม่ถูกต้อง':(m==='reserved_domain'?'โดเมนนี้สงวนไว้สำหรับระบบ — ใช้ไม่ได้':(m==='plan_required'?'ต้องใช้แพ็กเกจ Business เพื่อใช้โดเมนของตัวเอง':m)))); } };
 // Per-tenant brand editor (SaaS): logo uploaded as a resized data URL; name/short/unit/theme.
 let _brandLogo=null;
 window.onLogoFile=async(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;

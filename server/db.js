@@ -777,10 +777,21 @@ export function getTenantByDomain(host) {
   const h = String(host || '').toLowerCase().trim();
   return h ? (db.prepare('SELECT * FROM tenants WHERE domain=?').get(h) || null) : null;
 }
-/** Map (or clear) a tenant's custom domain. Pass '' to remove. Validated + unique. */
+// Platform-owned hostnames a tenant must NEVER be allowed to claim: doing so would poison the
+// Host-header → tenant resolution (see index.js) and let one tenant hijack the platform root /
+// landing / signup / another visitor's traffic. Derived from the deploy's own base URLs.
+const hostOf = (u) => String(u || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
+const RESERVED_DOMAINS = new Set(
+  [process.env.SAAS_BASE, process.env.PUBLIC_BASE_URL, process.env.BASE_URL]
+    .map(hostOf).filter(Boolean)
+    .flatMap((h) => [h, h.startsWith('www.') ? h.slice(4) : 'www.' + h])
+    .concat(['localhost', '127.0.0.1'])
+);
+/** Map (or clear) a tenant's custom domain. Pass '' to remove. Validated + unique + not reserved. */
 export function setTenantDomain(tenantId, domain) {
   const d = String(domain || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (d && !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) throw new Error('bad_domain');
+  if (d && RESERVED_DOMAINS.has(d)) throw new Error('reserved_domain');   // can't claim the platform's own host
   if (d) { const ex = db.prepare('SELECT id FROM tenants WHERE domain=? AND id<>?').get(d, tenantId); if (ex) throw new Error('domain_taken'); }
   db.prepare('UPDATE tenants SET domain=? WHERE id=?').run(d || null, tenantId);
   return getTenant(tenantId);
