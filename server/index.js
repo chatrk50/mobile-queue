@@ -1889,6 +1889,14 @@ else if (!DURABLE && !SAAS) {   // SaaS never auto-seeds the YO-DEE demo — ten
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
 
+// 404 catch-all: JSON for /api/ paths, redirect everything else to the landing page.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/admin/')) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  res.redirect('/landing/');
+});
+
 // Express error middleware — catches thrown errors in route handlers.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
