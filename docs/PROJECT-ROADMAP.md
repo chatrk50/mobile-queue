@@ -15,7 +15,7 @@ verification + close-account) · `dryrun` 32.
 Working end-to-end: signup → 60-day trial → self-serve pay (Omise, Pro/Business, monthly/yearly,
 founder, referral) → onboard → multi-tenant isolation → per-tenant LINE + brand + custom domain →
 platform admin → owner email/Google login → forgot-password (token, SHA-256) → email-change
-verification (two-step, 24h token) → PDPA export/erasure/close-account → DPA template → security hardening.
+verification (two-step, 24h token) → PDPA export/erasure/close-account → DPA template → security hardening → SEO/social (OG tags + robots.txt + mobile nav).
 
 ---
 
@@ -109,6 +109,8 @@ tables) — commit da7a4ca.
 **Should:** [x] vertical templates (yogurt/coffee/tea/food/bakery) — one-tap starter menus in the
 cashier empty state + `/api/menu-templates` & `/api/admin/apply-template` (commit 3dde7af) ·
 [ ] FB/LINE community seeding ·
+[x] SEO fundamentals — Open Graph + Twitter card meta on landing + signup (LINE/FB share previews);
+      `robots.txt` blocking /admin/ /api/ /b/; mobile hamburger nav on landing page ·
 [x] onboarding wizard (first-menu) — first-run activation checklist in the cashier (add item →
 brand → LINE → open), owner-only, auto-hides once activated (commit fe5cc55) · [x] referral
 tracking dashboard — 🎁 admin panel (invite code · referred-by · count + % via referral + top
