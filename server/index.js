@@ -1013,7 +1013,8 @@ app.get('/api/billing/status', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const bs = billingStatus(req.tenantId);
   // Attach order-quota usage so the cashier panel can warn free tenants approaching the 500/mo limit.
-  if (bs.plan === 'free' && bs.configured !== false) {
+  // Always attached regardless of BILLING_ON — the limit is enforced even without Omise configured.
+  if (bs.plan === 'free') {
     const u = Q.tenantUsage(req.tenantId);
     bs.ordersThisMonth = u.ordersThisMonth;
     bs.maxOrdersPerMonth = u.maxOrdersPerMonth;
@@ -1300,7 +1301,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
     }
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, order_limit: 402 };
     res.status(map[e.message] || 400).json({ error: e.message });
   }
 });
@@ -1632,7 +1633,7 @@ app.post('/api/finance', (req, res) => {
 app.get('/api/branches', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranches()); });
 app.post('/api/branches', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.createBranch(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+  try { res.json(Q.createBranch(req.body || {})); } catch (e) { res.status(e.message === 'branch_limit' ? 402 : 400).json({ error: e.message }); }
 });
 app.post('/api/branches/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1754,7 +1755,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
     res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
   } catch (e) {
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, order_limit: 402 };
     res.status(map[e.message] || 400).json({ error: e.message });
   }
 });
