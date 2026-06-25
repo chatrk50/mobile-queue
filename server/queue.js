@@ -1596,26 +1596,38 @@ export function createOrder(zoneId, items, opts = {}) {
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId, freeDisc, freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
+    // Queue-first: assign the queue number IN THE SAME TRANSACTION as the order. Previously this ran
+    // in a SEPARATE transaction after the order committed — on prod (Turso) a stale write-stream could
+    // make that second tx fail while the order tx had already committed, stranding the order in
+    // "รอชำระเงิน" with no number against the toggle. Atomic = an order is never created-but-unnumbered.
+    if (getQueueFirst()) {
+      const zr = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
+      const next = (zr.last_number || 0) + 1;
+      db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
+      db.prepare("UPDATE tickets SET number=?, code=?, status='waiting', numbered_at=datetime('now') WHERE id=? AND number=0")
+        .run(next, code(zr.prefix, next), tinfo.lastInsertRowid);
+    }
     logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
   });
-  const r = tx();
+  // Run the whole create+number transaction with Turso resilience: a stale write-stream (free instance
+  // waking from idle) throws on the first write — reconnect + retry ONCE. The clientToken/dedup
+  // conditional inserts keep the retry idempotent (no duplicate order). queue-first numbering is now
+  // INSIDE this tx, so the retry re-numbers atomically too — an order is never left unnumbered.
+  let r;
+  try { r = tx(); }
+  catch (e) {
+    const msg = String((e && e.message) || '');
+    if (DURABLE && STREAM_STALE.test(msg)) {
+      console.error('[order] createOrder hit a stale Turso stream — reconnecting + retrying once:', msg);
+      reconnectDb();
+      r = tx();
+    } else throw e;
+  }
   if (r.idempotent && !r.ticket) {   // token race lost inside the tx → return the winning order
     const ex = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
     const o = ex ? db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ex.id) : null;
     return { ticket: ex, total: o?.total ?? 0, idempotent: true };
-  }
-
-  // Queue-first: issue the queue number now (at order creation) so it joins the line immediately —
-  // even before payment, INCLUDING a held bill ("พักบิล / จ่ายทีหลัง"). The เข้าคิวทันที toggle is the
-  // single source of truth: ON → every order gets a number now (unpaid ones wait in the queue with a
-  // "ค้างชำระ" badge); OFF (pay-first) → number is issued only when payment is confirmed.
-  // RESILIENT: on prod (Turso) a stale write-stream can make assignQueueNumber throw — previously this
-  // was silently swallowed, stranding the order in "รอชำระเงิน" against the toggle. Now we reconnect +
-  // retry once (mirrors the midnight reset) and LOG if it still fails, so the toggle is honoured.
-  if (getQueueFirst() && r.ticket && r.ticket.number === 0) {
-    const numbered = assignQueueNumberResilient(r.ticket.id);
-    if (numbered) r.ticket = numbered;
   }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
