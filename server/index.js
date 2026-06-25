@@ -296,12 +296,16 @@ app.get('/manifest.webmanifest', (req, res) => {
     ],
   });
 });
-// Sitemap for the public marketing pages (uses request host so it works on any domain).
+// Sitemap + robots.txt served dynamically so the host is always correct.
 app.get('/sitemap.xml', (req, res) => {
   const base = `${req.protocol}://${req.get('host')}`;
-  const pages = ['/', '/landing/', '/signup/', '/login/', '/help/', '/help/line/', '/privacy/', '/terms/', '/dpa/', '/status/'];
+  const pages = ['/', '/landing/', '/signup/', '/login/', '/help/', '/help/line/', '/privacy/', '/terms/', '/dpa/'];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.map(p => `  <url><loc>${base}${p}</loc></url>`).join('\n')}\n</urlset>`;
   res.set('Content-Type', 'application/xml').send(xml);
+});
+app.get('/robots.txt', (req, res) => {
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.type('text/plain').send(`User-agent: *\nDisallow: /admin/\nDisallow: /api/\nDisallow: /b/\nAllow: /\n\nSitemap: ${base}/sitemap.xml\n`);
 });
 
 app.use(express.static(join(__dirname, '..', 'public')));
