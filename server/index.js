@@ -863,11 +863,19 @@ app.get('/api/menu', (req, res) => res.json(Q.listMenu(req.query.channelId ? Num
 app.get('/api/channels', (req, res) => res.json(Q.listChannels().filter((c) => c.active !== 0)));
 // ---------- Pricing management (owner): tier markup, channel commission, item prices ----------
 app.get('/api/price-tiers', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listPriceTiers()); });
+app.post('/api/price-tiers', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.status(201).json(Q.createPriceTier(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/price-tiers/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updatePriceTier(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.get('/api/channels/all', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listChannels()); });
+app.post('/api/channels', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.status(201).json(Q.createChannel(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/channels/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateChannel(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }

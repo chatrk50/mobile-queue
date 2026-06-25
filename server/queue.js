@@ -226,7 +226,7 @@ export function evaluateSoonNotifications(zoneId, threshold) {
 /** Customer rating (1..5) for a served ticket. */
 export function setRating(ticketId, stars) {
   const s = Math.max(1, Math.min(5, Math.round(Number(stars) || 0)));
-  const t = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
+  const t = db.prepare('SELECT id FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   db.prepare('UPDATE tickets SET rating = ? WHERE id = ?').run(s, ticketId);
   return { ok: true, rating: s };
@@ -962,6 +962,16 @@ export function listPriceTiers() {
 export function listChannels() {
   return db.prepare('SELECT * FROM channels WHERE tenant_id=? ORDER BY sort, id').all(TID());
 }
+/** Owner creates a new (non-default) price tier for this tenant. */
+export function createPriceTier({ name, markup_pct = 0 }) {
+  const tid = TID();
+  const nm = (name || '').toString().trim().slice(0, 40);
+  if (!nm) throw new Error('name_required');
+  const mk = Math.max(0, Math.min(1000, Number(markup_pct) || 0));
+  const sort = (db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM price_tiers WHERE tenant_id=?').get(tid)?.s) || 1;
+  const info = db.prepare('INSERT INTO price_tiers (name, is_default, markup_pct, sort, tenant_id) VALUES (?,0,?,?,?)').run(nm, mk, sort, tid);
+  return db.prepare('SELECT * FROM price_tiers WHERE id=?').get(info.lastInsertRowid);
+}
 /** Owner edits a price tier's default markup % over base (and optionally its name). */
 export function updatePriceTier(id, { markup_pct, name }) {
   const cur = db.prepare('SELECT * FROM price_tiers WHERE id=? AND tenant_id=?').get(id, TID());
@@ -970,6 +980,19 @@ export function updatePriceTier(id, { markup_pct, name }) {
   const nm = name != null ? (name.toString().trim().slice(0, 40) || cur.name) : cur.name;
   db.prepare('UPDATE price_tiers SET markup_pct=?, name=? WHERE id=?').run(mk, nm, id);
   return db.prepare('SELECT * FROM price_tiers WHERE id=?').get(id);
+}
+/** Owner creates a new sales channel for this tenant. */
+export function createChannel({ name, commission_pct = 0, tier_id = null }) {
+  const tid = TID();
+  const nm = (name || '').toString().trim().slice(0, 40);
+  if (!nm) throw new Error('name_required');
+  const c = Math.max(0, Math.min(100, Number(commission_pct) || 0));
+  const sort = (db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM channels WHERE tenant_id=?').get(tid)?.s) || 1;
+  const resolvedTier = tier_id
+    ? db.prepare('SELECT id FROM price_tiers WHERE id=? AND tenant_id=?').get(tier_id, tid)?.id ?? null
+    : null;
+  const info = db.prepare('INSERT INTO channels (name, tier_id, commission_pct, active, sort, tenant_id) VALUES (?,?,?,1,?,?)').run(nm, resolvedTier, c, sort, tid);
+  return db.prepare('SELECT * FROM channels WHERE id=?').get(info.lastInsertRowid);
 }
 /** Owner edits a channel's platform commission % (and active/name). */
 export function updateChannel(id, { commission_pct, active, name }) {
@@ -1088,7 +1111,7 @@ export function startMaking(ticketId, { actorId = null } = {}) {
 /** A LINE customer asks to cancel their own order. Allowed only while it's unpaid, NOT being made,
  *  and still open — otherwise rejected. Does NOT void; raises a sticky request for the cashier. */
 export function customerRequestCancel(ticketId, lineUserId) {
-  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  const t = db.prepare('SELECT * FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) throw new Error('ticket_not_found');
   if (!lineUserId || t.line_user_id !== lineUserId) throw new Error('not_your_order');
   if (!['pending', 'waiting'].includes(t.status)) throw new Error('too_late');
@@ -1462,7 +1485,7 @@ const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default
  * `channelId` selects the tier (defaults to the storefront tier when absent).
  */
 export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
-  const item = db.prepare('SELECT price FROM menu_items WHERE id=?').get(itemId);
+  const item = db.prepare('SELECT price FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, TID());
   if (!item) return null;
   const tenantId = TID();
   let tier = null;
@@ -2080,7 +2103,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
 }
 
 export function ticketView(ticketId) {
-  const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  const t = db.prepare('SELECT * FROM tickets WHERE id=? AND store_id IN (SELECT id FROM stores WHERE tenant_id=?)').get(ticketId, TID());
   if (!t) return null;
   const zone = getZone(t.zone_id);
   const o = orderForTicket(t.id);
