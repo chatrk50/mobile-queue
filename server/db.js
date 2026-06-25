@@ -550,6 +550,18 @@ try {
   );`);
 } catch { /* already exists */ }
 
+// Email-change tokens — single-use, expire in 24 hours, SHA-256 hashed in DB.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS email_change_tokens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   INTEGER NOT NULL,
+    new_email   TEXT NOT NULL,
+    token_hash  TEXT NOT NULL UNIQUE,
+    expires_at  TEXT NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0
+  );`);
+} catch { /* already exists */ }
+
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
 // so it runs at most once; existing rows are assigned to branch 1.
@@ -996,6 +1008,26 @@ export function consumeResetToken(raw, newPassword) {
   db.prepare('UPDATE password_reset_tokens SET used=1 WHERE token_hash=?').run(hash);
   setOwnerPassword(tenantId, String(newPassword));
   return true;
+}
+
+/** Create an email-change verification token for tenantId → newEmail. Returns the raw token. */
+export function createEmailChangeToken(tenantId, newEmail) {
+  const raw = randomBytes(32).toString('hex');
+  const hash = createHash('sha256').update(raw).digest('hex');
+  const expires = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  db.prepare('DELETE FROM email_change_tokens WHERE tenant_id=?').run(tenantId);
+  db.prepare('INSERT INTO email_change_tokens (tenant_id, new_email, token_hash, expires_at) VALUES (?,?,?,?)').run(tenantId, newEmail, hash, expires);
+  return raw;
+}
+/** Consume a raw email-change token — applies the email update. Returns { tenantId, newEmail } or null. */
+export function consumeEmailChangeToken(raw) {
+  if (!raw) return null;
+  const hash = createHash('sha256').update(String(raw)).digest('hex');
+  const row = db.prepare('SELECT tenant_id, new_email, expires_at, used FROM email_change_tokens WHERE token_hash=?').get(hash);
+  if (!row || row.used || new Date(row.expires_at) < new Date()) return null;
+  db.prepare('UPDATE email_change_tokens SET used=1 WHERE token_hash=?').run(hash);
+  db.prepare('UPDATE tenants SET owner_email=? WHERE id=?').run(row.new_email, row.tenant_id);
+  return { tenantId: row.tenant_id, newEmail: row.new_email };
 }
 
 /** Brand config for a tenant (DB row → falls back to env defaults for tenant 1). */

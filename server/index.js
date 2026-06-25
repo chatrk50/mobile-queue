@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, getTenantByReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats, createResetToken, validateResetToken, consumeResetToken } from './db.js';
+import { db, getSetting, setSetting, DURABLE, getTenant, getTenantBySlug, getTenantByDomain, setTenantDomain, listTenants, createTenant, seedTenantDefaults, tenantBrand, updateTenantBrand, startTrial, applyTenantReferral, getTenantByReferral, exportTenant, forgetCustomer, setOwnerPassword, updateOwnerEmail, ownerLoginMatches, ownerTenantsByEmail, ownerStaffId, logAudit, listAudit, deleteTenant, referralStats, createResetToken, validateResetToken, consumeResetToken, createEmailChangeToken, consumeEmailChangeToken } from './db.js';
 import { GOOGLE_CLIENT_ID, GOOGLE_ON, verifyGoogleIdToken } from './google.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import * as Q from './queue.js';
@@ -490,7 +490,36 @@ app.get('/api/owner/account', (req, res) => {
   const t = getTenant(req.tenantId);
   res.json({ email: t?.owner_email || null, hasPassword: !!(t?.owner_pass_hash) });
 });
+// Step 1: request an email change — sends a verification link to the NEW address.
+app.post('/api/owner/request-email-change', async (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
+  const token = createEmailChangeToken(req.tenantId, email);
+  const base = (process.env.BASE_URL || '').replace(/\/$/, '');
+  try {
+    await sendEmail({
+      to: email,
+      subject: 'ยืนยันการเปลี่ยนอีเมล — MobileQueue',
+      text: `คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):\n${base}/api/owner/verify-email-change?token=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
+      html: `<p>คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):</p><a href="${base}/api/owner/verify-email-change?token=${encodeURIComponent(token)}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ยืนยันอีเมลใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
+    });
+  } catch { /* non-fatal — token still stored; owner can retry */ }
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.request_email_change', detail: 'to=' + email, ip: ipOf(req) });
+  res.json({ ok: true, pending: true });
+});
+// Step 2: verify the token from the email link → apply email change → redirect to login.
+app.get('/api/owner/verify-email-change', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  const result = consumeEmailChangeToken(req.query?.token);
+  if (!result) return res.redirect('/login/?msg=email_verify_failed');
+  logAudit({ tenantId: result.tenantId, actor: 'owner', action: 'owner.email_changed', detail: 'new=' + result.newEmail, ip: ipOf(req) });
+  res.redirect('/login/?msg=email_changed');
+});
+// Legacy direct change (non-SaaS single-tenant or admin tools): still available.
 app.post('/api/owner/change-email', (req, res) => {
+  if (SAAS) return res.status(410).json({ error: 'use_request_email_change' });
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
@@ -1821,6 +1850,7 @@ if (BILLING_ON) setInterval(async () => {
 // Hourly cleanup: purge expired password-reset tokens and stale in-memory rate-limit entries.
 setInterval(() => {
   try { db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < datetime('now') OR used=1").run(); } catch {}
+  try { db.prepare("DELETE FROM email_change_tokens WHERE expires_at < datetime('now') OR used=1").run(); } catch {}
   const now = Date.now();
   for (const [k, v] of ownerHits) { if (v.until < now) ownerHits.delete(k); }
   for (const [k, v] of forgotHits) { if (v.until < now) forgotHits.delete(k); }

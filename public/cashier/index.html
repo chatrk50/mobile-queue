@@ -2198,9 +2198,18 @@ window.saveBrandConfig=async()=>{
   if(_brandLogo) body.logo=_brandLogo;
   try{ await api('/api/admin/brand',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast('บันทึกแบรนด์แล้ว ✓'); applyBrand(); }catch(e){ toast(err(e)); } };
-// Owner account: change email or password from settings panel.
-window.saveAcctEmail=async()=>{ const email=($('acctEmailInp')||{}).value||'';
-  try{ await api('/api/owner/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim()})}); toast('บันทึกอีเมลแล้ว ✓'); }catch(e){ toast(err(e)==='bad_email'?'อีเมลไม่ถูกต้อง':err(e)); } };
+// Owner account: request email change (SaaS = sends verification link; non-SaaS = direct save).
+window.saveAcctEmail=async()=>{
+  const email=(($('acctEmailInp')||{}).value||'').trim();
+  if(!email){ toast('กรอกอีเมล'); return; }
+  if(CFG.saas){
+    try{ await api('/api/owner/request-email-change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      toast('ส่งลิงก์ยืนยันไปที่ '+email+' แล้ว — กรุณาตรวจสอบกล่องขาเข้า');
+    }catch(e){ toast(err(e)==='bad_email'?'อีเมลไม่ถูกต้อง':err(e)); }
+  } else {
+    try{ await api('/api/owner/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})}); toast('บันทึกอีเมลแล้ว ✓'); }catch(e){ toast(err(e)==='bad_email'?'อีเมลไม่ถูกต้อง':err(e)); }
+  }
+};
 window.saveAcctPass=async()=>{ const pw=($('acctPassInp')||{}).value||'';
   if(pw.length<6){ toast('รหัสผ่านต้องมีอย่างน้อย 6 ตัว'); return; }
   try{ await api('/api/owner/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})}); toast('เปลี่ยนรหัสผ่านแล้ว ✓'); if($('acctPassInp')) $('acctPassInp').value=''; }catch(e){ toast(err(e)); } };
