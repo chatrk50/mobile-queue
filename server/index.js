@@ -745,6 +745,21 @@ app.post('/admin/api/tenants/:id/plan', adminGate, (req, res) => {
     res.json({ ok: true, plan }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Extend a tenant's trial/plan by N days (admin support action).
+app.post('/admin/api/tenants/:id/extend-trial', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  const days = Math.max(1, Math.min(365, Number(req.body?.days) || 0));
+  if (!days) return res.status(400).json({ error: 'days_required' });
+  const t = getTenant(id);
+  if (!t) return res.status(404).json({ error: 'not_found' });
+  const base = (t.plan_until && new Date(t.plan_until).getTime() > Date.now())
+    ? new Date(t.plan_until).getTime()
+    : Date.now();
+  const newUntil = new Date(base + days * 86400000).toISOString().slice(0, 10);
+  db.prepare('UPDATE tenants SET plan_until=? WHERE id=?').run(newUntil, id);
+  logAudit({ tenantId: id, actor: 'admin', action: 'tenant.extend_trial', detail: `days=${days} until=${newUntil}`, ip: ipOf(req) });
+  res.json({ ok: true, planUntil: newUntil, daysAdded: days });
+});
 // Map a custom domain to a tenant (the owner points DNS + the host adds the cert separately).
 app.post('/admin/api/tenants/:id/domain', adminGate, (req, res) => {
   try { const t = setTenantDomain(Number(req.params.id), req.body?.domain || '');
