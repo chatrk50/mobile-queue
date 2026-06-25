@@ -1343,8 +1343,8 @@ async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
   if(ME && ME.role!=='owner'){ box.innerHTML=''; return; }
   try{
     const tiers=await api('/api/price-tiers'); const chans=await api('/api/channels/all');
-    const tierRows=tiers.filter(t=>!t.is_default).map(t=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(t.name)} (บวกจากราคาปกติ)</span><input id="tier_${t.id}" type="number" inputmode="decimal" value="${t.markup_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">%</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveTier(${t.id})">บันทึก</button></div>`).join('');
-    const chanRows=chans.map(c=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(c.name)} ${c.active?'':'<span class="muted">(ปิด)</span>'}</span><input id="chan_${c.id}" type="number" inputmode="decimal" value="${c.commission_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">% คอม</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveChan(${c.id})">บันทึก</button></div>`).join('');
+    const tierRows=tiers.filter(t=>!t.is_default).map(t=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(t.name)} (บวกจากราคาปกติ)</span><input id="tier_${t.id}" type="number" inputmode="decimal" value="${t.markup_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">%</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveTier(${t.id})">บันทึก</button><button class="ghost danger" style="padding:4px 8px;font-size:12px" onclick="deleteTier(${t.id},'${esc(t.name)}')" aria-label="ลบ">${window.icon?icon('trash',{size:13}):'✕'}</button></div>`).join('');
+    const chanRows=chans.map(c=>`<div class="row" style="gap:6px;align-items:center;margin:4px 0"><span style="flex:1">${esc(c.name)} ${c.active?'':'<span class="muted">(ปิด)</span>'}</span><input id="chan_${c.id}" type="number" inputmode="decimal" value="${c.commission_pct}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"><span class="muted">% คอม</span><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveChan(${c.id})">บันทึก</button><button class="ghost danger" style="padding:4px 8px;font-size:12px" onclick="deleteChan(${c.id},'${esc(c.name)}')" aria-label="ลบ">${window.icon?icon('trash',{size:13}):'✕'}</button></div>`).join('');
     box.innerHTML=`<details style="border:1px solid var(--line);border-radius:10px;padding:10px"><summary style="cursor:pointer;font-weight:700">${IC.cash}ราคาเดลิเวอรี่ & ค่าคอมช่องทาง</summary>
       <div style="margin-top:8px"><div class="muted" style="font-size:12px">ราคาเดลิเวอรี่ = ราคาปกติ + % ที่ตั้ง (เช่น 150% = 2.5 เท่า)</div>${tierRows}
       <div class="muted" style="font-size:12px;margin-top:8px">ค่าคอมแพลตฟอร์ม (ใช้คำนวณกำไรหลังหักคอม)</div>${chanRows}</div></details>`;
@@ -1352,6 +1352,10 @@ async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
 }
 window.saveTier=async(id)=>{ const mk=Number($('tier_'+id).value); try{ await api('/api/price-tiers/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({markup_pct:mk})}); toast('บันทึกราคาเดลิเวอรี่แล้ว'); }catch(e){ toast(err(e)); } };
 window.saveChan=async(id)=>{ const c=Number($('chan_'+id).value); try{ await api('/api/channels/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commission_pct:c})}); toast('บันทึกค่าคอมแล้ว'); }catch(e){ toast(err(e)); } };
+window.deleteTier=async(id,name)=>{ if(!confirm('ลบราคาพิเศษ "'+name+'" ?\nราคาสินค้าใน tier นี้จะถูกลบด้วย')) return;
+  try{ await api('/api/price-tiers/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadPriceMgr(); }catch(e){ toast(err(e)); } };
+window.deleteChan=async(id,name)=>{ if(!confirm('ลบช่องทาง "'+name+'" ?')) return;
+  try{ await api('/api/channels/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadPriceMgr(); }catch(e){ toast(err(e)); } };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
 let _selMenuId=null;
 // Left pane: clickable item list, grouped by Menu (เครื่องดื่ม) and Topping.

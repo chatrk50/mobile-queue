@@ -981,6 +981,27 @@ export function updateChannel(id, { commission_pct, active, name }) {
   db.prepare('UPDATE channels SET commission_pct=?, active=?, name=? WHERE id=?').run(c, a, nm, id);
   return db.prepare('SELECT * FROM channels WHERE id=?').get(id);
 }
+/** Delete a non-default price tier. Cascades: removes item_prices for that tier,
+ *  nulls channels.tier_id that reference it. */
+export function deletePriceTier(id) {
+  const cur = db.prepare('SELECT id, is_default FROM price_tiers WHERE id=? AND tenant_id=?').get(id, TID());
+  if (!cur) throw new Error('tier_not_found');
+  if (cur.is_default) throw new Error('cannot_delete_default_tier');
+  db.transaction(() => {
+    db.prepare('DELETE FROM item_prices WHERE tier_id=?').run(id);
+    db.prepare('UPDATE channels SET tier_id=NULL WHERE tier_id=?').run(id);
+    db.prepare('DELETE FROM price_tiers WHERE id=?').run(id);
+  })();
+  return { ok: true };
+}
+/** Delete a sales channel. Orders that already used it keep their channel_id but the
+ *  channel name will appear blank in future reports — expected for deleted channels. */
+export function deleteChannel(id) {
+  const cur = db.prepare('SELECT id FROM channels WHERE id=? AND tenant_id=?').get(id, TID());
+  if (!cur) throw new Error('channel_not_found');
+  db.prepare('DELETE FROM channels WHERE id=?').run(id);
+  return { ok: true };
+}
 
 // ---------- Payment tenders (HOW money is collected; per-tender daily reconciliation) ----------
 /** Payment tenders. includeInactive=false → only active ones (for pickers). */

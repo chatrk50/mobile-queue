@@ -872,6 +872,16 @@ app.post('/api/channels/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateChannel(req.params.id, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.delete('/api/price-tiers/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deletePriceTier(Number(req.params.id))); }
+  catch (e) { res.status(e.message === 'tier_not_found' ? 404 : 400).json({ error: e.message }); }
+});
+app.delete('/api/channels/:id', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deleteChannel(Number(req.params.id))); }
+  catch (e) { res.status(e.message === 'channel_not_found' ? 404 : 400).json({ error: e.message }); }
+});
 // ---------- Payment tenders (how money is collected) ----------
 // Active tenders for the cashier/customer payment picker (any signed-in staff).
 app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
