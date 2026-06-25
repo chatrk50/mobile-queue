@@ -85,6 +85,10 @@
       <li><b>Loyalty isolation (composite PK)</b> — customers table rebuilt เป็น PRIMARY KEY (line_user_id, tenant_id) — แต้มสะสมแยกแบรนด์ถูกต้อง 100%</li>
       <li><b>Customer suggestions scoped to tenant</b> — favourites + lastTicket query กรอง JOIN stores → tenant ป้องกัน cross-tenant bleed</li>
       <li><b>Rate limiter (self-order)</b> — ป้องกัน tenant สแปม endpoint สั่งออเดอร์ลูกค้า (120 req/min, adjustable via ORDER_RATE env)</li>
+      <li><b>Pricing layer isolation</b> — defaultTier / priceFor / channelNet / setItemPrice ทั้งหมด scoped ด้วย tenant_id — ป้องกัน cross-tenant price injection</li>
+      <li><b>BOM ingredient tenant guard</b> — setRecipe() ตรวจสอบ ingredient ต้องเป็น tenant เดียวกัน ก่อนใส่สูตร</li>
+      <li><b>Delivery pricing N+1 fix</b> — listMenu() ใช้ batch query แทน per-item query — ประสิทธิภาพดีขึ้น</li>
+      <li><b>DELETE /api/rewards/:id endpoint</b> — ลบ reward ได้จาก UI (tenant-owned guard)</li>
     </ul>
   </div>
 
