@@ -549,7 +549,15 @@ document.addEventListener('click',(e)=>{ const m=$('adminMenu'); if(!m||m.style.
 });
 async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
-  const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
+  const r=await fetch(path,opts);
+  if(!r.ok){
+    // Session expired: when using staff session auth (not legacy PIN), a 401 means the
+    // cookie is gone or expired — show a non-dismissible overlay and reload to login screen.
+    if(r.status===401&&ME&&!PIN){ toast('เซสชั่นหมดอายุ — กรุณาเข้าสู่ระบบอีกครั้ง'); setTimeout(()=>logout(),1500); }
+    const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);
+  }
+  return r.json();
+}
 function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',order_limit:'ครบโควต้า 500 ออเดอร์/เดือน (Free) — ⚙ ตั้งค่า > แพ็กเกจ เพื่ออัปเกรด',branch_limit:'ครบจำนวนสาขาของแพ็กเกจปัจจุบัน — ⚙ ตั้งค่า > แพ็กเกจ เพื่ออัปเกรด'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 // Shared icons reference window.ICONS (from /assets/icons.js) to stay in sync with the icon set.
@@ -613,6 +621,7 @@ window.login=async()=>{
     $('loginErr').textContent='';
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
+    if(ME&&ME.name){ const lb2=$('logoutBtn'); if(lb2) lb2.textContent=ME.name.slice(0,12)+' · ออก'; }
     $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('chartsBtn').style.display=mgr?'':'none'; $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
@@ -622,7 +631,7 @@ window.login=async()=>{
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
-window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[]; const tb=$('trialBanner'); if(tb){ tb.style.display='none'; tb.innerHTML=''; }
+window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[]; const lb2=$('logoutBtn'); if(lb2) lb2.textContent='ออกจากระบบ'; const tb=$('trialBanner'); if(tb){ tb.style.display='none'; tb.innerHTML=''; }
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
