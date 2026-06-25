@@ -1171,6 +1171,10 @@ app.get('/api/billing/status', (req, res) => {
     bs.menuItems = u.menuItems;
     bs.maxMenuItems = u.maxMenuItems;
   }
+  // Custom-domain capability (Business plan only) + current mapping, for the self-service panel.
+  const planNow = Q.tenantPlan(req.tenantId);
+  bs.customDomainCapable = !!planNow.customDomain;
+  bs.domain = getTenant(req.tenantId)?.domain || null;
   res.json(bs);
 });
 app.post('/api/billing/subscribe', async (req, res) => {       // body: { token, plan, interval, email }
@@ -1224,6 +1228,20 @@ app.post('/api/billing/cancel', (req, res) => {
       html: billingHtml(tc.name, tc.slug, [['ใช้งานได้ถึง', until || '—']], { body: 'รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว คุณยังใช้บริการได้จนถึงวันที่ข้างต้น', ctaLabel: 'อัปเกรดใหม่' }),
     }).catch(() => {});
   }
+});
+// Owner self-service custom domain (Business plan only). The owner sets/clears their domain here;
+// they still point DNS (CNAME) at this host and the host adds the TLS cert separately. Gated on the
+// plan's customDomain capability so Free/Pro tenants can't claim a domain. Pass '' to remove.
+app.post('/api/owner/domain', (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const plan = Q.tenantPlan(req.tenantId);
+  if (!plan.customDomain) return res.status(402).json({ error: 'plan_required' }); // upgrade to Business
+  try {
+    const t = setTenantDomain(req.tenantId, req.body?.domain || '');
+    logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.domain', detail: 'domain=' + (t.domain || '(cleared)'), ip: ipOf(req) });
+    res.json({ ok: true, domain: t.domain || null, cnameTarget: PUBLIC_BASE_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '') });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner self-service account close: deletes ALL tenant data (PDPA erasure). Requires slug
 // confirmation to prevent accidental deletion. Clears the owner session cookie on success.
