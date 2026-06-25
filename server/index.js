@@ -1144,6 +1144,8 @@ app.get('/api/billing/status', (req, res) => {
     bs.maxOrdersPerMonth = u.maxOrdersPerMonth;
     bs.staff = u.staff;
     bs.maxStaff = u.maxStaff;
+    bs.menuItems = u.menuItems;
+    bs.maxMenuItems = u.maxMenuItems;
   }
   res.json(bs);
 });
@@ -1867,7 +1869,7 @@ app.post('/api/menu', (req, res) => {
   try { const item = Q.addMenuItem(req.body || {});
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(item.id, req.body.priceDelivery);
     res.json(item); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) { res.status(e.message === 'menu_limit' ? 402 : 400).json({ error: e.message }); }
 });
 // Starter-menu templates: list the verticals, and one-tap pre-fill a sample menu (owner only).
 app.get('/api/menu-templates', (req, res) => {

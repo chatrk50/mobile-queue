@@ -1450,7 +1450,7 @@ window.saveMenuForm=async()=>{
   try{
     if(_selMenuId==='new'){ const r=await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('เพิ่มเมนูแล้ว'); await loadMenu(); editMenuForm(r.id); }
     else { await api('/api/menu/'+_selMenuId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกแล้ว'); await loadMenu(); editMenuForm(_selMenuId); }
-  }catch(e){ toast(err(e)); }
+  }catch(e){ toast(err(e)==='menu_limit'?'ถึงขีดจำกัดรายการเมนู — อัปเกรดแพ็กเกจเพื่อเพิ่มรายการไม่จำกัด':err(e)); }
 };
 const _refreshMenu=()=>{ if(_selMenuId&&_selMenuId!=='new') editMenuForm(_selMenuId); else renderMenuMgr(); };
 window.toggleSoldout=async(id,soldout)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({soldout})}); await loadMenu(); _refreshMenu(); }catch(e){ toast(err(e)); } };
@@ -2118,6 +2118,12 @@ window.showFeatures=async()=>{
         <div style="display:flex;justify-content:space-between;font-size:11px;color:${warn?'#c0394a':'var(--muted)'};margin-bottom:3px"><span>พนักงาน (ไม่นับเจ้าของ)</span><span><b>${used}</b> / ${max}</span></div>
         <div style="background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${warn?'#c0394a':'#f59e0b'};border-radius:4px"></div></div>
         ${warn&&pct<100?'<div style="color:#c0394a;font-size:11px;margin-top:3px">⚠ ใกล้ถึงขีดจำกัดพนักงาน — อัปเกรดเพื่อเพิ่มได้มากขึ้น</div>':''}
+        </div>`; })():''}
+      ${bill.plan==='free'&&bill.maxMenuItems!=null?(()=>{ const used=bill.menuItems||0,max=bill.maxMenuItems,pct=Math.min(100,Math.round(used/max*100)),warn=pct>=80;
+        return `<div style="margin:4px 0 8px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:${warn?'#c0394a':'var(--muted)'};margin-bottom:3px"><span>รายการเมนู</span><span><b>${used}</b> / ${max}</span></div>
+        <div style="background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${warn?'#c0394a':'#10b981'};border-radius:4px"></div></div>
+        ${warn&&pct<100?'<div style="color:#c0394a;font-size:11px;margin-top:3px">⚠ ใกล้ถึงขีดจำกัดเมนู — อัปเกรดเพื่อเพิ่มรายการไม่จำกัด</div>':''}
         </div>`; })():''}
       ${bill.configured ? `
         <div class="muted" style="font-size:12px;margin-bottom:4px">เลือกอัปเกรด (ราคารวม VAT):</div>

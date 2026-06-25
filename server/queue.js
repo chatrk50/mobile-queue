@@ -8,9 +8,9 @@ const TID = () => currentTenantId();
 
 // ---- SaaS plans + quotas. Limits apply ONLY in SaaS mode; single-tenant is always unlimited. ----
 const PLANS = {
-  free:     { label: 'Free',     maxBranches: 1,    maxStaff: 5,   maxOrdersPerMonth: 500,  customDomain: false },
-  pro:      { label: 'Pro',      maxBranches: 3,    maxStaff: 20,  maxOrdersPerMonth: null, customDomain: false },
-  business: { label: 'Business', maxBranches: null, maxStaff: null, maxOrdersPerMonth: null, customDomain: true }, // null = unlimited
+  free:     { label: 'Free',     maxBranches: 1,    maxStaff: 5,   maxMenuItems: 50,   maxOrdersPerMonth: 500,  customDomain: false },
+  pro:      { label: 'Pro',      maxBranches: 3,    maxStaff: 20,  maxMenuItems: null, maxOrdersPerMonth: null, customDomain: false },
+  business: { label: 'Business', maxBranches: null, maxStaff: null, maxMenuItems: null, maxOrdersPerMonth: null, customDomain: true }, // null = unlimited
 };
 export function listPlans() { return PLANS; }
 export function tenantPlan(tenantId = TID()) {
@@ -39,6 +39,8 @@ export function tenantUsage(tenantId = TID()) {
     maxBranches: plan.maxBranches,
     staff: db.prepare("SELECT COUNT(*) c FROM staff WHERE tenant_id=? AND role<>'owner' AND active=1").get(tenantId).c,
     maxStaff: plan.maxStaff,
+    menuItems: db.prepare('SELECT COUNT(*) c FROM menu_items WHERE tenant_id=? AND active=1').get(tenantId).c,
+    maxMenuItems: plan.maxMenuItems,
     ordersThisMonth: monthOrderCount(tenantId),
     maxOrdersPerMonth: plan.maxOrdersPerMonth,
   };
@@ -1578,6 +1580,13 @@ export function addMenuItem({ name, name_en, price, image, category }) {
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
   const cat = category === 'topping' ? 'topping' : 'drink';
+  if (SAAS) {
+    const plan = tenantPlan();
+    if (plan.maxMenuItems != null) {
+      const current = db.prepare('SELECT COUNT(*) c FROM menu_items WHERE tenant_id=? AND active=1').get(TID()).c;
+      if (current >= plan.maxMenuItems) throw new Error('menu_limit');
+    }
+  }
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items WHERE tenant_id=?').get(TID()).s;
   const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort, tenant_id) VALUES (?,?,?,?,?,?,?)')
     .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, TID());
