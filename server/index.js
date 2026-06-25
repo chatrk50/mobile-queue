@@ -414,8 +414,8 @@ app.post('/api/signup', (req, res) => {
     // Referral notification to the referrer — fire-and-forget.
     if (referred && referrer?.owner_email) {
       sendEmail({ to: referrer.owner_email, subject: 'มีร้านใหม่สมัครผ่านลิงก์แนะนำของคุณ!',
-        text: `ร้าน "${name}" สมัคร MobileQueue ผ่านลิงก์แนะนำของคุณ\nคุณได้รับการขยายเวลาใช้งาน 30 วันเรียบร้อยแล้ว`,
-        html: `<p>ร้าน <b>${name}</b> สมัคร MobileQueue ผ่านลิงก์แนะนำของคุณ 🎉</p><p>คุณได้รับการขยายเวลาใช้งาน <b>30 วัน</b> เรียบร้อยแล้ว</p>`,
+        text: `ร้าน "${name}" สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ\nคุณได้รับการขยายเวลาใช้งาน 30 วันเรียบร้อยแล้ว`,
+        html: `<p>ร้าน <b>${name}</b> สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ 🎉</p><p>คุณได้รับการขยายเวลาใช้งาน <b>30 วัน</b> เรียบร้อยแล้ว</p>`,
       }).catch(() => {});
     }
     // Welcome email — fire-and-forget, never blocks the response.
@@ -424,8 +424,8 @@ app.post('/api/signup', (req, res) => {
       sendEmail({
         to: email,
         subject: `ยินดีต้อนรับ "${name}" — ระบบคิว + POS พร้อมใช้งาน!`,
-        text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${base}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม MobileQueue`,
-        html: `<p>ร้าน <b>${name}</b> พร้อมใช้งานแล้ว!</p><p>ทดลองใช้ฟรี <b>${TRIAL_DAYS} วัน</b> (Pro) — ไม่ต้องใส่บัตร</p><a href="${base}/b/${t.slug}/cashier/" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">เข้าใช้งาน</a><br><br><span style="color:#6b7280;font-size:13px">ขอบคุณที่ใช้บริการ — ทีม MobileQueue</span>`,
+        text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${base}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม ขายดี KhaiDee`,
+        html: `<p>ร้าน <b>${name}</b> พร้อมใช้งานแล้ว!</p><p>ทดลองใช้ฟรี <b>${TRIAL_DAYS} วัน</b> (Pro) — ไม่ต้องใส่บัตร</p><a href="${base}/b/${t.slug}/cashier/" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">เข้าใช้งาน</a><br><br><span style="color:#6b7280;font-size:13px">ขอบคุณที่ใช้บริการ — ทีม ขายดี KhaiDee</span>`,
       }).catch(() => {});
     }
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -509,7 +509,7 @@ app.post('/api/owner/request-email-change', async (req, res) => {
   try {
     await sendEmail({
       to: email,
-      subject: 'ยืนยันการเปลี่ยนอีเมล — MobileQueue',
+      subject: 'ยืนยันการเปลี่ยนอีเมล — ขายดี KhaiDee',
       text: `คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):\n${base}/api/owner/verify-email-change?token=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
       html: `<p>คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):</p><a href="${base}/api/owner/verify-email-change?token=${encodeURIComponent(token)}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ยืนยันอีเมลใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
     });
@@ -559,7 +559,7 @@ app.post('/api/owner/forgot-password', async (req, res) => {
       const token = createResetToken(m.tenantId);
       const base = (process.env.BASE_URL || '').replace(/\/$/, '');
       await sendEmail({
-        to: email, subject: 'รีเซ็ตรหัสผ่าน — MobileQueue',
+        to: email, subject: 'รีเซ็ตรหัสผ่าน — ขายดี KhaiDee',
         text: `คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):\n${base}/login/?reset=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
         html: `<p>คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):</p><a href="${base}/login/?reset=${token}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ตั้งรหัสผ่านใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
       });
@@ -677,13 +677,13 @@ app.post('/admin/api/dunning/send', adminGate, async (_req, res) => {
   const candidates = getDunningCandidates();
   const results = [];
   const TEMPLATES = {
-    trial_7d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} เหลือ 7 วัน`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดอายุใน 7 วัน\nเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก\n\nขอบคุณที่ใช้ MobileQueue` }),
-    trial_3d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} เหลือ 3 วัน`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดอายุใน 3 วัน\nเพิ่มบัตรเครดิตเพื่อใช้งานต่อ\n\nขอบคุณที่ใช้ MobileQueue` }),
-    trial_1d: (name) => ({ subject: `[MobileQueue] ทดลองใช้ ${name} หมดพรุ่งนี้!`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจทดลองใช้ของคุณจะหมดพรุ่งนี้\nเพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก\n\nขอบคุณที่ใช้ MobileQueue` }),
-    lapsed:   (name) => ({ subject: `[MobileQueue] แพ็กเกจ ${name} หมดอายุแล้ว`, text: `สวัสดีคุณ ${name},\n\nแพ็กเกจของคุณหมดอายุแล้ว ร้านของคุณยังใช้งานได้ในโหมดฟรี\nอัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ\n\nขอบคุณที่ใช้ MobileQueue` }),
+    trial_7d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" เหลือ 7 วัน`, text: `ร้าน "${name}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
+    trial_3d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" เหลือ 3 วัน`, text: `ร้าน "${name}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
+    trial_1d: (name) => ({ subject: `[ขายดี] ทดลองใช้ "${name}" หมดพรุ่งนี้!`, text: `ร้าน "${name}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
+    lapsed:   (name) => ({ subject: `[ขายดี] แพ็กเกจ "${name}" หมดอายุแล้ว`, text: `ร้าน "${name}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ\n\nขอบคุณที่ใช้บริการ ขายดี KhaiDee` }),
   };
   for (const c of candidates) {
-    const tmpl = TEMPLATES[c.event]?.(c.name) || { subject: `[MobileQueue] แจ้งเตือน ${c.event}`, text: `สวัสดีคุณ ${c.name}` };
+    const tmpl = TEMPLATES[c.event]?.(c.name) || { subject: `[ขายดี] แจ้งเตือน ${c.event}`, text: `สวัสดีคุณ ${c.name}` };
     const result = await sendEmail({ to: c.email, ...tmpl });
     logDunningSend(c.tenantId, c.event, { dryRun: result.dryRun || false, toEmail: c.email });
     results.push({ ...c, ...result });
@@ -1017,7 +1017,7 @@ app.post('/api/billing/cancel', (req, res) => {
   // Cancellation confirmation — fire-and-forget.
   const to = getTenant(req.tenantId)?.owner_email; if (to) {
     const until = result.planUntil ? new Date(result.planUntil).toLocaleDateString('th-TH') : '';
-    sendEmail({ to, subject: 'ยืนยันการยกเลิกต่ออายุ — MobileQueue',
+    sendEmail({ to, subject: 'ยืนยันการยกเลิกต่ออายุ — ขายดี KhaiDee',
       text: `รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว\nคุณยังใช้งานได้ถึง: ${until}\nหากต้องการกลับมาใช้ อัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ`,
       html: `<p>รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว</p><p>คุณยังใช้งานได้ถึง: <b>${until}</b></p><p>หากต้องการกลับมาใช้ สามารถอัปเกรดได้ที่ ⚙ ตั้งค่า &gt; แพ็กเกจ</p>`,
     }).catch(() => {});
@@ -1038,9 +1038,9 @@ app.post('/api/owner/close-account', async (req, res) => {
   res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${COOKIE_SECURE}`);
   res.json({ ok: true });
   if (email) sendEmail({
-    to: email, subject: `บัญชีร้าน "${name}" ถูกปิดแล้ว — MobileQueue`,
-    text: `บัญชีร้าน "${name}" ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ\nขอบคุณที่ใช้บริการ MobileQueue\nหากต้องการเปิดร้านใหม่ สมัครได้ที่ /signup/`,
-    html: `<p>บัญชีร้าน <b>"${name}"</b> ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ PDPA</p><p>ขอบคุณที่ใช้บริการ MobileQueue</p><p style="color:#6b7280;font-size:13px">หากต้องการเปิดร้านใหม่ <a href="/signup/">สมัครได้ที่นี่</a></p>`,
+    to: email, subject: `บัญชีร้าน "${name}" ถูกปิดแล้ว — ขายดี KhaiDee`,
+    text: `บัญชีร้าน "${name}" ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ\nขอบคุณที่ใช้บริการ ขายดี KhaiDee\nหากต้องการเปิดร้านใหม่ สมัครได้ที่ /signup/`,
+    html: `<p>บัญชีร้าน <b>"${name}"</b> ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ PDPA</p><p>ขอบคุณที่ใช้บริการ ขายดี KhaiDee</p><p style="color:#6b7280;font-size:13px">หากต้องการเปิดร้านใหม่ <a href="/signup/">สมัครได้ที่นี่</a></p>`,
   }).catch(() => {});
 });
 // Omise account-level webhook (one URL for the whole platform). Authenticity is verified by
