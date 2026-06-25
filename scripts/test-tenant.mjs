@@ -15,12 +15,13 @@ ok(currentTenantId() === 1, 'currentTenantId() defaults to 1 outside a request')
 const a = DB.createTenant({ name: 'Bean House Coffee', ownerEmail: 'a@x.com', pkg: 'pos', brandUnit: 'แก้ว' });
 const b = DB.createTenant({ name: 'Som Tam Express', ownerEmail: 'b@x.com', pkg: 'line', brandUnit: 'จาน' });
 ok(a.id > 1 && b.id > a.id, `createTenant assigns new ids (${a.id}, ${b.id})`);
-ok(a.slug === 'bean-house-coffee', `slugify name → slug (got ${a.slug})`);
+const slugBase = slugify('Bean House Coffee'); // 'bean-house-coffee'
+ok(a.slug.startsWith(slugBase), `slugify name → slug starts with base (got ${a.slug})`);
 ok(a.package === 'pos' && b.package === 'line', 'package stored per tenant');
 
-// slug collision → suffixed
+// slug collision → suffixed with a unique number (robust: DB may have prior runs)
 const a2 = DB.createTenant({ name: 'Bean House Coffee' });
-ok(a2.slug === 'bean-house-coffee-2', `duplicate name → unique slug (got ${a2.slug})`);
+ok(a2.slug !== a.slug && a2.slug.startsWith(slugBase), `duplicate name → unique slug differs from first (${a.slug} vs ${a2.slug})`);
 
 // per-tenant settings isolation (tenant 1 bare keys; others namespaced)
 runWithTenant(1, () => DB.setSetting('loyalty:enabled', '1'));

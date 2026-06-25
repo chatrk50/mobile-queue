@@ -2,6 +2,15 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ขายดี (KhaiDee) — ระบบ POS + คิว + LINE สำหรับร้านค้า</title>
 <meta name="description" content="จัดการออเดอร์จาก LINE และหน้าร้านในที่เดียว ไม่พลาดทุกการขาย เพิ่มยอดขายให้เติบโต — ทดลองฟรี ไม่ต้องใส่บัตร">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ขายดี KhaiDee">
+<meta property="og:title" content="ขายดี KhaiDee — ระบบ POS + คิว + LINE สำหรับร้านค้า">
+<meta property="og:description" content="จัดการออเดอร์จาก LINE และหน้าร้านในที่เดียว ไม่พลาดทุกการขาย — ทดลองฟรี 60 วัน ไม่ต้องใส่บัตร">
+<meta property="og:image" content="/assets/og-banner.png">
+<meta property="og:locale" content="th_TH">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ขายดี KhaiDee — ระบบ POS + คิว + LINE">
+<meta name="twitter:description" content="จัดการออเดอร์จาก LINE และหน้าร้านในที่เดียว ไม่พลาดทุกการขาย — ทดลองฟรี ไม่ต้องใส่บัตร">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -308,6 +317,11 @@ footer a:hover{color:var(--ink)}
 .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
 .reveal.in{opacity:1;transform:none}
 
+/* ===== HAMBURGER ===== */
+.ham{display:none;background:none;border:none;cursor:pointer;color:var(--ink);padding:6px;border-radius:8px;line-height:0}
+.ham:hover{background:var(--inds)}
+.ham svg{display:block}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:900px){
   .hero .wrap{grid-template-columns:1fr;gap:40px;text-align:center}
@@ -323,7 +337,12 @@ footer a:hover{color:var(--ink)}
   .grid,.prices,.steps{grid-template-columns:1fr}
   .sec{grid-template-columns:repeat(2,1fr)}
   h2.center{font-size:26px}
-  .nav-links{display:none}
+  /* nav: hide links by default, show hamburger */
+  .nav-links{display:none;position:absolute;top:70px;left:0;right:0;background:#fff;border-bottom:1px solid var(--line);flex-direction:column;padding:10px 20px;gap:0;box-shadow:0 4px 16px rgba(0,0,0,.08);z-index:100}
+  .nav-links.open{display:flex}
+  .nav-links a{padding:12px 0;border-bottom:1px solid var(--line);border-radius:0;font-size:15px;padding-bottom:12px}
+  .nav-links a:last-child{border-bottom:0}
+  .ham{display:flex;align-items:center;justify-content:center}
 }
 @media(max-width:600px){
   .hero-features{grid-template-columns:repeat(2,1fr)}
@@ -358,6 +377,9 @@ footer a:hover{color:var(--ink)}
       <a href="#reviews">รีวิวจากลูกค้า</a>
       <a href="#pricing">ราคา</a>
     </div>
+    <button class="ham" id="hamBtn" onclick="toggleNav()" aria-label="เมนู" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <div class="nav-actions">
       <a href="/login/" class="login-link">เข้าสู่ระบบ</a>
       <a href="/signup/" class="btn-primary">เปิดร้านฟรี</a>
@@ -873,6 +895,20 @@ footer a:hover{color:var(--ink)}
 </footer>
 
 <script>
+// Mobile nav toggle
+function toggleNav(){
+  var nl=document.querySelector('.nav-links');
+  var btn=document.getElementById('hamBtn');
+  var open=nl.classList.toggle('open');
+  btn.setAttribute('aria-expanded',String(open));
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('nav')) document.querySelector('.nav-links').classList.remove('open');
+});
+document.querySelectorAll('.nav-links a').forEach(function(a){
+  a.addEventListener('click',function(){ document.querySelector('.nav-links').classList.remove('open'); });
+});
+
 // Hero phone card animations on load
 (function(){
   var lp=document.getElementById('heroLinePhone');
