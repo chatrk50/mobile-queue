@@ -1206,6 +1206,10 @@ app.post('/api/rewards/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateReward(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.delete('/api/rewards/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deleteReward(Number(req.params.id))); } catch (e) { res.status(e.message === 'reward_not_found' ? 404 : 400).json({ error: e.message }); }
+});
 app.post('/api/item-prices', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setItemPrice(req.body?.itemId, req.body?.tierId, req.body?.price, req.body?.branchId || 0)); } catch (e) { res.status(400).json({ error: e.message }); }

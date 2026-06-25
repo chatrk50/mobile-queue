@@ -699,9 +699,12 @@ export function listMenu(channelId = null, branchId = null) {
   // (makeable<=0). Items without a recipe are unlimited (makeable=null) — unaffected.
   const mk = menuMakeable();
   const dtid = deliveryTierId();
+  const delivPrices = dtid
+    ? new Map(db.prepare('SELECT item_id, price FROM item_prices WHERE tier_id=? AND branch_id=0').all(dtid).map((p) => [p.item_id, p.price]))
+    : new Map();
   rows.forEach((r) => {
     if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; }
-    r.price_delivery = dtid ? (db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(r.id, dtid)?.price ?? null) : null;
+    r.price_delivery = delivPrices.has(r.id) ? delivPrices.get(r.id) : null;
   });
   return rows;
 }
@@ -1383,6 +1386,12 @@ export function updateReward(id, { name, cost_points, active, image } = {}) {
   db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=? WHERE id=?').run(nm, cost, a, img, id);
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
 }
+export function deleteReward(id) {
+  const cur = db.prepare('SELECT id FROM rewards WHERE id=? AND tenant_id=?').get(id, TID());
+  if (!cur) throw new Error('reward_not_found');
+  db.prepare('DELETE FROM rewards WHERE id=?').run(id);
+  return { ok: true };
+}
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
 export function redeemReward(key, rewardId, actorId = null) {
   if (!key) throw new Error('customer_required');
@@ -1399,7 +1408,7 @@ export function redeemReward(key, rewardId, actorId = null) {
 
 /** Owner sets an explicit per-item price for a tier (0/absent branch = all branches). */
 // Per-item Delivery price = an item_prices row for the (single, shared) เดลิเวอรี่ tier.
-function deliveryTierId() { return db.prepare('SELECT id FROM price_tiers WHERE is_default=0 ORDER BY sort LIMIT 1').get()?.id || null; }
+function deliveryTierId() { return db.prepare('SELECT id FROM price_tiers WHERE is_default=0 AND tenant_id=? ORDER BY sort LIMIT 1').get(TID())?.id || null; }
 export function getMenuDeliveryPrice(itemId) {
   const tid = deliveryTierId(); if (!tid) return null;
   const r = db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(itemId, tid);
