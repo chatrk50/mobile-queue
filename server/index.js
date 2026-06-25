@@ -104,6 +104,7 @@ const BRAND = {
 const POS_ONLY = BRAND.package === 'pos';
 // Our own support channel (a LINE OA / chat link) — shown on help + "ขอความช่วยเหลือ" buttons.
 const SUPPORT_LINE_URL = (process.env.SUPPORT_LINE_URL || '').trim();
+const PLATFORM_ADMIN_EMAIL = (process.env.PLATFORM_ADMIN_EMAIL || '').trim();
 // Brand + package per request. Single-tenant uses the env BRAND (identical to before); the SaaS
 // deployment resolves them from the request's tenant row.
 const brandFor = (req) => SAAS ? tenantBrand(req.tenantId, BRAND) : BRAND;
@@ -524,6 +525,14 @@ app.post('/api/signup', (req, res) => {
         subject: `[ขายดี] ยินดีต้อนรับ "${name}" — พร้อมใช้งานแล้ว!`,
         text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${BASE_URL}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม ขายดี KhaiDee`,
         html: billingHtml(name, t.slug, [['ทดลองใช้ฟรี', `${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร`]], { body: `ร้าน <b>${name}</b> พร้อมใช้งานแล้ว ยินดีต้อนรับสู่ ขายดี KhaiDee!`, ctaLabel: 'เข้าใช้งานเลย' }),
+      }).catch(() => {});
+    }
+    // Platform-admin growth notification — fire-and-forget.
+    if (PLATFORM_ADMIN_EMAIL) {
+      sendEmail({
+        to: PLATFORM_ADMIN_EMAIL,
+        subject: `[ขายดี Admin] ร้านใหม่สมัคร: "${name}"`,
+        text: `ร้านใหม่ลงทะเบียน\n\nชื่อ: ${name}\nSlug: ${t.slug}\nอีเมล: ${email || '(ไม่ระบุ)'}\nPackage: ${pkg}\nRef: ${refCode || '(ไม่มี)'}\nAdmin: ${PUBLIC_BASE_URL}/admin/`,
       }).catch(() => {});
     }
   } catch (e) { res.status(400).json({ error: e.message }); }
