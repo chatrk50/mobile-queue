@@ -986,6 +986,26 @@ app.post('/api/billing/cancel', (req, res) => {
     }).catch(() => {});
   }
 });
+// Owner self-service account close: deletes ALL tenant data (PDPA erasure). Requires slug
+// confirmation to prevent accidental deletion. Clears the owner session cookie on success.
+app.post('/api/owner/close-account', async (req, res) => {
+  if (!SAAS) return res.status(404).json({ error: 'not_available' });
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const t = getTenant(req.tenantId);
+  if (!t) return res.status(404).json({ error: 'not_found' });
+  const confirmSlug = String(req.body?.confirmSlug || '').trim().toLowerCase();
+  if (!confirmSlug || confirmSlug !== t.slug) return res.status(400).json({ error: 'slug_mismatch' });
+  const { owner_email: email, name } = t;
+  logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.close_account', detail: 'slug=' + t.slug, ip: ipOf(req) });
+  try { deleteTenant(req.tenantId); } catch (e) { return res.status(400).json({ error: e.message }); }
+  res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${COOKIE_SECURE}`);
+  res.json({ ok: true });
+  if (email) sendEmail({
+    to: email, subject: `บัญชีร้าน "${name}" ถูกปิดแล้ว — MobileQueue`,
+    text: `บัญชีร้าน "${name}" ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ\nขอบคุณที่ใช้บริการ MobileQueue\nหากต้องการเปิดร้านใหม่ สมัครได้ที่ /signup/`,
+    html: `<p>บัญชีร้าน <b>"${name}"</b> ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ PDPA</p><p>ขอบคุณที่ใช้บริการ MobileQueue</p><p style="color:#6b7280;font-size:13px">หากต้องการเปิดร้านใหม่ <a href="/signup/">สมัครได้ที่นี่</a></p>`,
+  }).catch(() => {});
+});
 // Omise account-level webhook (one URL for the whole platform). Authenticity is verified by
 // re-fetching the event from Omise inside billingWebhook; the tenant is found via the charge's
 // customer, so no per-tenant routing is needed.

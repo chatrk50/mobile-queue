@@ -2108,11 +2108,12 @@ window.showFeatures=async()=>{
     </div>` : '')+
     (CFG.saas ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>${icon('lock',{size:16})} ข้อมูล & PDPA</b>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">ส่งออกข้อมูลร้าน (พกพา) · ลบข้อมูลลูกค้ารายบุคคลตามคำขอ</div>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">ส่งออกข้อมูลร้าน (พกพา) · ลบข้อมูลลูกค้ารายบุคคลตามคำขอ · ปิดบัญชีและลบข้อมูลทั้งหมด</div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">${icon('download',{size:14})} ส่งออก (JSON)</button>
         <button class="ghost danger" style="flex:1;padding:8px" onclick="forgetCust()">ลบข้อมูลลูกค้า</button>
       </div>
+      <button class="ghost danger" style="width:100%;padding:8px;margin-top:8px" onclick="closeAccount()">⚠ ปิดบัญชีและลบข้อมูลทั้งหมด</button>
       <div class="muted" style="font-size:11px;margin-top:8px"><a href="/privacy/" target="_blank">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/" target="_blank">ข้อกำหนด</a></div>
     </div>` : '')+
     (lc ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
@@ -2209,6 +2210,20 @@ window.exportData=async()=>{ try{ const r=await fetch('/api/admin/export'); if(!
 window.forgetCust=async()=>{ const phone=prompt('เบอร์โทรลูกค้าที่จะลบข้อมูล (PDPA):'); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
   if(!confirm('ลบข้อมูลส่วนตัวของลูกค้า '+p+'? (ลบแต้ม+ทำให้ออเดอร์ไม่ระบุตัวตน · ย้อนกลับไม่ได้)')) return;
   try{ const d=await api('/api/admin/forget-customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})}); toast(d.found?'ลบข้อมูลลูกค้าแล้ว':'ไม่พบลูกค้า แต่เคลียร์เรียบร้อย'); }catch(e){ toast(err(e)); } };
+window.closeAccount=async()=>{
+  const slug=(CFG&&CFG.brand&&CFG.brand.slug)||'';
+  if(!slug){ toast('ไม่พบ slug ของร้าน'); return; }
+  if(!confirm('⚠ ปิดบัญชีและลบข้อมูลทั้งหมด\n\nการดำเนินการนี้จะลบ:\n• ข้อมูลเมนู ออเดอร์ คิว สต็อก\n• ข้อมูลพนักงานและลูกค้าทั้งหมด\n• บัญชีผู้ใช้และการตั้งค่าทั้งหมด\n\nย้อนกลับไม่ได้\n\nกดตกลงเพื่อยืนยันด้วยการพิมพ์ slug ของร้านต่อไป')) return;
+  const input=prompt('พิมพ์ "'+slug+'" เพื่อยืนยันการปิดบัญชี:');
+  if(input===null) return;
+  if(input.trim().toLowerCase()!==slug){ toast('slug ไม่ตรง — ยกเลิก'); return; }
+  try{
+    const r=await fetch('/api/owner/close-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmSlug:input.trim().toLowerCase()})});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); toast('ปิดบัญชีไม่สำเร็จ: '+(d.error||r.status)); return; }
+    toast('ปิดบัญชีแล้ว — กำลังออกจากระบบ…');
+    setTimeout(()=>{ location.href='/landing/'; },1500);
+  }catch(e){ toast(err(e)); }
+};
 // Per-tenant LINE connect (SaaS Pkg 2): only send token/secret if typed (blank keeps existing).
 window.saveLineConfig=async()=>{
   const body={ liffId:$('lineLiffInp').value.trim(), addFriendUrl:$('lineAddFriendInp').value.trim() };
