@@ -22,6 +22,24 @@ import generatePayload from 'promptpay-qr';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '');
+
+// Branded billing email HTML — used for all payment receipts and billing notifications.
+const billingHtml = (name, slug, rows, { body = '', ctaLabel = '', ctaUrl = '' } = {}) => {
+  const url = ctaUrl || (slug ? `${BASE_URL}/b/${slug}/cashier/` : `${BASE_URL}/login/`);
+  const rowsHtml = rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;width:42%;vertical-align:top">${k}</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#1a1a2e">${v}</td></tr>`).join('');
+  return `<div style="font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:#f7f7fb;padding:24px 0">
+<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+  <div style="background:#6366f1;padding:20px 28px"><span style="font-family:Kanit,sans-serif;font-size:20px;font-weight:700;color:#fff">ขายดี KhaiDee</span></div>
+  <div style="padding:24px 28px">
+    ${name ? `<p style="margin:0 0 14px;font-size:15px;color:#1a1a2e">สวัสดีร้าน <b>${name}</b>,</p>` : ''}
+    ${body ? `<p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.7">${body}</p>` : ''}
+    ${rows.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 20px;border:1px solid #e5e7eb;border-radius:8px">${rowsHtml}</table>` : ''}
+    ${ctaLabel ? `<a href="${url}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none">${ctaLabel} →</a>` : ''}
+  </div>
+  <div style="padding:16px 28px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af">ขายดี KhaiDee · <a href="${BASE_URL}/login/" style="color:#6366f1">khai-dee.com</a></div>
+</div></div>`;
+};
+
 const app = express();
 app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
 const PORT = process.env.PORT || 3000;
@@ -418,19 +436,18 @@ app.post('/api/signup', (req, res) => {
     res.json({ ok: true, slug: t.slug, package: pkg, url: `/b/${t.slug}/cashier/`, trialUntil, trialDays: TRIAL_DAYS, founder: !!t.founder, referralCode: t.referral_code, referred });
     // Referral notification to the referrer — fire-and-forget.
     if (referred && referrer?.owner_email) {
-      sendEmail({ to: referrer.owner_email, subject: 'มีร้านใหม่สมัครผ่านลิงก์แนะนำของคุณ!',
-        text: `ร้าน "${name}" สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ\nคุณได้รับการขยายเวลาใช้งาน 30 วันเรียบร้อยแล้ว`,
-        html: `<p>ร้าน <b>${name}</b> สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ 🎉</p><p>คุณได้รับการขยายเวลาใช้งาน <b>30 วัน</b> เรียบร้อยแล้ว</p>`,
+      sendEmail({ to: referrer.owner_email, subject: '[ขายดี] มีร้านใหม่สมัครผ่านลิงก์แนะนำของคุณ',
+        text: `ร้าน "${name}" สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ\nคุณได้รับการขยายเวลาใช้งาน 30 วันเรียบร้อยแล้ว\n\nขายดี KhaiDee`,
+        html: billingHtml(referrer.name, referrer.slug, [['โบนัส', 'ขยายเวลาใช้งาน +30 วัน']], { body: `ร้าน <b>${name}</b> สมัคร ขายดี KhaiDee ผ่านลิงก์แนะนำของคุณ — ขอบคุณที่ช่วยบอกต่อ!`, ctaLabel: 'เข้าระบบเลย' }),
       }).catch(() => {});
     }
     // Welcome email — fire-and-forget, never blocks the response.
     if (email) {
-      const base = BASE_URL;
       sendEmail({
         to: email,
-        subject: `ยินดีต้อนรับ "${name}" — ระบบคิว + POS พร้อมใช้งาน!`,
-        text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${base}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม ขายดี KhaiDee`,
-        html: `<p>ร้าน <b>${name}</b> พร้อมใช้งานแล้ว!</p><p>ทดลองใช้ฟรี <b>${TRIAL_DAYS} วัน</b> (Pro) — ไม่ต้องใส่บัตร</p><a href="${base}/b/${t.slug}/cashier/" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">เข้าใช้งาน</a><br><br><span style="color:#6b7280;font-size:13px">ขอบคุณที่ใช้บริการ — ทีม ขายดี KhaiDee</span>`,
+        subject: `[ขายดี] ยินดีต้อนรับ "${name}" — พร้อมใช้งานแล้ว!`,
+        text: `ร้าน "${name}" พร้อมใช้งานแล้ว!\n\nทดลองใช้ฟรี ${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร\n\nเข้าใช้งาน: ${BASE_URL}/b/${t.slug}/cashier/\n\nขอบคุณที่ใช้บริการ\n— ทีม ขายดี KhaiDee`,
+        html: billingHtml(name, t.slug, [['ทดลองใช้ฟรี', `${TRIAL_DAYS} วัน (Pro) — ไม่ต้องใส่บัตร`]], { body: `ร้าน <b>${name}</b> พร้อมใช้งานแล้ว ยินดีต้อนรับสู่ ขายดี KhaiDee!`, ctaLabel: 'เข้าใช้งานเลย' }),
       }).catch(() => {});
     }
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -510,13 +527,14 @@ app.post('/api/owner/request-email-change', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'bad_email' });
   const token = createEmailChangeToken(req.tenantId, email);
-  const base = BASE_URL;
+  const tec = getTenant(req.tenantId);
   try {
+    const verifyUrl = `${BASE_URL}/api/owner/verify-email-change?token=${encodeURIComponent(token)}`;
     await sendEmail({
       to: email,
-      subject: 'ยืนยันการเปลี่ยนอีเมล — ขายดี KhaiDee',
-      text: `คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):\n${base}/api/owner/verify-email-change?token=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
-      html: `<p>คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):</p><a href="${base}/api/owner/verify-email-change?token=${encodeURIComponent(token)}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ยืนยันอีเมลใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
+      subject: '[ขายดี] ยืนยันการเปลี่ยนอีเมล',
+      text: `คลิกลิงก์ด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง):\n${BASE_URL}/api/owner/verify-email-change?token=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
+      html: billingHtml(tec?.name, null, [], { body: 'คลิกปุ่มด้านล่างเพื่อยืนยันอีเมลใหม่ (หมดอายุใน 24 ชั่วโมง) — หากไม่ใช่คุณ ไม่ต้องดำเนินการใด', ctaLabel: 'ยืนยันอีเมลใหม่', ctaUrl: verifyUrl }),
     });
   } catch { /* non-fatal — token still stored; owner can retry */ }
   logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'owner.request_email_change', detail: 'to=' + email, ip: ipOf(req) });
@@ -562,11 +580,11 @@ app.post('/api/owner/forgot-password', async (req, res) => {
   for (const m of matches) {
     try {
       const token = createResetToken(m.tenantId);
-      const base = BASE_URL;
+      const resetUrl = `${BASE_URL}/login/?reset=${token}`;
       await sendEmail({
-        to: email, subject: 'รีเซ็ตรหัสผ่าน — ขายดี KhaiDee',
-        text: `คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):\n${base}/login/?reset=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
-        html: `<p>คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):</p><a href="${base}/login/?reset=${token}" style="display:inline-block;padding:10px 20px;background:#16876f;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">ตั้งรหัสผ่านใหม่</a><p style="color:#6b7280;font-size:13px">หากไม่ใช่คุณ ไม่ต้องดำเนินการใด</p>`,
+        to: email, subject: '[ขายดี] รีเซ็ตรหัสผ่าน',
+        text: `คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง):\n${BASE_URL}/login/?reset=${token}\n\nหากไม่ใช่คุณ ไม่ต้องดำเนินการใด`,
+        html: billingHtml(m.name, null, [], { body: 'คลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่ (หมดอายุใน 1 ชั่วโมง) — หากไม่ใช่คุณ ไม่ต้องดำเนินการใด', ctaLabel: 'ตั้งรหัสผ่านใหม่', ctaUrl: resetUrl }),
       });
     } catch { /* non-fatal */ }
   }
@@ -1005,10 +1023,13 @@ app.post('/api/billing/subscribe', async (req, res) => {       // body: { token,
     clearDunningLog(req.tenantId); // fresh start on renewal — allow future dunning cycle
     res.json(r);
     // Payment receipt — fire-and-forget.
-    const to = getTenant(req.tenantId)?.owner_email; if (to) {
+    const t0 = getTenant(req.tenantId); if (t0?.owner_email) {
       const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
       const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
-      sendEmail({ to, subject: `ใบเสร็จ — ${planLabel}`, text: `ขอบคุณสำหรับการสมัคร ${planLabel}\nใช้งานได้ถึง: ${until}`, html: `<p>ขอบคุณสำหรับการสมัคร <b>${planLabel}</b></p><p>ใช้งานได้ถึง: <b>${until}</b></p>` }).catch(() => {});
+      sendEmail({ to: t0.owner_email, subject: `[ขายดี] ใบเสร็จ — ${planLabel}`,
+        text: `ขอบคุณสำหรับการสมัคร ${planLabel}\nใช้งานได้ถึง: ${until}\n\nขายดี KhaiDee`,
+        html: billingHtml(t0.name, t0.slug, [['แพ็กเกจ', planLabel], ['ใช้งานได้ถึง', until]], { body: `สมัครแพ็กเกจ <b>${planLabel}</b> สำเร็จแล้ว ขอบคุณที่ไว้วางใจ ขายดี KhaiDee`, ctaLabel: 'เข้าระบบเลย' }),
+      }).catch(() => {});
     }
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -1019,12 +1040,15 @@ app.post('/api/billing/upgrade', async (req, res) => {  // body: { plan, interva
     clearDunningLog(req.tenantId);
     res.json(r);
     // Payment receipt — fire-and-forget.
-    const to = getTenant(req.tenantId)?.owner_email; if (to) {
+    const t1 = getTenant(req.tenantId); if (t1?.owner_email) {
       const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
       const charged = '฿' + Math.round((r.charged || 0) / 100).toLocaleString('en-US');
       const credit = r.credit ? ' (ส่วนลดตามสัดส่วน ฿' + Math.round(r.credit / 100).toLocaleString('en-US') + ')' : '';
       const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
-      sendEmail({ to, subject: `ใบเสร็จอัปเกรด — ${planLabel}`, text: `อัปเกรดเป็น ${planLabel} สำเร็จ\nยอดชำระ: ${charged}${credit}\nใช้งานได้ถึง: ${until}`, html: `<p>อัปเกรดเป็น <b>${planLabel}</b> สำเร็จ</p><p>ยอดชำระ: <b>${charged}</b>${credit}</p><p>ใช้งานได้ถึง: <b>${until}</b></p>` }).catch(() => {});
+      sendEmail({ to: t1.owner_email, subject: `[ขายดี] ใบเสร็จอัปเกรด — ${planLabel}`,
+        text: `อัปเกรดเป็น ${planLabel} สำเร็จ\nยอดชำระ: ${charged}${credit}\nใช้งานได้ถึง: ${until}\n\nขายดี KhaiDee`,
+        html: billingHtml(t1.name, t1.slug, [['แพ็กเกจ', planLabel], ['ยอดชำระ', `${charged}${credit}`], ['ใช้งานได้ถึง', until]], { body: `อัปเกรดเป็น <b>${planLabel}</b> สำเร็จแล้ว`, ctaLabel: 'เข้าระบบเลย' }),
+      }).catch(() => {});
     }
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -1033,11 +1057,11 @@ app.post('/api/billing/cancel', (req, res) => {
   const result = cancelSubscription(req.tenantId);
   res.json(result);
   // Cancellation confirmation — fire-and-forget.
-  const to = getTenant(req.tenantId)?.owner_email; if (to) {
+  const tc = getTenant(req.tenantId); if (tc?.owner_email) {
     const until = result.planUntil ? new Date(result.planUntil).toLocaleDateString('th-TH') : '';
-    sendEmail({ to, subject: 'ยืนยันการยกเลิกต่ออายุ — ขายดี KhaiDee',
-      text: `รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว\nคุณยังใช้งานได้ถึง: ${until}\nหากต้องการกลับมาใช้ อัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ`,
-      html: `<p>รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว</p><p>คุณยังใช้งานได้ถึง: <b>${until}</b></p><p>หากต้องการกลับมาใช้ สามารถอัปเกรดได้ที่ ⚙ ตั้งค่า &gt; แพ็กเกจ</p>`,
+    sendEmail({ to: tc.owner_email, subject: '[ขายดี] ยืนยันการยกเลิกต่ออายุ',
+      text: `รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว\nคุณยังใช้งานได้ถึง: ${until}\nหากต้องการกลับมาใช้ อัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ\n\nขายดี KhaiDee`,
+      html: billingHtml(tc.name, tc.slug, [['ใช้งานได้ถึง', until || '—']], { body: 'รับทราบการยกเลิกต่ออายุอัตโนมัติแล้ว คุณยังใช้บริการได้จนถึงวันที่ข้างต้น', ctaLabel: 'อัปเกรดใหม่' }),
     }).catch(() => {});
   }
 });
@@ -1056,9 +1080,9 @@ app.post('/api/owner/close-account', async (req, res) => {
   res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${COOKIE_SECURE}`);
   res.json({ ok: true });
   if (email) sendEmail({
-    to: email, subject: `บัญชีร้าน "${name}" ถูกปิดแล้ว — ขายดี KhaiDee`,
-    text: `บัญชีร้าน "${name}" ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ\nขอบคุณที่ใช้บริการ ขายดี KhaiDee\nหากต้องการเปิดร้านใหม่ สมัครได้ที่ /signup/`,
-    html: `<p>บัญชีร้าน <b>"${name}"</b> ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ PDPA</p><p>ขอบคุณที่ใช้บริการ ขายดี KhaiDee</p><p style="color:#6b7280;font-size:13px">หากต้องการเปิดร้านใหม่ <a href="/signup/">สมัครได้ที่นี่</a></p>`,
+    to: email, subject: `[ขายดี] บัญชีร้าน "${name}" ถูกปิดแล้ว`,
+    text: `บัญชีร้าน "${name}" ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ\nขอบคุณที่ใช้บริการ ขายดี KhaiDee\nหากต้องการเปิดร้านใหม่ สมัครได้ที่ ${BASE_URL}/signup/`,
+    html: billingHtml(name, null, [], { body: `บัญชีร้าน <b>"${name}"</b> ถูกปิดและลบข้อมูลทั้งหมดแล้วตามคำขอ PDPA ขอบคุณที่ใช้บริการ ขายดี KhaiDee`, ctaLabel: 'เปิดร้านใหม่', ctaUrl: `${BASE_URL}/signup/` }),
   }).catch(() => {});
 });
 // Omise account-level webhook (one URL for the whole platform). Authenticity is verified by
@@ -1859,16 +1883,16 @@ if (BILLING_ON) setInterval(async () => {
       const planLabel = (r.plan === 'business' ? 'Business' : 'Pro') + ' ' + (r.interval === 'year' ? 'รายปี' : 'รายเดือน');
       const paid = '฿' + Math.round((r.amount || 0) / 100).toLocaleString('en-US');
       const until = r.planUntil ? new Date(r.planUntil).toLocaleDateString('th-TH') : '';
-      sendEmail({ to: r.email, subject: `ใบเสร็จต่ออายุ — ${planLabel}`,
-        text: `ต่ออายุ ${planLabel} สำเร็จ\nยอดชำระ: ${paid}\nใช้งานได้ถึง: ${until}`,
-        html: `<p>ต่ออายุ <b>${planLabel}</b> สำเร็จ</p><p>ยอดชำระ: <b>${paid}</b></p><p>ใช้งานได้ถึง: <b>${until}</b></p>`,
+      sendEmail({ to: r.email, subject: `[ขายดี] ใบเสร็จต่ออายุ — ${planLabel}`,
+        text: `ต่ออายุ ${planLabel} สำเร็จ\nยอดชำระ: ${paid}\nใช้งานได้ถึง: ${until}\n\nขายดี KhaiDee`,
+        html: billingHtml(r.name, r.slug, [['แพ็กเกจ', planLabel], ['ยอดชำระ', paid], ['ใช้งานได้ถึง', until]], { body: `ต่ออายุ <b>${planLabel}</b> สำเร็จแล้ว`, ctaLabel: 'เข้าระบบเลย' }),
       }).catch(() => {});
     }
     for (const d of (result.downgrades || [])) {
       const prevLabel = d.prevPlan === 'business' ? 'Business' : 'Pro';
-      sendEmail({ to: d.email, subject: `แพ็กเกจ ${prevLabel} หมดอายุ — ร้านของคุณกลับสู่ Free`,
-        text: `แพ็กเกจ ${prevLabel} ของคุณหมดอายุและไม่สามารถต่ออายุได้ ร้านยังใช้งานได้ในโหมด Free\nอัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ`,
-        html: `<p>แพ็กเกจ <b>${prevLabel}</b> หมดอายุแล้ว — ร้านของคุณกลับสู่โหมด Free</p><p>ยังใช้งานได้ในโหมดฟรี อัปเกรดได้ที่ ⚙ ตั้งค่า &gt; แพ็กเกจ</p>`,
+      sendEmail({ to: d.email, subject: `[ขายดี] แพ็กเกจ ${prevLabel} หมดอายุ — ร้านกลับสู่ Free`,
+        text: `แพ็กเกจ ${prevLabel} ของคุณหมดอายุและไม่สามารถต่ออายุได้ ร้านยังใช้งานได้ในโหมด Free\nอัปเกรดได้ที่ ⚙ ตั้งค่า > แพ็กเกจ\n\nขายดี KhaiDee`,
+        html: billingHtml(d.name, d.slug, [], { body: `แพ็กเกจ <b>${prevLabel}</b> ของร้านหมดอายุแล้ว — ร้านยังใช้งานได้ในโหมดฟรี อัปเกรดเพื่อกลับมาใช้ LINE, รายงาน และฟีเจอร์ครบรูปแบบ`, ctaLabel: 'อัปเกรดใหม่' }),
       }).catch(() => {});
     }
   } catch {}
