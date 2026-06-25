@@ -1136,12 +1136,14 @@ app.get('/api/export/orders.csv', (req, res) => {
 app.get('/api/billing/status', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const bs = billingStatus(req.tenantId);
-  // Attach order-quota usage so the cashier panel can warn free tenants approaching the 500/mo limit.
-  // Always attached regardless of BILLING_ON — the limit is enforced even without Omise configured.
+  // Attach usage quotas so the cashier panel can warn free tenants approaching plan limits.
+  // Always attached regardless of BILLING_ON — limits are enforced even without Omise configured.
   if (bs.plan === 'free') {
     const u = Q.tenantUsage(req.tenantId);
     bs.ordersThisMonth = u.ordersThisMonth;
     bs.maxOrdersPerMonth = u.maxOrdersPerMonth;
+    bs.staff = u.staff;
+    bs.maxStaff = u.maxStaff;
   }
   res.json(bs);
 });
