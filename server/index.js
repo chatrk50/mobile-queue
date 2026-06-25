@@ -1635,6 +1635,22 @@ function doDailyReset() {
           }
         } catch (_) { /* never block reset */ }
       }
+      // Auto email-dunning sweep: send trial-expiry and lapsed emails (idempotent via dunning_log).
+      const DUNNING_TMPLS = {
+        trial_7d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" เหลือ 7 วัน`, text: `ร้าน "${n}" — ทดลองใช้ Pro เหลือ 7 วัน กรุณาเพิ่มบัตรเครดิตเพื่อใช้งานต่อโดยไม่หยุดชะงัก` }),
+        trial_3d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" เหลือ 3 วัน`, text: `ร้าน "${n}" — ทดลองใช้ Pro เหลือ 3 วัน เพิ่มบัตรเครดิตตอนนี้เพื่อไม่ให้บริการหยุดชะงัก` }),
+        trial_1d: (n) => ({ subject: `[ขายดี] ทดลองใช้ "${n}" หมดพรุ่งนี้!`, text: `ร้าน "${n}" — ทดลองใช้ Pro หมดพรุ่งนี้! เพิ่มบัตรเครดิตด่วนเพื่อรักษา LINE และข้อมูลลูกค้า` }),
+        lapsed:   (n) => ({ subject: `[ขายดี] แพ็กเกจ "${n}" หมดอายุแล้ว`, text: `ร้าน "${n}" กลับสู่โหมดฟรีแล้ว อัปเกรดเพื่อใช้ฟีเจอร์เต็มรูปแบบ` }),
+      };
+      // Fire-and-forget — doDailyReset is sync; email promises resolve independently.
+      try {
+        for (const c of getDunningCandidates()) {
+          const tmpl = DUNNING_TMPLS[c.event]?.(c.name); if (!tmpl) continue;
+          sendEmail({ to: c.email, ...tmpl })
+            .then((r) => logDunningSend(c.tenantId, c.event, { dryRun: r.dryRun || false, toEmail: c.email }))
+            .catch(() => {});
+        }
+      } catch (_) { /* never block reset */ }
     } else {
       try { Q.archiveTodaySales(ended); Q.pushOwnerSummary(); } catch (_) { /* never block reset */ }
     }
