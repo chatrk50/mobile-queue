@@ -7,13 +7,15 @@ perspective. Prioritised MoSCoW (Must / Should / Could / Won't-yet). Status as o
 ---
 
 ## 0. Status snapshot
-Built + verified on `saas` (YO-DEE prod on `main` untouched). ~130 automated checks green:
-`test:e2e` (financial invariants) · `test:tenant` 11 · `test:isolation` 15 · `test:billing` 24 ·
-`test:hierarchy` 43 (RBAC + backdoor + security headers + lockout) · `dryrun` 32.
+Built + verified on `saas` (YO-DEE prod on `main` untouched). ~160 automated checks green:
+`test:e2e` (financial invariants) · `test:tenant` 11 · `test:isolation` 53 · `test:billing` 24 ·
+`test:hierarchy` 56 (RBAC + backdoor + security headers + lockout + forgot-pwd + email-change
+verification + close-account) · `dryrun` 32.
 
 Working end-to-end: signup → 60-day trial → self-serve pay (Omise, Pro/Business, monthly/yearly,
 founder, referral) → onboard → multi-tenant isolation → per-tenant LINE + brand + custom domain →
-platform admin → owner email/Google login → PDPA export/erasure → security hardening.
+platform admin → owner email/Google login → forgot-password (token, SHA-256) → email-change
+verification (two-step, 24h token) → PDPA export/erasure/close-account → DPA template → security hardening.
 
 ---
 
