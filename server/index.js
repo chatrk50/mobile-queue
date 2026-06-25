@@ -920,7 +920,7 @@ app.post('/api/staff', (req, res) => {
     const r = Q.createStaff(req.body || {});
     logAudit({ tenantId: req.tenantId, actor: ownerActor(req), action: 'staff.create', detail: 'id=' + r.id + ' role=' + r.role, ip: ipOf(req) });
     res.json(r);
-  } catch (e) { res.status(400).json({ error: e.message }); }
+  } catch (e) { res.status(e.message === 'staff_limit' ? 402 : 400).json({ error: e.message }); }
 });
 app.post('/api/staff/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1914,7 +1914,18 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
 
 // ---------- Live updates (SSE) for cashier & display ----------
 // Pass ?pin=XXXX (cashier) to receive real customer names; public/display screens omit it.
+// Per-IP connection cap: prevents a single client from opening hundreds of connections (DoS).
+const sseIpCount = new Map(); // ip -> active SSE connection count
+const SSE_MAX_PER_IP = 20;   // 2 zones × cashier+display × a few tabs; well above legit need
 app.get('/api/zones/:zoneId/stream', (req, res) => {
+  const ip = ipOf(req);
+  const current = sseIpCount.get(ip) || 0;
+  if (current >= SSE_MAX_PER_IP) return res.status(429).end('too_many_connections');
+  sseIpCount.set(ip, current + 1);
+  res.on('close', () => {
+    const c = (sseIpCount.get(ip) || 1) - 1;
+    if (c <= 0) sseIpCount.delete(ip); else sseIpCount.set(ip, c);
+  });
   res.set({
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -2097,6 +2108,8 @@ setInterval(() => {
   for (const [k, v] of ownerHits) { if (v.until < now) ownerHits.delete(k); }
   for (const [k, v] of forgotHits) { if (v.until < now) forgotHits.delete(k); }
   for (const [k, v] of signupHits) { if (v.until < now) signupHits.delete(k); }
+  for (const [k, v] of pinFails) { if (v.until < now) pinFails.delete(k); }
+  for (const [k, v] of adminFails) { if (v.until < now) adminFails.delete(k); }
   for (const [k, v] of orderBurst) { if (now - v.windowStart >= ORDER_BURST_WINDOW) orderBurst.delete(k); }
   for (const [k, v] of promoHits) { if (now - v.windowStart >= PROMO_WINDOW) promoHits.delete(k); }
   for (const [k, v] of exportHits) { if (now - v.windowStart >= EXPORT_WINDOW) exportHits.delete(k); }

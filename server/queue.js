@@ -8,9 +8,9 @@ const TID = () => currentTenantId();
 
 // ---- SaaS plans + quotas. Limits apply ONLY in SaaS mode; single-tenant is always unlimited. ----
 const PLANS = {
-  free:     { label: 'Free',     maxBranches: 1,    maxOrdersPerMonth: 500,  customDomain: false },
-  pro:      { label: 'Pro',      maxBranches: 3,    maxOrdersPerMonth: null, customDomain: false },
-  business: { label: 'Business', maxBranches: null, maxOrdersPerMonth: null, customDomain: true }, // null = unlimited
+  free:     { label: 'Free',     maxBranches: 1,    maxStaff: 5,   maxOrdersPerMonth: 500,  customDomain: false },
+  pro:      { label: 'Pro',      maxBranches: 3,    maxStaff: 20,  maxOrdersPerMonth: null, customDomain: false },
+  business: { label: 'Business', maxBranches: null, maxStaff: null, maxOrdersPerMonth: null, customDomain: true }, // null = unlimited
 };
 export function listPlans() { return PLANS; }
 export function tenantPlan(tenantId = TID()) {
@@ -37,6 +37,8 @@ export function tenantUsage(tenantId = TID()) {
     plan: plan.name, planLabel: plan.label,
     branches: db.prepare('SELECT COUNT(*) c FROM stores WHERE tenant_id=?').get(tenantId).c,
     maxBranches: plan.maxBranches,
+    staff: db.prepare("SELECT COUNT(*) c FROM staff WHERE tenant_id=? AND role<>'owner' AND active=1").get(tenantId).c,
+    maxStaff: plan.maxStaff,
     ordersThisMonth: monthOrderCount(tenantId),
     maxOrdersPerMonth: plan.maxOrdersPerMonth,
   };
@@ -921,6 +923,13 @@ export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenan
   if (!/^\d{4,8}$/.test(p)) throw new Error('pin_must_be_4_8_digits');
   if (!ROLES.has(role)) throw new Error('bad_role');
   if (pinTaken(p)) throw new Error('pin_taken');
+  if (SAAS && role !== 'owner') {
+    const plan = tenantPlan(tenantId);
+    if (plan.maxStaff != null) {
+      const current = db.prepare("SELECT COUNT(*) c FROM staff WHERE tenant_id=? AND role<>'owner' AND active=1").get(tenantId).c;
+      if (current >= plan.maxStaff) throw new Error('staff_limit');
+    }
+  }
   const info = db.prepare('INSERT INTO staff (name, pin_hash, role, tenant_id) VALUES (?,?,?,?)')
     .run(n, hashPin(p), role, tenantId);
   const id = info.lastInsertRowid;
