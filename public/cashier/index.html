@@ -2061,7 +2061,13 @@ window.showFeatures=async()=>{
         </div>
         ${bill.plan!=='free'&&bill.autoRenew?`<button class="ghost danger" style="width:100%;margin-top:6px" onclick="cancelSub()">ยกเลิกต่ออายุอัตโนมัติ</button>`:''}`
         : `<div class="muted" style="font-size:12px">การชำระเงินออนไลน์ยังไม่เปิดบนระบบนี้ — ติดต่อผู้ดูแลเพื่ออัปเกรด</div>`}
-      ${bill.referralCode?`<div class="muted" style="font-size:11px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">🎁 แนะนำเพื่อน: โค้ด <b>${esc(bill.referralCode)}</b> — เพื่อนสมัครด้วยโค้ดนี้ รับฟรีคนละ 1 เดือน</div>`:''}
+      ${bill.referralCode?(()=>{ const refUrl=location.origin+'/signup/?ref='+encodeURIComponent(bill.referralCode);
+        return `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+        <div class="muted" style="font-size:12px;font-weight:600;margin-bottom:4px">🎁 แนะนำเพื่อน — รับฟรีคนละ 1 เดือน</div>
+        <div style="display:flex;gap:6px;align-items:center;background:#f9fafb;border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+          <code style="flex:1;font-size:11px;word-break:break-all;color:var(--navy)">${esc(refUrl)}</code>
+          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:4px 9px" onclick="copyText('${esc(refUrl)}',this)">${icon('copy',{size:12})} ก๊อป</button>
+        </div></div>`; })():''}
     </div>`; })() : '')+
     (br ? `<div style="border:1px solid var(--line);border-radius:12px;padding:12px">
       <b>${icon('palette',{size:16})} แบรนด์ของร้าน</b>
@@ -2251,6 +2257,8 @@ window.copyWebhook=async()=>{ const u=($('lineWebhookUrl')||{}).textContent||'';
 window.copyLiffEndpoint=async()=>{ const u=($('lineLiffEndpointUrl')||{}).textContent||''; if(!u) return;
   try{ await navigator.clipboard.writeText(u); toast('ก๊อป LIFF Endpoint URL แล้ว ✓'); }
   catch(e){ try{ const t=document.createElement('textarea'); t.value=u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ — เลือกข้อความเอง'); } } };
+window.copyText=async(text)=>{ try{ await navigator.clipboard.writeText(text); toast('ก๊อปลิงก์แนะนำเพื่อนแล้ว ✓'); }
+  catch(e){ try{ const t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('ก๊อปแล้ว ✓'); }catch(_){ toast('ก๊อปไม่สำเร็จ'); } } };
 window.verifyLine=async()=>{ const m=$('lineVerifyMsg'); const tk=$('lineTokenInp').value.trim();
   if(!tk){ m.innerHTML='<span style="color:var(--mut,#6b7280)">วาง Channel access token ในช่องด้านบนก่อน แล้วกดตรวจสอบ</span>'; return; }
   m.innerHTML='<span style="color:var(--mut,#6b7280)">⏳ กำลังตรวจสอบกับ LINE…</span>';
