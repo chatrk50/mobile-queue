@@ -935,12 +935,14 @@ app.delete('/api/channels/:id', (req, res) => {
 });
 // ---------- Payment tenders (how money is collected) ----------
 // Active tenders for the cashier/customer payment picker (any signed-in staff).
-app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
+// In SaaS mode we serve per-tenant customised views; single-tenant uses global table directly.
+app.get('/api/tenders', (req, res) => res.json(SAAS ? Q.listTendersForTenant(false) : Q.listTenders(false)));
 // Owner: manage tenders (rename / toggle / fee%).
-app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listTenders(true)); });
+app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(SAAS ? Q.listTendersForTenant(true) : Q.listTenders(true)); });
 app.post('/api/tenders/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.updateTender(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+  try { res.json(SAAS ? Q.updateTenderSetting(Number(req.params.id), req.body || {}) : Q.updateTender(Number(req.params.id), req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {

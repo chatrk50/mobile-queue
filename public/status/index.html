@@ -105,6 +105,7 @@
       <li><b>GET /api/owner/audit-log</b> — เจ้าของร้านดูประวัติกิจกรรมบัญชีตัวเอง (เปลี่ยนรหัสผ่าน · PDPA · admin actions) สูงสุด 200 events; UI ปุ่ม "ประวัติกิจกรรมบัญชี" ใน ⚙ ตั้งค่า › ข้อมูล &amp; PDPA; scoped ด้วย req.tenantId เสมอ</li>
       <li><b>tenderRecon tenant-scope fix</b> — query orders ไม่มี tenant filter ทำให้ยอดสรุปเงินสดวันนั้นรวมทุก tenant; เพิ่ม AND o.branch_id IN (SELECT id FROM stores WHERE tenant_id=TID())</li>
       <li><b>Branch-restriction enforcement in app.param</b> — branchIds ถูกเก็บใน session token แต่ไม่เคย enforce; เพิ่ม branchAllowed(req, storeId) ใน param handlers ทั้ง 3 (zoneId, ticketId, storeId) — non-owner staff ที่มี branchIds=[2] จะได้ 403 ถ้าพยายาม access zone/ticket/store ของ branch อื่น; owner (branchIds=[]) และ legacy PIN (req.staff=null) ผ่านทุกกรณี</li>
+      <li><b>Per-tenant tender customisation (SaaS isolation)</b> — updateTender() แก้ global table ที่ใช้ร่วมกัน ทำให้ tenant A เปลี่ยน label/active ส่งผลถึง tenant B ด้วย; เพิ่ม listTendersForTenant() + updateTenderSetting() ที่ layer per-tenant overrides ผ่าน settings table (namespaced t&lt;N&gt;:tender:&lt;id&gt;:field); ใน SAAS mode routes เปลี่ยนมาใช้ฟังก์ชันใหม่, single-tenant ยังใช้ global table เหมือนเดิม; tenderRecon ก็ใช้ per-tenant tenders สำหรับ label/fee calc</li>
     </ul>
   </div>
 

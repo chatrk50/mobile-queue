@@ -1042,6 +1042,36 @@ export function updateTender(id, { label, active, fee_pct, sort } = {}) {
   db.prepare('UPDATE tenders SET label=?, active=?, fee_pct=?, sort=? WHERE id=?').run(lb, a, f, s, id);
   return db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
 }
+// SaaS-safe: per-tenant tender customisation layered on top of the global tenders table via settings.
+// Global updateTender() mutates shared rows (single-tenant use only). In SaaS mode callers use
+// these two functions so changes are scoped and never leak across tenant boundaries.
+export function listTendersForTenant(includeInactive = false, tenantId = TID()) {
+  const globals = db.prepare('SELECT * FROM tenders ORDER BY sort, id').all();
+  const merged = globals.map((t) => {
+    const lb = getSetting(`tender:${t.id}:label`, null, tenantId);
+    const ac = getSetting(`tender:${t.id}:active`, null, tenantId);
+    const fp = getSetting(`tender:${t.id}:fee_pct`, null, tenantId);
+    const so = getSetting(`tender:${t.id}:sort`, null, tenantId);
+    return {
+      ...t,
+      label: lb != null ? lb : t.label,
+      active: ac != null ? Number(ac) : t.active,
+      fee_pct: fp != null ? Number(fp) : t.fee_pct,
+      sort: so != null ? Number(so) : t.sort,
+    };
+  }).sort((a, b) => (a.sort - b.sort) || (a.id - b.id));
+  return includeInactive ? merged : merged.filter((t) => t.active);
+}
+export function updateTenderSetting(id, { label, active, fee_pct, sort } = {}) {
+  const cur = db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
+  if (!cur) throw new Error('tender_not_found');
+  const tid = TID();
+  if (label != null) setSetting(`tender:${id}:label`, (label.toString().trim().slice(0, 40) || cur.label), tid);
+  if (active != null) setSetting(`tender:${id}:active`, active ? '1' : '0', tid);
+  if (fee_pct != null) setSetting(`tender:${id}:fee_pct`, String(Math.max(0, Math.min(100, Number(fee_pct) || 0))), tid);
+  if (sort != null) setSetting(`tender:${id}:sort`, String(Number(sort) || 0), tid);
+  return listTendersForTenant(true).find((t) => t.id === id) || cur;
+}
 /**
  * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
  * (0 if unused that day) so the owner can tick each line against what the app/bank actually
@@ -1061,7 +1091,7 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
       GROUP BY code`
   ).all(date, branchId, branchId, tid);
   const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
-  const tenders = listTenders();
+  const tenders = SAAS ? listTendersForTenant(true) : listTenders();
   const lines = tenders.map((t) => {
     const hit = byCode[t.code] || { orders: 0, amount: 0 };
     const amount = r2(hit.amount);
