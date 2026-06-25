@@ -1421,14 +1421,16 @@ export function setMenuDeliveryPrice(itemId, price) {
   return setItemPrice(itemId, tid, price, 0);
 }
 export function setItemPrice(itemId, tierId, price, branchId = 0) {
-  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, TID())) throw new Error('item_not_found');
+  const tid = TID();
+  if (!db.prepare('SELECT 1 FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, tid)) throw new Error('item_not_found');
+  if (!db.prepare('SELECT 1 FROM price_tiers WHERE id=? AND tenant_id=?').get(tierId, tid)) throw new Error('tier_not_found');
   const p = Math.max(0, Number(price) || 0);
   db.prepare(`INSERT INTO item_prices (item_id, tier_id, branch_id, price) VALUES (?,?,?,?)
               ON CONFLICT(item_id, tier_id, branch_id) DO UPDATE SET price=excluded.price`)
     .run(Number(itemId), Number(tierId), Number(branchId) || 0, p);
   return { ok: true };
 }
-const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default=1 LIMIT 1').get();
+const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default=1 AND tenant_id=? LIMIT 1').get(TID());
 
 /**
  * Resolve the price of an item for a (branch, channel) combination.
@@ -1439,10 +1441,11 @@ const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default
 export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
   const item = db.prepare('SELECT price FROM menu_items WHERE id=?').get(itemId);
   if (!item) return null;
+  const tenantId = TID();
   let tier = null;
   if (channelId) {
-    const ch = db.prepare('SELECT tier_id FROM channels WHERE id=?').get(channelId);
-    if (ch?.tier_id) tier = db.prepare('SELECT * FROM price_tiers WHERE id=?').get(ch.tier_id);
+    const ch = db.prepare('SELECT tier_id FROM channels WHERE id=? AND tenant_id=?').get(channelId, tenantId);
+    if (ch?.tier_id) tier = db.prepare('SELECT * FROM price_tiers WHERE id=? AND tenant_id=?').get(ch.tier_id, tenantId);
   }
   if (!tier) tier = defaultTier();
   // 1) explicit price book entry for this tier (branch-specific, then all-branch=0)
@@ -1465,7 +1468,7 @@ export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
 
 /** Net revenue an order keeps after the channel's platform commission (for P&L by channel). */
 export function channelNet(amount, channelId) {
-  const ch = channelId ? db.prepare('SELECT commission_pct FROM channels WHERE id=?').get(channelId) : null;
+  const ch = channelId ? db.prepare('SELECT commission_pct FROM channels WHERE id=? AND tenant_id=?').get(channelId, TID()) : null;
   const pct = ch?.commission_pct || 0;
   return Math.round((amount * (1 - pct / 100) + Number.EPSILON) * 100) / 100;
 }
