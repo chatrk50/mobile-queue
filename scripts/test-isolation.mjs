@@ -97,6 +97,40 @@ const aNext = runWithTenant(A.id, () => Q.nextTier(10));
 ok(aNext && aNext.label === 'VIP' && aNext.toGo === 40, 'A: nextTier from 10 = VIP, toGo 40');
 ok(runWithTenant(B.id, () => Q.getTiers())[0].label === 'ขาประจำ', 'B: still default tiers (per-tenant isolation)');
 
+// --- Tier member discount auto-apply (discount_pct > 0 → applied on attachCustomerToTicket) ---
+// Reconfigure A's tiers: Gold at min:2 with 10% discount (low threshold for test efficiency)
+runWithTenant(A.id, () => Q.setTiers([
+  { label: 'Silver', min: 1, emoji: '🥈', discount_pct: 0 },
+  { label: 'Gold',   min: 2, emoji: '🥇', perk: 'ลดสมาชิก 10%', discount_pct: 10 },
+]));
+ok(runWithTenant(A.id, () => Q.getTiers()).find(t => t.label === 'Gold')?.discount_pct === 10, 'tier discount: Gold tier persists discount_pct=10 via setTiers');
+// Earn 2 stamps for a new phone so it reaches Gold tier
+const DISC_PHONE = '0899876543';
+runWithTenant(A.id, () => {
+  Q.setLoyaltyEnabled(true);
+  const r1 = Q.createOrder(a.zoneId, [{ name: 'Stamp1', price: 10, qty: 1 }], { source: 'cashier' });
+  Q.attachCustomerToTicket(r1.ticket.id, DISC_PHONE);
+  Q.setOrderPaid(r1.ticket.id, { method: 'cash' });
+  const r2 = Q.createOrder(a.zoneId, [{ name: 'Stamp2', price: 10, qty: 1 }], { source: 'cashier' });
+  Q.attachCustomerToTicket(r2.ticket.id, DISC_PHONE);
+  Q.setOrderPaid(r2.ticket.id, { method: 'cash' });
+});
+ok((runWithTenant(A.id, () => Q.loyaltyByPhone(DISC_PHONE)?.points) ?? 0) >= 2, 'tier discount: earned ≥2 stamps → Gold threshold reached');
+// Create an unpaid ฿150 order and attach the Gold member
+const discR = runWithTenant(A.id, () => Q.createOrder(a.zoneId, [{ name: 'Premium Item', price: 150, qty: 1 }], { source: 'cashier' }));
+const discTid = discR.ticket.id;
+const discAttach = runWithTenant(A.id, () => Q.attachCustomerToTicket(discTid, DISC_PHONE));
+ok(discAttach.tierDiscountPct === 10, `tier discount: attachCustomerToTicket returns tierDiscountPct=10 (got ${discAttach.tierDiscountPct})`);
+ok(discAttach.autoDiscount === 15, `tier discount: autoDiscount=15 (10% of ฿150) — got ${discAttach.autoDiscount}`);
+const discOrdRow = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(discTid);
+ok(discOrdRow.discount === 15, `tier discount: orders.discount=15 persisted in DB (got ${discOrdRow.discount})`);
+ok(discOrdRow.total - discOrdRow.discount === 135, `tier discount: net ฿${discOrdRow.total}−฿${discOrdRow.discount}=฿${discOrdRow.total - discOrdRow.discount} (expect ฿135)`);
+// Idempotency: re-attaching the same customer must NOT overwrite the existing discount
+const discAttach2 = runWithTenant(A.id, () => Q.attachCustomerToTicket(discTid, DISC_PHONE));
+ok(discAttach2.autoDiscount === 0, 'tier discount: re-attach is idempotent — autoDiscount=0 when discount already set');
+const discOrdRow2 = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(discTid);
+ok(discOrdRow2.discount === 15, 'tier discount: discount value unchanged after idempotent re-attach');
+
 // --- Tenant erasure completeness: deleting B must leave ZERO orphan rows in ANY table ---
 DB.seedTenantDefaults(B.id);                                   // ensure channels + price_tiers exist
 const C1 = (sql, ...a) => db.prepare(sql).get(...a).c;

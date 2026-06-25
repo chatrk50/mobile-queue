@@ -1157,6 +1157,7 @@ export function getTiers() {
     emoji: String(t.emoji || '⭐').slice(0, 4),
     min: Math.max(0, Math.round(Number(t.min) || 0)),
     perk: String(t.perk || '').slice(0, 80),
+    discount_pct: Math.max(0, Math.min(100, Math.round(Number(t.discount_pct) || 0))),
   })).sort((a, b) => a.min - b.min);
 }
 /** Owner sets the tier ladder. Validates non-empty labels + numeric thresholds; max 6 tiers. */
@@ -1168,6 +1169,7 @@ export function setTiers(tiers) {
     emoji: String(t.emoji || '⭐').trim().slice(0, 4) || '⭐',
     min: Math.max(0, Math.round(Number(t.min) || 0)),
     perk: String(t.perk || '').trim().slice(0, 80),
+    discount_pct: Math.max(0, Math.min(100, Math.round(Number(t.discount_pct) || 0))),
   })).filter((t) => t.label).sort((a, b) => a.min - b.min);
   if (!clean.length) throw new Error('need_at_least_one_tier');
   setSetting('loyalty:tiers', JSON.stringify(clean));
@@ -1240,7 +1242,21 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
     db.prepare('UPDATE tickets SET customer_key=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
   })();
   const b = loyaltyBalance(key);
-  return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
+  // Auto-apply tier member discount when attaching, if the tier has discount_pct > 0 and no
+  // discount is already on the order (e.g. from a reward redemption or manual override).
+  let autoDiscount = 0;
+  if (b.tier && b.tier.discount_pct > 0) {
+    try {
+      const ord = db.prepare('SELECT id, total, discount, payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+      if (ord && ord.payment_status !== 'paid' && !ord.discount) {
+        autoDiscount = Math.round(ord.total * b.tier.discount_pct / 100 * 100) / 100;
+        if (autoDiscount > 0) {
+          setOrderDiscount(ticketId, { amount: autoDiscount, reason: `${b.tier.emoji} ${b.tier.label} ลด ${b.tier.discount_pct}%` });
+        }
+      }
+    } catch { /* discount is a bonus — never block attachment */ }
+  }
+  return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, tierDiscountPct: b.tier ? (b.tier.discount_pct || 0) : 0, autoDiscount, stampsPerReward: getStampsPerReward() };
 }
 
 /** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
@@ -2014,7 +2030,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     if (reveal && loyaltyEnabled()) {
       const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
       const li = r && (r.line_user_id || r.customer_key);
-      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_discount_pct = b.tier ? (b.tier.discount_pct || 0) : 0; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
     }
     return t;
   };

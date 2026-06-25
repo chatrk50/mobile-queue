@@ -220,7 +220,7 @@
     <p class="muted" style="font-size:12px;margin:6px 0 0">จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> — ลูกค้าหน้าร้านผูกเบอร์ที่เคาน์เตอร์ (ปุ่ม 📱 แต้ม) ก่อนรับเงิน · ลูกค้าสั่งผ่านไลน์ได้อัตโนมัติ · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 4px;font-size:15px">ระดับสมาชิก (จากยอดสะสมตลอดชีพ)</h2>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">ลูกค้าเลื่อนระดับเมื่อสะสมถึงเกณฑ์ · ใส่สิทธิประโยชน์ (ไม่บังคับ) เพื่อจูงใจให้กลับมาซื้อซ้ำ</p>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">ลูกค้าเลื่อนระดับเมื่อสะสมถึงเกณฑ์ · ตั้งส่วนลด % (0 = ไม่ลด) เพื่อให้ส่วนลดสมาชิกอัตโนมัติ · ใส่สิทธิประโยชน์อธิบายสิทธิ์เพิ่มเติม</p>
       <div id="tiersBody"></div>
       <div class="row" style="gap:8px;margin-top:8px">
         <button class="ghost" style="padding:6px 12px" onclick="addTier()">+ เพิ่มระดับ</button>
@@ -981,10 +981,11 @@ function renderTiers(){ const b=$('tiersBody'); if(!b) return;
     <input value="${esc(t.label||'')}" oninput="TIERS[${i}].label=this.value" placeholder="ชื่อระดับ" style="flex:1;min-width:100px;padding:7px;border:1px solid var(--line);border-radius:8px">
     <input type="number" inputmode="numeric" value="${t.min||0}" oninput="TIERS[${i}].min=this.value" title="ถึงกี่${unit()}สะสม" style="width:90px;padding:7px;border:1px solid var(--line);border-radius:8px">
     <input value="${esc(t.perk||'')}" oninput="TIERS[${i}].perk=this.value" placeholder="สิทธิประโยชน์ (ไม่บังคับ)" style="flex:1;min-width:120px;padding:7px;border:1px solid var(--line);border-radius:8px">
+    <input type="number" inputmode="numeric" min="0" max="100" value="${t.discount_pct||0}" oninput="TIERS[${i}].discount_pct=this.value" title="ส่วนลด % สำหรับสมาชิกระดับนี้" placeholder="ส่วนลด%" style="width:76px;padding:7px;border:1px solid var(--line);border-radius:8px">
     <button class="ghost danger" style="padding:6px 10px" onclick="removeTier(${i})" aria-label="ลบระดับ">${window.icon?icon('x',{size:14}):'✕'}</button>
   </div>`).join('') : '<p class="muted" style="font-size:12px">ยังไม่มีระดับ — กด "เพิ่มระดับ"</p>';
 }
-window.addTier=()=>{ TIERS.push({emoji:'⭐',label:'',min:0,perk:''}); renderTiers(); };
+window.addTier=()=>{ TIERS.push({emoji:'⭐',label:'',min:0,perk:'',discount_pct:0}); renderTiers(); };
 window.removeTier=(i)=>{ TIERS.splice(i,1); renderTiers(); };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
@@ -994,7 +995,7 @@ function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.i
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
 window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
-  const tiers=TIERS.filter(t=>(t.label||'').trim()).map(t=>({emoji:t.emoji,label:t.label,min:t.min,perk:t.perk}));
+  const tiers=TIERS.filter(t=>(t.label||'').trim()).map(t=>({emoji:t.emoji,label:t.label,min:t.min,perk:t.perk,discount_pct:Math.max(0,Math.min(100,Math.round(Number(t.discount_pct)||0)))}));
   try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus,tiers})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
@@ -1774,7 +1775,7 @@ function renderZone(snap){
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)
-    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?t.loy_tier+' ':'⭐ '}${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
+    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?t.loy_tier+' ':'⭐ '}${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}${t.loy_discount_pct>0?' · ลด'+t.loy_discount_pct+'%':''}</span>` : '';
   const pay=(t)=>{
     if(t.order_total==null) return '';
     if(t.payment_status==='paid') return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
@@ -2058,7 +2059,7 @@ window.showFeatures=async()=>{
       <div class="muted" style="font-size:12px;margin:2px 0 8px">หน้าเว็บสาธารณะของร้าน — ลิงก์เพื่อแชร์บน LINE กลุ่ม / โซเชียล / พิมพ์ QR</div>
       <div style="display:flex;gap:6px;align-items:center;background:#f9fafb;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
         <code style="flex:1;font-size:11px;word-break:break-all;color:var(--navy)">${esc(shareUrl)}</code>
-        <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyShareUrl()">📋 ก๊อป</button>
+        <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyShareUrl()">${icon('copy',{size:13})} ก๊อป</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <a class="ghost btn" style="text-align:center;padding:8px;display:block;text-decoration:none" href="${esc('/b/'+slug+'/share/')}" target="_blank">เปิดหน้าแชร์ →</a>
@@ -2083,7 +2084,7 @@ window.showFeatures=async()=>{
       <b>${icon('lock',{size:16})} ข้อมูล & PDPA</b>
       <div class="muted" style="font-size:12px;margin:2px 0 8px">ส่งออกข้อมูลร้าน (พกพา) · ลบข้อมูลลูกค้ารายบุคคลตามคำขอ</div>
       <div class="row" style="gap:8px">
-        <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">⬇️ ส่งออก (JSON)</button>
+        <button class="ghost" style="flex:1;padding:8px" onclick="exportData()">${icon('download',{size:14})} ส่งออก (JSON)</button>
         <button class="ghost danger" style="flex:1;padding:8px" onclick="forgetCust()">ลบข้อมูลลูกค้า</button>
       </div>
       <div class="muted" style="font-size:11px;margin-top:8px"><a href="/privacy/" target="_blank">นโยบายความเป็นส่วนตัว</a> · <a href="/terms/" target="_blank">ข้อกำหนด</a></div>
@@ -2098,14 +2099,14 @@ window.showFeatures=async()=>{
         <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 1</b> — ตั้ง Webhook URL นี้ใน LINE Developers (แท็บ Messaging API):</div>
         <div style="display:flex;gap:6px;align-items:center">
           <code id="lineWebhookUrl" style="flex:1;word-break:break-all;font-size:11px">${esc(lc.webhookUrl||'')}</code>
-          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyWebhook()">📋 ก๊อป</button>
+          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyWebhook()">${icon('copy',{size:13})} ก๊อป</button>
         </div>
       </div>
       <div style="background:var(--bg,#f7f7fb);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px">
         <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 1b</b> — (เฉพาะ LIFF) ใส่ URL นี้เป็น <b>Endpoint URL</b> ตอนสร้าง LIFF app ใน LINE Developers:</div>
         <div style="display:flex;gap:6px;align-items:center">
           <code id="lineLiffEndpointUrl" style="flex:1;word-break:break-all;font-size:11px">${esc(lc.liffEndpointUrl||'')}</code>
-          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyLiffEndpoint()">📋 ก๊อป</button>
+          <button class="ghost" style="white-space:nowrap;font-size:12px;padding:5px 10px" onclick="copyLiffEndpoint()">${icon('copy',{size:13})} ก๊อป</button>
         </div>
       </div>
       <div class="muted" style="font-size:11px;margin-bottom:4px"><b>ขั้นที่ 2</b> — วางค่าจาก LINE Developers:</div>
@@ -2267,7 +2268,8 @@ window.discountTicket=async(tid,total)=>{
 // stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
 window.attachPhone=async(tid)=>{ const phone=prompt('เบอร์โทรลูกค้า (สะสมแต้ม):'); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
   try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
-    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')); }
+    const discNote=r.autoDiscount>0?(' · ลด ฿'+r.autoDiscount+' ('+r.tierDiscountPct+'%)'):( r.tierDiscountPct>0?' · มีส่วนลด'+r.tierDiscountPct+'% (มีส่วนลดอื่นอยู่แล้ว)':'');
+    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')+discNote); }
   catch(e){ const m=err(e); toast(m==='loyalty_off'?'ยังไม่เปิดสะสมแต้ม':(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m))); } };
 window.redeemOrder=async(tid)=>{ if(!confirm('ใช้แต้มลูกค้าแลกของรางวัลฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)')) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
