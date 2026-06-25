@@ -901,6 +901,43 @@ app.post('/api/admin/forget-customer', (req, res) => {       // body: { phone } 
     res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---- Sales CSV export — owner/manager accounting download ----
+app.get('/api/export/orders.csv', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const tid = req.tenantId;
+  const stores = `(SELECT id FROM stores WHERE tenant_id=${Number(tid)})`;
+  // Date range: ?from=YYYY-MM-DD&to=YYYY-MM-DD (Bangkok date); default = last 30 days.
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query?.from || '') ? req.query.from : null;
+  const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query?.to   || '') ? req.query.to   : null;
+  const dateFilter = from || to
+    ? `AND date(o.paid_at,'+7 hours') BETWEEN '${from || '2000-01-01'}' AND '${to || '9999-12-31'}'`
+    : `AND date(o.paid_at,'+7 hours') >= date('now','+7 hours','-30 days')`;
+  const rows = db.prepare(
+    `SELECT o.id, o.paid_at, o.total, o.discount, o.payment_status,
+            s.name AS store_name,
+            (SELECT GROUP_CONCAT(oi.qty||'×'||oi.name, '; ')
+             FROM order_items oi WHERE oi.order_id=o.id) AS items
+     FROM orders o
+     JOIN stores s ON s.id=o.branch_id
+     WHERE o.branch_id IN ${stores} AND o.payment_status IN ('paid','void') ${dateFilter}
+     ORDER BY o.paid_at DESC LIMIT 5000`
+  ).all();
+  const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const headers = ['วันที่','เวลา','ออเดอร์#','สาขา','รายการ','ยอดรวม','ส่วนลด','ยอดสุทธิ','สถานะ'];
+  const lines = [headers.map(esc).join(',')];
+  for (const r of rows) {
+    const dt = r.paid_at ? new Date(String(r.paid_at).replace(' ', 'T') + 'Z') : null;
+    const date = dt ? dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' }) : '';
+    const time = dt ? dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) : '';
+    const net = Math.round(((r.total || 0) - (r.discount || 0)) * 100) / 100;
+    lines.push([date, time, r.id, r.store_name, r.items || '', r.total || 0, r.discount || 0, net, r.payment_status].map(esc).join(','));
+  }
+  const slug = brandFor(req).slug || tid;
+  const label = from ? `${from}_to_${to || 'now'}` : 'last30days';
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="orders-${slug}-${label}.csv"`);
+  res.send('﻿' + lines.join('\r\n')); // BOM for Excel Thai support
+});
 // ---- Self-service billing (Omise subscription) ----
 app.get('/api/billing/status', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

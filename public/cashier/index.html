@@ -306,9 +306,10 @@
   <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>ภาพรวมธุรกิจ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">KPI วันนี้ · แนวโน้มยอดขาย · เมนูขายดี · ช่วงเวลาพีค</p></div>
-      <div class="row" style="gap:8px">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">← คิว</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="renderCharts()">↻</button>
+        <a id="csvBtn" class="ghost" style="padding:6px 12px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" href="/api/export/orders.csv" download>⬇ CSV</a>
       </div>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
