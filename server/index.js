@@ -410,6 +410,18 @@ app.get('/api/onboard', (req, res) => {
 // SaaS-only; rate-limited per IP. The owner logs in at /b/<slug>/cashier/ with their PIN.
 const signupHits = new Map(); // ip -> { count, until }
 const SIGNUP_MAX = Math.max(1, parseInt(process.env.SIGNUP_MAX || '5', 10) || 5), SIGNUP_WINDOW = 60 * 60 * 1000;
+// Per-tenant burst limiter for the public self-order endpoint (no PIN). Prevents a single tenant's
+// LIFF from being weaponised to hammer the server. Window = 60 s, cap configurable via ORDER_RATE env.
+const orderBurst = new Map(); // tenantId -> { count, windowStart }
+const ORDER_BURST_MAX = Math.max(10, parseInt(process.env.ORDER_RATE || '120', 10) || 120);
+const ORDER_BURST_WINDOW = 60 * 1000;
+function checkOrderBurst(tenantId) {
+  const now = Date.now();
+  let b = orderBurst.get(tenantId);
+  if (!b || now - b.windowStart >= ORDER_BURST_WINDOW) { b = { count: 0, windowStart: now }; orderBurst.set(tenantId, b); }
+  b.count++;
+  return b.count > ORDER_BURST_MAX;
+}
 app.post('/api/signup', (req, res) => {
   if (!SAAS) return res.status(404).json({ error: 'not_available' });
   const ip = ipOf(req), now = Date.now();
@@ -1288,6 +1300,7 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 // number, then pay at the counter. Order is tagged source='customer', unpaid.
 app.post('/api/zones/:zoneId/order', (req, res) => {
   if (posOnlyFor(req) || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
+  if (SAAS && checkOrderBurst(req.tenantId)) return res.status(429).json({ error: 'too_many_requests' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',

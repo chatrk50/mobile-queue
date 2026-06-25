@@ -82,6 +82,9 @@
       <li><b>แจ้งเตือน LINE auto-reply</b> — ลูกค้าทักมา LINE OA ได้รับ reply อัตโนมัติ ชี้ไปสแกน QR</li>
       <li><b>Onboarding wizard</b> — Step 2 (รับออเดอร์แรก) ติ๊กถูกอัตโนมัติหลังรับออเดอร์จริงครั้งแรก</li>
       <li><b>Plan quota meter</b> — ⚙ ตั้งค่า > แพ็กเกจ แสดง progress bar ออเดอร์ใช้ไปแล้ว/เดือน (Free plan)</li>
+      <li><b>Loyalty isolation (composite PK)</b> — customers table rebuilt เป็น PRIMARY KEY (line_user_id, tenant_id) — แต้มสะสมแยกแบรนด์ถูกต้อง 100%</li>
+      <li><b>Customer suggestions scoped to tenant</b> — favourites + lastTicket query กรอง JOIN stores → tenant ป้องกัน cross-tenant bleed</li>
+      <li><b>Rate limiter (self-order)</b> — ป้องกัน tenant สแปม endpoint สั่งออเดอร์ลูกค้า (120 req/min, adjustable via ORDER_RATE env)</li>
     </ul>
   </div>
 
