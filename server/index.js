@@ -624,6 +624,13 @@ app.get('/api/loyalty/phone/:phone', (req, res) => {
   try { res.json(Q.loyaltyByPhone(req.params.phone)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// CRM: cashier looks up a customer by phone → full profile (visits, spend, favourites, history,
+// points). Works regardless of the loyalty toggle. Cashier-gated.
+app.get('/api/customers/phone/:phone', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.lookupCustomerByPhone(req.params.phone)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
 app.post('/api/tickets/:ticketId/redeem', (req, res) => {

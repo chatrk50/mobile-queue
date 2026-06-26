@@ -314,6 +314,26 @@ const snapCalled = Q.zoneSnapshot(1, { reveal: true }).recentCalled;
 ok(calledN >= 7 && snapCalled.length >= 7, `INVARIANT snapshot returns ALL called tickets, not just 5 (called ${calledN}, snapshot ${snapCalled.length})`);
 ok(snapCalled.length === snapCalled.filter((t) => t.order_total != null).length, 'every called ticket still carries its order detail');
 
+// ---- CRM: customer profile by phone is computed LIVE from paid orders (visits, spend, favourites,
+// history) — works retroactively, no maintained aggregates, independent of the loyalty toggle. ----
+console.log('\n== CRM: customer profile by phone ==');
+const crmPhone = '0812345678';
+const crm1 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }, { name: 'Topping', price: 10, qty: 1 }], {});
+Q.attachCustomerToTicket(crm1.ticket.id, crmPhone, 'คุณเทส');
+Q.setOrderPaid(crm1.ticket.id, { method: 'cash' });
+const crm2 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 2 }], {});
+Q.attachCustomerToTicket(crm2.ticket.id, crmPhone);
+Q.setOrderPaid(crm2.ticket.id, { method: 'cash' });
+const prof = Q.lookupCustomerByPhone(crmPhone);
+ok(prof.found && prof.visits === 2, `INVARIANT profile counts PAID visits (${prof.visits})`);
+ok(near(prof.totalSpend, 160), `INVARIANT profile sums net spend across visits (${prof.totalSpend})`);
+ok(prof.name === 'คุณเทส', `INVARIANT profile keeps the captured name (${prof.name})`);
+ok(prof.favourites[0] && prof.favourites[0].name === 'Drink' && prof.favourites[0].qty === 3, `INVARIANT favourites rank base drinks by qty (Drink=${prof.favourites[0] && prof.favourites[0].qty})`);
+ok(prof.recent.length === 2, `INVARIANT recent paid orders listed (${prof.recent.length})`);
+ok(Q.lookupCustomerByPhone('0899999999').found === false, 'INVARIANT unknown phone → found:false');
+let crmBad = null; try { Q.lookupCustomerByPhone('123'); } catch (e) { crmBad = e.message; }
+ok(crmBad === 'bad_phone', `INVARIANT malformed phone rejected (${crmBad})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

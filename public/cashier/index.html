@@ -85,6 +85,7 @@
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
+      <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
       <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
@@ -390,6 +391,21 @@
     <button class="ghost" style="width:100%;padding:13px;margin-bottom:8px;color:#0e6b7e;border-color:#bfe3ec;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailEditOptions()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>เปลี่ยนท็อปปิ้ง / ความหวาน</button>
     <button class="ghost danger" style="width:100%;padding:13px;margin-bottom:12px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailRemove()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>ลบรายการนี้</button>
     <button class="ok" style="width:100%;padding:14px;min-height:54px;font-size:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="confirmDetail()"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M20 6 9 17l-5-5"/></svg>ยืนยันการแก้ไข</button>
+  </div>
+</div>
+
+<!-- CRM: customer lookup by phone -->
+<div id="custPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
+    <div class="row between" style="margin-bottom:10px">
+      <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
+      <button class="ghost" style="padding:6px 12px" onclick="closeCust()">✕</button>
+    </div>
+    <div class="row" style="gap:8px">
+      <input id="custPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="เบอร์โทรลูกค้า" oninput="this.value=this.value.replace(/\D/g,'')" onkeydown="if(event.key==='Enter')doCustLookup()" style="flex:1;padding:12px 14px;font-size:17px;border:1.5px solid var(--line);border-radius:12px;letter-spacing:1px">
+      <button class="ok" style="padding:0 18px;font-weight:800" onclick="doCustLookup()">ค้นหา</button>
+    </div>
+    <div id="custResult" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -715,7 +731,7 @@ window.login=async()=>{
     $('loginErr').textContent='';
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
-    $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
+    $('historyBtn').style.display=''; $('custBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
@@ -732,7 +748,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
-  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
+  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('historyCard').style.display='none';
   $('salesBtn').style.display='none'; $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
@@ -1627,6 +1643,39 @@ window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx
 // Explicit "done" for the item editor — changes already apply live; this gives clear closure
 // (and a confirmation toast) so the cashier knows the edit is finished and returns to the bill.
 window.confirmDetail=()=>{ closeItemDetail(); toast('อัปเดตรายการแล้ว'); };
+
+// ---------- CRM: customer lookup by phone (enter phone → profile card) ----------
+window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPop').style.display='flex'; setTimeout(()=>i&&i.focus(),60); };
+window.closeCust=()=>{ $('custPop').style.display='none'; };
+window.doCustLookup=async()=>{
+  const ph=($('custPhone').value||'').replace(/\D/g,''); const box=$('custResult');
+  if(ph.length<9){ box.innerHTML='<p class="muted" style="text-align:center">กรอกเบอร์ให้ครบก่อนนะ</p>'; return; }
+  box.innerHTML='<p class="muted" style="text-align:center">⏳ กำลังค้นหา…</p>';
+  try{ box.innerHTML=renderCustProfile(await api('/api/customers/phone/'+ph)); }
+  catch(e){ box.innerHTML='<p class="muted" style="text-align:center;color:var(--danger)">ค้นหาไม่สำเร็จ: '+err(e)+'</p>'; }
+};
+function _agoTH(iso){ if(!iso) return '—'; const d=new Date(iso.replace(' ','T')+'Z'); const days=Math.floor((Date.now()-d.getTime())/86400000); return days<=0?'วันนี้':days===1?'เมื่อวาน':days+' วันก่อน'; }
+function renderCustProfile(p){
+  if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin-top:4px">ยังไม่มีประวัติของเบอร์นี้ — แนบเบอร์กับบิลเพื่อเริ่มเก็บประวัติได้เลย</p></div>`;
+  const tier=p.loyalty&&p.loyalty.tier?p.loyalty.tier.emoji+' ':'';
+  const favs=(p.favourites||[]).map(f=>`${esc(f.name)} ×${f.qty}`).join(' · ')||'—';
+  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${(r.paid_at||'').slice(5,16).replace('T',' ')}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
+  const bday=p.loyalty&&p.loyalty.isBirthday?'<span class="pill" style="background:#fde2e7;color:#c43a4b;margin-left:6px;font-size:11px">🎂 วันเกิดวันนี้</span>':'';
+  const pts=p.loyalty?`<div class="row between" style="font-size:13px;margin-top:4px"><span class="muted">แต้มสะสม</span><b style="color:#7c3aed">${tier}${p.loyalty.points} ดวง</b></div>`:'';
+  return `
+   <div style="text-align:center;margin-bottom:10px">
+     <div style="font-size:18px;font-weight:800;color:var(--navy)">${esc(p.name||'ลูกค้า')}${bday}</div>
+     <div class="muted" style="font-size:13px">📱 ${esc(p.phone||'—')}</div>
+   </div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
+     <div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--navy)">${p.visits}</div><div class="muted" style="font-size:12px">ครั้งที่มา</div></div>
+     <div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--navy)">฿${p.totalSpend}</div><div class="muted" style="font-size:12px">ใช้จ่ายรวม</div></div>
+   </div>
+   <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
+   <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
+   ${pts}
+   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>`;
+}
 window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
   $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
 window.detailRemove=()=>{ if(_detailIdx==null) return; cart.splice(_detailIdx,1); closeItemDetail(); renderBasketCount(); toast('ลบรายการแล้ว'); };
@@ -1941,10 +1990,12 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
   // Phone-keyed loyalty (Pkg 1, no LINE): attach a phone to a walk-in ticket so it earns stamps
   // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
-  const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
-    ? (t.loy_phone
-        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
-        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.loyalty}แต้ม</button>`) : '';
+  // CRM: tag any walk-in order to a customer phone (builds their history). Works regardless of the
+  // loyalty toggle; shows the stamp balance too when loyalty is on.
+  const phoneBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
+    ? ((t.loy_phone||t.cust_phone)
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${esc(t.loy_phone||t.cust_phone)}${(CFG.loyaltyOn&&t.loy_points!=null)?' · '+t.loy_points+' ดวง':''}</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้า (เก็บประวัติ${CFG.loyaltyOn?' + สะสมแต้ม':''})" onclick="attachPhone(${t.id})"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>`) : '';
   // Collect payment on a queued (already-numbered) order that's still unpaid → marks it paid in place.
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน</button>` : '';
@@ -2344,10 +2395,11 @@ window.discountTicket=async(tid,total)=>{
   try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
 // Phone-keyed loyalty: ask for the customer's phone, attach it to the ticket so this order earns
 // stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
-window.attachPhone=async(tid)=>{ const phone=await appPrompt({title:'📱 สะสมแต้มด้วยเบอร์โทร',message:'ใส่เบอร์ลูกค้าเพื่อสะสมแต้มออเดอร์นี้',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+window.attachPhone=async(tid)=>{ const loy=CFG.loyaltyOn;
+  const phone=await appPrompt({title:'ผูกเบอร์ลูกค้า',message:loy?'ใส่เบอร์ลูกค้าเพื่อเก็บประวัติ + สะสมแต้มออเดอร์นี้':'ใส่เบอร์ลูกค้าเพื่อเก็บประวัติการซื้อ',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
   try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
-    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')); }
-  catch(e){ const m=err(e); toast(m==='loyalty_off'?'ยังไม่เปิดสะสมแต้ม':(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m))); } };
+    toast((loy&&r.points!=null) ? ('ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')) : ('ผูกเบอร์ '+r.phone+' แล้ว · เก็บประวัติลูกค้า')); }
+  catch(e){ const m=err(e); toast(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m)); } };
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

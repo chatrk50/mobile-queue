@@ -1151,10 +1151,61 @@ export function loyaltyByPhone(phone) {
   const b = loyaltyBalance(key);
   return { ...b, phone: d, history: loyaltyHistory(key, 10) };
 }
-/** Attach a phone (loyalty key) + optional name to a pending ticket, creating the customer row.
- *  Returns the balance so the till can show it. Rejected once the order is paid. */
+// ---- CRM: live customer profile (computed from real orders — no maintained aggregates, so it works
+// retroactively on all history and needs no migration). A customer's orders are tickets whose
+// line_user_id (LINE) OR customer_key ('tel:<phone>') matches the key. ----
+/** Full profile for one customer key (LINE userId or 'tel:<digits>'). `found` is false for an
+ *  unknown phone with zero history. Safe to call regardless of the loyalty-rewards toggle. */
+export function customerProfile(key) {
+  if (!key) return { found: false };
+  const isPhone = key.startsWith('tel:');
+  const cust = db.prepare('SELECT name, first_seen, birthday FROM customers WHERE line_user_id=?').get(key);
+  const agg = db.prepare(
+    `SELECT COUNT(DISTINCT t.id) AS visits,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS spend,
+            MIN(o.paid_at) AS first_paid, MAX(o.paid_at) AS last_paid
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'`
+  ).get(key, key);
+  const favourites = db.prepare(
+    `SELECT oi.name, SUM(oi.qty) AS qty
+     FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND oi.kind='base' AND o.payment_status='paid'
+     GROUP BY oi.name ORDER BY qty DESC, oi.name LIMIT 3`
+  ).all(key, key);
+  const recent = db.prepare(
+    `SELECT t.code, o.paid_at, (o.total - COALESCE(o.discount,0)) AS net
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'
+     ORDER BY o.paid_at DESC LIMIT 5`
+  ).all(key, key);
+  const visits = agg.visits || 0;
+  const bal = loyaltyEnabled() ? loyaltyBalance(key) : null;
+  return {
+    found: visits > 0 || !!cust,
+    key, isPhone, phone: isPhone ? key.slice(4) : null,
+    name: cust?.name || null,
+    firstSeen: agg.first_paid || cust?.first_seen || null,
+    lastVisit: agg.last_paid || null,
+    visits,
+    totalSpend: Math.round((agg.spend || 0) * 100) / 100,
+    favourites,
+    recent,
+    birthday: cust?.birthday || null,
+    loyalty: bal ? { points: bal.points, lifetime: bal.lifetime, tier: bal.tier, isBirthday: bal.isBirthday } : null,
+  };
+}
+/** Cashier "enter phone → see customer". Throws bad_phone on a malformed number. */
+export function lookupCustomerByPhone(phone) {
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  return customerProfile('tel:' + d);
+}
+
+/** Attach a phone (customer key) + optional name to a pending ticket, creating the customer row so
+ *  future orders accrue to this customer (CRM). Works regardless of the loyalty-rewards toggle —
+ *  stamps are awarded separately (and only when loyalty is on). Rejected once the order is paid. */
 export function attachCustomerToTicket(ticketId, phone, name = null) {
-  if (!loyaltyEnabled()) throw new Error('loyalty_off');
   const d = normalizePhone(phone);
   if (!d) throw new Error('bad_phone');
   const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
@@ -2085,12 +2136,15 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
     }
-    // Cashier-only: attach the customer's stamp balance (LINE userId or a phone key) so staff
-    // can redeem on the spot.
-    if (reveal && loyaltyEnabled()) {
+    // Cashier-only: show the attached customer (phone) so staff always know an order is tagged — even
+    // with loyalty OFF (CRM). When loyalty is ON, also attach the stamp balance for on-the-spot redeem.
+    if (reveal) {
       const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
-      const li = r && (r.line_user_id || r.customer_key);
-      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+      if (r && (r.customer_key || '').startsWith('tel:')) t.cust_phone = r.customer_key.slice(4);
+      if (loyaltyEnabled()) {
+        const li = r && (r.line_user_id || r.customer_key);
+        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+      }
     }
     return t;
   };
