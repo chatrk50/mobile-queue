@@ -27,6 +27,7 @@
   @keyframes wowspin{0%{transform:rotate(-25deg) scale(0)}60%{transform:rotate(8deg) scale(1.15)}100%{transform:rotate(0) scale(1)}}
   .confetti{position:absolute;top:-12px;width:9px;height:14px;border-radius:2px;opacity:.9;animation:conffall linear forwards}
   @keyframes conffall{0%{transform:translateY(-10px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(620deg);opacity:.6}}
+  @keyframes rpop{0%{transform:scale(.7);opacity:.3}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -98,6 +99,7 @@
       </div>
     </div>
     <p class="muted" style="margin-top:6px">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน แล้วดูตะกร้า 🧺</p>
+    <button id="surpriseBtn" onclick="openRandom()" style="width:100%;margin:12px 0 0;padding:13px;border:none;border-radius:16px;background:linear-gradient(135deg,#ff9d2f,#ff6a3d 55%,#ff4e62);color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 12px rgba(255,94,73,.34);display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent">เลือกไม่ถูก ให้เราสุ่มให้</button>
     <div id="orderLoyChip" style="display:none;margin:8px 0 0;font-size:13px;font-weight:700;color:var(--navy);background:rgba(0,181,216,.10);border:1px solid rgba(0,181,216,.3);border-radius:999px;padding:7px 12px;text-align:center"></div>
     <div id="menuButtons" style="margin:10px 0"></div>
     <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
@@ -216,6 +218,19 @@
     <h1 id="sweetTitle">ความหวาน</h1>
     <p class="muted">เลือกระดับความหวาน</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
+  </div>
+</div>
+
+<!-- "SURPRISE ME" random menu suggester -->
+<div id="randomPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()">✕</button></div>
+    <div id="randomReveal" style="min-height:188px;display:flex;align-items:center;justify-content:center;margin:8px 0 4px"></div>
+    <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้</button>
+    <div class="row" style="gap:9px">
+      <button class="ghost" id="randomAgainBtn" style="flex:1;padding:12px;font-weight:800;color:#0e7c93" onclick="spinRandom()">สุ่มใหม่</button>
+      <button class="ghost" style="flex:1;padding:12px" onclick="closeRandom()">เลือกเอง</button>
+    </div>
   </div>
 </div>
 
@@ -534,6 +549,55 @@ function openSweet(){ $('topPop').style.display='none';
   $('sweetPop').style.display='flex'; }
 window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops), sweet:s });
   $('sweetPop').style.display='none'; renderBasketCount(); toast('เพิ่มลงตะกร้าแล้ว'); };
+
+// ---------- "Surprise me" — random menu suggester for indecisive customers ----------
+// Proven pattern (UberEats "Surprise me" / "I'm feeling lucky" / gacha reveals): a slot-machine
+// shuffle builds a beat of anticipation, then lands on a pick. Excludes sold-out, surfaces the
+// item's badge as social proof, and keeps escape hatches obvious — สุ่มใหม่ / เลือกเอง — so it never
+// traps the customer. Picking "เลือกเมนูนี้" hands off to the normal sweetness step so the customer
+// chooses their own sweetness (not randomised).
+let _randomPick=null, _randomSpinning=false;
+const RANDOM_BADGE={ rec:{t:'⭐ แนะนำ',bg:'#16a34a'}, hot:{t:'🔥 ขายดี',bg:'#f3961a'}, new:{t:'✨ ใหม่',bg:'#1ab3ce'}, promo:{t:'🏷️ โปรโมชั่น',bg:'#e55b6b'}, free:{t:'🎁 ฟรี',bg:'#7c3aed'} };
+function randomPool(){ return (MENU||[]).filter(m=>m.active && m.category!=='topping' && !(m.soldout||m.stockSoldout)); }
+function randomCard(m, spinning){
+  const b = (!spinning && m.badge) ? RANDOM_BADGE[m.badge] : null;
+  return `<div style="${spinning?'opacity:.55;filter:blur(.4px)':'animation:rpop .22s ease-out'}">
+    <div style="font-size:62px;line-height:1">${itemImg(m)}</div>
+    <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:6px">${esc(m.name)}</div>
+    ${m.name_en?`<div class="muted" style="font-size:12px">${esc(m.name_en)}</div>`:''}
+    <div style="font-size:23px;font-weight:800;color:var(--accent);margin-top:4px">฿${m.price}</div>
+    ${b?`<div style="margin-top:7px"><span style="background:${b.bg};color:#fff;font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px">${b.t}</span></div>`:''}
+  </div>`;
+}
+window.openRandom=()=>{ if(!randomPool().length){ toast('ขณะนี้ยังไม่มีเครื่องดื่มให้สุ่ม'); return; }
+  $('randomPop').style.display='flex'; spinRandom(); };
+window.closeRandom=()=>{ $('randomPop').style.display='none'; };
+window.spinRandom=()=>{
+  const pool=randomPool(); if(!pool.length){ closeRandom(); return; }
+  if(_randomSpinning) return; _randomSpinning=true; _randomPick=null;
+  const reveal=$('randomReveal'), add=$('randomAddBtn'), again=$('randomAgainBtn');
+  add.disabled=true; add.style.opacity=.45; again.disabled=true; again.style.opacity=.5;
+  const total=15+Math.floor(Math.random()*6);   // 15–20 shuffles
+  let i=0;
+  const tick=()=>{
+    if(i>=total){   // land on the final pick
+      const pick=pool[Math.floor(Math.random()*pool.length)];
+      _randomPick={ drink:pick };
+      reveal.innerHTML=randomCard(pick, false);
+      _randomSpinning=false; add.disabled=false; add.style.opacity=1; again.disabled=false; again.style.opacity=1;
+      try{ navigator.vibrate && navigator.vibrate(28); }catch(e){}
+      return;
+    }
+    reveal.innerHTML=randomCard(pool[Math.floor(Math.random()*pool.length)], true);
+    i++;
+    setTimeout(tick, 45 + Math.pow(i/total,3)*250);   // accelerate-then-decelerate feel
+  };
+  tick();
+};
+// Hand off to the normal ordering flow for the picked drink — topping → ความหวาน → ตะกร้า — so the
+// customer chooses toppings and sweetness themselves, exactly like a hand-picked drink.
+window.addRandomToCart=()=>{ if(!_randomPick || _randomSpinning) return;
+  const id=_randomPick.drink.id; closeRandom(); pickDrink(id); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
 function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; updateNudges(); }
