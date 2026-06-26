@@ -254,6 +254,7 @@
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
+const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
 let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false;
 
 const $ = (id) => document.getElementById(id);
@@ -343,6 +344,25 @@ window.closeApp = ()=>{
     '<p class="muted">ปิดหน้านี้ได้เลยค่ะ</p></div>';
 };
 
+// QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
+async function doClaim(){
+  try{
+    const r = await api('/api/tickets/'+encodeURIComponent(claimId)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId, token:claimTok, name:displayName})});
+    const p = r.profile||{}, visits = p.visits||0;
+    document.querySelector('.wrap').innerHTML =
+      '<div class="card" style="text-align:center">'+
+      '<div style="font-size:46px">✅</div>'+
+      '<h1 style="margin:6px 0;color:var(--navy)">เช็คอินสำเร็จ!</h1>'+
+      '<p class="muted">'+(displayName?('คุณ '+esc(displayName)+' '):'')+'เชื่อมออเดอร์นี้กับ LINE แล้ว</p>'+
+      (visits>=2?('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px;margin:12px 0;color:#c2410c;font-weight:800">★ คุณมาแล้ว '+visits+' ครั้ง · ขอบคุณนะคะ 💛</div>'):'')+
+      '<p class="muted" style="font-size:13px;margin-top:10px">รับเครื่องดื่มที่เคาน์เตอร์ได้เลยค่ะ</p>'+
+      '</div>';
+  }catch(e){
+    const m=(e.data&&e.data.error)||e.message;
+    const map={bad_or_expired_qr:'QR หมดอายุ — ขอ QR ใหม่จากเคาน์เตอร์นะคะ',already_claimed:'ออเดอร์นี้เชื่อมบัญชีแล้ว',order_already_paid:'ออเดอร์นี้ชำระแล้ว',ticket_not_found:'ไม่พบออเดอร์',no_identity:'เปิดผ่าน LINE เพื่อเช็คอินนะคะ'};
+    err(map[m]||('เช็คอินไม่สำเร็จ: '+m));
+  }
+}
 async function loadZone(){
   if(!zoneId) return err('ไม่พบโซนใน QR code');
   const z = await api('/api/zones/'+zoneId);
@@ -934,6 +954,7 @@ async function proceed(){
 
 (async ()=>{
   await initLiff();
+  if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
   if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
   await proceed();
 })().catch(e=>err(e.message));

@@ -646,6 +646,28 @@ app.post('/api/crm/winback', async (req, res) => {
   try { res.json(await Q.winBackBlast(req.body?.message, { days: Number(req.body?.days) || 30 })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// QR check-in: cashier shows this per-order QR; the customer scans it with LINE to link their
+// identity to THIS order (no phone typing). Cashier-gated; returns a PNG.
+app.get('/api/tickets/:ticketId/checkin-qr', async (req, res) => {
+  if (!pinOK(req)) return res.status(401).end();
+  try {
+    const token = Q.startCheckin(req.params.ticketId);
+    const url = LIFF_ID
+      ? `https://liff.line.me/${LIFF_ID}?claim=${req.params.ticketId}&t=${token}`
+      : `${PUBLIC_BASE_URL}/liff/?claim=${req.params.ticketId}&t=${token}`;
+    const buf = await QRCode.toBuffer(url, { width: 520, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.set('Cache-Control', 'no-store').type('png').send(buf);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Customer's LIFF claims the order after scanning the check-in QR (links their LINE identity). Public
+// (the token in the QR is the auth) — the cashier card then auto-recognises them via the live snapshot.
+app.post('/api/tickets/:ticketId/claim', (req, res) => {
+  try {
+    const r = Q.claimTicket(req.params.ticketId, req.body?.lineUserId, req.body?.token, req.body?.name || null);
+    if (r.zoneId != null) emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
 app.post('/api/tickets/:ticketId/redeem', (req, res) => {

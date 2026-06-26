@@ -432,6 +432,16 @@
   </div>
 </div>
 
+<!-- QR check-in: customer scans to link their LINE identity to this order -->
+<div id="checkinPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:57;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:320px;width:100%;margin:0;text-align:center;padding:18px">
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:0 0 10px">สแกนด้วย LINE เพื่อสะสมประวัติ — ไม่ต้องพิมพ์เบอร์</p>
+    <img id="checkinImg" alt="QR เช็คอิน" style="width:240px;height:240px;border-radius:14px;border:1px solid var(--line);object-fit:contain;background:#fff">
+    <p class="muted" id="checkinHint" style="font-size:12px;margin:10px 0 0">รอลูกค้าสแกน… ระบบจะแสดงชื่อบนการ์ดเองเมื่อเช็คอินสำเร็จ</p>
+  </div>
+</div>
+
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
@@ -2023,6 +2033,9 @@ function renderZone(snap){
     ? ((t.loy_phone||t.cust_phone)
         ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${esc(t.loy_phone||t.cust_phone)}${(CFG.loyaltyOn&&t.loy_points!=null)?' · '+t.loy_points+' ดวง':''}</span>`
         : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้า (เก็บประวัติ${CFG.loyaltyOn?' + สะสมแต้ม':''})" onclick="attachPhone(${t.id})"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>`) : '';
+  // QR check-in: customer scans → links their LINE identity to this order (no typing). Walk-in unpaid only.
+  const checkinBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer' && !t.cust_phone && !(t.cust&&t.cust.name))
+    ? `<button class="ghost" style="padding:8px 10px" title="ให้ลูกค้าสแกน QR เพื่อเช็คอินด้วย LINE" onclick="showCheckinQR(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 21v.01M17 21v.01"/></svg>QR เช็คอิน</button>` : '';
   // Collect payment on a queued (already-numbered) order that's still unpaid → marks it paid in place.
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน</button>` : '';
@@ -2092,13 +2105,13 @@ function renderZone(snap){
         <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
-        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
+        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const called=snap.recentCalled||[];
   const calledCard=(t)=>`
@@ -2432,6 +2445,12 @@ window.attachPhone=async(tid)=>{ const loy=CFG.loyaltyOn;
     else toast((loy&&r.points!=null) ? ('ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง') : ('ผูกเบอร์ '+r.phone+' แล้ว · ลูกค้าใหม่')); }
   catch(e){ const m=err(e); toast(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m)); } };
 window.showCustomerProfile=(phone)=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=phone; $('custPop').style.display='flex'; doCustLookup(); };
+
+// QR check-in: show a per-order QR. When the customer scans + claims, the live snapshot pushes the
+// recognition onto the card automatically (no polling here needed).
+window.showCheckinQR=(tid)=>{ const q=PIN?('?pin='+encodeURIComponent(PIN)+'&_='+Date.now()):('?_='+Date.now());
+  $('checkinImg').src='/api/tickets/'+tid+'/checkin-qr'+q; $('checkinPop').style.display='flex'; };
+window.closeCheckin=()=>{ $('checkinPop').style.display='none'; $('checkinImg').src=''; };
 
 // ---------- CRM: win-back lapsed LINE customers (manager) ----------
 window.openWinback=()=>{ closeAdmin(); $('wbMsg').value='คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ วันนี้มีเมนูอร่อย ๆ รออยู่!'; $('winbackPop').style.display='flex'; wbPreview(); };

@@ -1299,6 +1299,43 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
 }
 
+// ---- QR check-in handshake: cashier shows a per-order QR → customer scans with LINE → their LINE
+// identity links to THIS order (no phone typing). Tokens live in-memory (short scan window), so no
+// migration and they auto-expire; a lost token just means the customer re-scans. ----
+const _checkinTokens = new Map();   // ticketId -> { token, exp }
+function _newToken() { try { return globalThis.crypto.randomUUID().replace(/-/g, ''); } catch { return 'c' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); } }
+/** Cashier asks for a check-in QR for an unpaid, not-yet-LINE order. Returns a fresh token. */
+export function startCheckin(ticketId) {
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_line_customer');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const token = _newToken();
+  _checkinTokens.set(Number(ticketId), { token, exp: Date.now() + 5 * 60 * 1000 });
+  return token;
+}
+/** Customer's LIFF claims the order after scanning. Verifies the token + that the order is still
+ *  unclaimed/unpaid, then links their LINE identity to the ticket and ensures the customer row. */
+export function claimTicket(ticketId, lineUserId, token, name = null) {
+  const id = Number(ticketId);
+  if (!lineUserId) throw new Error('no_identity');
+  const rec = _checkinTokens.get(id);
+  if (!rec || rec.token !== token || rec.exp < Date.now()) throw new Error('bad_or_expired_qr');
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(id);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_claimed');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(id);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const nm = (name || '').toString().trim().slice(0, 80) || null;
+  db.transaction(() => {
+    db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(lineUserId, nm);
+    db.prepare('UPDATE tickets SET line_user_id=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(lineUserId, nm, id);
+  })();
+  _checkinTokens.delete(id);
+  return { ok: true, ticketId: id, zoneId: db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(id)?.zone_id, profile: customerProfile(lineUserId) };
+}
+
 /** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
  *  and when that friend completes their FIRST paid order both sides get bonus stamps. */
 export function getReferralBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:referral_bonus', '5')) || 0)); }

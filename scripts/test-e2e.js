@@ -363,6 +363,19 @@ ok(!Q.lapsedLineCustomers(1).some((c) => String(c.lineUserId).startsWith('tel:')
 let wbEmpty = null; try { await Q.winBackBlast('   ', { days: 30 }); } catch (e) { wbEmpty = e.message; }
 ok(wbEmpty === 'empty_message', `INVARIANT win-back rejects an empty message (${wbEmpty})`);
 
+// ---- CRM QR check-in: cashier shows a per-order QR; the customer's scan claims (links) the order ----
+console.log('\n== CRM: QR check-in handshake ==');
+const ciT = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+const ciTok = Q.startCheckin(ciT.ticket.id);
+const ciUser = 'Uclaimer000000000000000000000000001';
+let ciBad = null; try { Q.claimTicket(ciT.ticket.id, ciUser, 'WRONGTOKEN'); } catch (e) { ciBad = e.message; }
+ok(ciBad === 'bad_or_expired_qr', `INVARIANT claim rejects a wrong token (${ciBad})`);
+const ciR = Q.claimTicket(ciT.ticket.id, ciUser, ciTok, 'สแกน');
+ok(ciR.ok && db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ciT.ticket.id).line_user_id === ciUser,
+  'INVARIANT claim links the LINE identity to the ticket');
+let ciTwice = null; try { Q.claimTicket(ciT.ticket.id, 'Uother', ciTok); } catch (e) { ciTwice = e.message; }
+ok(ciTwice === 'bad_or_expired_qr' || ciTwice === 'already_claimed', `INVARIANT a used check-in token can't be replayed (${ciTwice})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
