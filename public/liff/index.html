@@ -226,7 +226,7 @@
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
     <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()">✕</button></div>
     <div id="randomReveal" style="min-height:188px;display:flex;align-items:center;justify-content:center;margin:8px 0 4px"></div>
-    <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้ → เลือกความหวาน</button>
+    <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้</button>
     <div class="row" style="gap:9px">
       <button class="ghost" id="randomAgainBtn" style="flex:1;padding:12px;font-weight:800;color:#0e7c93" onclick="spinRandom()">สุ่มใหม่</button>
       <button class="ghost" style="flex:1;padding:12px" onclick="closeRandom()">เลือกเอง</button>
@@ -594,11 +594,10 @@ window.spinRandom=()=>{
   };
   tick();
 };
-// Hand off to the normal sweetness step so the customer picks their OWN sweetness (no toppings — the
-// quick path); chooseSweet then adds it to the basket exactly like a hand-picked drink.
+// Hand off to the normal ordering flow for the picked drink — topping → ความหวาน → ตะกร้า — so the
+// customer chooses toppings and sweetness themselves, exactly like a hand-picked drink.
 window.addRandomToCart=()=>{ if(!_randomPick || _randomSpinning) return;
-  pendingDrink=_randomPick.drink; pendingTops={};
-  closeRandom(); openSweet(); };
+  const id=_randomPick.drink.id; closeRandom(); pickDrink(id); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
 function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; updateNudges(); }
