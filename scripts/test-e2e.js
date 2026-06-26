@@ -333,6 +333,10 @@ ok(prof.recent.length === 2, `INVARIANT recent paid orders listed (${prof.recent
 ok(Q.lookupCustomerByPhone('0899999999').found === false, 'INVARIANT unknown phone → found:false');
 let crmBad = null; try { Q.lookupCustomerByPhone('123'); } catch (e) { crmBad = e.message; }
 ok(crmBad === 'bad_phone', `INVARIANT malformed phone rejected (${crmBad})`);
+// The owner's customer report counts phone customers too (computed from real paid orders).
+const ins = Q.customerInsights();
+ok(ins.customers.repeat >= 1 && ins.customers.top.some((t) => t.isPhone && t.order_count === 2 && near(t.spend, 160)),
+  `INVARIANT phone customer appears in repeat + top with real visits/spend (repeat ${ins.customers.repeat})`);
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

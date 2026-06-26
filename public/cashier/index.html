@@ -1345,7 +1345,7 @@ async function loadInsights(){
     <span style="width:28px">${s}★</span>
     <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${((stars[s]||0)/maxN*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
     <span class="muted" style="width:28px;text-align:right">${stars[s]||0}</span></div>`).join('');
-  const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}</span><span class="muted">${t.order_count} ครั้ง</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
+  const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}${t.isPhone?' <span class="muted" style="font-size:10px">📱</span>':' <span class="muted" style="font-size:10px">LINE</span>'}</span><span class="muted">${t.order_count} ครั้ง${t.spend?' · ฿'+t.spend:''}</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
   box.innerHTML=`<h2>⭐ ความพึงพอใจลูกค้า</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
@@ -2396,10 +2396,15 @@ window.discountTicket=async(tid,total)=>{
 // Phone-keyed loyalty: ask for the customer's phone, attach it to the ticket so this order earns
 // stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
 window.attachPhone=async(tid)=>{ const loy=CFG.loyaltyOn;
-  const phone=await appPrompt({title:'ผูกเบอร์ลูกค้า',message:loy?'ใส่เบอร์ลูกค้าเพื่อเก็บประวัติ + สะสมแต้มออเดอร์นี้':'ใส่เบอร์ลูกค้าเพื่อเก็บประวัติการซื้อ',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+  // PDPA: state the purpose; staff should inform the customer before capturing the number.
+  const phone=await appPrompt({title:'ผูกเบอร์ลูกค้า',message:(loy?'เก็บประวัติ + สะสมแต้มออเดอร์นี้':'เก็บประวัติการซื้อของลูกค้า')+' · แจ้งลูกค้าก่อนขอเบอร์นะคะ',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
   try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
-    toast((loy&&r.points!=null) ? ('ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')) : ('ผูกเบอร์ '+r.phone+' แล้ว · เก็บประวัติลูกค้า')); }
+    // Recognition: a returning customer → pop their profile so staff can greet/personalise.
+    let prof=null; try{ prof=await api('/api/customers/phone/'+r.phone); }catch(e){}
+    if(prof && prof.visits>0){ showCustomerProfile(r.phone); }
+    else toast((loy&&r.points!=null) ? ('ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง') : ('ผูกเบอร์ '+r.phone+' แล้ว · ลูกค้าใหม่')); }
   catch(e){ const m=err(e); toast(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m)); } };
+window.showCustomerProfile=(phone)=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=phone; $('custPop').style.display='flex'; doCustLookup(); };
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

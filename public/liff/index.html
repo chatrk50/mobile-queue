@@ -381,7 +381,10 @@ async function loadReorder(){
     const fav = (s.favourites||[]).find(f=>!f.soldout && f.itemId);
     if(!fav) return;
     FAV=fav;
-    $('reorderHi').textContent = s.name ? ('คุณ '+s.name+' วันนี้สั่งเหมือนเดิมเลยไหม!') : 'วันนี้สั่งเหมือนเดิมเลยไหม!';
+    const _visits = s.orderCount||0;
+    const _greet = s.name ? ('คุณ '+esc(s.name)) : 'ยินดีต้อนรับกลับ';
+    const _vbadge = _visits>=3 ? (' <span style="color:#c2410c">· มาแล้ว '+_visits+' ครั้ง 💛</span>') : '';
+    $('reorderHi').innerHTML = _greet + _vbadge + '<br><span style="font-weight:600;font-size:.92em;opacity:.9">วันนี้สั่งเหมือนเดิมไหม?</span>';
     const favNm = (fav.name||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }

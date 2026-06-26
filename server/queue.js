@@ -239,11 +239,34 @@ export function customerInsights() {
   for (const r of db.prepare('SELECT rating, COUNT(*) n FROM tickets WHERE rating IS NOT NULL GROUP BY rating').all()) {
     if (stars[r.rating] != null) { stars[r.rating] = r.n; total += r.n; sum += r.rating * r.n; }
   }
-  const c = db.prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN order_count>=2 THEN 1 ELSE 0 END),0) repeat FROM customers').get();
-  const top = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE order_count>=2 ORDER BY order_count DESC, last_order_at DESC LIMIT 10').all();
+  // Compute the customer base from ACTUAL paid orders, unified across LINE (line_user_id) and phone
+  // (customer_key) — so phone customers count too, not just LINE. Visits/spend are real, not the
+  // LINE-only maintained order_count.
+  const rows = db.prepare(
+    `SELECT COALESCE(t.line_user_id, t.customer_key) AS k,
+            COUNT(DISTINCT t.id) AS visits,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS spend,
+            MAX(o.paid_at) AS last_paid
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE o.payment_status='paid' AND COALESCE(t.line_user_id, t.customer_key) IS NOT NULL
+     GROUP BY k`
+  ).all();
+  const totalC = rows.length;
+  const repeatC = rows.filter((r) => r.visits >= 2).length;
+  const nameOf = (k) => (db.prepare('SELECT name FROM customers WHERE line_user_id=?').get(k)?.name) || null;
+  const top = rows.filter((r) => r.visits >= 2)
+    .sort((a, b) => b.visits - a.visits || String(b.last_paid || '').localeCompare(String(a.last_paid || '')))
+    .slice(0, 10)
+    .map((r) => ({
+      name: nameOf(r.k) || (String(r.k).startsWith('tel:') ? r.k.slice(4) : 'ลูกค้า LINE'),
+      isPhone: String(r.k).startsWith('tel:'),
+      order_count: r.visits,
+      spend: Math.round((r.spend || 0) * 100) / 100,
+      last_order_at: r.last_paid,
+    }));
   return {
     satisfaction: { avg: total ? Math.round((sum / total) * 10) / 10 : null, total, stars },
-    customers: { total: c.total || 0, repeat: c.repeat || 0, repeatPct: c.total ? Math.round((c.repeat / c.total) * 100) : 0, top },
+    customers: { total: totalC, repeat: repeatC, repeatPct: totalC ? Math.round((repeatC / totalC) * 100) : 0, top },
   };
 }
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
