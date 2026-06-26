@@ -1252,6 +1252,25 @@ export function customerProfile(key) {
     loyalty: bal ? { points: bal.points, lifetime: bal.lifetime, tier: bal.tier, isBirthday: bal.isBirthday } : null,
   };
 }
+/** Lightweight recognition for the order card (cheap: 2 indexed queries) — name + paid-visit count +
+ *  top favourite, so the cashier sees "คุณเอ · มา 6 ครั้ง · ชอบมะม่วง" automatically, no lookup. */
+function customerMini(key) {
+  if (!key) return null;
+  const v = db.prepare(
+    `SELECT COUNT(DISTINCT t.id) AS visits FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'`
+  ).get(key, key);
+  const visits = v.visits || 0;
+  if (!visits) return null;   // brand-new / no paid history yet → nothing to recognise
+  const fav = db.prepare(
+    `SELECT oi.name FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND oi.kind='base' AND o.payment_status='paid'
+     GROUP BY oi.name ORDER BY SUM(oi.qty) DESC, oi.name LIMIT 1`
+  ).get(key, key);
+  const c = db.prepare('SELECT name FROM customers WHERE line_user_id=?').get(key);
+  return { name: c?.name || null, visits, fav: fav?.name || null };
+}
+
 /** Cashier "enter phone → see customer". Throws bad_phone on a malformed number. */
 export function lookupCustomerByPhone(phone) {
   const d = normalizePhone(phone);
@@ -2198,6 +2217,10 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     if (reveal) {
       const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
       if (r && (r.customer_key || '').startsWith('tel:')) t.cust_phone = r.customer_key.slice(4);
+      // Auto-recognition: if the order is tied to a KNOWN customer (LINE id or phone), attach a mini
+      // profile so the card greets them ("มา N ครั้ง · ชอบ X") with no lookup. null for new customers.
+      const ck = r && (r.line_user_id || r.customer_key);
+      if (ck) { const m = customerMini(ck); if (m) t.cust = m; }
       if (loyaltyEnabled()) {
         const li = r && (r.line_user_id || r.customer_key);
         if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }

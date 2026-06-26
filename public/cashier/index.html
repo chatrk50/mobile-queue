@@ -1947,10 +1947,14 @@ function renderZone(snap){
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
   const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'เปิด':'ปิด'; }
   const tog=$('ztog-'+id); if(tog) tog.textContent=open?'ปิดโซน':'เปิดโซน';
+  // Auto-recognition chip: a returning customer is greeted on the card itself (no lookup needed).
+  const recoChip=(t)=> (t.cust && t.cust.visits>=2)
+    ? ` <span class="pill" style="background:rgba(255,138,61,.15);color:#c2410c;font-weight:700;margin-left:6px;font-size:11px">★ มา ${t.cust.visits} ครั้ง${t.cust.fav?' · ชอบ'+esc(t.cust.fav):''}</span>` : '';
   const nm=(t)=>{
     const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
+    const nameTxt = (t.cust&&t.cust.name) ? t.cust.name : (real?t.customer_name:'');
     const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0e7c93;margin-left:6px">LINE</span>' : '';
-    return (real?` <span class="muted">· ${esc(t.customer_name)}</span>`:'')+src+loyChip(t);
+    return (nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)

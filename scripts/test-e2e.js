@@ -337,6 +337,14 @@ ok(crmBad === 'bad_phone', `INVARIANT malformed phone rejected (${crmBad})`);
 const ins = Q.customerInsights();
 ok(ins.customers.repeat >= 1 && ins.customers.top.some((t) => t.isPhone && t.order_count === 2 && near(t.spend, 160)),
   `INVARIANT phone customer appears in repeat + top with real visits/spend (repeat ${ins.customers.repeat})`);
+// Auto-recognition: a fresh order tagged to a RETURNING customer carries a mini-profile in the snapshot.
+const recoT = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.attachCustomerToTicket(recoT.ticket.id, crmPhone);
+const recoSnap = Q.zoneSnapshot(1, { reveal: true });
+const recoTk = [...(recoSnap.pending || []), ...(recoSnap.waiting || [])].find((x) => x.id === recoT.ticket.id);
+ok(recoTk && recoTk.cust && recoTk.cust.visits === 2 && recoTk.cust.fav === 'Drink',
+  `INVARIANT order card auto-recognises a returning customer (visits ${recoTk && recoTk.cust && recoTk.cust.visits}, fav ${recoTk && recoTk.cust && recoTk.cust.fav})`);
+ok(!Q.zoneSnapshot(1, { reveal: false }).pending.some((x) => x.cust), 'INVARIANT recognition is cashier-only (not in the public snapshot)');
 
 // ---- CRM win-back: targets ONLY lapsed LINE customers (recent or phone-only excluded) ----
 console.log('\n== CRM: win-back targeting ==');
