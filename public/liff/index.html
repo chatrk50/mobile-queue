@@ -76,6 +76,8 @@
     </div>
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
     <div id="referralCard" style="display:none;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px;text-align:left"><div id="referralBody"></div></div>
+    <button id="memberBtn" style="width:100%;margin-bottom:10px;background:#fff;color:var(--navy);border:1.5px solid var(--navy)" onclick="openMember()">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรของฉัน</button>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
     <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ปิด</button>
@@ -234,6 +236,23 @@
   </div>
 </div>
 
+<!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
+<div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:330px;width:100%;margin:0;text-align:center;max-height:92vh;overflow:auto">
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:18px">บัตรสมาชิก YO-DEE</h1><button class="ghost" style="padding:6px 12px" onclick="closeMember()">✕</button></div>
+    <div id="memberName" style="font-weight:800;color:var(--navy);font-size:16px;margin:8px 0 6px"></div>
+    <img id="memberQR" alt="QR สมาชิก" style="width:196px;height:196px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
+    <p class="muted" style="font-size:12px;margin:8px 0 6px">แสดง QR นี้ที่เคาน์เตอร์ — สะสมแต้ม/ประวัติโดยไม่ต้องบอกเบอร์</p>
+    <div class="row" style="justify-content:center;gap:14px;margin:8px 0;flex-wrap:wrap;font-size:14px">
+      <span id="memberPts" style="display:none;font-weight:800;color:#7c3aed"></span>
+      <span id="memberVisits" style="font-weight:800;color:#c2410c"></span>
+    </div>
+    <div id="memberFav" class="muted" style="font-size:14px;margin-bottom:10px"></div>
+    <button id="memberReorder" class="ok" style="width:100%;display:none;margin-bottom:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
+    <button class="ghost" style="width:100%" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+  </div>
+</div>
+
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
@@ -343,6 +362,22 @@ window.closeApp = ()=>{
     '<div class="card" style="text-align:center"><h1>แล้วพบกันใหม่ค่ะ 👋</h1>'+
     '<p class="muted">ปิดหน้านี้ได้เลยค่ะ</p></div>';
 };
+
+// "บัตรของฉัน" member card: QR สมาชิก + แต้ม + visits + สั่งซ้ำ in one place (reuses suggestions + loyalty).
+window.openMember=async()=>{
+  $('memberPop').style.display='flex';
+  $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
+  $('memberName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+  $('memberPts').style.display='none'; $('memberVisits').textContent=''; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
+    const visits=s.orderCount||0, fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
+    $('memberVisits').textContent = visits>=1 ? ('★ มาแล้ว '+visits+' ครั้ง') : '';
+    if(fav){ FAV=fav; $('memberFav').textContent='เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
+  }catch(e){}
+  try{ const conf=await api('/api/loyalty/config'); if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); $('memberPts').textContent='⭐ '+(bal.points||0)+' ดวง'; $('memberPts').style.display=''; } }catch(e){}
+};
+window.closeMember=()=>{ $('memberPop').style.display='none'; };
+window.memberReorder=()=>{ closeMember(); reorderFav(); };
 
 // QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
 async function doClaim(){

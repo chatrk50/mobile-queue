@@ -370,6 +370,17 @@ app.get('/api/qr/:zoneId', async (req, res) => {
     res.type('png').send(buf);
   } catch (e) { res.status(500).end(); }
 });
+// Member QR for the customer's "บัตรของฉัน" — encodes a member URL the cashier scanner reads to
+// identify them (no typing). The id is the customer's own LINE id; the QR is shown only to them.
+app.get('/api/member-qr', async (req, res) => {
+  const u = String(req.query.u || '').slice(0, 128);
+  if (!u) return res.status(400).end();
+  const url = `${PUBLIC_BASE_URL}/m?u=${encodeURIComponent(u)}`;
+  try {
+    const buf = await QRCode.toBuffer(url, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.set('Cache-Control', 'no-store').type('png').send(buf);
+  } catch (e) { res.status(500).end(); }
+});
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
 app.get('/api/promptpay-qr', async (req, res) => {
@@ -629,6 +640,12 @@ app.get('/api/loyalty/phone/:phone', (req, res) => {
 app.get('/api/customers/phone/:phone', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { res.json(Q.lookupCustomerByPhone(req.params.phone)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM: cashier scanned a member QR → look the customer up by their LINE id. Cashier-gated.
+app.get('/api/customers/by-line/:lineUserId', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.customerProfile(req.params.lineUserId)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).

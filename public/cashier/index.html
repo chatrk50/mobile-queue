@@ -86,6 +86,7 @@
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
       <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
+      <button id="scanBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตร</button>
       <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
@@ -442,6 +443,15 @@
   </div>
 </div>
 
+<!-- Scan a customer's "บัตรของฉัน" member QR → pull up their profile (no typing) -->
+<div id="scanPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
+    <video id="scanVideo" playsinline muted style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
+  </div>
+</div>
+
 <!-- BASKET REVIEW (step 4) -->
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:460px;width:100%;max-height:88vh;overflow:auto;margin:0">
@@ -627,6 +637,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -764,7 +775,7 @@ window.login=async()=>{
     $('loginErr').textContent='';
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
-    $('historyBtn').style.display=''; $('custBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
+    $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
@@ -781,7 +792,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
-  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('historyCard').style.display='none';
+  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('scanBtn').style.display='none'; $('historyCard').style.display='none';
   $('salesBtn').style.display='none'; $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
@@ -1698,7 +1709,7 @@ function renderCustProfile(p){
   return `
    <div style="text-align:center;margin-bottom:10px">
      <div style="font-size:18px;font-weight:800;color:var(--navy)">${esc(p.name||'ลูกค้า')}${bday}</div>
-     <div class="muted" style="font-size:13px">📱 ${esc(p.phone||'—')}</div>
+     <div class="muted" style="font-size:13px">${p.isPhone?('📱 '+esc(p.phone||'—')):'สมาชิก LINE'}</div>
    </div>
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
      <div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--navy)">${p.visits}</div><div class="muted" style="font-size:12px">ครั้งที่มา</div></div>
@@ -2451,6 +2462,32 @@ window.showCustomerProfile=(phone)=>{ $('custResult').innerHTML=''; const i=$('c
 window.showCheckinQR=(tid)=>{ const q=PIN?('?pin='+encodeURIComponent(PIN)+'&_='+Date.now()):('?_='+Date.now());
   $('checkinImg').src='/api/tickets/'+tid+'/checkin-qr'+q; $('checkinPop').style.display='flex'; };
 window.closeCheckin=()=>{ $('checkinPop').style.display='none'; $('checkinImg').src=''; };
+
+// Scan a customer's member QR (เbackend /m?u=<lineUserId>) → look them up → show the profile card.
+let _scanStream=null, _scanRAF=null;
+window.openScanner=async()=>{
+  if(typeof jsQR==='undefined'){ toast('ตัวสแกนยังโหลดไม่เสร็จ — ลองอีกครั้ง'); return; }
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
+  $('scanPop').style.display='flex';
+  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); }
+  catch(e){ toast('เปิดกล้องไม่ได้ — อนุญาตการใช้กล้องในเบราว์เซอร์'); closeScanner(); return; }
+  const v=$('scanVideo'); v.srcObject=_scanStream; try{ await v.play(); }catch(e){}
+  const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
+  const tick=()=>{ if(!_scanStream) return;
+    if(v.readyState>=2 && v.videoWidth){ c.width=v.videoWidth; c.height=v.videoHeight; g.drawImage(v,0,0,c.width,c.height);
+      let r=null; try{ const d=g.getImageData(0,0,c.width,c.height); r=jsQR(d.data,d.width,d.height); }catch(e){}
+      if(r&&r.data){ onScan(r.data); return; } }
+    _scanRAF=requestAnimationFrame(tick); };
+  _scanRAF=requestAnimationFrame(tick);
+};
+window.closeScanner=()=>{ if(_scanRAF) cancelAnimationFrame(_scanRAF); _scanRAF=null; if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; } const v=$('scanVideo'); if(v) v.srcObject=null; $('scanPop').style.display='none'; };
+async function onScan(text){
+  let uid=null; try{ uid=new URL(text).searchParams.get('u'); }catch(e){ const m=String(text).match(/[?&]u=([^&]+)/); uid=m?decodeURIComponent(m[1]):null; }
+  closeScanner();
+  if(!uid){ toast('ไม่ใช่บัตรสมาชิก YO-DEE'); return; }
+  try{ const p=await api('/api/customers/by-line/'+encodeURIComponent(uid)); $('custPhone').value=''; $('custResult').innerHTML=renderCustProfile(p); $('custPop').style.display='flex'; }
+  catch(e){ toast('ค้นหาไม่สำเร็จ: '+err(e)); }
+}
 
 // ---------- CRM: win-back lapsed LINE customers (manager) ----------
 window.openWinback=()=>{ closeAdmin(); $('wbMsg').value='คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ วันนี้มีเมนูอร่อย ๆ รออยู่!'; $('winbackPop').style.display='flex'; wbPreview(); };
