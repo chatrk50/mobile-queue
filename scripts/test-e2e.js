@@ -338,6 +338,23 @@ const ins = Q.customerInsights();
 ok(ins.customers.repeat >= 1 && ins.customers.top.some((t) => t.isPhone && t.order_count === 2 && near(t.spend, 160)),
   `INVARIANT phone customer appears in repeat + top with real visits/spend (repeat ${ins.customers.repeat})`);
 
+// ---- CRM win-back: targets ONLY lapsed LINE customers (recent or phone-only excluded) ----
+console.log('\n== CRM: win-back targeting ==');
+const luOld = 'Uoldcust0000000000000000000000001';
+db.prepare('INSERT INTO customers (line_user_id, name) VALUES (?,?)').run(luOld, 'เก่า');
+const wbO = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: luOld });
+Q.setOrderPaid(wbO.ticket.id, { method: 'cash' });
+db.prepare("UPDATE orders SET paid_at=datetime('now','-40 days') WHERE ticket_id=?").run(wbO.ticket.id);
+const luNew = 'Unewcust0000000000000000000000002';
+const wbN = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: luNew });
+Q.setOrderPaid(wbN.ticket.id, { method: 'cash' });
+db.prepare("UPDATE orders SET paid_at=datetime('now','-1 days') WHERE ticket_id=?").run(wbN.ticket.id);
+const lapsed = Q.lapsedLineCustomers(30).map((c) => c.lineUserId);
+ok(lapsed.includes(luOld) && !lapsed.includes(luNew), 'INVARIANT win-back targets lapsed LINE only (40-day in, 1-day out)');
+ok(!Q.lapsedLineCustomers(1).some((c) => String(c.lineUserId).startsWith('tel:')), 'INVARIANT win-back never targets phone-only customers');
+let wbEmpty = null; try { await Q.winBackBlast('   ', { days: 30 }); } catch (e) { wbEmpty = e.message; }
+ok(wbEmpty === 'empty_message', `INVARIANT win-back rejects an empty message (${wbEmpty})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

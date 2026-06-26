@@ -631,6 +631,21 @@ app.get('/api/customers/phone/:phone', (req, res) => {
   try { res.json(Q.lookupCustomerByPhone(req.params.phone)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
+app.get('/api/crm/lapsed', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const days = Number(req.query.days) || 30;
+    const list = Q.lapsedLineCustomers(days);
+    res.json({ days, count: list.length, sample: list.slice(0, 5).map((c) => c.name || 'ลูกค้า LINE') });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM win-back: SEND the message to lapsed LINE customers. Manager-gated; the UI confirms first.
+app.post('/api/crm/winback', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.winBackBlast(req.body?.message, { days: Number(req.body?.days) || 30 })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
 app.post('/api/tickets/:ticketId/redeem', (req, res) => {

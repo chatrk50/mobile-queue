@@ -269,6 +269,40 @@ export function customerInsights() {
     customers: { total: totalC, repeat: repeatC, repeatPct: totalC ? Math.round((repeatC / totalC) * 100) : 0, top },
   };
 }
+
+// ---- CRM: win-back (re-engage lapsed LINE customers) ----
+/** LINE customers (real userId, not a 'tel:' phone key) whose most recent PAID order is at least
+ *  `days` days ago — i.e. they've gone quiet. Newest-lapsed first. Phone-only customers can't be
+ *  LINE-messaged, so they're excluded here. */
+export function lapsedLineCustomers(days = 30) {
+  const d = Math.max(1, Math.floor(Number(days) || 30));
+  return db.prepare(
+    `SELECT c.line_user_id AS lineUserId, c.name AS name,
+            MAX(o.paid_at) AS lastVisit, COUNT(DISTINCT t.id) AS visits
+     FROM customers c
+     JOIN tickets t ON t.line_user_id = c.line_user_id
+     JOIN orders o  ON o.ticket_id = t.id AND o.payment_status='paid'
+     WHERE c.line_user_id LIKE 'U%'
+     GROUP BY c.line_user_id
+     HAVING julianday('now') - julianday(MAX(o.paid_at)) >= ?
+     ORDER BY lastVisit DESC`
+  ).all(d);
+}
+/** Owner action: push a win-back message to lapsed LINE customers. Capped (OA quota friendliness).
+ *  Best-effort — never throws on a single failed push. On UAT (LINE stubbed) it logs and `sent`
+ *  stays 0, but `targeted` still shows who WOULD receive it. Returns counts for the UI. */
+export async function winBackBlast(message, { days = 30, max = 300 } = {}) {
+  const msg = String(message || '').trim().slice(0, 400);
+  if (!msg) throw new Error('empty_message');
+  const all = lapsedLineCustomers(days);
+  const list = all.slice(0, Math.max(1, Math.min(max, 1000)));
+  let sent = 0;
+  for (const c of list) {
+    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย')) !== false) sent++; } catch { /* skip one */ }
+  }
+  return { targeted: all.length, attempted: list.length, sent, capped: all.length > list.length };
+}
+
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport(branchId = null, dateStr = null) {
   const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards
