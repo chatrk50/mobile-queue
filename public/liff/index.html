@@ -84,7 +84,7 @@
     <button id="memberBtn" style="width:100%;margin-bottom:10px;background:#fff;color:var(--navy);border:1.5px solid var(--navy)" onclick="openMember()">
       <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรของฉัน</button>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
-      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span id="orderNowLbl">สั่งเลย</span></button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 ปิดรับคิว</b><br>
       <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
@@ -480,6 +480,9 @@ async function loadZone(){
 let FAV=null;
 async function loadReorder(){
   FAV=null; show('reorderCard',false);
+  // Default: "สั่งเลย" is the single primary CTA. If a reorder is offered below, it gets demoted to secondary.
+  const _onb=$('orderNowBtn'), _onl=$('orderNowLbl');
+  if(_onb){ _onb.classList.remove('ghost'); if(_onl) _onl.textContent='สั่งเลย'; }
   if(!lineUserId || !cfg.selfOrder) return;
   try{
     const s = await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
@@ -495,6 +498,8 @@ async function loadReorder(){
     $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
     show('reorderCard', true);
+    // Returning customer: reorder is the primary CTA → demote "สั่งเลย" to a secondary "เลือกเมนูอื่น".
+    if(_onb){ _onb.classList.add('ghost'); if(_onl) _onl.textContent='เลือกเมนูอื่น'; }
   }catch(e){ /* never block the normal flow */ }
 }
 window.reorderFav = async ()=>{
