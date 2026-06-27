@@ -248,7 +248,7 @@ app.get('/api/tender-recon', (req, res) => {
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
-app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), rewards: Q.listRewards(false) }));
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
@@ -280,6 +280,7 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.welcomeBonus != null) Object.assign(out, Q.setWelcomeBonus(req.body.welcomeBonus));
     if (req.body?.earnMode != null) Object.assign(out, Q.setEarnMode(req.body.earnMode));
     if (req.body?.bahtPerStar != null) Object.assign(out, Q.setBahtPerStar(req.body.bahtPerStar));
+    if (req.body?.tier != null) out.tier = Q.setTierConfig(req.body.tier);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

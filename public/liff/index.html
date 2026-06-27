@@ -420,14 +420,19 @@ window.openMember=async()=>{
     visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
     if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
   }catch(e){}
-  const lvl=memberLevel(visits);
-  // Per-tier card art: ขาประจำ/ใหม่ → PURE, คนพิเศษ → BLOOM, VIP → ESSENCE.
-  const tier = visits>=30 ? 'essence' : visits>=15 ? 'bloom' : 'pure';
-  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+tier+'.png)';
-  $('memberLevel').textContent=lvl.icon+' '+lvl.name;
+  // Owner-configurable 3-tier system (Pure/Bloom/Essence) by visit count — falls back to sensible defaults.
+  let tcfg={bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''};
+  try{ const c=await api('/api/loyalty/config'); if(c&&c.tier) tcfg=c.tier; }catch(e){}
+  const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',icon:'👑',perk:tcfg.essencePerk}
+             : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',icon:'🌷',perk:tcfg.bloomPerk}
+             :                           {key:'pure',name:'PURE',icon:'🌱',perk:tcfg.purePerk};
+  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png)';
+  $('memberLevel').textContent = TIER.icon+' '+TIER.name;
   $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'ยินดีต้อนรับสู่ YO-DEE!';
-  const next=MEMBER_LEVELS.filter(L=>L.min>visits).sort((a,b)=>a.min-b.min)[0];
-  $('memberNext').textContent = next ? ('อีก '+(next.min-visits)+' ครั้ง → '+next.icon+' '+next.name) : '🎉 ระดับสูงสุดแล้ว ขอบคุณนะคะ';
+  const nextMin = visits<tcfg.bloomMin ? tcfg.bloomMin : (visits<tcfg.essenceMin ? tcfg.essenceMin : null);
+  const nextName = visits<tcfg.bloomMin ? '🌷 BLOOM' : '👑 ESSENCE';
+  const prog = nextMin!=null ? ('อีก '+(nextMin-visits)+' ครั้ง → '+nextName) : '🎉 ระดับสูงสุดแล้ว';
+  $('memberNext').innerHTML = esc(prog) + (TIER.perk ? '<div style="margin-top:3px;opacity:.92">🎁 '+esc(TIER.perk)+'</div>' : '');
   // Never-ordered customer → invite to start; returning → "order something else".
   $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
   // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.

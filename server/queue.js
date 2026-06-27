@@ -1169,6 +1169,30 @@ export function getEarnMode() { return getSetting('loyalty:earn_mode', 'cup') ==
 export function setEarnMode(m) { const v = m === 'baht' ? 'baht' : 'cup'; setSetting('loyalty:earn_mode', v); return { earnMode: v }; }
 export function getBahtPerStar() { return Math.max(1, Math.round(Number(getSetting('loyalty:baht_per_star', '25')) || 25)); }
 export function setBahtPerStar(n) { const v = Math.max(1, Math.round(Number(n) || 0)); setSetting('loyalty:baht_per_star', String(v)); return { bahtPerStar: v }; }
+/** Membership tiers (Pure/Bloom/Essence) — a status layer measured by visit count (paid orders).
+ *  Thresholds + perk text are owner-editable and surfaced on the LIFF member card. */
+const TIER_DEFAULTS = { bloomMin: 10, essenceMin: 25,
+  purePerk: 'สะสมดวง · 🎂 ของขวัญวันเกิด',
+  bloomPerk: 'สิทธิ์ PURE + 🎂 โบนัสวันเกิดพิเศษ',
+  essencePerk: 'สิทธิ์ทั้งหมด · ⭐ แต้มไม่หมดอายุ · 🎂 วันเกิดยาวขึ้น' };
+export function getTierConfig() {
+  const num = (k, d) => Math.max(0, Math.round(Number(getSetting(k, String(d))) || d));
+  return {
+    bloomMin: num('loyalty:tier_bloom_min', TIER_DEFAULTS.bloomMin),
+    essenceMin: num('loyalty:tier_essence_min', TIER_DEFAULTS.essenceMin),
+    purePerk: getSetting('loyalty:tier_pure_perk', TIER_DEFAULTS.purePerk),
+    bloomPerk: getSetting('loyalty:tier_bloom_perk', TIER_DEFAULTS.bloomPerk),
+    essencePerk: getSetting('loyalty:tier_essence_perk', TIER_DEFAULTS.essencePerk),
+  };
+}
+export function setTierConfig(p = {}) {
+  if (p.bloomMin != null) setSetting('loyalty:tier_bloom_min', String(Math.max(0, Math.round(Number(p.bloomMin) || 0))));
+  if (p.essenceMin != null) setSetting('loyalty:tier_essence_min', String(Math.max(0, Math.round(Number(p.essenceMin) || 0))));
+  if (p.purePerk != null) setSetting('loyalty:tier_pure_perk', String(p.purePerk).slice(0, 200));
+  if (p.bloomPerk != null) setSetting('loyalty:tier_bloom_perk', String(p.bloomPerk).slice(0, 200));
+  if (p.essencePerk != null) setSetting('loyalty:tier_essence_perk', String(p.essencePerk).slice(0, 200));
+  return getTierConfig();
+}
 /** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
 export function loyaltyTier(lifetime) {
   const l = lifetime || 0;
