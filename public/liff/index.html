@@ -22,10 +22,16 @@
   .dish-card .dimg{ width:100%; aspect-ratio:1/1; background:var(--surface); display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:48px; }
   .dish-card .dimg img{ width:100%; height:100%; object-fit:cover; }
   .dish-card .dimg svg{ width:46px; height:46px; stroke:var(--accent); fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
-  .dish-card .dinfo{ padding:9px 11px 11px; }
+  .dish-card .dinfo{ padding:9px 11px 11px; border-top:1px solid var(--line); }
   .dish-card .dname{ font-weight:800; font-size:14px; line-height:1.2; }
   .dish-card .dsold{ font-size:11px; color:var(--muted); margin-top:3px; }
   .dish-card .dpr{ font-weight:900; color:var(--accent); font-size:18px; margin-top:6px; }
+  /* Topping cards reuse the same framed look, more compact, with a selected state */
+  .dish-card.top .dimg{ aspect-ratio:auto; height:90px; font-size:40px; }
+  .dish-card.top .dinfo{ padding:7px 9px 9px; text-align:center; }
+  .dish-card.top .dname{ font-size:13px; }
+  .dish-card.top .dpr{ font-size:14px; margin-top:3px; }
+  .dish-card.top.on{ border-color:var(--accent); background:#e9f8fb; }
   /* "It's your turn" celebration */
   @keyframes callpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
   .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
@@ -273,8 +279,8 @@
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
           <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()">✕</button>
-          <div id="memberName" style="position:absolute;top:7%;left:6.5%;width:55%;height:12.5%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
-          <div id="memberLevel" style="position:absolute;top:24.5%;left:63%;width:33%;text-align:center;color:#16314f;font-size:12px;font-weight:800;letter-spacing:.5px"></div>
+          <div id="memberName" style="position:absolute;top:5.5%;left:5%;width:57.5%;height:15%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
+          <div id="memberLevel" style="position:absolute;top:23.5%;left:64.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:80%;left:5.5%;width:40%;height:11.5%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 3px"></div>
           <div id="memberNext" style="position:absolute;top:80%;left:54.5%;width:40%;height:11.5%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:10.5px;font-weight:700;text-align:center;line-height:1.05;padding:0 3px"></div>
           <div style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
@@ -677,9 +683,10 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" style="position:relative${on?';border-color:var(--accent);background:#e9f8fb':''}${m.soldout?';opacity:.55':''}" ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
-      <div class="mimg" style="font-size:40px">${itemImg(m)}</div>
-      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
+    return `<button class="dish-card top${on?' on':''}"${m.soldout?' style="opacity:.55"':''} ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
+      <div class="dimg">${itemImg(m)}</div>
+      <div class="dinfo"><div class="dname">${esc(m.name)}${on?' ✓':''}</div>
+      <div class="dpr">${m.soldout?'หมด':'+฿'+m.price}</div></div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
