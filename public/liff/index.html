@@ -107,6 +107,18 @@
     <div id="orderLoyChip" style="display:none;margin:8px 0 0;font-size:13px;font-weight:700;color:var(--navy);background:rgba(0,181,216,.10);border:1px solid rgba(0,181,216,.3);border-radius:999px;padding:7px 12px;text-align:center"></div>
     <div id="menuButtons" style="margin:10px 0"></div>
     <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
+    <div id="cartBarSpacer" style="height:78px;display:none"></div>
+  </div>
+
+  <!-- Sticky cart bar: stays pinned to the bottom while the menu scrolls (only on the order screen, when cart has items). Tapping opens the basket. -->
+  <div id="cartBar" onclick="openBasket()" role="button" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;padding:0 14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));pointer-events:none">
+    <div style="max-width:472px;margin:0 auto;pointer-events:auto;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 24px rgba(0,124,147,.36);-webkit-tap-highlight-color:transparent">
+      <span style="display:flex;align-items:center;gap:11px;font-weight:800;font-size:15px">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
+        <span id="cartBarCount">0 แก้ว</span>
+      </span>
+      <span style="display:flex;align-items:center;gap:10px"><span id="cartBarTotal" style="font-weight:900;font-size:16px">฿0</span><span style="font-size:13px;font-weight:700;opacity:.92">ดูตะกร้า ›</span></span>
+    </div>
   </div>
 
   <!-- STEP: my ticket -->
@@ -620,7 +632,7 @@ window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false;
     <div class="mpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
-window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
+window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
   $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
@@ -695,7 +707,16 @@ window.addRandomToCart=()=>{ if(!_randomPick || _randomSpinning) return;
   const id=_randomPick.drink.id; closeRandom(); pickDrink(id); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
-function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; updateNudges(); }
+// Payable total (subtotal minus free-giveaway discount) — mirrors renderBasket's math; used by the sticky cart bar.
+function cartNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
+  let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
+  return sub-Math.min(disc,sub); }
+function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none';
+  const bar=$('cartBar'), sp=$('cartBarSpacer'), oc=$('orderCard');
+  const orderOpen = oc && oc.style.display!=='none';
+  if(bar){ if(n && orderOpen){ $('cartBarCount').textContent=n+' '+unit(); $('cartBarTotal').textContent='฿'+cartNet(); bar.style.display='block'; if(sp) sp.style.display=''; }
+    else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
+  updateNudges(); }
 // Step 4: review basket -> confirm or cancel.
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
@@ -726,7 +747,9 @@ function renderBasket(){
   updateNudges();
 }
 // Remove a single cup from a (possibly consolidated) line.
-window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
+  if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
+  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
 window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
@@ -740,12 +763,12 @@ window.confirmBasket=async()=>{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-    cart=[]; ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
+    cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
+      ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
   }
