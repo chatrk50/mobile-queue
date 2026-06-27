@@ -992,6 +992,9 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId,
       channelId: req.body?.channelId ? Number(req.body.channelId) : null,
       clientToken: req.body?.clientToken ? String(req.body.clientToken).slice(0, 64) : null });
+    // "สั่งให้ลูกค้าคนนี้": tag the new order to a looked-up customer (phone or LINE) BEFORE pay so
+    // the history accrues + the card recognises them. Best-effort; idempotent retries are unaffected.
+    if (req.body?.customerKey && r.ticket && !r.idempotent) Q.tagOrderCustomer(r.ticket.id, String(req.body.customerKey).slice(0, 80), req.body?.customerName || null);
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
     // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid

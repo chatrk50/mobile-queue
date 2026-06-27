@@ -305,6 +305,11 @@
       <h1 style="margin:0">ออเดอร์ใหม่ — <span id="orderZone">—</span></h1>
       <button class="ghost" style="padding:8px 14px" onclick="hideOrder()">← กลับหน้าคิว</button>
     </div>
+    <div id="orderCustBanner" style="display:none;align-items:center;gap:8px;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.3);color:#7c3aed;border-radius:12px;padding:9px 14px;margin-bottom:10px;font-weight:700">
+      <svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span id="orderCustLabel" style="flex:1"></span>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="clearOrderCust()">ไม่ผูก</button>
+    </div>
     <div class="pos-split">
       <!-- LEFT: live bill / receipt -->
       <div class="card pos-bill" style="margin:0">
@@ -1534,7 +1539,7 @@ function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img
 window.delItem=async(id)=>{ if(!(await appConfirm({title:'ลบเมนู',message:'ลบเมนูนี้ออกถาวร?',okText:'ลบ',danger:true}))) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
-let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null;
+let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null, _orderCust=null;
 let _kitchenStatus={};  // "ticketId:lineIndex" -> null | 'making' | 'done' (per drink line)
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
@@ -1584,11 +1589,21 @@ function renderOrderMenu(){
 // Re-price the menu when the cashier switches channel (delivery applies its markup).
 window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderChannel); renderOrderMenu();
   if(cart.length){ toast('เปลี่ยนช่องทาง — ตรวจราคาในตะกร้าอีกครั้ง'); } };
-window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadChannels(); renderChannelSel();
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; _orderCust=null; const _ocb=$('orderCustBanner'); if(_ocb) _ocb.style.display='none'; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
-window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; setEditMode(false); $('dash').style.display=''; };
+window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; _orderCust=null; setEditMode(false); $('dash').style.display=''; };
+// "สั่งให้ลูกค้าคนนี้": open a new order tied to a looked-up customer (phone or LINE); optional fav pre-add.
+window.orderForCustomer=async(key,name,favName)=>{
+  closeCust();
+  const z=(zones||[]).find(x=>x.is_open===1)||(zones||[])[0]; if(!z){ toast('ยังไม่มีโซนเปิด'); return; }
+  await showOrder(z.id);
+  _orderCust={key,name:name||''};
+  const ocb=$('orderCustBanner'); if(ocb){ ocb.style.display='flex'; $('orderCustLabel').textContent='สั่งให้: '+(name||String(key).replace('tel:','')); }
+  if(favName){ const m=(MENU||[]).find(x=>x.name===favName && x.category!=='topping'); if(m){ cart.push({name:m.name,price:m.price,toppings:[],sweet:100,qty:1}); renderBasketCount(); toast('เพิ่ม '+favName+' แล้ว'); } }
+};
+window.clearOrderCust=()=>{ _orderCust=null; const ocb=$('orderCustBanner'); if(ocb) ocb.style.display='none'; toast('ออเดอร์นี้จะไม่ผูกกับลูกค้า'); };
 // ---------- แก้ไขออเดอร์: load an unpaid order back into the cart, edit, save in place ----------
 function setEditMode(on){
   const hold=$('billHoldBtn'), pay=$('billPayBtn'), save=$('billSaveBtn');
@@ -1699,8 +1714,15 @@ window.doCustLookup=async()=>{
   catch(e){ box.innerHTML='<p class="muted" style="text-align:center;color:var(--danger)">ค้นหาไม่สำเร็จ: '+err(e)+'</p>'; }
 };
 function _agoTH(iso){ if(!iso) return '—'; const d=new Date(iso.replace(' ','T')+'Z'); const days=Math.floor((Date.now()-d.getTime())/86400000); return days<=0?'วันนี้':days===1?'เมื่อวาน':days+' วันก่อน'; }
+// "สั่งให้ลูกค้าคนนี้" CTAs — read the stored profile (no fragile inline-string args).
+function _crmCta(p){ if(!p||!p.key) return '';
+  const fav=(p.favourites&&p.favourites[0])?p.favourites[0].name:'';
+  return `<button class="ok" style="width:100%;min-height:50px;font-size:16px;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="orderForCurrentCustomer(false)"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>สั่งออเดอร์ให้ลูกค้าคนนี้</button>${fav?`<button class="ghost" style="width:100%;margin-top:8px;color:#0e7c93;border-color:#bfe3ec" onclick="orderForCurrentCustomer(true)">สั่งซ้ำ ${esc(fav)}</button>`:''}`;
+}
+window.orderForCurrentCustomer=(withFav)=>{ const p=window._crmProfile; if(!p||!p.key) return; const fav=(withFav&&p.favourites&&p.favourites[0])?p.favourites[0].name:''; orderForCustomer(p.key, p.name||p.phone||'', fav); };
 function renderCustProfile(p){
-  if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin-top:4px">ยังไม่มีประวัติของเบอร์นี้ — แนบเบอร์กับบิลเพื่อเริ่มเก็บประวัติได้เลย</p></div>`;
+  window._crmProfile=p;   // remembered for the "สั่งให้ลูกค้าคนนี้" CTA
+  if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin:4px 0 0">ยังไม่มีประวัติของเบอร์นี้ — สั่งให้เลยเพื่อเริ่มเก็บประวัติ</p></div>${_crmCta(p)}`;
   const tier=p.loyalty&&p.loyalty.tier?p.loyalty.tier.emoji+' ':'';
   const favs=(p.favourites||[]).map(f=>`${esc(f.name)} ×${f.qty}`).join(' · ')||'—';
   const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${(r.paid_at||'').slice(5,16).replace('T',' ')}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
@@ -1718,7 +1740,7 @@ function renderCustProfile(p){
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
    ${pts}
-   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>`;
+   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_crmCta(p)}`;
 }
 window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
   $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
@@ -1764,6 +1786,7 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
 function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
+  if(_orderCust){ body.customerKey=_orderCust.key; body.customerName=_orderCust.name; }   // "สั่งให้ลูกค้าคนนี้"
   if(payMethod) body.pay=payMethod;   // no tender = พักบิล (held); queue number follows the เข้าคิวทันที setting
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if

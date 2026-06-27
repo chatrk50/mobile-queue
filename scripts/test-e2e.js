@@ -376,6 +376,18 @@ ok(ciR.ok && db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ciT.t
 let ciTwice = null; try { Q.claimTicket(ciT.ticket.id, 'Uother', ciTok); } catch (e) { ciTwice = e.message; }
 ok(ciTwice === 'bad_or_expired_qr' || ciTwice === 'already_claimed', `INVARIANT a used check-in token can't be replayed (${ciTwice})`);
 
+// ---- "สั่งให้ลูกค้าคนนี้": tag a fresh order to a looked-up customer (phone or LINE) ----
+console.log('\n== CRM: tag order to a looked-up customer ==');
+const tagPhone = '0890001112';
+const tg = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.tagOrderCustomer(tg.ticket.id, 'tel:' + tagPhone, 'ใหม่');
+Q.setOrderPaid(tg.ticket.id, { method: 'cash' });
+const tgp = Q.lookupCustomerByPhone(tagPhone);
+ok(tgp.found && tgp.visits === 1 && tgp.name === 'ใหม่', `INVARIANT tagging by phone ties the order to the customer (visits ${tgp.visits})`);
+const tgL = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.tagOrderCustomer(tgL.ticket.id, 'Utagline0000000000000000000000001', 'LINE');
+ok(db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(tgL.ticket.id).line_user_id === 'Utagline0000000000000000000000001', 'INVARIANT tagging by LINE id sets the ticket identity');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

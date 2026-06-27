@@ -1299,6 +1299,25 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
 }
 
+/** Tag a new order to a known customer key (from "สั่งให้ลูกค้าคนนี้"). Handles a phone key
+ *  ('tel:<digits>') via attachCustomerToTicket, or a LINE id (set directly — cashier-authed). No-op
+ *  if already tied / paid. Best-effort: never blocks order creation. */
+export function tagOrderCustomer(ticketId, key, name = null) {
+  if (!key) return;
+  if (String(key).startsWith('tel:')) { try { attachCustomerToTicket(ticketId, key.slice(4), name); } catch { /* best-effort */ } return; }
+  try {
+    const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+    if (!t || t.line_user_id) return;
+    const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+    if (order && order.payment_status === 'paid') return;
+    const nm = (name || '').toString().trim().slice(0, 80) || null;
+    db.transaction(() => {
+      db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm);
+      db.prepare('UPDATE tickets SET line_user_id=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
+    })();
+  } catch { /* best-effort */ }
+}
+
 // ---- QR check-in handshake: cashier shows a per-order QR → customer scans with LINE → their LINE
 // identity links to THIS order (no phone typing). Tokens live in-memory (short scan window), so no
 // migration and they auto-expire; a lost token just means the customer re-scans. ----
