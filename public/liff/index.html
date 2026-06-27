@@ -254,18 +254,19 @@
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
 <div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:330px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:0">
-    <!-- Tier banner — colour + level by visit count (Starbucks-style status) -->
-    <div id="memberBanner" style="padding:14px 16px;color:#fff;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,#2fc2a6,#7ed9c3)">
-      <img src="/assets/logo.png" onerror="this.style.display='none'" style="position:absolute;right:-16px;bottom:-18px;width:96px;height:96px;opacity:.14;pointer-events:none">
-      <button class="ghost" style="position:absolute;top:8px;right:8px;color:#fff;border-color:rgba(255,255,255,.45);padding:3px 9px;z-index:2" onclick="closeMember()">✕</button>
-      <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:2px">
-        <img src="/assets/logo.png" onerror="this.style.display='none'" style="width:30px;height:30px;border-radius:50%;background:#fff;padding:2px;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.2)">
-        <span style="font-size:13px;letter-spacing:1.5px;font-weight:800">YO-DEE YOGURT</span>
+    <!-- Virtual tier card: full per-tier art background + identity overlaid on the clean centre -->
+    <div id="memberVCard" style="position:relative;width:100%;aspect-ratio:1024/1536;min-height:380px;background:#cfeafa center/cover no-repeat;color:#16314f">
+      <button class="ghost" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.72);border:none;color:#16314f;padding:3px 10px;border-radius:999px;z-index:2;font-size:16px;line-height:1" onclick="closeMember()">✕</button>
+      <div style="position:absolute;left:0;right:0;top:20%;text-align:center;padding:0 20px;text-shadow:0 1px 7px rgba(255,255,255,.9)">
+        <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:9px">
+          <img src="/assets/logo.png" onerror="this.style.display='none'" style="width:26px;height:26px;border-radius:50%;background:#fff;padding:2px;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.18)">
+          <span style="font-size:12px;letter-spacing:1.6px;font-weight:800">YO-DEE YOGURT</span>
+        </div>
+        <div id="memberLevel" style="font-size:25px;font-weight:900;margin:2px 0"></div>
+        <div id="memberName" style="font-size:16px;font-weight:700"></div>
+        <div id="memberVisits" style="font-size:13px;font-weight:600;margin-top:3px"></div>
+        <div id="memberNext" style="font-size:11px;margin-top:9px;opacity:.8"></div>
       </div>
-      <div id="memberLevel" style="font-size:21px;font-weight:900;margin:1px 0 2px;text-shadow:0 1px 4px rgba(0,0,0,.18)"></div>
-      <div id="memberName" style="font-size:15px;font-weight:700"></div>
-      <div id="memberVisits" style="font-size:13px;opacity:.94;margin-top:2px"></div>
-      <div id="memberNext" style="font-size:11px;opacity:.86;margin-top:7px"></div>
     </div>
     <div style="padding:16px;text-align:center">
       <img id="memberQR" alt="QR สมาชิก" style="width:188px;height:188px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
@@ -413,8 +414,9 @@ window.openMember=async()=>{
     if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
   }catch(e){}
   const lvl=memberLevel(visits);
-  $('memberBanner').style.background=lvl.grad;
-  $('memberBanner').style.color=lvl.text||'#fff';
+  // Per-tier card art: ขาประจำ/ใหม่ → PURE, คนพิเศษ → BLOOM, VIP → ESSENCE.
+  const tier = visits>=30 ? 'essence' : visits>=15 ? 'bloom' : 'pure';
+  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+tier+'.png)';
   $('memberLevel').textContent=lvl.icon+' '+lvl.name;
   $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'ยินดีต้อนรับสู่ YO-DEE!';
   const next=MEMBER_LEVELS.filter(L=>L.min>visits).sort((a,b)=>a.min-b.min)[0];
