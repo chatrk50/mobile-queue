@@ -81,7 +81,7 @@
     </div>
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
     <button id="memberBtn" style="width:100%;margin-bottom:10px;background:#fff;color:var(--navy);border:1.5px solid var(--navy)" onclick="openMember()">
-      <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรของฉัน</button>
+      <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรสมาชิก</button>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span id="orderNowLbl">สั่งเลย</span></button>
     <div id="closedMsg" class="closed-note" style="display:none">
@@ -424,7 +424,7 @@ window.openMember=async()=>{
   const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',perk:tcfg.essencePerk,bg:'#e6dcf6'}
              : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',perk:tcfg.bloomPerk,bg:'#d9f0d9'}
              :                           {key:'pure',name:'PURE',perk:tcfg.purePerk,bg:'#cfe6f5'};
-  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png)';
+  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=2)';   // ?v bump busts stale browser cache when art is replaced
   if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
   $('memberLevel').textContent = TIER.name;
   $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
