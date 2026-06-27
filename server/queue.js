@@ -1164,6 +1164,11 @@ export function setStampsPerReward(n) {
  *  that pulls counter customers into ordering via LINE (endowed-progress effect). 0 = off. */
 export function getWelcomeBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:welcome_bonus', '2')) || 0)); }
 export function setWelcomeBonus(n) { const v = Math.max(0, Math.round(Number(n) || 0)); setSetting('loyalty:welcome_bonus', String(v)); return { welcomeBonus: v }; }
+/** How a paid order earns stamps: 'cup' = 1 per drink cup (default); 'baht' = 1 per N baht spent (cashback-style). */
+export function getEarnMode() { return getSetting('loyalty:earn_mode', 'cup') === 'baht' ? 'baht' : 'cup'; }
+export function setEarnMode(m) { const v = m === 'baht' ? 'baht' : 'cup'; setSetting('loyalty:earn_mode', v); return { earnMode: v }; }
+export function getBahtPerStar() { return Math.max(1, Math.round(Number(getSetting('loyalty:baht_per_star', '25')) || 25)); }
+export function setBahtPerStar(n) { const v = Math.max(1, Math.round(Number(n) || 0)); setSetting('loyalty:baht_per_star', String(v)); return { bahtPerStar: v }; }
 /** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
 export function loyaltyTier(lifetime) {
   const l = lifetime || 0;
@@ -1408,10 +1413,12 @@ export function awardPoints(orderId) {
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
   // 1 stamp per drink cup (non-topping lines); sweetened drink names don't match the menu
   // catalog so they COALESCE to 'drink' — counted, which is correct.
-  const pts = db.prepare(
-    `SELECT COALESCE(SUM(oi.qty),0) c FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name
-      WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
-  ).get(orderId).c;
+  const pts = getEarnMode() === 'baht'
+    ? Math.floor((order.total || 0) / getBahtPerStar())
+    : db.prepare(
+        `SELECT COALESCE(SUM(oi.qty),0) c FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name
+          WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
+      ).get(orderId).c;
   if (pts <= 0) return null;
   const key = loyKey;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;

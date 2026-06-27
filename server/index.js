@@ -248,7 +248,7 @@ app.get('/api/tender-recon', (req, res) => {
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
-app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(false) }));
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
@@ -270,7 +270,7 @@ app.post('/api/loyalty/:key/refer', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner: manage loyalty settings + rewards.
-app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(true) }); });
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
@@ -278,6 +278,8 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.enabled != null) Object.assign(out, Q.setLoyaltyEnabled(!!req.body.enabled));
     if (req.body?.stampsPerReward != null) Object.assign(out, Q.setStampsPerReward(req.body.stampsPerReward));
     if (req.body?.welcomeBonus != null) Object.assign(out, Q.setWelcomeBonus(req.body.welcomeBonus));
+    if (req.body?.earnMode != null) Object.assign(out, Q.setEarnMode(req.body.earnMode));
+    if (req.body?.bahtPerStar != null) Object.assign(out, Q.setBahtPerStar(req.body.bahtPerStar));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

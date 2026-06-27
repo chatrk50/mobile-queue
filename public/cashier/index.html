@@ -225,6 +225,11 @@
     </div>
     <div style="margin-top:14px;display:grid;gap:12px">
       <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม</label>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px">วิธีให้ดวง (แต้ม)</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="radio" name="earnMode" id="earnCup" value="cup" style="width:18px;height:18px;flex:none" onchange="onEarnMode()"><span>ต่อ<span data-unit>แก้ว</span> — <b>1 ดวง / <span data-unit>แก้ว</span></b></span></label>
+        <label style="display:flex;align-items:center;gap:8px"><input type="radio" name="earnMode" id="earnBaht" value="baht" style="width:18px;height:18px;flex:none" onchange="onEarnMode()"><span>ต่อยอดซื้อ — ทุก ฿<input id="loyBahtInp" type="number" inputmode="numeric" min="1" style="width:64px;padding:6px;border:1px solid var(--line);border-radius:8px;margin:0 3px"> = <b>1 ดวง</b></span></label>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span>สะสมครบ</span>
         <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px">
@@ -1132,7 +1137,10 @@ window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.
 window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2); renderRewards(); }catch(e){ toast(err(e)); } };
+window.onEarnMode=()=>{ const baht=$('earnBaht')&&$('earnBaht').checked; if($('loyBahtInp')) $('loyBahtInp').disabled=!baht; };
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
+  const em=d.earnMode==='baht'?'baht':'cup'; if($('earnCup'))$('earnCup').checked=em==='cup'; if($('earnBaht'))$('earnBaht').checked=em==='baht'; if($('loyBahtInp'))$('loyBahtInp').value=d.bahtPerStar||25; onEarnMode();
+  renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
     const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
@@ -1140,7 +1148,9 @@ function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.i
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
+  const earnMode=($('earnBaht')&&$('earnBaht').checked)?'baht':'cup', bahtPerStar=Math.max(1,Number($('loyBahtInp').value)||25);
+  try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus,earnMode,bahtPerStar})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
