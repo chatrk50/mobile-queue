@@ -739,6 +739,15 @@ export function listMenu(channelId = null, branchId = null) {
     if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; }
     r.price_delivery = dtid ? (db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(r.id, dtid)?.price ?? null) : null;
   });
+  // Lifetime "sold" per item from PAID orders. Drink lines carry a " · หวาน X%" suffix, so match on the base name.
+  try {
+    const soldMap = new Map();
+    for (const s of db.prepare(
+      `SELECT CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END AS base, SUM(oi.qty) q
+         FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY base`
+    ).all()) soldMap.set(s.base, s.q);
+    rows.forEach((r) => { r.sold = soldMap.get(r.name) || 0; });
+  } catch (e) { rows.forEach((r) => { r.sold = 0; }); }
   return rows;
 }
 
