@@ -408,9 +408,12 @@
       <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
       <button class="ghost" style="padding:6px 12px" onclick="closeCust()">✕</button>
     </div>
-    <div class="row" style="gap:8px">
-      <input id="custPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="เบอร์โทรลูกค้า" oninput="this.value=this.value.replace(/\D/g,'')" onkeydown="if(event.key==='Enter')doCustLookup()" style="flex:1;padding:12px 14px;font-size:17px;border:1.5px solid var(--line);border-radius:12px;letter-spacing:1px">
-      <button class="ok" style="padding:0 18px;font-weight:800" onclick="doCustLookup()">ค้นหา</button>
+    <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <button class="ckey" onclick="custKey('1')">1</button><button class="ckey" onclick="custKey('2')">2</button><button class="ckey" onclick="custKey('3')">3</button>
+      <button class="ckey" onclick="custKey('4')">4</button><button class="ckey" onclick="custKey('5')">5</button><button class="ckey" onclick="custKey('6')">6</button>
+      <button class="ckey" onclick="custKey('7')">7</button><button class="ckey" onclick="custKey('8')">8</button><button class="ckey" onclick="custKey('9')">9</button>
+      <button class="ckey" style="color:var(--danger)" onclick="custBack()" aria-label="ลบ">⌫</button><button class="ckey" onclick="custKey('0')">0</button><button class="ok" style="border-radius:12px;font-weight:800;font-size:16px" onclick="doCustLookup()">ค้นหา</button>
     </div>
     <div id="custResult" style="margin-top:14px"></div>
   </div>
@@ -1704,8 +1707,10 @@ window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx
 window.confirmDetail=()=>{ closeItemDetail(); toast('อัปเดตรายการแล้ว'); };
 
 // ---------- CRM: customer lookup by phone (enter phone → profile card) ----------
-window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPop').style.display='flex'; setTimeout(()=>i&&i.focus(),60); };
+window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPop').style.display='flex'; };
 window.closeCust=()=>{ $('custPop').style.display='none'; };
+window.custKey=(d)=>{ const i=$('custPhone'); if((i.value||'').length>=10) return; i.value=(i.value||'')+d; };
+window.custBack=()=>{ const i=$('custPhone'); i.value=(i.value||'').slice(0,-1); };
 window.doCustLookup=async()=>{
   const ph=($('custPhone').value||'').replace(/\D/g,''); const box=$('custResult');
   if(ph.length<9){ box.innerHTML='<p class="muted" style="text-align:center">กรอกเบอร์ให้ครบก่อนนะ</p>'; return; }
