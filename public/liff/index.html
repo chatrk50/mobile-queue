@@ -273,7 +273,7 @@
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
           <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()">✕</button>
-          <div id="memberName" style="position:absolute;top:7%;left:6.5%;width:55%;height:12.5%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:15px;font-weight:800;text-align:center;line-height:1.05;padding:0 4px;overflow:hidden"></div>
+          <div id="memberName" style="position:absolute;top:7%;left:6.5%;width:55%;height:12.5%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
           <div id="memberLevel" style="position:absolute;top:24.5%;left:63%;width:33%;text-align:center;color:#16314f;font-size:12px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:80%;left:5.5%;width:40%;height:11.5%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 3px"></div>
           <div id="memberNext" style="position:absolute;top:80%;left:54.5%;width:40%;height:11.5%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:10.5px;font-weight:700;text-align:center;line-height:1.05;padding:0 3px"></div>
@@ -423,7 +423,7 @@ function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[M
 window.openMember=async()=>{
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
   $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
-  $('memberName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+  $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
   let visits=0;
   try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
