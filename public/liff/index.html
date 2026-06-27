@@ -79,6 +79,18 @@
       </div>
       <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
     </div>
+    <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
+    <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
+      <div id="guestPhonePrompt">
+        <div style="font-weight:800;color:var(--navy);font-size:13.5px;margin-bottom:7px">📱 สะสมแต้ม? กรอกเบอร์โทร</div>
+        <div class="row" style="gap:6px">
+          <input id="guestPhoneInp" type="tel" inputmode="numeric" placeholder="08X-XXX-XXXX" maxlength="12" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:15px" oninput="fmtGuestPhone(this)">
+          <button class="ok" style="padding:9px 16px" onclick="saveGuestPhone()">บันทึก</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:5px">ได้แต้มอัตโนมัติเมื่อชำระเงิน · ไม่ต้องมีไลน์</div>
+      </div>
+      <div id="guestPhoneDone" style="display:none;font-size:13px;color:#047857;font-weight:700">✓ จะสะสมแต้มให้เบอร์ <span id="guestPhoneMask"></span> · <span style="color:var(--accent);cursor:pointer" onclick="editGuestPhone()">แก้ไข</span></div>
+    </div>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
       <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
@@ -333,7 +345,7 @@
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
-let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false;
+let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
@@ -519,6 +531,7 @@ async function loadZone(){
   show('getCard',true);
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
+  show('guestPhoneCard', !lineUserId && !!cfg.selfOrder);   // non-LINE: offer phone to collect stamps
   loadLoyalty();            // show the customer's points balance (best-effort)
   loadReferral();           // invite-a-friend code + enter-a-code (best-effort)
 }
@@ -539,6 +552,10 @@ async function loadMemberStrip(){
     el.style.display='flex';
   }catch(e){}
 }
+// Non-LINE phone capture: format while typing (full digits, not masked — easier to verify), mask only when saved.
+window.fmtGuestPhone=(el)=>{ let d=el.value.replace(/\D/g,'').slice(0,10),s=d; if(d.length>6)s=d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6); else if(d.length>3)s=d.slice(0,3)+'-'+d.slice(3); el.value=s; };
+window.saveGuestPhone=()=>{ const d=$('guestPhoneInp').value.replace(/\D/g,''); if(d.length<9){ toast('กรอกเบอร์ให้ครบ'); return; } guestPhone=d; $('guestPhoneMask').textContent='••••'+d.slice(-4); $('guestPhonePrompt').style.display='none'; $('guestPhoneDone').style.display=''; toast('✓ จะสะสมแต้มให้เบอร์นี้เมื่อชำระเงิน'); };
+window.editGuestPhone=()=>{ $('guestPhoneDone').style.display='none'; $('guestPhonePrompt').style.display=''; };
 async function loadReorder(){
   FAV=null; show('reorderCard',false);
   // Default: "สั่งเลย" is the single primary CTA. If a reorder is offered below, it gets demoted to secondary.
@@ -832,6 +849,7 @@ window.confirmBasket=async()=>{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
+    if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
     cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket

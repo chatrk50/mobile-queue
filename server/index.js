@@ -633,6 +633,20 @@ app.post('/api/tickets/:ticketId/customer', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Customer self-attaches their phone to their OWN just-created (non-LINE) ticket → earns stamps.
+// Public, but only works on a fresh ticket with no LINE identity and no phone yet (can't hijack another's).
+app.post('/api/tickets/:ticketId/guest-phone', (req, res) => {
+  try {
+    const t = db.prepare('SELECT id, line_user_id, customer_key FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (!t) return res.status(404).json({ error: 'ticket_not_found' });
+    if (t.line_user_id) return res.status(409).json({ error: 'already_line_customer' });
+    if (t.customer_key) return res.status(409).json({ error: 'already_attached' });
+    const r = Q.attachCustomerToTicket(req.params.ticketId, req.body?.phone, req.body?.name || null);
+    const z = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (z) emit(z.zone_id, 'update', (reveal) => Q.zoneSnapshot(z.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/loyalty/phone/:phone', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { res.json(Q.loyaltyByPhone(req.params.phone)); }
