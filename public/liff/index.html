@@ -238,18 +238,24 @@
 
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
 <div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:330px;width:100%;margin:0;text-align:center;max-height:92vh;overflow:auto">
-    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:18px">บัตรสมาชิก YO-DEE</h1><button class="ghost" style="padding:6px 12px" onclick="closeMember()">✕</button></div>
-    <div id="memberName" style="font-weight:800;color:var(--navy);font-size:16px;margin:8px 0 6px"></div>
-    <img id="memberQR" alt="QR สมาชิก" style="width:196px;height:196px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
-    <p class="muted" style="font-size:12px;margin:8px 0 6px">แสดง QR นี้ที่เคาน์เตอร์ — สะสมแต้ม/ประวัติโดยไม่ต้องบอกเบอร์</p>
-    <div class="row" style="justify-content:center;gap:14px;margin:8px 0;flex-wrap:wrap;font-size:14px">
-      <span id="memberPts" style="display:none;font-weight:800;color:#7c3aed"></span>
-      <span id="memberVisits" style="font-weight:800;color:#c2410c"></span>
+  <div class="card" style="max-width:330px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:0">
+    <!-- Tier banner — colour + level by visit count (Starbucks-style status) -->
+    <div id="memberBanner" style="padding:16px 16px 14px;color:#fff;text-align:center;position:relative;background:linear-gradient(135deg,#2fc2a6,#7ed9c3)">
+      <button class="ghost" style="position:absolute;top:8px;right:8px;color:#fff;border-color:rgba(255,255,255,.45);padding:3px 9px" onclick="closeMember()">✕</button>
+      <div style="font-size:11px;opacity:.9;letter-spacing:2px;font-weight:700">YO-DEE MEMBER</div>
+      <div id="memberLevel" style="font-size:21px;font-weight:900;margin:3px 0;text-shadow:0 1px 4px rgba(0,0,0,.18)"></div>
+      <div id="memberName" style="font-size:15px;font-weight:700"></div>
+      <div id="memberVisits" style="font-size:13px;opacity:.94;margin-top:2px"></div>
+      <div id="memberNext" style="font-size:11px;opacity:.86;margin-top:7px"></div>
     </div>
-    <div id="memberFav" class="muted" style="font-size:14px;margin-bottom:10px"></div>
-    <button id="memberReorder" class="ok" style="width:100%;display:none;margin-bottom:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
-    <button class="ghost" style="width:100%" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+    <div style="padding:16px;text-align:center">
+      <img id="memberQR" alt="QR สมาชิก" style="width:188px;height:188px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
+      <p class="muted" style="font-size:12px;margin:8px 0 8px">แสดง QR นี้ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
+      <div id="memberStamp" style="display:none;background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:10px;font-size:14px;color:#7c3aed;font-weight:700;margin-bottom:8px"></div>
+      <div id="memberFav" class="muted" style="font-size:14px;margin-bottom:10px"></div>
+      <button id="memberReorder" class="ok" style="width:100%;display:none;margin-bottom:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
+      <button class="ghost" style="width:100%" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+    </div>
   </div>
 </div>
 
@@ -363,18 +369,38 @@ window.closeApp = ()=>{
     '<p class="muted">ปิดหน้านี้ได้เลยค่ะ</p></div>';
 };
 
-// "บัตรของฉัน" member card: QR สมาชิก + แต้ม + visits + สั่งซ้ำ in one place (reuses suggestions + loyalty).
+// Membership levels by visit count (works even with loyalty off). Colour + name like Starbucks tiers.
+const MEMBER_LEVELS=[
+  {min:30, name:'VIP', icon:'👑', grad:'linear-gradient(135deg,#3a2d5f,#7c3aed 55%,#caa14a)'},
+  {min:15, name:'คนพิเศษ', icon:'🏅', grad:'linear-gradient(135deg,#b8860b,#f3cb55 55%,#d99a08)'},
+  {min:5,  name:'ขาประจำ', icon:'⭐', grad:'linear-gradient(135deg,#0e7c93,#1ab3ce 55%,#2fc2a6)'},
+  {min:0,  name:'สมาชิกใหม่', icon:'🌱', grad:'linear-gradient(135deg,#2fc2a6,#7ed9c3)'}
+];
+function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[MEMBER_LEVELS.length-1]; }
+// "บัตรของฉัน" member card: tier banner + QR สมาชิก + แต้ม/แลกฟรี + สั่งซ้ำ in one place.
 window.openMember=async()=>{
   $('memberPop').style.display='flex';
   $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
   $('memberName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
-  $('memberPts').style.display='none'; $('memberVisits').textContent=''; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  let visits=0;
   try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
-    const visits=s.orderCount||0, fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
-    $('memberVisits').textContent = visits>=1 ? ('★ มาแล้ว '+visits+' ครั้ง') : '';
-    if(fav){ FAV=fav; $('memberFav').textContent='เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
+    visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
+    if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
   }catch(e){}
-  try{ const conf=await api('/api/loyalty/config'); if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); $('memberPts').textContent='⭐ '+(bal.points||0)+' ดวง'; $('memberPts').style.display=''; } }catch(e){}
+  const lvl=memberLevel(visits);
+  $('memberBanner').style.background=lvl.grad;
+  $('memberLevel').textContent=lvl.icon+' '+lvl.name;
+  $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'ยินดีต้อนรับสู่ YO-DEE!';
+  const next=MEMBER_LEVELS.filter(L=>L.min>visits).sort((a,b)=>a.min-b.min)[0];
+  $('memberNext').textContent = next ? ('อีก '+(next.min-visits)+' ครั้ง → '+next.icon+' '+next.name) : '🎉 ระดับสูงสุดแล้ว ขอบคุณนะคะ';
+  // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
+  try{ const conf=await api('/api/loyalty/config');
+    if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
+      $('memberStamp').innerHTML = (pts>=per) ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
+        : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
+      $('memberStamp').style.display=''; }
+  }catch(e){}
 };
 window.closeMember=()=>{ $('memberPop').style.display='none'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
