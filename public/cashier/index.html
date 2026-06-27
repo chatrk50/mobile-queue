@@ -23,7 +23,9 @@
   .wrap.wide{ max-width:1280px; }
   /* Bigger menu item images on the cashier order/topping screens (+~10%) */
   #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
-  #orderCard .menu-btn .mimg, #topPop .menu-btn .mimg{ width:68px; height:68px; }
+  #orderCard .menu-btn .mimg{ width:68px; height:68px; }
+  #topPop .menu-btn .mimg{ width:96px; height:96px; }
+  #topPop .menu-btn .mimg img{ width:100%; height:100%; object-fit:cover; border-radius:12px; }
   #orderCard .menu-btn .mimg svg, #topPop .menu-btn .mimg svg{ width:35px; height:35px; }
   #orderCard .menu-btn .mth{ font-size:13.5px; }
   #orderCard .menu-btn .mpr{ font-size:15px; }
@@ -362,8 +364,8 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
-    <div class="row between" style="flex:none"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
-    <p class="muted" style="flex:none;margin:6px 0 8px">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
+    <div class="row between" style="flex:none"><h1 style="margin:0">เลือกท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <p class="muted" id="topPopItem" style="flex:none;margin:6px 0 8px">เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้</p>
     <div id="topPopBtns" style="overflow-y:auto;flex:1;min-height:0;margin:0"></div>
     <div class="row" style="gap:8px;flex:none;margin-top:12px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
@@ -375,8 +377,8 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
-    <p class="muted">เลือกระดับความหวาน</p>
+    <div class="row between"><h1 style="margin:0">เลือกระดับความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <p class="muted" id="sweetItem">เลือกความหวานของเครื่องดื่ม</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
 </div>
@@ -1102,7 +1104,8 @@ window.editBranchForm=(id)=>{
         <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
         <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
       </div>
-      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'🟢 เปิดอยู่ — กดปิดร้านชั่วคราว':'🔴 ปิดอยู่ — กดเปิดร้าน'}</button>`}
+      <div style="text-align:center;font-size:13px;font-weight:700;margin:2px 0 8px;padding:9px 10px;border-radius:10px;background:${b.open_now?'rgba(22,135,111,.12)':'rgba(196,58,75,.1)'};color:${b.open_now?'#16876f':'#c43a4b'}">สถานะตอนนี้: ${b.open_now?'🟢 เปิดรับออเดอร์':(b.is_open?`🟡 นอกเวลาทำการ — ลูกค้าสั่งไม่ได้ตอนนี้${(b.hours_open&&b.hours_close)?` (เปิด ${b.hours_open}–${b.hours_close})`:''}`:'🔴 ปิดร้าน (ปิดเอง)')}</div>
+      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'เปิดร้านไว้ — กดเพื่อปิดร้านเอง':'🔴 ปิดร้านเองอยู่ — กดเพื่อเปิดร้าน'}</button>`}
       <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
     </div>`;
 };
@@ -1640,13 +1643,13 @@ window.saveEdit=async()=>{
 // drink + closes the topping/sweet popups, returning to the menu without adding anything.
 window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; _editEntryIdx=null; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
     return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>${menuBadge(m)}
-      <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
+      <div class="mimg" style="font-size:40px">${itemImg(m)}</div>
       <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
@@ -1656,7 +1659,7 @@ const SWEETS=[0,25,50,100];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
-  $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
+  $('sweetItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
     <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
@@ -1762,7 +1765,7 @@ window.detailEditOptions=()=>{ const e=cart[_detailIdx]; if(!e) return; const dr
   _editEntryIdx=_detailIdx; $('itemDetailPop').style.display='none';
   pendingDrink=drink; pendingTops={};
   e.toppings.forEach(tp=>{ const m=MENU.find(x=>x.name===tp.name); if(m) pendingTops[m.id]={name:tp.name,price:tp.price,qty:tp.qty}; });
-  $('topPopTitle').textContent=drink.name+' · ฿'+drink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=drink.name+' · ฿'+drink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderBasket(){
   const FREE=freeNameSet();
   $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
