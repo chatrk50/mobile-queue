@@ -2529,10 +2529,19 @@ let _scanStream=null, _scanRAF=null;
 window.openScanner=async()=>{
   if(typeof jsQR==='undefined'){ toast('ตัวสแกนยังโหลดไม่เสร็จ — ลองอีกครั้ง'); return; }
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
+  if(!window.isSecureContext){ toast('ต้องเปิดผ่าน https เท่านั้นจึงจะใช้กล้องได้'); return; }
   $('scanPop').style.display='flex';
-  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); }
-  catch(e){ toast('เปิดกล้องไม่ได้ — อนุญาตการใช้กล้องในเบราว์เซอร์'); closeScanner(); return; }
-  const v=$('scanVideo'); v.srcObject=_scanStream; try{ await v.play(); }catch(e){}
+  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}); }
+  catch(e){
+    // Some front-camera-only devices (older iPads/laptops) reject 'environment' — retry with any camera.
+    try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:true}); }
+    catch(e2){ const n=(e2&&e2.name)||'';
+      const msg = (n==='NotAllowedError'||n==='SecurityError') ? 'กล้องถูกปฏิเสธ — ไปตั้งค่าเบราว์เซอร์ > อนุญาตกล้องของเว็บนี้ แล้วลองใหม่'
+        : (n==='NotFoundError'||n==='OverconstrainedError') ? 'ไม่พบกล้องบนอุปกรณ์นี้'
+        : (n==='NotReadableError') ? 'กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอปนั้นแล้วลองใหม่'
+        : 'เปิดกล้องไม่ได้ — ตรวจสอบสิทธิ์กล้องในเบราว์เซอร์';
+      toast(msg); closeScanner(); return; } }
+  const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); try{ await v.play(); }catch(e){}
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;
     if(v.readyState>=2 && v.videoWidth){ c.width=v.videoWidth; c.height=v.videoHeight; g.drawImage(v,0,0,c.width,c.height);
