@@ -70,6 +70,15 @@
       <h1 id="zoneName" style="margin:0">—</h1>
       <span id="zoneState" class="pill open">เปิด</span>
     </div>
+    <!-- Auto member recognition for LINE customers — tap to open the full card -->
+    <div id="memberStrip" style="display:none;align-items:center;gap:11px;background:linear-gradient(135deg,#eaf6ff,#f4fbff);border:1px solid var(--line);border-radius:14px;padding:9px 12px;margin:12px 0 0;cursor:pointer;text-align:left" onclick="openMember()">
+      <span id="memberStripIcon" style="font-size:23px;flex:none">🌱</span>
+      <div style="flex:1;min-width:0">
+        <div id="memberStripName" style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+        <div id="memberStripSub" style="font-size:11.5px;color:var(--muted)"></div>
+      </div>
+      <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
+    </div>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
       <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
@@ -509,12 +518,27 @@ async function loadZone(){
   show('closedMsg', !open);
   show('getCard',true);
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
+  loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
   loadLoyalty();            // show the customer's points balance (best-effort)
   loadReferral();           // invite-a-friend code + enter-a-code (best-effort)
 }
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
 let FAV=null;
+// Auto member recognition on the home: LINE customers see their tier + visits without opening the card.
+async function loadMemberStrip(){
+  const el=$('memberStrip'); if(!el) return; el.style.display='none';
+  if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
+  try{
+    let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
+    let t={bloomMin:10,essenceMin:25}; try{ const c=await api('/api/loyalty/config'); if(c&&c.tier) t=c.tier; }catch(e){}
+    const T = visits>=t.essenceMin ? {n:'ESSENCE',i:'👑'} : visits>=t.bloomMin ? {n:'BLOOM',i:'🌷'} : {n:'PURE',i:'🌱'};
+    $('memberStripIcon').textContent = T.i;
+    $('memberStripName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+    $('memberStripSub').textContent = T.n + ' · ' + (visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉');
+    el.style.display='flex';
+  }catch(e){}
+}
 async function loadReorder(){
   FAV=null; show('reorderCard',false);
   // Default: "สั่งเลย" is the single primary CTA. If a reorder is offered below, it gets demoted to secondary.
