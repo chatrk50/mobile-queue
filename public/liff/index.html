@@ -253,30 +253,37 @@
 
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
 <div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:330px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:0">
-    <!-- Virtual tier card: full per-tier art background + identity overlaid on the clean centre -->
-    <div id="memberVCard" style="position:relative;width:100%;aspect-ratio:1024/1536;min-height:380px;background:#cfeafa center/cover no-repeat;color:#16314f">
-      <button class="ghost" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.72);border:none;color:#16314f;padding:3px 10px;border-radius:999px;z-index:2;font-size:16px;line-height:1" onclick="closeMember()">✕</button>
-      <div style="position:absolute;left:0;right:0;top:20%;text-align:center;padding:0 20px;text-shadow:0 1px 7px rgba(255,255,255,.9)">
-        <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:9px">
-          <img src="/assets/logo.png" onerror="this.style.display='none'" style="width:26px;height:26px;border-radius:50%;background:#fff;padding:2px;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.18)">
-          <span style="font-size:12px;letter-spacing:1.6px;font-weight:800">YO-DEE YOGURT</span>
+  <div class="card" style="max-width:312px;width:100%;margin:0;max-height:94vh;overflow:auto;padding:14px">
+    <!-- FLIP CARD: front = tier identity (art), back = QR (hidden until you flip). Fits one screen. -->
+    <div style="perspective:1400px">
+      <div id="memberFlipInner" style="position:relative;width:100%;aspect-ratio:1/1.18;transition:transform .55s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d">
+        <!-- FRONT -->
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55)">
+          <div id="memberVCard" style="position:absolute;inset:0;background:#cfeafa center/cover no-repeat;color:#16314f"></div>
+          <button class="ghost" style="position:absolute;top:9px;right:9px;background:rgba(255,255,255,.74);border:none;color:#16314f;padding:2px 9px;border-radius:999px;z-index:2;font-size:15px;line-height:1.3" onclick="closeMember()">✕</button>
+          <div style="position:absolute;left:0;right:0;top:12%;text-align:center;padding:0 18px;text-shadow:0 1px 7px rgba(255,255,255,.92)">
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px"><img src="/assets/logo.png" onerror="this.style.display='none'" style="width:23px;height:23px;border-radius:50%;background:#fff;padding:2px;object-fit:contain"><span style="font-size:11px;letter-spacing:1.4px;font-weight:800">YO-DEE YOGURT</span></div>
+            <div id="memberLevel" style="font-size:22px;font-weight:900;margin:1px 0"></div>
+            <div id="memberName" style="font-size:15px;font-weight:700"></div>
+            <div id="memberVisits" style="font-size:12px;font-weight:600;margin-top:2px"></div>
+            <div id="memberNext" style="font-size:10.5px;margin-top:6px;opacity:.8"></div>
+          </div>
+          <div id="memberStamp" style="display:none;position:absolute;left:12px;right:12px;bottom:11px;background:rgba(255,255,255,.88);border-radius:11px;padding:7px 9px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
         </div>
-        <div id="memberLevel" style="font-size:25px;font-weight:900;margin:2px 0"></div>
-        <div id="memberName" style="font-size:16px;font-weight:700"></div>
-        <div id="memberVisits" style="font-size:13px;font-weight:600;margin-top:3px"></div>
-        <div id="memberNext" style="font-size:11px;margin-top:9px;opacity:.8"></div>
+        <!-- BACK (QR) -->
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px">
+          <button class="ghost" style="position:absolute;top:9px;right:9px;padding:2px 9px;border-radius:999px;font-size:15px;line-height:1.3" onclick="closeMember()">✕</button>
+          <img id="memberQR" alt="QR สมาชิก" style="width:194px;height:194px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
+          <p class="muted" style="font-size:12px;margin:10px 0 0;text-align:center">แสดง QR นี้ที่เคาน์เตอร์<br>ไม่ต้องบอกเบอร์</p>
+          <button class="ghost" onclick="flipMember(false)" style="margin-top:13px;padding:8px 18px">↺ กลับด้านบัตร</button>
+        </div>
       </div>
     </div>
-    <div style="padding:16px;text-align:center">
-      <img id="memberQR" alt="QR สมาชิก" style="width:188px;height:188px;border-radius:12px;border:1px solid var(--line);background:#fff;object-fit:contain">
-      <p class="muted" style="font-size:12px;margin:8px 0 8px">แสดง QR นี้ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
-      <div id="memberStamp" style="display:none;background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:10px;font-size:14px;color:#7c3aed;font-weight:700;margin-bottom:8px"></div>
-      <div id="memberFav" class="muted" style="font-size:14px;margin-bottom:10px"></div>
-      <button id="memberReorder" class="ok" style="width:100%;display:none;margin-bottom:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
-      <button class="ghost" style="width:100%" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
-      <div id="referralCard" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin:12px 0 0;text-align:left"><div id="referralBody"></div></div>
-    </div>
+    <button class="ghost" onclick="flipMember(true)" style="width:100%;margin-top:12px"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>แสดง QR สมาชิก</button>
+    <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
+    <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
+    <button id="memberOrderBtn" class="ghost" style="width:100%;margin-top:8px" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+    <div id="referralCard" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin:12px 0 0;text-align:left"><div id="referralBody"></div></div>
   </div>
 </div>
 
@@ -404,7 +411,7 @@ const MEMBER_LEVELS=[
 function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[MEMBER_LEVELS.length-1]; }
 // "บัตรของฉัน" member card: tier banner + QR สมาชิก + แต้ม/แลกฟรี + สั่งซ้ำ in one place.
 window.openMember=async()=>{
-  $('memberPop').style.display='flex';
+  $('memberPop').style.display='flex'; flipMember(false);
   $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
   $('memberName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
@@ -421,6 +428,8 @@ window.openMember=async()=>{
   $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'ยินดีต้อนรับสู่ YO-DEE!';
   const next=MEMBER_LEVELS.filter(L=>L.min>visits).sort((a,b)=>a.min-b.min)[0];
   $('memberNext').textContent = next ? ('อีก '+(next.min-visits)+' ครั้ง → '+next.icon+' '+next.name) : '🎉 ระดับสูงสุดแล้ว ขอบคุณนะคะ';
+  // Never-ordered customer → invite to start; returning → "order something else".
+  $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
   // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
   try{ const conf=await api('/api/loyalty/config');
     if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
@@ -431,7 +440,9 @@ window.openMember=async()=>{
   // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
   try{ loadReferral(); }catch(e){}
 };
-window.closeMember=()=>{ $('memberPop').style.display='none'; };
+window.closeMember=()=>{ $('memberPop').style.display='none'; flipMember(false); };
+// Flip the member card between identity (front) and QR (back).
+window.flipMember=(on)=>{ const el=$('memberFlipInner'); if(el) el.style.transform = on ? 'rotateY(180deg)' : 'rotateY(0deg)'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
 
 // QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
