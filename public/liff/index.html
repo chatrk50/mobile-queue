@@ -45,10 +45,13 @@
   </div>
 
   <!-- STEP: get ticket -->
-  <div id="getCard" class="card" style="display:none;text-align:center">
-    <h2 id="storeName">—</h2>
-    <h1 id="zoneName" style="margin-bottom:4px">—</h1>
-    <span id="zoneState" class="pill open">เปิด</span>
+  <div id="getCard" class="card" style="display:none;text-align:center;position:relative">
+    <button class="ghost" onclick="closeApp()" aria-label="ปิด" style="position:absolute;top:8px;right:8px;padding:2px 9px;border:none;background:transparent;color:var(--muted);font-size:20px;line-height:1;cursor:pointer">✕</button>
+    <div id="storeName" style="font-size:13px;color:var(--muted);font-weight:700;letter-spacing:.3px"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:1px">
+      <h1 id="zoneName" style="margin:0">—</h1>
+      <span id="zoneState" class="pill open">เปิด</span>
+    </div>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
       <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
@@ -82,7 +85,6 @@
       <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรของฉัน</button>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
-    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ปิด</button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 ปิดรับคิว</b><br>
       <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
