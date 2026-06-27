@@ -12,6 +12,8 @@
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
+  #topPop .menu-btn .mimg{ width:92px; height:92px; }
+  #topPop .menu-btn .mimg img{ width:100%; height:100%; object-fit:cover; border-radius:12px; }
   /* "It's your turn" celebration */
   @keyframes callpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
   .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
@@ -204,8 +206,8 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <h1 id="topPopTitle">ท็อปปิ้ง</h1>
-    <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
+    <h1>เลือกท็อปปิ้ง</h1>
+    <p class="muted" id="topPopItem">เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้</p>
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
@@ -217,8 +219,8 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <h1 id="sweetTitle">ความหวาน</h1>
-    <p class="muted">เลือกระดับความหวาน</p>
+    <h1>เลือกระดับความหวาน</h1>
+    <p class="muted" id="sweetItem">เลือกความหวานของเครื่องดื่ม</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
 </div>
@@ -620,13 +622,13 @@ window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false;
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
     return `<button class="menu-btn" style="position:relative${on?';border-color:var(--accent);background:#e9f8fb':''}${m.soldout?';opacity:.55':''}" ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
-      <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
+      <div class="mimg" style="font-size:40px">${itemImg(m)}</div>
       <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
@@ -636,7 +638,7 @@ const SWEETS=[0,25,50,100];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
-  $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
+  $('sweetItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
     <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
