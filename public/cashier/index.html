@@ -408,12 +408,14 @@
       <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
       <button class="ghost" style="padding:6px 12px" onclick="closeCust()">✕</button>
     </div>
-    <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-      <button class="ckey" onclick="custKey('1')">1</button><button class="ckey" onclick="custKey('2')">2</button><button class="ckey" onclick="custKey('3')">3</button>
-      <button class="ckey" onclick="custKey('4')">4</button><button class="ckey" onclick="custKey('5')">5</button><button class="ckey" onclick="custKey('6')">6</button>
-      <button class="ckey" onclick="custKey('7')">7</button><button class="ckey" onclick="custKey('8')">8</button><button class="ckey" onclick="custKey('9')">9</button>
-      <button class="ckey" style="color:var(--danger)" onclick="custBack()" aria-label="ลบ">⌫</button><button class="ckey" onclick="custKey('0')">0</button><button class="ok" style="border-radius:12px;font-weight:800;font-size:16px" onclick="doCustLookup()">ค้นหา</button>
+    <div id="custPad">
+      <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <button class="ckey" onclick="custKey('1')">1</button><button class="ckey" onclick="custKey('2')">2</button><button class="ckey" onclick="custKey('3')">3</button>
+        <button class="ckey" onclick="custKey('4')">4</button><button class="ckey" onclick="custKey('5')">5</button><button class="ckey" onclick="custKey('6')">6</button>
+        <button class="ckey" onclick="custKey('7')">7</button><button class="ckey" onclick="custKey('8')">8</button><button class="ckey" onclick="custKey('9')">9</button>
+        <button class="ckey" style="color:var(--danger)" onclick="custBack()" aria-label="ลบ">⌫</button><button class="ckey" onclick="custKey('0')">0</button><button class="ok" style="border-radius:12px;font-weight:800;font-size:16px" onclick="doCustLookup()">ค้นหา</button>
+      </div>
     </div>
     <div id="custResult" style="margin-top:14px"></div>
   </div>
@@ -511,6 +513,7 @@
     -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;
     display:flex;align-items:center;justify-content:center;transition:transform .06s,background .06s}
   .ckey:active{transform:scale(.95);background:#e4ebf3}
+  #custPhone::placeholder{font-size:14px;letter-spacing:.5px;font-weight:600;color:var(--muted)}
   /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
   .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
     cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
@@ -1707,16 +1710,19 @@ window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx
 window.confirmDetail=()=>{ closeItemDetail(); toast('อัปเดตรายการแล้ว'); };
 
 // ---------- CRM: customer lookup by phone (enter phone → profile card) ----------
-window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPop').style.display='flex'; };
+window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPad').style.display=''; $('custPop').style.display='flex'; };
 window.closeCust=()=>{ $('custPop').style.display='none'; };
 window.custKey=(d)=>{ const i=$('custPhone'); if((i.value||'').length>=10) return; i.value=(i.value||'')+d; };
 window.custBack=()=>{ const i=$('custPhone'); i.value=(i.value||'').slice(0,-1); };
+// After a search, hide the keypad and show the result; "← ค้นหาใหม่" brings the keypad back.
+function showCustResult(html){ $('custPad').style.display='none'; $('custResult').innerHTML='<button class="ghost" style="margin-bottom:12px;font-size:13px;padding:7px 14px" onclick="custSearchAgain()">← ค้นหาเบอร์อื่น</button>'+html; }
+window.custSearchAgain=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPad').style.display=''; };
 window.doCustLookup=async()=>{
-  const ph=($('custPhone').value||'').replace(/\D/g,''); const box=$('custResult');
-  if(ph.length<9){ box.innerHTML='<p class="muted" style="text-align:center">กรอกเบอร์ให้ครบก่อนนะ</p>'; return; }
-  box.innerHTML='<p class="muted" style="text-align:center">⏳ กำลังค้นหา…</p>';
-  try{ box.innerHTML=renderCustProfile(await api('/api/customers/phone/'+ph)); }
-  catch(e){ box.innerHTML='<p class="muted" style="text-align:center;color:var(--danger)">ค้นหาไม่สำเร็จ: '+err(e)+'</p>'; }
+  const ph=($('custPhone').value||'').replace(/\D/g,'');
+  if(ph.length<9){ toast('กดเบอร์ให้ครบก่อนนะ'); return; }
+  showCustResult('<p class="muted" style="text-align:center">⏳ กำลังค้นหา…</p>');
+  try{ showCustResult(renderCustProfile(await api('/api/customers/phone/'+ph))); }
+  catch(e){ showCustResult('<p class="muted" style="text-align:center;color:var(--danger)">ค้นหาไม่สำเร็จ: '+err(e)+'</p>'); }
 };
 function _agoTH(iso){ if(!iso) return '—'; const d=new Date(iso.replace(' ','T')+'Z'); const days=Math.floor((Date.now()-d.getTime())/86400000); return days<=0?'วันนี้':days===1?'เมื่อวาน':days+' วันก่อน'; }
 // "สั่งให้ลูกค้าคนนี้" CTAs — read the stored profile (no fragile inline-string args).
@@ -2513,7 +2519,7 @@ async function onScan(text){
   let uid=null; try{ uid=new URL(text).searchParams.get('u'); }catch(e){ const m=String(text).match(/[?&]u=([^&]+)/); uid=m?decodeURIComponent(m[1]):null; }
   closeScanner();
   if(!uid){ toast('ไม่ใช่บัตรสมาชิก YO-DEE'); return; }
-  try{ const p=await api('/api/customers/by-line/'+encodeURIComponent(uid)); $('custPhone').value=''; $('custResult').innerHTML=renderCustProfile(p); $('custPop').style.display='flex'; }
+  try{ const p=await api('/api/customers/by-line/'+encodeURIComponent(uid)); const ph=$('custPhone'); if(ph) ph.value=''; $('custPop').style.display='flex'; showCustResult(renderCustProfile(p)); }
   catch(e){ toast('ค้นหาไม่สำเร็จ: '+err(e)); }
 }
 
