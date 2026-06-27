@@ -80,7 +80,6 @@
       <div id="loyBday" style="margin-top:10px"></div>
     </div>
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
-    <div id="referralCard" style="display:none;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px;text-align:left"><div id="referralBody"></div></div>
     <button id="memberBtn" style="width:100%;margin-bottom:10px;background:#fff;color:var(--navy);border:1.5px solid var(--navy)" onclick="openMember()">
       <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h5"/></svg>บัตรของฉัน</button>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
@@ -275,6 +274,7 @@
       <div id="memberFav" class="muted" style="font-size:14px;margin-bottom:10px"></div>
       <button id="memberReorder" class="ok" style="width:100%;display:none;margin-bottom:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
       <button class="ghost" style="width:100%" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+      <div id="referralCard" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin:12px 0 0;text-align:left"><div id="referralBody"></div></div>
     </div>
   </div>
 </div>
@@ -426,6 +426,8 @@ window.openMember=async()=>{
         : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
       $('memberStamp').style.display=''; }
   }catch(e){}
+  // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
+  try{ loadReferral(); }catch(e){}
 };
 window.closeMember=()=>{ $('memberPop').style.display='none'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
