@@ -1689,6 +1689,16 @@ export function moveMenuItem(id, dir) {
   tx();
   return { ok: true, moved: true };
 }
+/** Set a whole category's display order from a drag-and-drop reorder (array of ids, top→bottom). */
+export function setMenuOrder(ids) {
+  const arr = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => n > 0);
+  if (!arr.length) return { ok: true, count: 0 };
+  const cats = new Set(db.prepare(`SELECT DISTINCT category FROM menu_items WHERE id IN (${arr.map(() => '?').join(',')})`).all(...arr).map((r) => r.category));
+  if (cats.size > 1) throw new Error('mixed_categories');   // never let a reorder mix drinks + toppings
+  const tx = db.transaction(() => { const upd = db.prepare('UPDATE menu_items SET sort=? WHERE id=?'); arr.forEach((id, i) => upd.run(i, id)); });
+  tx();
+  return { ok: true, count: arr.length };
+}
 
 // ---------- Customers: remember LINE customers for reorder suggestions ----------
 /** Upsert a LINE customer's profile + counters after they place an order. Best-effort:
