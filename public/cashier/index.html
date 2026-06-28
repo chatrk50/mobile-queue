@@ -1549,8 +1549,8 @@ function renderMenuMgr(){
     <div class="ms-item ${m.id===_selMenuId?'sel':''}" data-id="${m.id}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
       <span class="dgrip" title="ลากเพื่อจัดลำดับ" onclick="event.stopPropagation()" style="flex:none;cursor:grab;color:var(--muted);padding:0 6px 0 0;font-size:19px;line-height:1;touch-action:none">⠿</span>
       <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
-      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>
-        <div class="muted" style="font-size:12px">฿${m.price}${m.soldout?' · หมด':''}${m.active?'':' · ซ่อน'}</div></div>
+      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>${m.soldout?' <span style="background:var(--danger);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;vertical-align:middle">หมด</span>':''}
+        <div class="muted" style="font-size:12px">฿${m.price}${m.active?'':' · ซ่อน'}</div></div>
     </div>`;
   const drinks=MENU.filter(m=>m.category!=='topping'), tops=MENU.filter(m=>m.category==='topping');
   const sec=(title,items,cid)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length}) — ลาก ⠿ เพื่อจัดลำดับ</div><div id="${cid}">`+items.map((m,i)=>row(m,i,items.length)).join('')+`</div>`:'';
@@ -1559,7 +1559,10 @@ function renderMenuMgr(){
 }
 // Drag-and-drop reorder (fast) on top of the ▲▼ fallback — SortableJS handles touch + mouse.
 function initMenuSort(){ if(!window.Sortable) return;
-  ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,onEnd:saveMenuOrder}); } }); }
+  ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,
+    forceFallback:true, fallbackOnBody:true, fallbackTolerance:4,   // reliable pointer-drag on iPad (native touch-drag couldn't move items up)
+    scroll:true, scrollSensitivity:70, scrollSpeed:14,              // auto-scroll the list while dragging up/down
+    onEnd:saveMenuOrder}); } }); }
 window.saveMenuOrder=async(evt)=>{ const el=evt&&evt.to; if(!el) return;
   const ids=[...el.querySelectorAll('[data-id]')].map(n=>Number(n.dataset.id)).filter(Boolean);
   if(!ids.length) return;
