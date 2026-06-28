@@ -612,14 +612,47 @@ function cashComponents(branchId, sinceAt) {
   // Cash paid back out = refunds (paid-then-voided) that had been paid by cash.
   const cashRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
     FROM orders o WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?`).get(branchId, sinceAt).v || 0;
-  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund) };
+  // Manual drawer movements in the window: pay_in adds cash, pay_out removes it.
+  const payIn = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_in' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  const payOut = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut) };
+}
+/** Add a manual cash drawer movement (pay-in / pay-out). */
+export function addCashMove(branchId = 1, kind, amount, remark = null, actorId = null) {
+  const k = kind === 'pay_out' ? 'pay_out' : 'pay_in';
+  const a = Math.round((Number(amount) || 0) * 100) / 100;
+  if (!(a > 0)) throw new Error('bad_amount');
+  const info = db.prepare('INSERT INTO cash_moves (branch_id, kind, amount, remark, actor_id) VALUES (?,?,?,?,?)')
+    .run(branchId, k, a, remark ? String(remark).slice(0, 120) : null, actorId);
+  return db.prepare('SELECT * FROM cash_moves WHERE id=?').get(info.lastInsertRowid);
+}
+/** Pay-in/out ledger for one Bangkok-local day (default today) — for the cash screen's day view. */
+export function listCashMoves(branchId = 1, date = null) {
+  const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const rows = db.prepare(
+    `SELECT cm.id, cm.kind, cm.amount, cm.remark, cm.at, s.name AS actor_name
+       FROM cash_moves cm LEFT JOIN staff s ON s.id=cm.actor_id
+      WHERE cm.branch_id=? AND date(cm.at,'+7 hours')=? ORDER BY cm.at DESC`
+  ).all(branchId, day);
+  const payIn = r2(rows.filter((r) => r.kind === 'pay_in').reduce((s, r) => s + r.amount, 0));
+  const payOut = r2(rows.filter((r) => r.kind === 'pay_out').reduce((s, r) => s + r.amount, 0));
+  return { date: day, moves: rows, payIn, payOut, net: r2(payIn - payOut) };
+}
+export function deleteCashMove(id, branchId = 1) {
+  db.prepare('DELETE FROM cash_moves WHERE id=? AND branch_id=?').run(Number(id), branchId);
+  return { ok: true };
+}
+/** Total pay-out for a Bangkok day — deducted from that day's revenue in reports. */
+export function payOutForDay(branchId = 1, date = null) {
+  const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  return r2(db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND date(at,'+7 hours')=?`).get(branchId, day).v || 0);
 }
 /** Current open cash session for a branch (+ live expected cash so far). */
 export function currentCashSession(branchId = 1) {
   const s = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
   if (!s) return { open: false };
   const c = cashComponents(branchId, s.opened_at);
-  return { open: true, session: s, ...c, expectedCash: r2(s.open_float + c.cashIn - c.cashRefund) };
+  return { open: true, session: s, ...c, expectedCash: r2(s.open_float + c.cashIn - c.cashRefund + c.payIn - c.payOut) };
 }
 /** Open a drawer with a starting float (one open session per branch at a time). */
 export function openCashSession(branchId = 1, { actorId = null, openFloat = 0 } = {}) {
@@ -632,7 +665,7 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   const cur = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
   if (!cur) throw new Error('no_open_session');
   const c = cashComponents(branchId, cur.opened_at);
-  const expected = r2(cur.open_float + c.cashIn - c.cashRefund);
+  const expected = r2(cur.open_float + c.cashIn - c.cashRefund + c.payIn - c.payOut);
   const counted = r2(countedCash);
   const over = r2(counted - expected);
   db.prepare(`UPDATE cash_sessions SET closed_by=?, closed_at=datetime('now'), counted_cash=?, expected_cash=?, over_short=?, note=? WHERE id=?`)

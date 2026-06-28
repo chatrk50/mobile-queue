@@ -339,6 +339,18 @@ CREATE TABLE IF NOT EXISTS cash_sessions (
   over_short    REAL,
   note          TEXT
 );
+-- Cash pay-in / pay-out: manual drawer movements not tied to a sale (petty cash, expenses, float top-up).
+-- pay_out reduces the day's revenue + drawer; pay_in adds cash to the drawer only (not revenue).
+CREATE TABLE IF NOT EXISTS cash_moves (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL DEFAULT 1,
+  kind      TEXT NOT NULL,             -- 'pay_in' | 'pay_out'
+  amount    REAL NOT NULL,
+  remark    TEXT,
+  actor_id  INTEGER,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cash_moves_day ON cash_moves(branch_id, at);
 -- Inventory: raw materials/ingredients + a movement log (purchases / stock counts / usage).
 CREATE TABLE IF NOT EXISTS ingredients (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

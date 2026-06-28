@@ -288,6 +288,23 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCash()">ปิด</button>
     </div>
     <div id="cashBody" style="margin-top:14px"></div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="row between" style="align-items:center">
+        <h2 style="margin:0;font-size:15px">💵 รับ/จ่ายเงินสด</h2>
+        <div class="row" style="gap:4px;align-items:center">
+          <button class="ghost" style="padding:4px 10px" onclick="cashMovesDay(-1)">‹</button>
+          <span id="cashMovesDate" style="font-size:13px;font-weight:700;min-width:104px;text-align:center">—</span>
+          <button class="ghost" style="padding:4px 10px" onclick="cashMovesDay(1)">›</button>
+        </div>
+      </div>
+      <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
+        <select id="cmKind" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option value="pay_out">จ่ายออก (−)</option><option value="pay_in">รับเข้า (+)</option></select>
+        <input id="cmAmount" type="number" inputmode="decimal" placeholder="฿" style="width:88px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="cmRemark" placeholder="หมายเหตุ เช่น ซื้อน้ำแข็ง" style="flex:1;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <button class="ok" style="padding:8px 16px" onclick="addCashMove()">เพิ่ม</button>
+      </div>
+      <div id="cashMovesList" style="margin-top:12px"><p class="muted" style="font-size:12px">กำลังโหลด…</p></div>
+    </div>
   </div>
 
   <!-- OVERVIEW / CHARTS (owner/manager) -->
@@ -1250,8 +1267,32 @@ window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
 let CASH=null;
 window.hideCash=()=>{ $('cashCard').style.display='none'; $('dash').style.display=''; };
 window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
-  await loadCash(); };
+  CMDATE=null; await loadCash(); loadCashMoves(); };
 window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); renderCash(); }catch(e){ toast(err(e)); } };
+// Pay In/Out ledger (per Bangkok day, navigable). pay_out shown as a deduction; pay_in as added cash.
+let CMDATE=null;
+window.loadCashMoves=async()=>{ try{ const q=CMDATE?('?date='+encodeURIComponent(CMDATE)):''; const d=await api('/api/cash/moves'+q); CMDATE=d.date; renderCashMoves(d); }catch(e){ const l=$('cashMovesList'); if(l) l.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
+window.cashMovesDay=(delta)=>{ const p=(CMDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CMDATE=b.toISOString().slice(0,10); loadCashMoves(); };
+function renderCashMoves(d){
+  const dt=$('cashMovesDate'); if(dt) dt.textContent=d.date;
+  const rows=(d.moves||[]).map(m=>{ const out=m.kind==='pay_out';
+    return `<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:center">
+      <div style="flex:1;min-width:0"><b>${esc(m.remark||(out?'จ่ายออก':'รับเข้า'))}</b>
+        <div class="muted" style="font-size:11px">${(m.at||'').slice(11,16)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
+      <b style="color:${out?'var(--danger)':'#16a34a'};white-space:nowrap">${out?'−':'+'}${baht2(m.amount)}</b>
+      <button class="ghost" style="padding:2px 8px;margin-left:8px;font-size:13px;color:var(--danger)" title="ลบ" onclick="delCashMove(${m.id})">✕</button></div>`; }).join('');
+  $('cashMovesList').innerHTML=`
+    <div style="background:var(--surface);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px">
+      <div class="row between"><span class="muted">รับเข้า (เพิ่มเงินสด · ไม่นับรายได้)</span><b style="color:#16a34a">+${baht2(d.payIn)}</b></div>
+      <div class="row between" style="margin-top:4px"><span class="muted">จ่ายออก (หักจากรายได้วันนั้น)</span><b style="color:var(--danger)">−${baht2(d.payOut)}</b></div>
+    </div>
+    ${rows||'<p class="muted" style="font-size:12px;text-align:center;padding:8px">ยังไม่มีรายการในวันนี้</p>'}`;
+}
+window.addCashMove=async()=>{ const kind=$('cmKind').value, amount=Number($('cmAmount').value)||0, remark=$('cmRemark').value.trim();
+  if(!(amount>0)){ toast('ใส่จำนวนเงิน'); return; }
+  try{ await api('/api/cash/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,amount,remark})}); $('cmAmount').value='';$('cmRemark').value=''; toast('บันทึกแล้ว'); loadCashMoves(); if(CASH&&CASH.open) loadCash(); }catch(e){ toast(err(e)); } };
+window.delCashMove=async(id)=>{ if(!(await appConfirm({title:'ลบรายการ',message:'ลบรายการรับ/จ่ายเงินสดนี้?',okText:'ลบ',danger:true}))) return;
+  try{ await api('/api/cash/move/'+id+'/delete',{method:'POST'}); loadCashMoves(); if(CASH&&CASH.open) loadCash(); }catch(e){ toast(err(e)); } };
 function renderCash(){
   const box=$('cashBody');
   if(!CASH || !CASH.open){
@@ -1268,6 +1309,8 @@ function renderCash(){
     <div class="row between" style="margin-top:6px"><span>เงินทอนเริ่มต้น</span><b>${baht2(s.session.open_float)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินสดที่รับ (กะนี้)</span><b style="color:var(--ok,#16a34a)">+${baht2(s.cashIn)}</b></div>
     ${s.cashRefund?`<div class="row between" style="margin-top:6px"><span>คืนเงินสด</span><b style="color:var(--danger)">−${baht2(s.cashRefund)}</b></div>`:''}
+    ${s.payIn?`<div class="row between" style="margin-top:6px"><span>รับเข้า (pay-in)</span><b style="color:#16a34a">+${baht2(s.payIn)}</b></div>`:''}
+    ${s.payOut?`<div class="row between" style="margin-top:6px"><span>จ่ายออก (pay-out)</span><b style="color:var(--danger)">−${baht2(s.payOut)}</b></div>`:''}
     <div class="row between" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;font-size:18px"><b>เงินสดที่ควรมี</b><b>${baht2(s.expectedCash)}</b></div></div>
   <div style="margin-top:14px;border:1px solid var(--line);border-radius:14px;padding:16px">
     <div class="row" style="gap:8px;align-items:center"><span>นับเงินจริง ฿</span>
@@ -2546,7 +2589,7 @@ window.openScanner=async()=>{
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
   if(!window.isSecureContext){ toast('ต้องเปิดผ่าน https เท่านั้นจึงจะใช้กล้องได้'); return; }
   $('scanPop').style.display='flex';
-  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}); }
+  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}}); }
   catch(e){
     // Some front-camera-only devices (older iPads/laptops) reject 'environment' — retry with any camera.
     try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:true}); }
@@ -2556,11 +2599,14 @@ window.openScanner=async()=>{
         : (n==='NotReadableError') ? 'กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอปนั้นแล้วลองใหม่'
         : 'เปิดกล้องไม่ได้ — ตรวจสอบสิทธิ์กล้องในเบราว์เซอร์';
       toast(msg); closeScanner(); return; } }
-  const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); try{ await v.play(); }catch(e){}
+  const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.onloadedmetadata=()=>{ v.play().catch(()=>{}); }; try{ await v.play(); }catch(e){}
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;
-    if(v.readyState>=2 && v.videoWidth){ c.width=v.videoWidth; c.height=v.videoHeight; g.drawImage(v,0,0,c.width,c.height);
-      let r=null; try{ const d=g.getImageData(0,0,c.width,c.height); r=jsQR(d.data,d.width,d.height); }catch(e){}
+    if(v.readyState>=2 && v.videoWidth){
+      // Downscale to ≤640px for jsQR — much faster per frame (the QR fills the frame at counter distance).
+      const s=Math.min(1,640/v.videoWidth), cw=Math.round(v.videoWidth*s), ch=Math.round(v.videoHeight*s);
+      c.width=cw; c.height=ch; g.drawImage(v,0,0,cw,ch);
+      let r=null; try{ const d=g.getImageData(0,0,cw,ch); r=jsQR(d.data,d.width,d.height,{inversionAttempts:'dontInvert'}); }catch(e){}
       if(r&&r.data){ onScan(r.data); return; } }
     _scanRAF=requestAnimationFrame(tick); };
   _scanRAF=requestAnimationFrame(tick);
