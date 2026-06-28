@@ -1069,6 +1069,9 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
 // "points" in the DB == stamps. Disabled by default (owner enables later).
 export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
 export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
+// Membership system (บัตรสมาชิก + tier + recognition) — SEPARATE from the stamp/points programme. Default ON.
+export function memberEnabled() { return getSetting('member:enabled', '1') === '1'; }
+export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '0'); return { memberEnabled: !!on }; }
 // SlipOK auto-verify is an OWNER TOGGLE (default OFF) on top of the env creds, so the shop
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.

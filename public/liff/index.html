@@ -541,8 +541,10 @@ async function loadMemberStrip(){
   const el=$('memberStrip'); if(!el) return; el.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
   try{
+    let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
+    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
     let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
-    let t={bloomMin:10,essenceMin:25}; try{ const c=await api('/api/loyalty/config'); if(c&&c.tier) t=c.tier; }catch(e){}
+    let t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
     const T = visits>=t.essenceMin ? {n:'ESSENCE',i:'👑'} : visits>=t.bloomMin ? {n:'BLOOM',i:'🌷'} : {n:'PURE',i:'🌱'};
     $('memberStripIcon').textContent = T.i;
     $('memberStripName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';

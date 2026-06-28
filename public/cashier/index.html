@@ -224,7 +224,11 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:grid;gap:12px">
-      <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม</label>
+      <div style="background:#eef6ff;border:1px solid #cfe6f5;border-radius:10px;padding:11px 12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="memberEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานระบบสมาชิก (บัตรสมาชิก + ระดับ)</label>
+        <div class="muted" style="font-size:12px;margin-top:5px">ลูกค้าเห็นบัตรสมาชิก · ระดับ Pure/Bloom/Essence · มาแล้วกี่ครั้ง — แยกจากสะสมแต้มด้านล่าง</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม (ดวง/ของรางวัล)</label>
       <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
         <div style="font-weight:700;font-size:14px;margin-bottom:8px">วิธีให้ดวง (แต้ม)</div>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="radio" name="earnMode" id="earnCup" value="cup" style="width:18px;height:18px;flex:none" onchange="onEarnMode()"><span>ต่อ<span data-unit>แก้ว</span> — <b>1 ดวง / <span data-unit>แก้ว</span></b></span></label>
@@ -1150,7 +1154,7 @@ window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&(
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
 window.onEarnMode=()=>{ const baht=$('earnBaht')&&$('earnBaht').checked; if($('loyBahtInp')) $('loyBahtInp').disabled=!baht; };
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; if($('memberEnabledInp'))$('memberEnabledInp').checked=(d.memberEnabled!==false); $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
   const em=d.earnMode==='baht'?'baht':'cup'; if($('earnCup'))$('earnCup').checked=em==='cup'; if($('earnBaht'))$('earnBaht').checked=em==='baht'; if($('loyBahtInp'))$('loyBahtInp').value=d.bahtPerStar||25; onEarnMode();
   const t=d.tier||{}; if($('tierBloomMin'))$('tierBloomMin').value=(t.bloomMin!=null?t.bloomMin:10); if($('tierEssenceMin'))$('tierEssenceMin').value=(t.essenceMin!=null?t.essenceMin:25); if($('tierPurePerk'))$('tierPurePerk').value=t.purePerk||''; if($('tierBloomPerk'))$('tierBloomPerk').value=t.bloomPerk||''; if($('tierEssencePerk'))$('tierEssencePerk').value=t.essencePerk||'';
   renderRewards(); }catch(e){ toast(err(e)); } };
@@ -1161,10 +1165,10 @@ function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.i
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, memberEnabled=!$('memberEnabledInp')||$('memberEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
   const earnMode=($('earnBaht')&&$('earnBaht').checked)?'baht':'cup', bahtPerStar=Math.max(1,Number($('loyBahtInp').value)||25);
   const tier={ bloomMin:Math.max(0,Number($('tierBloomMin').value)||0), essenceMin:Math.max(0,Number($('tierEssenceMin').value)||0), purePerk:$('tierPurePerk').value.trim(), bloomPerk:$('tierBloomPerk').value.trim(), essencePerk:$('tierEssencePerk').value.trim() };
-  try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus,earnMode,bahtPerStar,tier})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+  try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,memberEnabled,stampsPerReward,welcomeBonus,earnMode,bahtPerStar,tier})}); toast('บันทึกการตั้งค่าแล้ว'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
