@@ -23,7 +23,9 @@
   .wrap.wide{ max-width:1280px; }
   /* Bigger menu item images on the cashier order/topping screens (+~10%) */
   #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
-  #orderCard .menu-btn .mimg, #topPop .menu-btn .mimg{ width:68px; height:68px; }
+  #orderCard .menu-btn .mimg{ width:68px; height:68px; }
+  #topPop .menu-btn .mimg{ width:96px; height:96px; }
+  #topPop .menu-btn .mimg img{ width:100%; height:100%; object-fit:cover; border-radius:12px; }
   #orderCard .menu-btn .mimg svg, #topPop .menu-btn .mimg svg{ width:35px; height:35px; }
   #orderCard .menu-btn .mth{ font-size:13.5px; }
   #orderCard .menu-btn .mpr{ font-size:15px; }
@@ -85,6 +87,8 @@
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
+      <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
+      <button id="scanBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตร</button>
       <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
@@ -97,6 +101,7 @@
         <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
+        <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
         <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
         <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
         <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
@@ -219,11 +224,32 @@
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:grid;gap:12px">
-      <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม</label>
+      <div style="background:#eef6ff;border:1px solid #cfe6f5;border-radius:10px;padding:11px 12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="memberEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานระบบสมาชิก (บัตรสมาชิก + ระดับ)</label>
+        <div class="muted" style="font-size:12px;margin-top:5px">ลูกค้าเห็นบัตรสมาชิก · ระดับ Pure/Bloom/Essence · มาแล้วกี่ครั้ง — แยกจากสะสมแต้มด้านล่าง</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="loyEnabledInp" type="checkbox" style="width:18px;height:18px;flex:none"> เปิดใช้งานสะสมแต้ม (ดวง/ของรางวัล)</label>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px">วิธีให้ดวง (แต้ม)</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="radio" name="earnMode" id="earnCup" value="cup" style="width:18px;height:18px;flex:none" onchange="onEarnMode()"><span>ต่อ<span data-unit>แก้ว</span> — <b>1 ดวง / <span data-unit>แก้ว</span></b></span></label>
+        <label style="display:flex;align-items:center;gap:8px"><input type="radio" name="earnMode" id="earnBaht" value="baht" style="width:18px;height:18px;flex:none" onchange="onEarnMode()"><span>ต่อยอดซื้อ — ทุก ฿<input id="loyBahtInp" type="number" inputmode="numeric" min="1" style="width:64px;padding:6px;border:1px solid var(--line);border-radius:8px;margin:0 3px"> = <b>1 ดวง</b></span></label>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span>สะสมครบ</span>
         <input id="loyStampsInp" type="number" inputmode="numeric" min="1" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <span><span data-unit>แก้ว</span> = ฟรี 1 <span data-unit>แก้ว</span> (ไม่เกิน 49฿)</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px">ระดับสมาชิก (Tier) — วัดจากจำนวนครั้งที่มา</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <span>🌷 <b>BLOOM</b> ตั้งแต่</span><input id="tierBloomMin" type="number" inputmode="numeric" min="0" style="width:58px;padding:6px;border:1px solid var(--line);border-radius:8px"><span>ครั้ง</span>
+          <span style="margin-left:6px">👑 <b>ESSENCE</b> ตั้งแต่</span><input id="tierEssenceMin" type="number" inputmode="numeric" min="0" style="width:58px;padding:6px;border:1px solid var(--line);border-radius:8px"><span>ครั้ง</span>
+        </div>
+        <div style="display:grid;gap:6px">
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px"><span style="flex:none">🌱</span><input id="tierPurePerk" placeholder="สิทธิ์ PURE" style="flex:1;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:13px"></label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px"><span style="flex:none">🌷</span><input id="tierBloomPerk" placeholder="สิทธิ์ BLOOM" style="flex:1;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:13px"></label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px"><span style="flex:none">👑</span><input id="tierEssencePerk" placeholder="สิทธิ์ ESSENCE" style="flex:1;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:13px"></label>
+        </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span>สั่งผ่านไลน์ครั้งแรก แถมฟรี</span>
@@ -302,6 +328,11 @@
       <h1 style="margin:0">ออเดอร์ใหม่ — <span id="orderZone">—</span></h1>
       <button class="ghost" style="padding:8px 14px" onclick="hideOrder()">← กลับหน้าคิว</button>
     </div>
+    <div id="orderCustBanner" style="display:none;align-items:center;gap:8px;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.3);color:#7c3aed;border-radius:12px;padding:9px 14px;margin-bottom:10px;font-weight:700">
+      <svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span id="orderCustLabel" style="flex:1"></span>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="clearOrderCust()">ไม่ผูก</button>
+    </div>
     <div class="pos-split">
       <!-- LEFT: live bill / receipt -->
       <div class="card pos-bill" style="margin:0">
@@ -354,8 +385,8 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
-    <div class="row between" style="flex:none"><h1 id="topPopTitle" style="margin:0">ท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
-    <p class="muted" style="flex:none;margin:6px 0 8px">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
+    <div class="row between" style="flex:none"><h1 style="margin:0">เลือกท็อปปิ้ง</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <p class="muted" id="topPopItem" style="flex:none;margin:3px 0 8px;font-size:12px">เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้</p>
     <div id="topPopBtns" style="overflow-y:auto;flex:1;min-height:0;margin:0"></div>
     <div class="row" style="gap:8px;flex:none;margin-top:12px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
@@ -367,8 +398,8 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <div class="row between"><h1 id="sweetTitle" style="margin:0">ความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
-    <p class="muted">เลือกระดับความหวาน</p>
+    <div class="row between"><h1 style="margin:0">เลือกระดับความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
+    <p class="muted" id="sweetItem" style="margin:3px 0 0;font-size:12px">เลือกความหวานของเครื่องดื่ม</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
 </div>
@@ -390,6 +421,67 @@
     <button class="ghost" style="width:100%;padding:13px;margin-bottom:8px;color:#0e6b7e;border-color:#bfe3ec;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailEditOptions()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>เปลี่ยนท็อปปิ้ง / ความหวาน</button>
     <button class="ghost danger" style="width:100%;padding:13px;margin-bottom:12px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="detailRemove()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>ลบรายการนี้</button>
     <button class="ok" style="width:100%;padding:14px;min-height:54px;font-size:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px" onclick="confirmDetail()"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M20 6 9 17l-5-5"/></svg>ยืนยันการแก้ไข</button>
+  </div>
+</div>
+
+<!-- CRM: customer lookup by phone -->
+<div id="custPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
+    <div class="row between" style="margin-bottom:10px">
+      <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
+      <button class="ghost" style="padding:6px 12px" onclick="closeCust()">✕</button>
+    </div>
+    <div id="custPad">
+      <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <button class="ckey" onclick="custKey('1')">1</button><button class="ckey" onclick="custKey('2')">2</button><button class="ckey" onclick="custKey('3')">3</button>
+        <button class="ckey" onclick="custKey('4')">4</button><button class="ckey" onclick="custKey('5')">5</button><button class="ckey" onclick="custKey('6')">6</button>
+        <button class="ckey" onclick="custKey('7')">7</button><button class="ckey" onclick="custKey('8')">8</button><button class="ckey" onclick="custKey('9')">9</button>
+        <button class="ckey" style="color:var(--danger)" onclick="custBack()" aria-label="ลบ">⌫</button><button class="ckey" onclick="custKey('0')">0</button><button class="ok" style="border-radius:12px;font-weight:800;font-size:16px" onclick="doCustLookup()">ค้นหา</button>
+      </div>
+    </div>
+    <div id="custResult" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<!-- CRM: win-back lapsed LINE customers (manager) -->
+<div id="winbackPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:400px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
+    <div class="row between" style="margin-bottom:6px">
+      <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</h1>
+      <button class="ghost" style="padding:6px 12px" onclick="closeWinback()">✕</button>
+    </div>
+    <p class="muted" style="font-size:13px;margin:0 0 12px">ส่งข้อความผ่าน LINE หาลูกค้าที่ไม่ได้แวะมาสักพัก</p>
+    <div class="row between" style="align-items:center;margin-bottom:10px">
+      <span style="font-weight:700;font-size:14px">ไม่ได้มาเกิน</span>
+      <select id="wbDays" onchange="wbPreview()" style="padding:8px 12px;font-size:15px;border:1.5px solid var(--line);border-radius:10px">
+        <option value="30">30 วัน</option><option value="60">60 วัน</option><option value="90">90 วัน</option>
+      </select>
+    </div>
+    <div id="wbCount" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:12px">—</div>
+    <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ</div>
+    <textarea id="wbMsg" rows="3" maxlength="380" style="width:100%;box-sizing:border-box;padding:11px 14px;font-size:15px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit"></textarea>
+    <button class="ok" id="wbSend" style="width:100%;min-height:52px;font-size:16px;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="sendWinback()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งข้อความ</button>
+    <p class="muted" style="font-size:11px;text-align:center;margin:8px 0 0">เฉพาะลูกค้าที่สั่งผ่าน LINE · ส่งผ่าน LINE Official Account ของร้าน</p>
+  </div>
+</div>
+
+<!-- QR check-in: customer scans to link their LINE identity to this order -->
+<div id="checkinPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:57;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:320px;width:100%;margin:0;text-align:center;padding:18px">
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:0 0 10px">สแกนด้วย LINE เพื่อสะสมประวัติ — ไม่ต้องพิมพ์เบอร์</p>
+    <img id="checkinImg" alt="QR เช็คอิน" style="width:240px;height:240px;border-radius:14px;border:1px solid var(--line);object-fit:contain;background:#fff">
+    <p class="muted" id="checkinHint" style="font-size:12px;margin:10px 0 0">รอลูกค้าสแกน… ระบบจะแสดงชื่อบนการ์ดเองเมื่อเช็คอินสำเร็จ</p>
+  </div>
+</div>
+
+<!-- Scan a customer's "บัตรของฉัน" member QR → pull up their profile (no typing) -->
+<div id="scanPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
+    <video id="scanVideo" playsinline muted style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
   </div>
 </div>
 
@@ -444,6 +536,7 @@
     -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;
     display:flex;align-items:center;justify-content:center;transition:transform .06s,background .06s}
   .ckey:active{transform:scale(.95);background:#e4ebf3}
+  #custPhone::placeholder{font-size:14px;letter-spacing:.5px;font-weight:600;color:var(--muted)}
   /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
   .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
     cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
@@ -578,6 +671,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -715,9 +809,9 @@ window.login=async()=>{
     $('loginErr').textContent='';
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
-    $('historyBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
+    $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
@@ -732,7 +826,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
-  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('historyCard').style.display='none';
+  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('scanBtn').style.display='none'; $('historyCard').style.display='none';
   $('salesBtn').style.display='none'; $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
@@ -1031,7 +1125,8 @@ window.editBranchForm=(id)=>{
         <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
         <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
       </div>
-      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'🟢 เปิดอยู่ — กดปิดร้านชั่วคราว':'🔴 ปิดอยู่ — กดเปิดร้าน'}</button>`}
+      <div style="text-align:center;font-size:13px;font-weight:700;margin:2px 0 8px;padding:9px 10px;border-radius:10px;background:${b.open_now?'rgba(22,135,111,.12)':'rgba(196,58,75,.1)'};color:${b.open_now?'#16876f':'#c43a4b'}">สถานะตอนนี้: ${b.open_now?'🟢 เปิดรับออเดอร์':(b.is_open?`🟡 นอกเวลาทำการ — ลูกค้าสั่งไม่ได้ตอนนี้${(b.hours_open&&b.hours_close)?` (เปิด ${b.hours_open}–${b.hours_close})`:''}`:'🔴 ปิดร้าน (ปิดเอง)')}</div>
+      <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'เปิดร้านไว้ — กดเพื่อปิดร้านเอง':'🔴 ปิดร้านเองอยู่ — กดเพื่อเปิดร้าน'}</button>`}
       <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
     </div>`;
 };
@@ -1058,7 +1153,11 @@ window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.
 window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2); renderRewards(); }catch(e){ toast(err(e)); } };
+window.onEarnMode=()=>{ const baht=$('earnBaht')&&$('earnBaht').checked; if($('loyBahtInp')) $('loyBahtInp').disabled=!baht; };
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; if($('memberEnabledInp'))$('memberEnabledInp').checked=(d.memberEnabled!==false); $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
+  const em=d.earnMode==='baht'?'baht':'cup'; if($('earnCup'))$('earnCup').checked=em==='cup'; if($('earnBaht'))$('earnBaht').checked=em==='baht'; if($('loyBahtInp'))$('loyBahtInp').value=d.bahtPerStar||25; onEarnMode();
+  const t=d.tier||{}; if($('tierBloomMin'))$('tierBloomMin').value=(t.bloomMin!=null?t.bloomMin:10); if($('tierEssenceMin'))$('tierEssenceMin').value=(t.essenceMin!=null?t.essenceMin:25); if($('tierPurePerk'))$('tierPurePerk').value=t.purePerk||''; if($('tierBloomPerk'))$('tierBloomPerk').value=t.bloomPerk||''; if($('tierEssencePerk'))$('tierEssencePerk').value=t.essencePerk||'';
+  renderRewards(); }catch(e){ toast(err(e)); } };
 function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
     const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
@@ -1066,7 +1165,10 @@ function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.i
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
-window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0); try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,stampsPerReward,welcomeBonus})}); toast(enabled?'เปิดสะสม'+unit()+'แล้ว':'บันทึกแล้ว (ปิดอยู่)'); }catch(e){ toast(err(e)); } };
+window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, memberEnabled=!$('memberEnabledInp')||$('memberEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
+  const earnMode=($('earnBaht')&&$('earnBaht').checked)?'baht':'cup', bahtPerStar=Math.max(1,Number($('loyBahtInp').value)||25);
+  const tier={ bloomMin:Math.max(0,Number($('tierBloomMin').value)||0), essenceMin:Math.max(0,Number($('tierEssenceMin').value)||0), purePerk:$('tierPurePerk').value.trim(), bloomPerk:$('tierBloomPerk').value.trim(), essencePerk:$('tierEssencePerk').value.trim() };
+  try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,memberEnabled,stampsPerReward,welcomeBonus,earnMode,bahtPerStar,tier})}); toast('บันทึกการตั้งค่าแล้ว'); }catch(e){ toast(err(e)); } };
 window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
   try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
@@ -1329,7 +1431,7 @@ async function loadInsights(){
     <span style="width:28px">${s}★</span>
     <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${((stars[s]||0)/maxN*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
     <span class="muted" style="width:28px;text-align:right">${stars[s]||0}</span></div>`).join('');
-  const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}</span><span class="muted">${t.order_count} ครั้ง</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
+  const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}${t.isPhone?' <span class="muted" style="font-size:10px">📱</span>':' <span class="muted" style="font-size:10px">LINE</span>'}</span><span class="muted">${t.order_count} ครั้ง${t.spend?' · ฿'+t.spend:''}</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
   box.innerHTML=`<h2>⭐ ความพึงพอใจลูกค้า</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
@@ -1474,7 +1576,7 @@ function resizeImage(file,max){ return new Promise((resolve,reject)=>{ const img
 window.delItem=async(id)=>{ if(!(await appConfirm({title:'ลบเมนู',message:'ลบเมนูนี้ออกถาวร?',okText:'ลบ',danger:true}))) return; try{ await api('/api/menu/'+id,{method:'DELETE'}); _selMenuId=null; await loadMenu(); renderMenuMgr(); $('menuEditForm').innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">← เลือกเมนูเพื่อแก้ไข</p>'; }catch(e){ toast(err(e)); } };
 
 // ---------- Order builder: pick a drink -> choose toppings (or skip) ----------
-let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null;
+let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null, _orderCust=null;
 let _kitchenStatus={};  // "ticketId:lineIndex" -> null | 'making' | 'done' (per drink line)
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
@@ -1524,11 +1626,21 @@ function renderOrderMenu(){
 // Re-price the menu when the cashier switches channel (delivery applies its markup).
 window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderChannel); renderOrderMenu();
   if(cart.length){ toast('เปลี่ยนช่องทาง — ตรวจราคาในตะกร้าอีกครั้ง'); } };
-window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; await loadChannels(); renderChannelSel();
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; _orderCust=null; const _ocb=$('orderCustBanner'); if(_ocb) _ocb.style.display='none'; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
-window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; setEditMode(false); $('dash').style.display=''; };
+window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; _orderCust=null; setEditMode(false); $('dash').style.display=''; };
+// "สั่งให้ลูกค้าคนนี้": open a new order tied to a looked-up customer (phone or LINE); optional fav pre-add.
+window.orderForCustomer=async(key,name,favName)=>{
+  closeCust();
+  const z=(zones||[]).find(x=>x.is_open===1)||(zones||[])[0]; if(!z){ toast('ยังไม่มีโซนเปิด'); return; }
+  await showOrder(z.id);
+  _orderCust={key,name:name||''};
+  const ocb=$('orderCustBanner'); if(ocb){ ocb.style.display='flex'; $('orderCustLabel').textContent='สั่งให้: '+(name||String(key).replace('tel:','')); }
+  if(favName){ const m=(MENU||[]).find(x=>x.name===favName && x.category!=='topping'); if(m){ cart.push({name:m.name,price:m.price,toppings:[],sweet:100,qty:1}); renderBasketCount(); toast('เพิ่ม '+favName+' แล้ว'); } }
+};
+window.clearOrderCust=()=>{ _orderCust=null; const ocb=$('orderCustBanner'); if(ocb) ocb.style.display='none'; toast('ออเดอร์นี้จะไม่ผูกกับลูกค้า'); };
 // ---------- แก้ไขออเดอร์: load an unpaid order back into the cart, edit, save in place ----------
 function setEditMode(on){
   const hold=$('billHoldBtn'), pay=$('billPayBtn'), save=$('billSaveBtn');
@@ -1559,13 +1671,13 @@ window.saveEdit=async()=>{
 // drink + closes the topping/sweet popups, returning to the menu without adding anything.
 window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; _editEntryIdx=null; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
     return `<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`style="${on?'border-color:var(--accent);background:#e9f8fb':''}" onclick="togTop(${m.id})"`}>${menuBadge(m)}
-      <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
+      <div class="mimg" style="font-size:40px">${itemImg(m)}</div>
       <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
@@ -1575,7 +1687,7 @@ const SWEETS=[0,25,50,100];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
-  $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
+  $('sweetItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
     <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
@@ -1627,6 +1739,62 @@ window.closeItemDetail=()=>{ $('itemDetailPop').style.display='none'; _detailIdx
 // Explicit "done" for the item editor — changes already apply live; this gives clear closure
 // (and a confirmation toast) so the cashier knows the edit is finished and returns to the bill.
 window.confirmDetail=()=>{ closeItemDetail(); toast('อัปเดตรายการแล้ว'); };
+
+// ---------- CRM: customer lookup by phone (enter phone → profile card) ----------
+window.openCustLookup=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPad').style.display=''; $('custPop').style.display='flex'; };
+window.closeCust=()=>{ $('custPop').style.display='none'; };
+window.custKey=(d)=>{ const i=$('custPhone'); if((i.value||'').length>=10) return; i.value=(i.value||'')+d; };
+window.custBack=()=>{ const i=$('custPhone'); i.value=(i.value||'').slice(0,-1); };
+// After a search, hide the keypad and show the result; "← ค้นหาใหม่" brings the keypad back.
+function showCustResult(html){ $('custPad').style.display='none'; $('custResult').innerHTML='<button class="ghost" style="margin-bottom:12px;font-size:13px;padding:7px 14px" onclick="custSearchAgain()">← ค้นหาเบอร์อื่น</button>'+html; }
+window.custSearchAgain=()=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=''; $('custPad').style.display=''; };
+window.doCustLookup=async()=>{
+  const ph=($('custPhone').value||'').replace(/\D/g,'');
+  if(ph.length<9){ toast('กดเบอร์ให้ครบก่อนนะ'); return; }
+  showCustResult('<p class="muted" style="text-align:center">⏳ กำลังค้นหา…</p>');
+  try{ showCustResult(renderCustProfile(await api('/api/customers/phone/'+ph))); }
+  catch(e){ showCustResult('<p class="muted" style="text-align:center;color:var(--danger)">ค้นหาไม่สำเร็จ: '+err(e)+'</p>'); }
+};
+function _agoTH(iso){ if(!iso) return '—'; const d=new Date(iso.replace(' ','T')+'Z'); const days=Math.floor((Date.now()-d.getTime())/86400000); return days<=0?'วันนี้':days===1?'เมื่อวาน':days+' วันก่อน'; }
+// "สั่งให้ลูกค้าคนนี้" CTAs — read the stored profile (no fragile inline-string args).
+function _crmCta(p){ if(!p||!p.key) return '';
+  const fav=(p.favourites&&p.favourites[0])?p.favourites[0].name:'';
+  return `<button class="ok" style="width:100%;min-height:50px;font-size:16px;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="orderForCurrentCustomer(false)"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>สั่งออเดอร์ให้ลูกค้าคนนี้</button>${fav?`<button class="ghost" style="width:100%;margin-top:8px;color:#0e7c93;border-color:#bfe3ec" onclick="orderForCurrentCustomer(true)">สั่งซ้ำ ${esc(fav)}</button>`:''}`;
+}
+window.orderForCurrentCustomer=(withFav)=>{ const p=window._crmProfile; if(!p||!p.key) return; const fav=(withFav&&p.favourites&&p.favourites[0])?p.favourites[0].name:''; orderForCustomer(p.key, p.name||p.phone||'', fav); };
+function renderCustProfile(p){
+  window._crmProfile=p;   // remembered for the "สั่งให้ลูกค้าคนนี้" CTA
+  if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin:4px 0 0">ยังไม่มีประวัติของเบอร์นี้ — สั่งให้เลยเพื่อเริ่มเก็บประวัติ</p></div>${_crmCta(p)}`;
+  const tier=p.loyalty&&p.loyalty.tier?p.loyalty.tier.emoji+' ':'';
+  const favs=(p.favourites||[]).map(f=>`${esc(f.name)} ×${f.qty}`).join(' · ')||'—';
+  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${(r.paid_at||'').slice(5,16).replace('T',' ')}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
+  const bday=p.loyalty&&p.loyalty.isBirthday?'<span class="pill" style="background:#fde2e7;color:#c43a4b;margin-left:6px;font-size:11px">🎂 วันเกิดวันนี้</span>':'';
+  const pts=p.loyalty?`<div class="row between" style="font-size:13px;margin-top:4px"><span class="muted">แต้มสะสม</span><b style="color:#7c3aed">${tier}${p.loyalty.points} ดวง</b></div>`:'';
+  return `
+   <div style="text-align:center;margin-bottom:10px">
+     <div style="font-size:18px;font-weight:800;color:var(--navy)">${esc(p.name||'ลูกค้า')}${bday}</div>
+     <div class="muted" style="font-size:13px">${p.isPhone?('📱 '+esc(p.phone||'—')):'สมาชิก LINE'}</div>
+   </div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
+     <div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--navy)">${p.visits}</div><div class="muted" style="font-size:12px">ครั้งที่มา</div></div>
+     <div style="background:var(--surface,#f1f5f9);border-radius:12px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--navy)">฿${p.totalSpend}</div><div class="muted" style="font-size:12px">ใช้จ่ายรวม</div></div>
+   </div>
+   <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
+   <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
+   ${pts}
+   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_bdayRedeem(p)}${_crmCta(p)}`;
+}
+// Birthday free-drink redeem button — cashier-initiated; server is the source of truth (the customer card only prompts).
+function _bdayRedeem(p){
+  const b=p&&p.birthdayRedeem; if(!b||!b.eligible) return '';
+  if(b.used) return '<div style="margin-top:10px;background:#ecfdf5;border:1px solid #6ee7b7;color:#047857;border-radius:12px;padding:9px;text-align:center;font-weight:700;font-size:13px">🎂 ใช้สิทธิ์วันเกิดแล้วปีนี้ ✓</div>';
+  return '<button class="ok" style="width:100%;margin-top:10px;background:#fde2e7;color:#c43a4b" onclick="redeemBday()">🎂 ใช้สิทธิ์วันเกิด — ฟรี 1 '+unit()+'</button>';
+}
+window.redeemBday=async()=>{ const p=window._crmProfile; if(!p||!p.key) return;
+  if(!(await appConfirm({title:'🎂 ใช้สิทธิ์วันเกิด',message:'ให้ของขวัญวันเกิด (ฟรี 1 '+unit()+') กับลูกค้านี้?\nใช้ได้ปีละ 1 ครั้ง',okText:'ใช้สิทธิ์'}))) return;
+  try{ await api('/api/customers/'+encodeURIComponent(p.key)+'/redeem-birthday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎂 ใช้สิทธิ์วันเกิดแล้ว!');
+    try{ const np=await api(p.isPhone?('/api/customers/phone/'+encodeURIComponent(p.phone)):('/api/customers/by-line/'+encodeURIComponent(p.key))); showCustResult(renderCustProfile(np)); }catch(e){}
+  }catch(e){ toast('ใช้สิทธิ์ไม่สำเร็จ: '+err(e)); } };
 window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
   $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
 window.detailRemove=()=>{ if(_detailIdx==null) return; cart.splice(_detailIdx,1); closeItemDetail(); renderBasketCount(); toast('ลบรายการแล้ว'); };
@@ -1636,7 +1804,7 @@ window.detailEditOptions=()=>{ const e=cart[_detailIdx]; if(!e) return; const dr
   _editEntryIdx=_detailIdx; $('itemDetailPop').style.display='none';
   pendingDrink=drink; pendingTops={};
   e.toppings.forEach(tp=>{ const m=MENU.find(x=>x.name===tp.name); if(m) pendingTops[m.id]={name:tp.name,price:tp.price,qty:tp.qty}; });
-  $('topPopTitle').textContent=drink.name+' · ฿'+drink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=drink.name+' · ฿'+drink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderBasket(){
   const FREE=freeNameSet();
   $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
@@ -1671,6 +1839,7 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
 function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
+  if(_orderCust){ body.customerKey=_orderCust.key; body.customerName=_orderCust.name; }   // "สั่งให้ลูกค้าคนนี้"
   if(payMethod) body.pay=payMethod;   // no tender = พักบิล (held); queue number follows the เข้าคิวทันที setting
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if
@@ -1875,10 +2044,14 @@ function renderZone(snap){
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
   const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'เปิด':'ปิด'; }
   const tog=$('ztog-'+id); if(tog) tog.textContent=open?'ปิดโซน':'เปิดโซน';
+  // Auto-recognition chip: a returning customer is greeted on the card itself (no lookup needed).
+  const recoChip=(t)=> (t.cust && t.cust.visits>=2)
+    ? ` <span class="pill" style="background:rgba(255,138,61,.15);color:#c2410c;font-weight:700;margin-left:6px;font-size:11px">★ มา ${t.cust.visits} ครั้ง${t.cust.fav?' · ชอบ'+esc(t.cust.fav):''}</span>` : '';
   const nm=(t)=>{
     const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
+    const nameTxt = (t.cust&&t.cust.name) ? t.cust.name : (real?t.customer_name:'');
     const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0e7c93;margin-left:6px">LINE</span>' : '';
-    return (real?` <span class="muted">· ${esc(t.customer_name)}</span>`:'')+src+loyChip(t);
+    return (nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)
@@ -1941,10 +2114,15 @@ function renderZone(snap){
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
   // Phone-keyed loyalty (Pkg 1, no LINE): attach a phone to a walk-in ticket so it earns stamps
   // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).
-  const phoneBtn=(t)=> (CFG.loyaltyOn && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
-    ? (t.loy_phone
-        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${t.loy_phone} · ${t.loy_points||0} ดวง</span>`
-        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้าเพื่อสะสมแต้ม" onclick="attachPhone(${t.id})">${IC.loyalty}แต้ม</button>`) : '';
+  // CRM: tag any walk-in order to a customer phone (builds their history). Works regardless of the
+  // loyalty toggle; shows the stamp balance too when loyalty is on.
+  const phoneBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer')
+    ? ((t.loy_phone||t.cust_phone)
+        ? `<span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;font-weight:700;padding:6px 10px">${esc(t.loy_phone||t.cust_phone)}${(CFG.loyaltyOn&&t.loy_points!=null)?' · '+t.loy_points+' ดวง':''}</span>`
+        : `<button class="ghost" style="padding:8px 10px" title="ผูกเบอร์ลูกค้า (เก็บประวัติ${CFG.loyaltyOn?' + สะสมแต้ม':''})" onclick="attachPhone(${t.id})"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>`) : '';
+  // QR check-in: customer scans → links their LINE identity to this order (no typing). Walk-in unpaid only.
+  const checkinBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && t.order_source!=='customer' && !t.cust_phone && !(t.cust&&t.cust.name))
+    ? `<button class="ghost" style="padding:8px 10px" title="ให้ลูกค้าสแกน QR เพื่อเช็คอินด้วย LINE" onclick="showCheckinQR(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 21v.01M17 21v.01"/></svg>QR เช็คอิน</button>` : '';
   // Collect payment on a queued (already-numbered) order that's still unpaid → marks it paid in place.
   const payBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid')
     ? `<button class="ok" style="padding:8px 10px" onclick="markPaid(${t.id},'${t.payment_status}',${netOf(t)})">${IC.cash}รับเงิน</button>` : '';
@@ -2014,13 +2192,13 @@ function renderZone(snap){
         <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
-        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
+        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const called=snap.recentCalled||[];
   const calledCard=(t)=>`
@@ -2344,10 +2522,75 @@ window.discountTicket=async(tid,total)=>{
   try{ const r=await api('/api/tickets/'+tid+'/discount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,reason})}); toast(r.discount>0?('ลด ฿'+r.discount+' · ยอดสุทธิ ฿'+r.net):'ยกเลิกส่วนลดแล้ว'); }catch(e){ toast(err(e)); } };
 // Phone-keyed loyalty: ask for the customer's phone, attach it to the ticket so this order earns
 // stamps on payment. Shows the running balance. (Pkg 1 — works without LINE.)
-window.attachPhone=async(tid)=>{ const phone=await appPrompt({title:'📱 สะสมแต้มด้วยเบอร์โทร',message:'ใส่เบอร์ลูกค้าเพื่อสะสมแต้มออเดอร์นี้',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
+window.attachPhone=async(tid)=>{ const loy=CFG.loyaltyOn;
+  // PDPA: state the purpose; staff should inform the customer before capturing the number.
+  const phone=await appPrompt({title:'ผูกเบอร์ลูกค้า',message:(loy?'เก็บประวัติ + สะสมแต้มออเดอร์นี้':'เก็บประวัติการซื้อของลูกค้า')+' · แจ้งลูกค้าก่อนขอเบอร์นะคะ',type:'tel',inputMode:'numeric',placeholder:'08X-XXX-XXXX',okText:'ผูกเบอร์'}); if(phone==null) return; const p=String(phone).replace(/\D/g,''); if(p.length<9||p.length>10){ toast('เบอร์ไม่ถูกต้อง'); return; }
   try{ const r=await api('/api/tickets/'+tid+'/customer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p})});
-    toast('📱 ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง'+(r.points>=(r.stampsPerReward||10)?' · แลกฟรีได้!':'')); }
-  catch(e){ const m=err(e); toast(m==='loyalty_off'?'ยังไม่เปิดสะสมแต้ม':(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m))); } };
+    // Recognition: a returning customer → pop their profile so staff can greet/personalise.
+    let prof=null; try{ prof=await api('/api/customers/phone/'+r.phone); }catch(e){}
+    if(prof && prof.visits>0){ showCustomerProfile(r.phone); }
+    else toast((loy&&r.points!=null) ? ('ผูกเบอร์ '+r.phone+' · มี '+r.points+' ดวง') : ('ผูกเบอร์ '+r.phone+' แล้ว · ลูกค้าใหม่')); }
+  catch(e){ const m=err(e); toast(m==='order_already_paid'?'จ่ายแล้ว ผูกไม่ได้':(m==='bad_phone'?'เบอร์ไม่ถูกต้อง':m)); } };
+window.showCustomerProfile=(phone)=>{ $('custResult').innerHTML=''; const i=$('custPhone'); if(i) i.value=phone; $('custPop').style.display='flex'; doCustLookup(); };
+
+// QR check-in: show a per-order QR. When the customer scans + claims, the live snapshot pushes the
+// recognition onto the card automatically (no polling here needed).
+window.showCheckinQR=(tid)=>{ const q=PIN?('?pin='+encodeURIComponent(PIN)+'&_='+Date.now()):('?_='+Date.now());
+  $('checkinImg').src='/api/tickets/'+tid+'/checkin-qr'+q; $('checkinPop').style.display='flex'; };
+window.closeCheckin=()=>{ $('checkinPop').style.display='none'; $('checkinImg').src=''; };
+
+// Scan a customer's member QR (เbackend /m?u=<lineUserId>) → look them up → show the profile card.
+let _scanStream=null, _scanRAF=null;
+window.openScanner=async()=>{
+  if(typeof jsQR==='undefined'){ toast('ตัวสแกนยังโหลดไม่เสร็จ — ลองอีกครั้ง'); return; }
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
+  if(!window.isSecureContext){ toast('ต้องเปิดผ่าน https เท่านั้นจึงจะใช้กล้องได้'); return; }
+  $('scanPop').style.display='flex';
+  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}); }
+  catch(e){
+    // Some front-camera-only devices (older iPads/laptops) reject 'environment' — retry with any camera.
+    try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:true}); }
+    catch(e2){ const n=(e2&&e2.name)||'';
+      const msg = (n==='NotAllowedError'||n==='SecurityError') ? 'กล้องถูกปฏิเสธ — ไปตั้งค่าเบราว์เซอร์ > อนุญาตกล้องของเว็บนี้ แล้วลองใหม่'
+        : (n==='NotFoundError'||n==='OverconstrainedError') ? 'ไม่พบกล้องบนอุปกรณ์นี้'
+        : (n==='NotReadableError') ? 'กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอปนั้นแล้วลองใหม่'
+        : 'เปิดกล้องไม่ได้ — ตรวจสอบสิทธิ์กล้องในเบราว์เซอร์';
+      toast(msg); closeScanner(); return; } }
+  const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); try{ await v.play(); }catch(e){}
+  const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
+  const tick=()=>{ if(!_scanStream) return;
+    if(v.readyState>=2 && v.videoWidth){ c.width=v.videoWidth; c.height=v.videoHeight; g.drawImage(v,0,0,c.width,c.height);
+      let r=null; try{ const d=g.getImageData(0,0,c.width,c.height); r=jsQR(d.data,d.width,d.height); }catch(e){}
+      if(r&&r.data){ onScan(r.data); return; } }
+    _scanRAF=requestAnimationFrame(tick); };
+  _scanRAF=requestAnimationFrame(tick);
+};
+window.closeScanner=()=>{ if(_scanRAF) cancelAnimationFrame(_scanRAF); _scanRAF=null; if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; } const v=$('scanVideo'); if(v) v.srcObject=null; $('scanPop').style.display='none'; };
+async function onScan(text){
+  let uid=null; try{ uid=new URL(text).searchParams.get('u'); }catch(e){ const m=String(text).match(/[?&]u=([^&]+)/); uid=m?decodeURIComponent(m[1]):null; }
+  closeScanner();
+  if(!uid){ toast('ไม่ใช่บัตรสมาชิก YO-DEE'); return; }
+  try{ const p=await api('/api/customers/by-line/'+encodeURIComponent(uid)); const ph=$('custPhone'); if(ph) ph.value=''; $('custPop').style.display='flex'; showCustResult(renderCustProfile(p)); }
+  catch(e){ toast('ค้นหาไม่สำเร็จ: '+err(e)); }
+}
+
+// ---------- CRM: win-back lapsed LINE customers (manager) ----------
+window.openWinback=()=>{ closeAdmin(); $('wbMsg').value='คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ วันนี้มีเมนูอร่อย ๆ รออยู่!'; $('winbackPop').style.display='flex'; wbPreview(); };
+window.closeWinback=()=>{ $('winbackPop').style.display='none'; };
+window.wbPreview=async()=>{ const days=$('wbDays').value, box=$('wbCount'), send=$('wbSend'); box.textContent='⏳ กำลังนับ…'; if(send) send.disabled=true;
+  try{ const r=await api('/api/crm/lapsed?days='+days);
+    box.innerHTML = r.count ? ('ลูกค้าเก่า <b style="color:var(--navy);font-size:16px">'+r.count+' คน</b>'+(r.sample&&r.sample.length?' <span class="muted">· เช่น '+r.sample.map(esc).join(', ')+'</span>':'')) : '<span class="muted">ยังไม่มีลูกค้าเก่าในช่วงนี้</span>';
+    if(send) send.disabled=!r.count; }
+  catch(e){ box.textContent='ดึงข้อมูลไม่สำเร็จ: '+err(e); } };
+window.sendWinback=async()=>{ const days=Number($('wbDays').value), msg=($('wbMsg').value||'').trim();
+  if(!msg){ toast('ใส่ข้อความก่อนนะ'); return; }
+  let pre; try{ pre=await api('/api/crm/lapsed?days='+days); }catch(e){ toast('ดึงข้อมูลไม่สำเร็จ'); return; }
+  if(!pre.count){ toast('ยังไม่มีลูกค้าเก่าให้ส่ง'); return; }
+  if(!(await appConfirm({title:'ส่งข้อความ',message:'ส่งข้อความนี้หาลูกค้าเก่า '+pre.count+' คน?',okText:'ส่งเลย'}))) return;
+  try{ const r=await api('/api/crm/winback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days,message:msg})});
+    toast(r.sent ? ('ส่งแล้ว '+r.sent+'/'+r.targeted+' คน 🎉') : ('กลุ่มเป้าหมาย '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
+    closeWinback(); }
+  catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ':('ส่งไม่สำเร็จ: '+m)); } };
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

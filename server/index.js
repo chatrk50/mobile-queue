@@ -248,13 +248,19 @@ app.get('/api/tender-recon', (req, res) => {
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
-app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(false) }));
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
 app.post('/api/loyalty/:key/redeem', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { res.json(Q.redeemReward(req.params.key, Number(req.body?.rewardId), req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Redeem the birthday free drink (once per year). Cashier-initiated, server-ledgered.
+app.post('/api/customers/:key/redeem-birthday', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.redeemBirthday(req.params.key, req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
@@ -270,14 +276,18 @@ app.post('/api/loyalty/:key/refer', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner: manage loyalty settings + rewards.
-app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), rewards: Q.listRewards(true) }); });
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const out = {};
     if (req.body?.enabled != null) Object.assign(out, Q.setLoyaltyEnabled(!!req.body.enabled));
+    if (req.body?.memberEnabled != null) Object.assign(out, Q.setMemberEnabled(!!req.body.memberEnabled));
     if (req.body?.stampsPerReward != null) Object.assign(out, Q.setStampsPerReward(req.body.stampsPerReward));
     if (req.body?.welcomeBonus != null) Object.assign(out, Q.setWelcomeBonus(req.body.welcomeBonus));
+    if (req.body?.earnMode != null) Object.assign(out, Q.setEarnMode(req.body.earnMode));
+    if (req.body?.bahtPerStar != null) Object.assign(out, Q.setBahtPerStar(req.body.bahtPerStar));
+    if (req.body?.tier != null) out.tier = Q.setTierConfig(req.body.tier);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -368,6 +378,17 @@ app.get('/api/qr/:zoneId', async (req, res) => {
   try {
     const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.type('png').send(buf);
+  } catch (e) { res.status(500).end(); }
+});
+// Member QR for the customer's "บัตรของฉัน" — encodes a member URL the cashier scanner reads to
+// identify them (no typing). The id is the customer's own LINE id; the QR is shown only to them.
+app.get('/api/member-qr', async (req, res) => {
+  const u = String(req.query.u || '').slice(0, 128);
+  if (!u) return res.status(400).end();
+  const url = `${PUBLIC_BASE_URL}/m?u=${encodeURIComponent(u)}`;
+  try {
+    const buf = await QRCode.toBuffer(url, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).end(); }
 });
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
@@ -619,10 +640,74 @@ app.post('/api/tickets/:ticketId/customer', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Customer self-attaches their phone to their OWN just-created (non-LINE) ticket → earns stamps.
+// Public, but only works on a fresh ticket with no LINE identity and no phone yet (can't hijack another's).
+app.post('/api/tickets/:ticketId/guest-phone', (req, res) => {
+  try {
+    const t = db.prepare('SELECT id, line_user_id, customer_key FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (!t) return res.status(404).json({ error: 'ticket_not_found' });
+    if (t.line_user_id) return res.status(409).json({ error: 'already_line_customer' });
+    if (t.customer_key) return res.status(409).json({ error: 'already_attached' });
+    const r = Q.attachCustomerToTicket(req.params.ticketId, req.body?.phone, req.body?.name || null);
+    const z = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (z) emit(z.zone_id, 'update', (reveal) => Q.zoneSnapshot(z.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/loyalty/phone/:phone', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { res.json(Q.loyaltyByPhone(req.params.phone)); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM: cashier looks up a customer by phone → full profile (visits, spend, favourites, history,
+// points). Works regardless of the loyalty toggle. Cashier-gated.
+app.get('/api/customers/phone/:phone', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.lookupCustomerByPhone(req.params.phone)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM: cashier scanned a member QR → look the customer up by their LINE id. Cashier-gated.
+app.get('/api/customers/by-line/:lineUserId', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.customerProfile(req.params.lineUserId)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
+app.get('/api/crm/lapsed', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const days = Number(req.query.days) || 30;
+    const list = Q.lapsedLineCustomers(days);
+    res.json({ days, count: list.length, sample: list.slice(0, 5).map((c) => c.name || 'ลูกค้า LINE') });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// CRM win-back: SEND the message to lapsed LINE customers. Manager-gated; the UI confirms first.
+app.post('/api/crm/winback', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.winBackBlast(req.body?.message, { days: Number(req.body?.days) || 30 })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// QR check-in: cashier shows this per-order QR; the customer scans it with LINE to link their
+// identity to THIS order (no phone typing). Cashier-gated; returns a PNG.
+app.get('/api/tickets/:ticketId/checkin-qr', async (req, res) => {
+  if (!pinOK(req)) return res.status(401).end();
+  try {
+    const token = Q.startCheckin(req.params.ticketId);
+    const url = LIFF_ID
+      ? `https://liff.line.me/${LIFF_ID}?claim=${req.params.ticketId}&t=${token}`
+      : `${PUBLIC_BASE_URL}/liff/?claim=${req.params.ticketId}&t=${token}`;
+    const buf = await QRCode.toBuffer(url, { width: 520, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+    res.set('Cache-Control', 'no-store').type('png').send(buf);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Customer's LIFF claims the order after scanning the check-in QR (links their LINE identity). Public
+// (the token in the QR is the auth) — the cashier card then auto-recognises them via the live snapshot.
+app.post('/api/tickets/:ticketId/claim', (req, res) => {
+  try {
+    const r = Q.claimTicket(req.params.ticketId, req.body?.lineUserId, req.body?.token, req.body?.name || null);
+    if (r.zoneId != null) emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier redeems a loyalty reward against the customer's (LINE) order → free-drink discount.
 // The order carries the line_user_id, so no QR/id handshake is needed. Before the /:action route.
@@ -931,6 +1016,9 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, { source: 'cashier', actorId,
       channelId: req.body?.channelId ? Number(req.body.channelId) : null,
       clientToken: req.body?.clientToken ? String(req.body.clientToken).slice(0, 64) : null });
+    // "สั่งให้ลูกค้าคนนี้": tag the new order to a looked-up customer (phone or LINE) BEFORE pay so
+    // the history accrues + the card recognises them. Best-effort; idempotent retries are unaffected.
+    if (req.body?.customerKey && r.ticket && !r.idempotent) Q.tagOrderCustomer(r.ticket.id, String(req.body.customerKey).slice(0, 80), req.body?.customerName || null);
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
     // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid

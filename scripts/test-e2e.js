@@ -314,6 +314,80 @@ const snapCalled = Q.zoneSnapshot(1, { reveal: true }).recentCalled;
 ok(calledN >= 7 && snapCalled.length >= 7, `INVARIANT snapshot returns ALL called tickets, not just 5 (called ${calledN}, snapshot ${snapCalled.length})`);
 ok(snapCalled.length === snapCalled.filter((t) => t.order_total != null).length, 'every called ticket still carries its order detail');
 
+// ---- CRM: customer profile by phone is computed LIVE from paid orders (visits, spend, favourites,
+// history) — works retroactively, no maintained aggregates, independent of the loyalty toggle. ----
+console.log('\n== CRM: customer profile by phone ==');
+const crmPhone = '0812345678';
+const crm1 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }, { name: 'Topping', price: 10, qty: 1 }], {});
+Q.attachCustomerToTicket(crm1.ticket.id, crmPhone, 'คุณเทส');
+Q.setOrderPaid(crm1.ticket.id, { method: 'cash' });
+const crm2 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 2 }], {});
+Q.attachCustomerToTicket(crm2.ticket.id, crmPhone);
+Q.setOrderPaid(crm2.ticket.id, { method: 'cash' });
+const prof = Q.lookupCustomerByPhone(crmPhone);
+ok(prof.found && prof.visits === 2, `INVARIANT profile counts PAID visits (${prof.visits})`);
+ok(near(prof.totalSpend, 160), `INVARIANT profile sums net spend across visits (${prof.totalSpend})`);
+ok(prof.name === 'คุณเทส', `INVARIANT profile keeps the captured name (${prof.name})`);
+ok(prof.favourites[0] && prof.favourites[0].name === 'Drink' && prof.favourites[0].qty === 3, `INVARIANT favourites rank base drinks by qty (Drink=${prof.favourites[0] && prof.favourites[0].qty})`);
+ok(prof.recent.length === 2, `INVARIANT recent paid orders listed (${prof.recent.length})`);
+ok(Q.lookupCustomerByPhone('0899999999').found === false, 'INVARIANT unknown phone → found:false');
+let crmBad = null; try { Q.lookupCustomerByPhone('123'); } catch (e) { crmBad = e.message; }
+ok(crmBad === 'bad_phone', `INVARIANT malformed phone rejected (${crmBad})`);
+// The owner's customer report counts phone customers too (computed from real paid orders).
+const ins = Q.customerInsights();
+ok(ins.customers.repeat >= 1 && ins.customers.top.some((t) => t.isPhone && t.order_count === 2 && near(t.spend, 160)),
+  `INVARIANT phone customer appears in repeat + top with real visits/spend (repeat ${ins.customers.repeat})`);
+// Auto-recognition: a fresh order tagged to a RETURNING customer carries a mini-profile in the snapshot.
+const recoT = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.attachCustomerToTicket(recoT.ticket.id, crmPhone);
+const recoSnap = Q.zoneSnapshot(1, { reveal: true });
+const recoTk = [...(recoSnap.pending || []), ...(recoSnap.waiting || [])].find((x) => x.id === recoT.ticket.id);
+ok(recoTk && recoTk.cust && recoTk.cust.visits === 2 && recoTk.cust.fav === 'Drink',
+  `INVARIANT order card auto-recognises a returning customer (visits ${recoTk && recoTk.cust && recoTk.cust.visits}, fav ${recoTk && recoTk.cust && recoTk.cust.fav})`);
+ok(!Q.zoneSnapshot(1, { reveal: false }).pending.some((x) => x.cust), 'INVARIANT recognition is cashier-only (not in the public snapshot)');
+
+// ---- CRM win-back: targets ONLY lapsed LINE customers (recent or phone-only excluded) ----
+console.log('\n== CRM: win-back targeting ==');
+const luOld = 'Uoldcust0000000000000000000000001';
+db.prepare('INSERT INTO customers (line_user_id, name) VALUES (?,?)').run(luOld, 'เก่า');
+const wbO = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: luOld });
+Q.setOrderPaid(wbO.ticket.id, { method: 'cash' });
+db.prepare("UPDATE orders SET paid_at=datetime('now','-40 days') WHERE ticket_id=?").run(wbO.ticket.id);
+const luNew = 'Unewcust0000000000000000000000002';
+const wbN = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: luNew });
+Q.setOrderPaid(wbN.ticket.id, { method: 'cash' });
+db.prepare("UPDATE orders SET paid_at=datetime('now','-1 days') WHERE ticket_id=?").run(wbN.ticket.id);
+const lapsed = Q.lapsedLineCustomers(30).map((c) => c.lineUserId);
+ok(lapsed.includes(luOld) && !lapsed.includes(luNew), 'INVARIANT win-back targets lapsed LINE only (40-day in, 1-day out)');
+ok(!Q.lapsedLineCustomers(1).some((c) => String(c.lineUserId).startsWith('tel:')), 'INVARIANT win-back never targets phone-only customers');
+let wbEmpty = null; try { await Q.winBackBlast('   ', { days: 30 }); } catch (e) { wbEmpty = e.message; }
+ok(wbEmpty === 'empty_message', `INVARIANT win-back rejects an empty message (${wbEmpty})`);
+
+// ---- CRM QR check-in: cashier shows a per-order QR; the customer's scan claims (links) the order ----
+console.log('\n== CRM: QR check-in handshake ==');
+const ciT = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+const ciTok = Q.startCheckin(ciT.ticket.id);
+const ciUser = 'Uclaimer000000000000000000000000001';
+let ciBad = null; try { Q.claimTicket(ciT.ticket.id, ciUser, 'WRONGTOKEN'); } catch (e) { ciBad = e.message; }
+ok(ciBad === 'bad_or_expired_qr', `INVARIANT claim rejects a wrong token (${ciBad})`);
+const ciR = Q.claimTicket(ciT.ticket.id, ciUser, ciTok, 'สแกน');
+ok(ciR.ok && db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(ciT.ticket.id).line_user_id === ciUser,
+  'INVARIANT claim links the LINE identity to the ticket');
+let ciTwice = null; try { Q.claimTicket(ciT.ticket.id, 'Uother', ciTok); } catch (e) { ciTwice = e.message; }
+ok(ciTwice === 'bad_or_expired_qr' || ciTwice === 'already_claimed', `INVARIANT a used check-in token can't be replayed (${ciTwice})`);
+
+// ---- "สั่งให้ลูกค้าคนนี้": tag a fresh order to a looked-up customer (phone or LINE) ----
+console.log('\n== CRM: tag order to a looked-up customer ==');
+const tagPhone = '0890001112';
+const tg = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.tagOrderCustomer(tg.ticket.id, 'tel:' + tagPhone, 'ใหม่');
+Q.setOrderPaid(tg.ticket.id, { method: 'cash' });
+const tgp = Q.lookupCustomerByPhone(tagPhone);
+ok(tgp.found && tgp.visits === 1 && tgp.name === 'ใหม่', `INVARIANT tagging by phone ties the order to the customer (visits ${tgp.visits})`);
+const tgL = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
+Q.tagOrderCustomer(tgL.ticket.id, 'Utagline0000000000000000000000001', 'LINE');
+ok(db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(tgL.ticket.id).line_user_id === 'Utagline0000000000000000000000001', 'INVARIANT tagging by LINE id sets the ticket identity');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

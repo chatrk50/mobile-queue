@@ -12,6 +12,26 @@
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
+  #topPop .menu-btn .mimg{ width:92px; height:92px; }
+  #topPop .menu-btn .mimg img{ width:100%; height:100%; object-fit:cover; border-radius:12px; }
+  /* Rich drink cards: full image on top, bold name, sold count, big price (tap to choose) */
+  #menuButtons .menu-grid{ grid-template-columns:repeat(2,1fr); gap:12px; }
+  .dish-card{ position:relative; display:flex; flex-direction:column; align-items:stretch; text-align:left; padding:0; background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden; cursor:pointer; color:var(--navy); box-shadow:0 2px 10px rgba(16,40,70,.06); transition:transform .05s; }
+  .dish-card:active{ transform:translateY(1px); }
+  .dish-card[disabled]{ opacity:.5; filter:grayscale(1); }
+  .dish-card .dimg{ width:100%; aspect-ratio:1/1; background:var(--surface); display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:48px; }
+  .dish-card .dimg img{ width:100%; height:100%; object-fit:cover; }
+  .dish-card .dimg svg{ width:46px; height:46px; stroke:var(--accent); fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .dish-card .dinfo{ padding:9px 11px 11px; border-top:1px solid var(--line); }
+  .dish-card .dname{ font-weight:800; font-size:14px; line-height:1.2; }
+  .dish-card .dsold{ font-size:11px; color:var(--muted); margin-top:3px; }
+  .dish-card .dpr{ font-weight:900; color:var(--accent); font-size:18px; margin-top:6px; }
+  /* Topping cards reuse the same framed look, more compact, with a selected state */
+  .dish-card.top .dimg{ aspect-ratio:auto; height:90px; font-size:40px; }
+  .dish-card.top .dinfo{ padding:7px 9px 9px; text-align:center; }
+  .dish-card.top .dname{ font-size:13px; }
+  .dish-card.top .dpr{ font-size:14px; margin-top:3px; }
+  .dish-card.top.on{ border-color:var(--accent); background:#e9f8fb; }
   /* "It's your turn" celebration */
   @keyframes callpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
   .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
@@ -43,10 +63,34 @@
   </div>
 
   <!-- STEP: get ticket -->
-  <div id="getCard" class="card" style="display:none;text-align:center">
-    <h2 id="storeName">—</h2>
-    <h1 id="zoneName" style="margin-bottom:4px">—</h1>
-    <span id="zoneState" class="pill open">เปิด</span>
+  <div id="getCard" class="card" style="display:none;text-align:center;position:relative">
+    <button class="ghost" onclick="closeApp()" aria-label="ปิด" style="position:absolute;top:8px;right:8px;padding:2px 9px;border:none;background:transparent;color:var(--muted);font-size:20px;line-height:1;cursor:pointer">✕</button>
+    <div id="storeName" style="font-size:13px;color:var(--muted);font-weight:700;letter-spacing:.3px"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:1px">
+      <h1 id="zoneName" style="margin:0">—</h1>
+      <span id="zoneState" class="pill open">เปิด</span>
+    </div>
+    <!-- Auto member recognition for LINE customers — tap to open the full card -->
+    <div id="memberStrip" style="display:none;align-items:center;gap:11px;background:linear-gradient(135deg,#eaf6ff,#f4fbff);border:1px solid var(--line);border-radius:14px;padding:9px 12px;margin:12px 0 0;cursor:pointer;text-align:left" onclick="openMember()">
+      <span id="memberStripIcon" style="font-size:23px;flex:none">🌱</span>
+      <div style="flex:1;min-width:0">
+        <div id="memberStripName" style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+        <div id="memberStripSub" style="font-size:11.5px;color:var(--muted)"></div>
+      </div>
+      <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
+    </div>
+    <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
+    <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
+      <div id="guestPhonePrompt">
+        <div style="font-weight:800;color:var(--navy);font-size:13.5px;margin-bottom:7px">📱 สะสมแต้ม? กรอกเบอร์โทร</div>
+        <div class="row" style="gap:6px">
+          <input id="guestPhoneInp" type="tel" inputmode="numeric" placeholder="08X-XXX-XXXX" maxlength="12" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:15px" oninput="fmtGuestPhone(this)">
+          <button class="ok" style="padding:9px 16px" onclick="saveGuestPhone()">บันทึก</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:5px">ได้แต้มอัตโนมัติเมื่อชำระเงิน · ไม่ต้องมีไลน์</div>
+      </div>
+      <div id="guestPhoneDone" style="display:none;font-size:13px;color:#047857;font-weight:700">✓ จะสะสมแต้มให้เบอร์ <span id="guestPhoneMask"></span> · <span style="color:var(--accent);cursor:pointer" onclick="editGuestPhone()">แก้ไข</span></div>
+    </div>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
       <div class="muted" style="font-size:13px">คิวรอก่อนหน้าคุณตอนนี้</div>
@@ -75,10 +119,8 @@
       <div id="loyBday" style="margin-top:10px"></div>
     </div>
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
-    <div id="referralCard" style="display:none;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px;text-align:left"><div id="referralBody"></div></div>
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
-      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>สั่งเลย</button>
-    <button id="closeBtn" class="ghost" style="width:100%;margin-top:10px" onclick="closeApp()">ปิด</button>
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span id="orderNowLbl">สั่งเลย</span></button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 ปิดรับคิว</b><br>
       <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
@@ -103,6 +145,18 @@
     <div id="orderLoyChip" style="display:none;margin:8px 0 0;font-size:13px;font-weight:700;color:var(--navy);background:rgba(0,181,216,.10);border:1px solid rgba(0,181,216,.3);border-radius:999px;padding:7px 12px;text-align:center"></div>
     <div id="menuButtons" style="margin:10px 0"></div>
     <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
+    <div id="cartBarSpacer" style="height:78px;display:none"></div>
+  </div>
+
+  <!-- Sticky cart bar: stays pinned to the bottom while the menu scrolls (only on the order screen, when cart has items). Tapping opens the basket. -->
+  <div id="cartBar" onclick="openBasket()" role="button" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;padding:0 14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));pointer-events:none">
+    <div style="max-width:472px;margin:0 auto;pointer-events:auto;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 24px rgba(0,124,147,.36);-webkit-tap-highlight-color:transparent">
+      <span style="display:flex;align-items:center;gap:11px;font-weight:800;font-size:15px">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
+        <span id="cartBarCount">0 แก้ว</span>
+      </span>
+      <span style="display:flex;align-items:center;gap:10px"><span id="cartBarTotal" style="font-weight:900;font-size:16px">฿0</span><span style="font-size:13px;font-weight:700;opacity:.92">ดูตะกร้า ›</span></span>
+    </div>
   </div>
 
   <!-- STEP: my ticket -->
@@ -202,8 +256,8 @@
 <!-- TOPPING PICKER (per drink) -->
 <div id="topPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:50;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <h1 id="topPopTitle">ท็อปปิ้ง</h1>
-    <p class="muted">เลือกท็อปปิ้ง (+฿10) หรือข้ามได้</p>
+    <h1 style="margin:0">เลือกท็อปปิ้ง</h1>
+    <p class="muted" id="topPopItem" style="margin:3px 0 0;font-size:12px">เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้</p>
     <div id="topPopBtns" style="margin:12px 0"></div>
     <div class="row" style="gap:8px">
       <button class="ghost" style="flex:1" onclick="skipToppings()">ข้าม</button>
@@ -215,8 +269,8 @@
 <!-- SWEETNESS PICKER (step 3) -->
 <div id="sweetPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:51;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0">
-    <h1 id="sweetTitle">ความหวาน</h1>
-    <p class="muted">เลือกระดับความหวาน</p>
+    <h1 style="margin:0">เลือกระดับความหวาน</h1>
+    <p class="muted" id="sweetItem" style="margin:3px 0 0;font-size:12px">เลือกความหวานของเครื่องดื่ม</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
   </div>
 </div>
@@ -231,6 +285,40 @@
       <button class="ghost" id="randomAgainBtn" style="flex:1;padding:12px;font-weight:800;color:#0e7c93" onclick="spinRandom()">สุ่มใหม่</button>
       <button class="ghost" style="flex:1;padding:12px" onclick="closeRandom()">เลือกเอง</button>
     </div>
+  </div>
+</div>
+
+<!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
+<div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:312px;width:100%;margin:0;max-height:94vh;overflow:auto;padding:14px">
+    <!-- FLIP CARD: tap anywhere to flip. front = tier card (art + boxes), back = QR + details (same tier colour). -->
+    <div style="perspective:1400px">
+      <div id="memberFlipInner" style="position:relative;width:100%;aspect-ratio:1/1;transition:transform .55s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d">
+        <!-- FRONT: data dropped into the art's baked boxes -->
+        <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
+          <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()">✕</button>
+          <div id="memberName" style="position:absolute;top:7.2%;left:6.9%;width:45%;height:17%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
+          <div id="memberLevel" style="position:absolute;top:23%;left:65.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
+          <div id="memberVisits" style="position:absolute;top:75.6%;left:4%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
+          <div id="memberNext" style="position:absolute;top:75.7%;left:53.8%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:10.5px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
+          <div style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
+        </div>
+        <!-- BACK: QR + details on the same tier colour -->
+        <div id="memberBack" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()">✕</button>
+          <div style="background:#fff;border-radius:13px;padding:9px;box-shadow:0 4px 14px rgba(14,40,55,.18)"><img id="memberQR" alt="QR สมาชิก" style="width:132px;height:132px;display:block;object-fit:contain"></div>
+          <p style="font-size:11px;margin:7px 0 0;text-align:center;color:#16314f;font-weight:600">แสดง QR ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
+          <div id="memberStamp" style="display:none;margin-top:7px;background:rgba(255,255,255,.8);border-radius:10px;padding:6px 10px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
+          <div id="memberPerk" style="margin-top:7px;font-size:11px;color:#16314f;font-weight:600;text-align:center;opacity:.92;padding:0 6px"></div>
+          <div style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
+    <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
+    <button id="memberOrderBtn" class="ghost" style="width:100%;margin-top:8px" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+    <div id="referralCard" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin:12px 0 0;text-align:left"><div id="referralBody"></div></div>
   </div>
 </div>
 
@@ -254,7 +342,8 @@
 <script type="module">
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
-let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false;
+const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
+let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
@@ -343,6 +432,79 @@ window.closeApp = ()=>{
     '<p class="muted">ปิดหน้านี้ได้เลยค่ะ</p></div>';
 };
 
+// Membership levels by visit count (works even with loyalty off). Colour + name like Starbucks tiers.
+const MEMBER_LEVELS=[
+  // VIP — premium dark purple→gold with gold/white sparkles
+  {min:30, name:'VIP', icon:'👑', text:'#fff', grad:'radial-gradient(circle at 82% 22%,rgba(202,161,74,.95) 0 2px,transparent 3px),radial-gradient(circle at 20% 30%,rgba(255,255,255,.55) 0 1.5px,transparent 2px),radial-gradient(circle at 66% 72%,rgba(202,161,74,.85) 0 2px,transparent 3px),radial-gradient(circle at 40% 86%,rgba(255,255,255,.45) 0 1.5px,transparent 2px),radial-gradient(circle at 118% -10%,rgba(124,58,237,.55) 0 38%,transparent 60%),linear-gradient(135deg,#2a2150,#4a2d7a 52%,#7c3aed)'},
+  // คนพิเศษ — gold card with diagonal shine streaks + sparkles, dark text
+  {min:15, name:'คนพิเศษ', icon:'🏅', text:'#5a3a02', grad:'repeating-linear-gradient(115deg,rgba(255,255,255,.14) 0 11px,transparent 11px 42px),radial-gradient(circle at 80% 28%,rgba(255,255,255,.6) 0 2px,transparent 3px),radial-gradient(circle at 24% 66%,rgba(255,255,255,.5) 0 2px,transparent 3px),linear-gradient(135deg,#d99a08,#f6d264 55%,#e0a512)'},
+  // ขาประจำ — teal with soft floating bubbles
+  {min:5,  name:'ขาประจำ', icon:'⭐', text:'#fff', grad:'radial-gradient(circle at 86% 18%,rgba(255,255,255,.2) 0 26px,transparent 27px),radial-gradient(circle at 10% 82%,rgba(255,255,255,.15) 0 34px,transparent 35px),radial-gradient(circle at 55% 52%,rgba(255,255,255,.1) 0 16px,transparent 17px),linear-gradient(135deg,#0e7c93,#1ab3ce 55%,#2fc2a6)'},
+  // สมาชิกใหม่ — playful mint with sprinkle dots
+  {min:0,  name:'สมาชิกใหม่', icon:'🌱', text:'#fff', grad:'radial-gradient(circle at 18% 28%,rgba(255,255,255,.4) 0 5px,transparent 6px),radial-gradient(circle at 78% 22%,rgba(255,255,255,.3) 0 4px,transparent 5px),radial-gradient(circle at 62% 74%,rgba(255,255,255,.32) 0 5px,transparent 6px),radial-gradient(circle at 30% 80%,rgba(255,255,255,.25) 0 3px,transparent 4px),radial-gradient(circle at 88% 60%,rgba(255,255,255,.22) 0 4px,transparent 5px),linear-gradient(135deg,#2fc2a6,#7ed9c3)'}
+];
+function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[MEMBER_LEVELS.length-1]; }
+// "บัตรของฉัน" member card: tier banner + QR สมาชิก + แต้ม/แลกฟรี + สั่งซ้ำ in one place.
+window.openMember=async()=>{
+  $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
+  $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
+  $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
+  $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  let visits=0;
+  try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
+    visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
+    if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
+  }catch(e){}
+  // Owner-configurable 3-tier system (Pure/Bloom/Essence) by visit count — falls back to sensible defaults.
+  let tcfg={bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''};
+  try{ const c=await api('/api/loyalty/config'); if(c&&c.tier) tcfg=c.tier; }catch(e){}
+  const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',perk:tcfg.essencePerk,bg:'#e6dcf6'}
+             : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',perk:tcfg.bloomPerk,bg:'#d9f0d9'}
+             :                           {key:'pure',name:'PURE',perk:tcfg.purePerk,bg:'#cfe6f5'};
+  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=2)';   // ?v bump busts stale browser cache when art is replaced
+  if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
+  $('memberLevel').textContent = TIER.name;
+  $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
+  const nextMin = visits<tcfg.bloomMin ? tcfg.bloomMin : (visits<tcfg.essenceMin ? tcfg.essenceMin : null);
+  const nextName = visits<tcfg.bloomMin ? '🌷 BLOOM' : '👑 ESSENCE';
+  $('memberNext').textContent = nextMin!=null ? ('อีก '+(nextMin-visits)+' → '+nextName) : '🎉 สูงสุดแล้ว';
+  if($('memberPerk')) $('memberPerk').textContent = TIER.perk ? ('🎁 '+TIER.perk) : '';
+  // Never-ordered customer → invite to start; returning → "order something else".
+  $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
+  // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
+  try{ const conf=await api('/api/loyalty/config');
+    if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
+      $('memberStamp').innerHTML = (pts>=per) ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
+        : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
+      $('memberStamp').style.display=''; }
+  }catch(e){}
+  // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
+  try{ loadReferral(); }catch(e){}
+};
+window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; };
+// Tap the card to flip between identity (front) and QR (back).
+window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; el.style.transform = (el.style.transform||'').includes('180') ? 'rotateY(0deg)' : 'rotateY(180deg)'; };
+window.memberReorder=()=>{ closeMember(); reorderFav(); };
+
+// QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
+async function doClaim(){
+  try{
+    const r = await api('/api/tickets/'+encodeURIComponent(claimId)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId, token:claimTok, name:displayName})});
+    const p = r.profile||{}, visits = p.visits||0;
+    document.querySelector('.wrap').innerHTML =
+      '<div class="card" style="text-align:center">'+
+      '<div style="font-size:46px">✅</div>'+
+      '<h1 style="margin:6px 0;color:var(--navy)">เช็คอินสำเร็จ!</h1>'+
+      '<p class="muted">'+(displayName?('คุณ '+esc(displayName)+' '):'')+'เชื่อมออเดอร์นี้กับ LINE แล้ว</p>'+
+      (visits>=2?('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px;margin:12px 0;color:#c2410c;font-weight:800">★ คุณมาแล้ว '+visits+' ครั้ง · ขอบคุณนะคะ 💛</div>'):'')+
+      '<p class="muted" style="font-size:13px;margin-top:10px">รับเครื่องดื่มที่เคาน์เตอร์ได้เลยค่ะ</p>'+
+      '</div>';
+  }catch(e){
+    const m=(e.data&&e.data.error)||e.message;
+    const map={bad_or_expired_qr:'QR หมดอายุ — ขอ QR ใหม่จากเคาน์เตอร์นะคะ',already_claimed:'ออเดอร์นี้เชื่อมบัญชีแล้ว',order_already_paid:'ออเดอร์นี้ชำระแล้ว',ticket_not_found:'ไม่พบออเดอร์',no_identity:'เปิดผ่าน LINE เพื่อเช็คอินนะคะ'};
+    err(map[m]||('เช็คอินไม่สำเร็จ: '+m));
+  }
+}
 async function loadZone(){
   if(!zoneId) return err('ไม่พบโซนใน QR code');
   const z = await api('/api/zones/'+zoneId);
@@ -366,14 +528,39 @@ async function loadZone(){
   show('closedMsg', !open);
   show('getCard',true);
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
+  loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
+  show('guestPhoneCard', !lineUserId && !!cfg.selfOrder);   // non-LINE: offer phone to collect stamps
   loadLoyalty();            // show the customer's points balance (best-effort)
   loadReferral();           // invite-a-friend code + enter-a-code (best-effort)
 }
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
 let FAV=null;
+// Auto member recognition on the home: LINE customers see their tier + visits without opening the card.
+async function loadMemberStrip(){
+  const el=$('memberStrip'); if(!el) return; el.style.display='none';
+  if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
+  try{
+    let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
+    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
+    let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
+    let t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
+    const T = visits>=t.essenceMin ? {n:'ESSENCE',i:'👑'} : visits>=t.bloomMin ? {n:'BLOOM',i:'🌷'} : {n:'PURE',i:'🌱'};
+    $('memberStripIcon').textContent = T.i;
+    $('memberStripName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+    $('memberStripSub').textContent = T.n + ' · ' + (visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉');
+    el.style.display='flex';
+  }catch(e){}
+}
+// Non-LINE phone capture: format while typing (full digits, not masked — easier to verify), mask only when saved.
+window.fmtGuestPhone=(el)=>{ let d=el.value.replace(/\D/g,'').slice(0,10),s=d; if(d.length>6)s=d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6); else if(d.length>3)s=d.slice(0,3)+'-'+d.slice(3); el.value=s; };
+window.saveGuestPhone=()=>{ const d=$('guestPhoneInp').value.replace(/\D/g,''); if(d.length<9){ toast('กรอกเบอร์ให้ครบ'); return; } guestPhone=d; $('guestPhoneMask').textContent='••••'+d.slice(-4); $('guestPhonePrompt').style.display='none'; $('guestPhoneDone').style.display=''; toast('✓ จะสะสมแต้มให้เบอร์นี้เมื่อชำระเงิน'); };
+window.editGuestPhone=()=>{ $('guestPhoneDone').style.display='none'; $('guestPhonePrompt').style.display=''; };
 async function loadReorder(){
   FAV=null; show('reorderCard',false);
+  // Default: "สั่งเลย" is the single primary CTA. If a reorder is offered below, it gets demoted to secondary.
+  const _onb=$('orderNowBtn'), _onl=$('orderNowLbl');
+  if(_onb){ _onb.classList.remove('ghost'); if(_onl) _onl.textContent='สั่งเลย'; }
   if(!lineUserId || !cfg.selfOrder) return;
   try{
     const s = await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
@@ -381,11 +568,16 @@ async function loadReorder(){
     const fav = (s.favourites||[]).find(f=>!f.soldout && f.itemId);
     if(!fav) return;
     FAV=fav;
-    $('reorderHi').textContent = s.name ? ('คุณ '+s.name+' วันนี้สั่งเหมือนเดิมเลยไหม!') : 'วันนี้สั่งเหมือนเดิมเลยไหม!';
+    const _visits = s.orderCount||0;
+    const _greet = s.name ? ('คุณ '+esc(s.name)) : 'ยินดีต้อนรับกลับ';
+    const _vbadge = _visits>=3 ? (' <span style="color:#c2410c">· มาแล้ว '+_visits+' ครั้ง 💛</span>') : '';
+    $('reorderHi').innerHTML = _greet + _vbadge + '<br><span style="font-weight:600;font-size:.92em;opacity:.9">วันนี้สั่งเหมือนเดิมไหม?</span>';
     const favNm = (fav.name||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
     show('reorderCard', true);
+    // Returning customer: reorder is the primary CTA → demote "สั่งเลย" to a secondary "เลือกเมนูอื่น".
+    if(_onb){ _onb.classList.add('ghost'); if(_onl) _onl.textContent='เลือกเมนูอื่น'; }
   }catch(e){ /* never block the normal flow */ }
 }
 window.reorderFav = async ()=>{
@@ -518,23 +710,24 @@ window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false;
   const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;background:${b.bg};color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
   window._BADGE=badge;   // reuse for the topping picker
   const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
-    const st='position:relative'+(out?';opacity:.5;filter:grayscale(1)':'');
-    return `<button class="menu-btn" style="${st}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
-    ${badge(m)}<div class="mimg" style="font-size:41px">${itemImg(m)}</div>
-    <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
-    <div class="mpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></button>`; };
+    const sold = (m.sold>0) ? `<div class="dsold">🔥 ขายแล้ว ${m.sold} ${unit()}</div>` : '';
+    return `<button class="dish-card" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
+    ${badge(m)}<div class="dimg">${itemImg(m)}</div>
+    <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
+    <div class="dpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
-window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
+window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price; renderTopPop(); $('topPop').style.display='flex'; };
+  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="menu-btn" style="position:relative${on?';border-color:var(--accent);background:#e9f8fb':''}${m.soldout?';opacity:.55':''}" ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
-      <div class="mimg" style="font-size:26px">${itemIcon(m)}</div>
-      <div class="mth">${esc(m.name)}${on?' ✓':''}</div><div class="men">${m.soldout?'หมด':esc(m.name_en||'')+' +฿'+m.price}</div></button>`;
+    return `<button class="dish-card top${on?' on':''}"${m.soldout?' style="opacity:.55"':''} ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
+      <div class="dimg">${itemImg(m)}</div>
+      <div class="dinfo"><div class="dname">${esc(m.name)}${on?' ✓':''}</div>
+      <div class="dpr">${m.soldout?'หมด':'+฿'+m.price}</div></div></button>`;
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
@@ -543,7 +736,7 @@ const SWEETS=[0,25,50,100];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
-  $('sweetTitle').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
+  $('sweetItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price;
   $('sweetBtns').innerHTML=SWEETS.map(s=>`<button class="menu-btn" onclick="chooseSweet(${s})">
     <div class="mth" style="font-size:18px">${s}%</div><div class="men">${s===100?'ปกติ':s===0?'ไม่หวาน':'หวาน'}</div></button>`).join('');
   $('sweetPop').style.display='flex'; }
@@ -600,7 +793,16 @@ window.addRandomToCart=()=>{ if(!_randomPick || _randomSpinning) return;
   const id=_randomPick.drink.id; closeRandom(); pickDrink(id); };
 function entryTotal(e){ return e.price + e.toppings.reduce((s,t)=>s+t.price*t.qty,0); }
 const sweetLabel=(s)=> (s==null||s===100)?'' : ' · หวาน '+s+'%';
-function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none'; updateNudges(); }
+// Payable total (subtotal minus free-giveaway discount) — mirrors renderBasket's math; used by the sticky cart bar.
+function cartNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
+  let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
+  return sub-Math.min(disc,sub); }
+function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none';
+  const bar=$('cartBar'), sp=$('cartBarSpacer'), oc=$('orderCard');
+  const orderOpen = oc && oc.style.display!=='none';
+  if(bar){ if(n && orderOpen){ $('cartBarCount').textContent=n+' '+unit(); $('cartBarTotal').textContent='฿'+cartNet(); bar.style.display='block'; if(sp) sp.style.display=''; }
+    else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
+  updateNudges(); }
 // Step 4: review basket -> confirm or cancel.
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
@@ -631,7 +833,9 @@ function renderBasket(){
   updateNudges();
 }
 // Remove a single cup from a (possibly consolidated) line.
-window.removeOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
+  if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
+  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
 window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
@@ -645,12 +849,13 @@ window.confirmBasket=async()=>{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-    cart=[]; ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
+    if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
+    cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      ['orderCard','basketPop'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
+      ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
   }
@@ -931,6 +1136,7 @@ async function proceed(){
 
 (async ()=>{
   await initLiff();
+  if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
   if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
   await proceed();
 })().catch(e=>err(e.message));

@@ -239,13 +239,70 @@ export function customerInsights() {
   for (const r of db.prepare('SELECT rating, COUNT(*) n FROM tickets WHERE rating IS NOT NULL GROUP BY rating').all()) {
     if (stars[r.rating] != null) { stars[r.rating] = r.n; total += r.n; sum += r.rating * r.n; }
   }
-  const c = db.prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN order_count>=2 THEN 1 ELSE 0 END),0) repeat FROM customers').get();
-  const top = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE order_count>=2 ORDER BY order_count DESC, last_order_at DESC LIMIT 10').all();
+  // Compute the customer base from ACTUAL paid orders, unified across LINE (line_user_id) and phone
+  // (customer_key) — so phone customers count too, not just LINE. Visits/spend are real, not the
+  // LINE-only maintained order_count.
+  const rows = db.prepare(
+    `SELECT COALESCE(t.line_user_id, t.customer_key) AS k,
+            COUNT(DISTINCT t.id) AS visits,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS spend,
+            MAX(o.paid_at) AS last_paid
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE o.payment_status='paid' AND COALESCE(t.line_user_id, t.customer_key) IS NOT NULL
+     GROUP BY k`
+  ).all();
+  const totalC = rows.length;
+  const repeatC = rows.filter((r) => r.visits >= 2).length;
+  const nameOf = (k) => (db.prepare('SELECT name FROM customers WHERE line_user_id=?').get(k)?.name) || null;
+  const top = rows.filter((r) => r.visits >= 2)
+    .sort((a, b) => b.visits - a.visits || String(b.last_paid || '').localeCompare(String(a.last_paid || '')))
+    .slice(0, 10)
+    .map((r) => ({
+      name: nameOf(r.k) || (String(r.k).startsWith('tel:') ? r.k.slice(4) : 'ลูกค้า LINE'),
+      isPhone: String(r.k).startsWith('tel:'),
+      order_count: r.visits,
+      spend: Math.round((r.spend || 0) * 100) / 100,
+      last_order_at: r.last_paid,
+    }));
   return {
     satisfaction: { avg: total ? Math.round((sum / total) * 10) / 10 : null, total, stars },
-    customers: { total: c.total || 0, repeat: c.repeat || 0, repeatPct: c.total ? Math.round((c.repeat / c.total) * 100) : 0, top },
+    customers: { total: totalC, repeat: repeatC, repeatPct: totalC ? Math.round((repeatC / totalC) * 100) : 0, top },
   };
 }
+
+// ---- CRM: win-back (re-engage lapsed LINE customers) ----
+/** LINE customers (real userId, not a 'tel:' phone key) whose most recent PAID order is at least
+ *  `days` days ago — i.e. they've gone quiet. Newest-lapsed first. Phone-only customers can't be
+ *  LINE-messaged, so they're excluded here. */
+export function lapsedLineCustomers(days = 30) {
+  const d = Math.max(1, Math.floor(Number(days) || 30));
+  return db.prepare(
+    `SELECT c.line_user_id AS lineUserId, c.name AS name,
+            MAX(o.paid_at) AS lastVisit, COUNT(DISTINCT t.id) AS visits
+     FROM customers c
+     JOIN tickets t ON t.line_user_id = c.line_user_id
+     JOIN orders o  ON o.ticket_id = t.id AND o.payment_status='paid'
+     WHERE c.line_user_id LIKE 'U%'
+     GROUP BY c.line_user_id
+     HAVING julianday('now') - julianday(MAX(o.paid_at)) >= ?
+     ORDER BY lastVisit DESC`
+  ).all(d);
+}
+/** Owner action: push a win-back message to lapsed LINE customers. Capped (OA quota friendliness).
+ *  Best-effort — never throws on a single failed push. On UAT (LINE stubbed) it logs and `sent`
+ *  stays 0, but `targeted` still shows who WOULD receive it. Returns counts for the UI. */
+export async function winBackBlast(message, { days = 30, max = 300 } = {}) {
+  const msg = String(message || '').trim().slice(0, 400);
+  if (!msg) throw new Error('empty_message');
+  const all = lapsedLineCustomers(days);
+  const list = all.slice(0, Math.max(1, Math.min(max, 1000)));
+  let sent = 0;
+  for (const c of list) {
+    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย')) !== false) sent++; } catch { /* skip one */ }
+  }
+  return { targeted: all.length, attempted: list.length, sent, capped: all.length > list.length };
+}
+
 /** Daily report: cups sold, no-shows, avg wait, avg rating + per-zone, since the last reset. */
 export function dailyReport(branchId = null, dateStr = null) {
   const B = [branchId, branchId];   // for "(? IS NULL OR <branch col>=?)" guards
@@ -682,6 +739,15 @@ export function listMenu(channelId = null, branchId = null) {
     if (mk.has(r.id)) { r.makeable = mk.get(r.id); r.stockSoldout = r.makeable <= 0 ? 1 : 0; } else { r.makeable = null; r.stockSoldout = 0; }
     r.price_delivery = dtid ? (db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(r.id, dtid)?.price ?? null) : null;
   });
+  // Lifetime "sold" per item from PAID orders. Drink lines carry a " · หวาน X%" suffix, so match on the base name.
+  try {
+    const soldMap = new Map();
+    for (const s of db.prepare(
+      `SELECT CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END AS base, SUM(oi.qty) q
+         FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY base`
+    ).all()) soldMap.set(s.base, s.q);
+    rows.forEach((r) => { r.sold = soldMap.get(r.name) || 0; });
+  } catch (e) { rows.forEach((r) => { r.sold = 0; }); }
   return rows;
 }
 
@@ -1003,6 +1069,9 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
 // "points" in the DB == stamps. Disabled by default (owner enables later).
 export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
 export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
+// Membership system (บัตรสมาชิก + tier + recognition) — SEPARATE from the stamp/points programme. Default ON.
+export function memberEnabled() { return getSetting('member:enabled', '1') === '1'; }
+export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '0'); return { memberEnabled: !!on }; }
 // SlipOK auto-verify is an OWNER TOGGLE (default OFF) on top of the env creds, so the shop
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
@@ -1107,6 +1176,35 @@ export function setStampsPerReward(n) {
  *  that pulls counter customers into ordering via LINE (endowed-progress effect). 0 = off. */
 export function getWelcomeBonus() { return Math.max(0, Math.round(Number(getSetting('loyalty:welcome_bonus', '2')) || 0)); }
 export function setWelcomeBonus(n) { const v = Math.max(0, Math.round(Number(n) || 0)); setSetting('loyalty:welcome_bonus', String(v)); return { welcomeBonus: v }; }
+/** How a paid order earns stamps: 'cup' = 1 per drink cup (default); 'baht' = 1 per N baht spent (cashback-style). */
+export function getEarnMode() { return getSetting('loyalty:earn_mode', 'cup') === 'baht' ? 'baht' : 'cup'; }
+export function setEarnMode(m) { const v = m === 'baht' ? 'baht' : 'cup'; setSetting('loyalty:earn_mode', v); return { earnMode: v }; }
+export function getBahtPerStar() { return Math.max(1, Math.round(Number(getSetting('loyalty:baht_per_star', '25')) || 25)); }
+export function setBahtPerStar(n) { const v = Math.max(1, Math.round(Number(n) || 0)); setSetting('loyalty:baht_per_star', String(v)); return { bahtPerStar: v }; }
+/** Membership tiers (Pure/Bloom/Essence) — a status layer measured by visit count (paid orders).
+ *  Thresholds + perk text are owner-editable and surfaced on the LIFF member card. */
+const TIER_DEFAULTS = { bloomMin: 10, essenceMin: 25,
+  purePerk: 'สะสมดวง · 🎂 ของขวัญวันเกิด',
+  bloomPerk: 'สิทธิ์ PURE + 🎂 โบนัสวันเกิดพิเศษ',
+  essencePerk: 'สิทธิ์ทั้งหมด · ⭐ แต้มไม่หมดอายุ · 🎂 วันเกิดยาวขึ้น' };
+export function getTierConfig() {
+  const num = (k, d) => Math.max(0, Math.round(Number(getSetting(k, String(d))) || d));
+  return {
+    bloomMin: num('loyalty:tier_bloom_min', TIER_DEFAULTS.bloomMin),
+    essenceMin: num('loyalty:tier_essence_min', TIER_DEFAULTS.essenceMin),
+    purePerk: getSetting('loyalty:tier_pure_perk', TIER_DEFAULTS.purePerk),
+    bloomPerk: getSetting('loyalty:tier_bloom_perk', TIER_DEFAULTS.bloomPerk),
+    essencePerk: getSetting('loyalty:tier_essence_perk', TIER_DEFAULTS.essencePerk),
+  };
+}
+export function setTierConfig(p = {}) {
+  if (p.bloomMin != null) setSetting('loyalty:tier_bloom_min', String(Math.max(0, Math.round(Number(p.bloomMin) || 0))));
+  if (p.essenceMin != null) setSetting('loyalty:tier_essence_min', String(Math.max(0, Math.round(Number(p.essenceMin) || 0))));
+  if (p.purePerk != null) setSetting('loyalty:tier_pure_perk', String(p.purePerk).slice(0, 200));
+  if (p.bloomPerk != null) setSetting('loyalty:tier_bloom_perk', String(p.bloomPerk).slice(0, 200));
+  if (p.essencePerk != null) setSetting('loyalty:tier_essence_perk', String(p.essencePerk).slice(0, 200));
+  return getTierConfig();
+}
 /** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
 export function loyaltyTier(lifetime) {
   const l = lifetime || 0;
@@ -1151,10 +1249,100 @@ export function loyaltyByPhone(phone) {
   const b = loyaltyBalance(key);
   return { ...b, phone: d, history: loyaltyHistory(key, 10) };
 }
-/** Attach a phone (loyalty key) + optional name to a pending ticket, creating the customer row.
- *  Returns the balance so the till can show it. Rejected once the order is paid. */
+// ---- CRM: live customer profile (computed from real orders — no maintained aggregates, so it works
+// retroactively on all history and needs no migration). A customer's orders are tickets whose
+// line_user_id (LINE) OR customer_key ('tel:<phone>') matches the key. ----
+/** Full profile for one customer key (LINE userId or 'tel:<digits>'). `found` is false for an
+ *  unknown phone with zero history. Safe to call regardless of the loyalty-rewards toggle. */
+export function customerProfile(key) {
+  if (!key) return { found: false };
+  const isPhone = key.startsWith('tel:');
+  const cust = db.prepare('SELECT name, first_seen, birthday FROM customers WHERE line_user_id=?').get(key);
+  const agg = db.prepare(
+    `SELECT COUNT(DISTINCT t.id) AS visits,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS spend,
+            MIN(o.paid_at) AS first_paid, MAX(o.paid_at) AS last_paid
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'`
+  ).get(key, key);
+  const favourites = db.prepare(
+    `SELECT oi.name, SUM(oi.qty) AS qty
+     FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND oi.kind='base' AND o.payment_status='paid'
+     GROUP BY oi.name ORDER BY qty DESC, oi.name LIMIT 3`
+  ).all(key, key);
+  const recent = db.prepare(
+    `SELECT t.code, o.paid_at, (o.total - COALESCE(o.discount,0)) AS net
+     FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'
+     ORDER BY o.paid_at DESC LIMIT 5`
+  ).all(key, key);
+  const visits = agg.visits || 0;
+  const bal = loyaltyEnabled() ? loyaltyBalance(key) : null;
+  return {
+    found: visits > 0 || !!cust,
+    key, isPhone, phone: isPhone ? key.slice(4) : null,
+    name: cust?.name || null,
+    firstSeen: agg.first_paid || cust?.first_seen || null,
+    lastVisit: agg.last_paid || null,
+    visits,
+    totalSpend: Math.round((agg.spend || 0) * 100) / 100,
+    favourites,
+    recent,
+    birthday: cust?.birthday || null,
+    birthdayRedeem: birthdayRedeemStatus(key),
+    loyalty: bal ? { points: bal.points, lifetime: bal.lifetime, tier: bal.tier, isBirthday: bal.isBirthday } : null,
+  };
+}
+/** Birthday free-drink redeem — once per calendar year, ledgered idempotently in loyalty_moves.
+ *  Cashier-initiated (the customer card only PROMPTS; the server is the source of truth). */
+export function birthdayRedeemStatus(key) {
+  if (!key) return { eligible: false, used: false, available: false };
+  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  const today = !!(cust && isBirthdayToday(cust.birthday));
+  const used = !!db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?').get(key, 'bday-redeem-' + bkkYear());
+  return { eligible: today, used, available: today && !used };
+}
+export function redeemBirthday(key, actorId = null) {
+  if (!key) throw new Error('no_customer');
+  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  if (!cust || !isBirthdayToday(cust.birthday)) throw new Error('not_birthday');
+  const note = 'bday-redeem-' + bkkYear();
+  if (db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?').get(key, note)) throw new Error('already_redeemed');
+  // note must stay exactly 'bday-redeem-YEAR' so the idempotency check above matches next time.
+  db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', 0, ?)`).run(key, note);
+  return { ok: true, redeemed: '🎂 ของขวัญวันเกิด', year: bkkYear() };
+}
+/** Lightweight recognition for the order card (cheap: 2 indexed queries) — name + paid-visit count +
+ *  top favourite, so the cashier sees "คุณเอ · มา 6 ครั้ง · ชอบมะม่วง" automatically, no lookup. */
+function customerMini(key) {
+  if (!key) return null;
+  const v = db.prepare(
+    `SELECT COUNT(DISTINCT t.id) AS visits FROM tickets t JOIN orders o ON o.ticket_id=t.id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND o.payment_status='paid'`
+  ).get(key, key);
+  const visits = v.visits || 0;
+  if (!visits) return null;   // brand-new / no paid history yet → nothing to recognise
+  const fav = db.prepare(
+    `SELECT oi.name FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+     WHERE (t.line_user_id=? OR t.customer_key=?) AND oi.kind='base' AND o.payment_status='paid'
+     GROUP BY oi.name ORDER BY SUM(oi.qty) DESC, oi.name LIMIT 1`
+  ).get(key, key);
+  const c = db.prepare('SELECT name FROM customers WHERE line_user_id=?').get(key);
+  return { name: c?.name || null, visits, fav: fav?.name || null };
+}
+
+/** Cashier "enter phone → see customer". Throws bad_phone on a malformed number. */
+export function lookupCustomerByPhone(phone) {
+  const d = normalizePhone(phone);
+  if (!d) throw new Error('bad_phone');
+  return customerProfile('tel:' + d);
+}
+
+/** Attach a phone (customer key) + optional name to a pending ticket, creating the customer row so
+ *  future orders accrue to this customer (CRM). Works regardless of the loyalty-rewards toggle —
+ *  stamps are awarded separately (and only when loyalty is on). Rejected once the order is paid. */
 export function attachCustomerToTicket(ticketId, phone, name = null) {
-  if (!loyaltyEnabled()) throw new Error('loyalty_off');
   const d = normalizePhone(phone);
   if (!d) throw new Error('bad_phone');
   const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
@@ -1170,6 +1358,62 @@ export function attachCustomerToTicket(ticketId, phone, name = null) {
   })();
   const b = loyaltyBalance(key);
   return { ticketId: t.id, phone: d, key, name: nm, points: b.points, tier: b.tier ? b.tier.emoji : null, stampsPerReward: getStampsPerReward() };
+}
+
+/** Tag a new order to a known customer key (from "สั่งให้ลูกค้าคนนี้"). Handles a phone key
+ *  ('tel:<digits>') via attachCustomerToTicket, or a LINE id (set directly — cashier-authed). No-op
+ *  if already tied / paid. Best-effort: never blocks order creation. */
+export function tagOrderCustomer(ticketId, key, name = null) {
+  if (!key) return;
+  if (String(key).startsWith('tel:')) { try { attachCustomerToTicket(ticketId, key.slice(4), name); } catch { /* best-effort */ } return; }
+  try {
+    const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+    if (!t || t.line_user_id) return;
+    const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+    if (order && order.payment_status === 'paid') return;
+    const nm = (name || '').toString().trim().slice(0, 80) || null;
+    db.transaction(() => {
+      db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(key, nm);
+      db.prepare('UPDATE tickets SET line_user_id=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(key, nm, ticketId);
+    })();
+  } catch { /* best-effort */ }
+}
+
+// ---- QR check-in handshake: cashier shows a per-order QR → customer scans with LINE → their LINE
+// identity links to THIS order (no phone typing). Tokens live in-memory (short scan window), so no
+// migration and they auto-expire; a lost token just means the customer re-scans. ----
+const _checkinTokens = new Map();   // ticketId -> { token, exp }
+function _newToken() { try { return globalThis.crypto.randomUUID().replace(/-/g, ''); } catch { return 'c' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); } }
+/** Cashier asks for a check-in QR for an unpaid, not-yet-LINE order. Returns a fresh token. */
+export function startCheckin(ticketId) {
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_line_customer');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const token = _newToken();
+  _checkinTokens.set(Number(ticketId), { token, exp: Date.now() + 5 * 60 * 1000 });
+  return token;
+}
+/** Customer's LIFF claims the order after scanning. Verifies the token + that the order is still
+ *  unclaimed/unpaid, then links their LINE identity to the ticket and ensures the customer row. */
+export function claimTicket(ticketId, lineUserId, token, name = null) {
+  const id = Number(ticketId);
+  if (!lineUserId) throw new Error('no_identity');
+  const rec = _checkinTokens.get(id);
+  if (!rec || rec.token !== token || rec.exp < Date.now()) throw new Error('bad_or_expired_qr');
+  const t = db.prepare('SELECT id, line_user_id FROM tickets WHERE id=?').get(id);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id) throw new Error('already_claimed');
+  const order = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(id);
+  if (order && order.payment_status === 'paid') throw new Error('order_already_paid');
+  const nm = (name || '').toString().trim().slice(0, 80) || null;
+  db.transaction(() => {
+    db.prepare(`INSERT INTO customers (line_user_id, name) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET name=COALESCE(excluded.name, customers.name)`).run(lineUserId, nm);
+    db.prepare('UPDATE tickets SET line_user_id=?, customer_name=COALESCE(?, customer_name) WHERE id=?').run(lineUserId, nm, id);
+  })();
+  _checkinTokens.delete(id);
+  return { ok: true, ticketId: id, zoneId: db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(id)?.zone_id, profile: customerProfile(lineUserId) };
 }
 
 /** Referral: each customer has a short invite code (YD<base36 rowid>). A NEW friend enters it,
@@ -1225,10 +1469,12 @@ export function awardPoints(orderId) {
   if (db.prepare("SELECT 1 FROM loyalty_moves WHERE order_id=? AND kind='earn'").get(orderId)) return null;
   // 1 stamp per drink cup (non-topping lines); sweetened drink names don't match the menu
   // catalog so they COALESCE to 'drink' — counted, which is correct.
-  const pts = db.prepare(
-    `SELECT COALESCE(SUM(oi.qty),0) c FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name
-      WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
-  ).get(orderId).c;
+  const pts = getEarnMode() === 'baht'
+    ? Math.floor((order.total || 0) / getBahtPerStar())
+    : db.prepare(
+        `SELECT COALESCE(SUM(oi.qty),0) c FROM order_items oi LEFT JOIN menu_items mi ON mi.name = oi.name
+          WHERE oi.order_id=? AND COALESCE(mi.category,'drink') != 'topping'`
+      ).get(orderId).c;
   if (pts <= 0) return null;
   const key = loyKey;
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
@@ -2085,12 +2331,19 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
     }
-    // Cashier-only: attach the customer's stamp balance (LINE userId or a phone key) so staff
-    // can redeem on the spot.
-    if (reveal && loyaltyEnabled()) {
+    // Cashier-only: show the attached customer (phone) so staff always know an order is tagged — even
+    // with loyalty OFF (CRM). When loyalty is ON, also attach the stamp balance for on-the-spot redeem.
+    if (reveal) {
       const r = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(t.id);
-      const li = r && (r.line_user_id || r.customer_key);
-      if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+      if (r && (r.customer_key || '').startsWith('tel:')) t.cust_phone = r.customer_key.slice(4);
+      // Auto-recognition: if the order is tied to a KNOWN customer (LINE id or phone), attach a mini
+      // profile so the card greets them ("มา N ครั้ง · ชอบ X") with no lookup. null for new customers.
+      const ck = r && (r.line_user_id || r.customer_key);
+      if (ck) { const m = customerMini(ck); if (m) t.cust = m; }
+      if (loyaltyEnabled()) {
+        const li = r && (r.line_user_id || r.customer_key);
+        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+      }
     }
     return t;
   };
