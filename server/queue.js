@@ -1287,8 +1287,28 @@ export function customerProfile(key) {
     favourites,
     recent,
     birthday: cust?.birthday || null,
+    birthdayRedeem: birthdayRedeemStatus(key),
     loyalty: bal ? { points: bal.points, lifetime: bal.lifetime, tier: bal.tier, isBirthday: bal.isBirthday } : null,
   };
+}
+/** Birthday free-drink redeem — once per calendar year, ledgered idempotently in loyalty_moves.
+ *  Cashier-initiated (the customer card only PROMPTS; the server is the source of truth). */
+export function birthdayRedeemStatus(key) {
+  if (!key) return { eligible: false, used: false, available: false };
+  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  const today = !!(cust && isBirthdayToday(cust.birthday));
+  const used = !!db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?').get(key, 'bday-redeem-' + bkkYear());
+  return { eligible: today, used, available: today && !used };
+}
+export function redeemBirthday(key, actorId = null) {
+  if (!key) throw new Error('no_customer');
+  const cust = db.prepare('SELECT birthday FROM customers WHERE line_user_id=?').get(key);
+  if (!cust || !isBirthdayToday(cust.birthday)) throw new Error('not_birthday');
+  const note = 'bday-redeem-' + bkkYear();
+  if (db.prepare('SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?').get(key, note)) throw new Error('already_redeemed');
+  // note must stay exactly 'bday-redeem-YEAR' so the idempotency check above matches next time.
+  db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', 0, ?)`).run(key, note);
+  return { ok: true, redeemed: '🎂 ของขวัญวันเกิด', year: bkkYear() };
 }
 /** Lightweight recognition for the order card (cheap: 2 indexed queries) — name + paid-visit count +
  *  top favourite, so the cashier sees "คุณเอ · มา 6 ครั้ง · ชอบมะม่วง" automatically, no lookup. */

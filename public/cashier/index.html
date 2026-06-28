@@ -1778,8 +1778,19 @@ function renderCustProfile(p){
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
    ${pts}
-   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_crmCta(p)}`;
+   <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_bdayRedeem(p)}${_crmCta(p)}`;
 }
+// Birthday free-drink redeem button — cashier-initiated; server is the source of truth (the customer card only prompts).
+function _bdayRedeem(p){
+  const b=p&&p.birthdayRedeem; if(!b||!b.eligible) return '';
+  if(b.used) return '<div style="margin-top:10px;background:#ecfdf5;border:1px solid #6ee7b7;color:#047857;border-radius:12px;padding:9px;text-align:center;font-weight:700;font-size:13px">🎂 ใช้สิทธิ์วันเกิดแล้วปีนี้ ✓</div>';
+  return '<button class="ok" style="width:100%;margin-top:10px;background:#fde2e7;color:#c43a4b" onclick="redeemBday()">🎂 ใช้สิทธิ์วันเกิด — ฟรี 1 '+unit()+'</button>';
+}
+window.redeemBday=async()=>{ const p=window._crmProfile; if(!p||!p.key) return;
+  if(!(await appConfirm({title:'🎂 ใช้สิทธิ์วันเกิด',message:'ให้ของขวัญวันเกิด (ฟรี 1 '+unit()+') กับลูกค้านี้?\nใช้ได้ปีละ 1 ครั้ง',okText:'ใช้สิทธิ์'}))) return;
+  try{ await api('/api/customers/'+encodeURIComponent(p.key)+'/redeem-birthday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎂 ใช้สิทธิ์วันเกิดแล้ว!');
+    try{ const np=await api(p.isPhone?('/api/customers/phone/'+encodeURIComponent(p.phone)):('/api/customers/by-line/'+encodeURIComponent(p.key))); showCustResult(renderCustProfile(np)); }catch(e){}
+  }catch(e){ toast('ใช้สิทธิ์ไม่สำเร็จ: '+err(e)); } };
 window.detailQty=(d)=>{ const e=cart[_detailIdx]; if(!e) return; e.qty=Math.max(1,Math.min(99,(e.qty||1)+d));
   $('detailQty').textContent=e.qty; $('detailLineTotal').textContent=entryTotal(e); renderBill(); };
 window.detailRemove=()=>{ if(_detailIdx==null) return; cart.splice(_detailIdx,1); closeItemDetail(); renderBasketCount(); toast('ลบรายการแล้ว'); };

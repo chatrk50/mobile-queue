@@ -257,6 +257,12 @@ app.post('/api/loyalty/:key/redeem', (req, res) => {
   try { res.json(Q.redeemReward(req.params.key, Number(req.body?.rewardId), req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Redeem the birthday free drink (once per year). Cashier-initiated, server-ledgered.
+app.post('/api/customers/:key/redeem-birthday', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.redeemBirthday(req.params.key, req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
 app.post('/api/loyalty/:key/birthday', (req, res) => {
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
