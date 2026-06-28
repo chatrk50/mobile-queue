@@ -499,6 +499,7 @@
     <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
     <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
+    <div id="scanStatus" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--muted);white-space:pre-line"></div>
     <button class="ghost" style="width:100%;margin-top:10px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
 </div>
@@ -2596,21 +2597,30 @@ window.closeCheckin=()=>{ $('checkinPop').style.display='none'; $('checkinImg').
 
 // Scan a customer's member QR (เbackend /m?u=<lineUserId>) → look them up → show the profile card.
 let _scanStream=null, _scanRAF=null;
+const _scanSay=(m)=>{ const s=$('scanStatus'); if(s) s.textContent=m||''; };
+// Legacy getUserMedia shim (very old WebKit exposed it only on navigator.*) so we never hard-fail on capability checks.
+function _getCam(constraints){
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) return navigator.mediaDevices.getUserMedia(constraints);
+  const legacy=navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
+  if(legacy) return new Promise((res,rej)=>legacy.call(navigator,constraints,res,rej));
+  return Promise.reject(new Error('no-getusermedia'));
+}
 window.openScanner=async()=>{
-  if(typeof jsQR==='undefined'){ toast('ตัวสแกนยังโหลดไม่เสร็จ — ลองอีกครั้ง'); return; }
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
-  if(!window.isSecureContext){ toast('ต้องเปิดผ่าน https เท่านั้นจึงจะใช้กล้องได้'); return; }
-  $('scanPop').style.display='flex';
-  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}}); }
+  $('scanPop').style.display='flex'; _scanSay('กำลังเปิดกล้อง…');
+  if(typeof jsQR==='undefined'){ _scanSay('ตัวอ่าน QR ยังโหลดไม่เสร็จ — ปิดแล้วลองใหม่อีกครั้ง'); return; }
+  if(!window.isSecureContext){ _scanSay('⚠️ ต้องเปิดผ่าน https:// เท่านั้น\nURL ปัจจุบัน: '+location.protocol+'//'+location.host); return; }
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(navigator.getUserMedia||navigator.webkitGetUserMedia)){ _scanSay('⚠️ เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง (getUserMedia)\nลองเปิดด้วย Safari หรือ Chrome เวอร์ชันล่าสุด — อย่าเปิดผ่านแอปอื่น'); return; }
+  try{ _scanStream=await _getCam({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}}); }
   catch(e){
     // Some front-camera-only devices (older iPads/laptops) reject 'environment' — retry with any camera.
-    try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:true}); }
+    try{ _scanStream=await _getCam({video:true}); }
     catch(e2){ const n=(e2&&e2.name)||'';
-      const msg = (n==='NotAllowedError'||n==='SecurityError') ? 'กล้องถูกปฏิเสธ — ไปตั้งค่าเบราว์เซอร์ > อนุญาตกล้องของเว็บนี้ แล้วลองใหม่'
-        : (n==='NotFoundError'||n==='OverconstrainedError') ? 'ไม่พบกล้องบนอุปกรณ์นี้'
-        : (n==='NotReadableError') ? 'กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอปนั้นแล้วลองใหม่'
-        : 'เปิดกล้องไม่ได้ — ตรวจสอบสิทธิ์กล้องในเบราว์เซอร์';
-      toast(msg); closeScanner(); return; } }
+      const msg = (n==='NotAllowedError'||n==='SecurityError') ? '🚫 กล้องถูกปฏิเสธ\nแตะไอคอน 🔒/AA บนแถบ URL > ตั้งค่าเว็บไซต์ > กล้อง > อนุญาต แล้วกดสแกนใหม่'
+        : (n==='NotFoundError'||n==='OverconstrainedError') ? '📷 ไม่พบกล้องบนอุปกรณ์นี้'
+        : (n==='NotReadableError') ? '⚠️ กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอป/แท็บที่ใช้กล้องแล้วลองใหม่'
+        : ('เปิดกล้องไม่ได้ ['+(n||'unknown')+']\n'+((e2&&e2.message)||'')+'\nลองพิมพ์เบอร์แทนได้ด้านล่าง');
+      _scanSay(msg); return; } }   // keep popup open so the cashier can read the error + use the phone fallback
+  _scanSay('');
   const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.onloadedmetadata=()=>{ v.play().catch(()=>{}); }; try{ await v.play(); }catch(e){}
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;
