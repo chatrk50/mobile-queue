@@ -647,6 +647,40 @@ export function payOutForDay(branchId = 1, date = null) {
   const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   return r2(db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND date(at,'+7 hours')=?`).get(branchId, day).v || 0);
 }
+/** Owner anti-fraud view: every revenue-REDUCING action for a Bangkok-local day
+ *  (void / waste / discount) with WHO did it + ฿ value, plus per-staff & per-type totals.
+ *  Plus standalone counter reward-redeems. Pure read over the immutable sale_events trail. */
+export function listReductions(branchId = 1, date = null) {
+  const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const rows = db.prepare(
+    `SELECT se.id, se.type, se.amount, se.meta, se.at, se.ticket_id,
+            COALESCE(s.name,'—') AS staff, t.number AS ticket_no, t.customer_name
+       FROM sale_events se
+       LEFT JOIN staff s ON s.id=se.actor
+       LEFT JOIN tickets t ON t.id=se.ticket_id
+      WHERE se.branch_id=? AND se.type IN ('void','waste','discount')
+        AND date(se.at,'+7 hours')=? ORDER BY se.at DESC`
+  ).all(branchId, day);
+  const events = rows.map((r) => {
+    let reason = null; try { reason = r.meta ? (JSON.parse(r.meta).reason || null) : null; } catch { /* keep null */ }
+    return { id: r.id, type: r.type, amount: r2(r.amount || 0), at: r.at, staff: r.staff,
+      ticketNo: r.ticket_no || null, customer: r.customer_name || null, reason };
+  });
+  const sumType = (t) => r2(events.filter((e) => e.type === t).reduce((s, e) => s + e.amount, 0));
+  const byType = { void: sumType('void'), waste: sumType('waste'), discount: sumType('discount') };
+  const byStaffMap = {};
+  for (const e of events) byStaffMap[e.staff] = r2((byStaffMap[e.staff] || 0) + e.amount);
+  const byStaff = Object.entries(byStaffMap).map(([staff, amount]) => ({ staff, amount })).sort((a, b) => b.amount - a.amount);
+  let redeems = [];
+  try {
+    redeems = db.prepare(
+      `SELECT lm.at, lm.note, lm.points, COALESCE(c.name, lm.customer_key) AS customer
+         FROM loyalty_moves lm LEFT JOIN customers c ON c.line_user_id=lm.customer_key
+        WHERE lm.kind='redeem' AND date(lm.at,'+7 hours')=? ORDER BY lm.at DESC`
+    ).all(day);
+  } catch { /* loyalty optional */ }
+  return { date: day, events, byType, byStaff, redeems, count: events.length, total: r2(byType.void + byType.waste + byType.discount) };
+}
 /** Current open cash session for a branch (+ live expected cash so far). */
 export function currentCashSession(branchId = 1) {
   const s = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(branchId);
