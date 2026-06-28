@@ -689,6 +689,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.3/Sortable.min.js"></script>
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -1545,7 +1546,8 @@ let _selMenuId=null;
 function renderMenuMgr(){
   if(!MENU.length){ $('menuMgr').innerHTML='<p class="muted">ยังไม่มีเมนู</p>'; return; }
   const row=(m,i,n)=>`
-    <div class="ms-item ${m.id===_selMenuId?'sel':''}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
+    <div class="ms-item ${m.id===_selMenuId?'sel':''}" data-id="${m.id}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
+      <span class="dgrip" title="ลากเพื่อจัดลำดับ" onclick="event.stopPropagation()" style="flex:none;cursor:grab;color:var(--muted);padding:0 6px 0 0;font-size:19px;line-height:1;touch-action:none">⠿</span>
       <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
       <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>
         <div class="muted" style="font-size:12px">฿${m.price}${m.soldout?' · หมด':''}${m.active?'':' · ซ่อน'}</div></div>
@@ -1555,9 +1557,17 @@ function renderMenuMgr(){
       </div>
     </div>`;
   const drinks=MENU.filter(m=>m.category!=='topping'), tops=MENU.filter(m=>m.category==='topping');
-  const sec=(title,items)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length}) — ใช้ ▲▼ จัดลำดับการแสดงผล</div>`+items.map((m,i)=>row(m,i,items.length)).join(''):'';
-  $('menuMgr').innerHTML = sec('🥤 เครื่องดื่ม · Menu', drinks)+(tops.length?'<div style="height:8px"></div>':'')+sec('🍫 ท็อปปิ้ง · Topping', tops);
+  const sec=(title,items,cid)=> items.length?`<div class="menu-section" style="margin:4px 2px 6px;font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">${title} (${items.length}) — ลาก ⠿ หรือใช้ ▲▼ จัดลำดับ</div><div id="${cid}">`+items.map((m,i)=>row(m,i,items.length)).join('')+`</div>`:'';
+  $('menuMgr').innerHTML = sec('🥤 เครื่องดื่ม · Menu', drinks,'mgrDrinks')+(tops.length?'<div style="height:8px"></div>':'')+sec('🍫 ท็อปปิ้ง · Topping', tops,'mgrTops');
+  initMenuSort();
 }
+// Drag-and-drop reorder (fast) on top of the ▲▼ fallback — SortableJS handles touch + mouse.
+function initMenuSort(){ if(!window.Sortable) return;
+  ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,onEnd:saveMenuOrder}); } }); }
+window.saveMenuOrder=async(evt)=>{ const el=evt&&evt.to; if(!el) return;
+  const ids=[...el.querySelectorAll('[data-id]')].map(n=>Number(n.dataset.id)).filter(Boolean);
+  if(!ids.length) return;
+  try{ await api('/api/menu/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})}); await loadMenu(); toast('จัดลำดับแล้ว ✓'); }catch(e){ toast(err(e)); renderMenuMgr(); } };
 // Reorder a menu item up/down (within its category) → changes the order in the customer + cashier grid.
 window.moveMenu=async(id,dir)=>{
   try{ const r=await api('/api/menu/'+id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});

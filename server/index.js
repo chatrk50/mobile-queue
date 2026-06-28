@@ -1020,6 +1020,12 @@ app.post('/api/menu/:id/move', (req, res) => {
   try { res.json(Q.moveMenuItem(req.params.id, req.body?.dir === 'up' ? 'up' : 'down')); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Drag-and-drop reorder: set a whole category's order from an ordered list of ids.
+app.post('/api/menu/order', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.setMenuOrder(req.body?.ids)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.delete('/api/menu/:id', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json(Q.deleteMenuItem(req.params.id));
