@@ -872,6 +872,21 @@ app.post('/api/cash/close', (req, res) => {
   try { res.json(Q.closeCashSession(cashBranch(req), { actorId: req.staff?.id || null, countedCash: req.body?.countedCash, note: req.body?.note || null })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Cash pay-in / pay-out ledger (manager): list a day, add a move, delete a move.
+app.get('/api/cash/moves', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.listCashMoves(cashBranch(req), req.query.date || null));
+});
+app.post('/api/cash/move', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.addCashMove(cashBranch(req), req.body?.kind, req.body?.amount, req.body?.remark || null, req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/cash/move/:id/delete', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deleteCashMove(req.params.id, cashBranch(req))); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Order history (PIN): completed/cancelled orders today, to re-check after the fact.
 app.get('/api/history', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
