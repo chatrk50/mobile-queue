@@ -498,7 +498,8 @@
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
     <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
-    <video id="scanVideo" playsinline muted style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
+    <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
+    <button class="ghost" style="width:100%;margin-top:10px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
 </div>
 
@@ -1559,10 +1560,12 @@ function renderMenuMgr(){
 }
 // Drag-and-drop reorder (fast) on top of the ▲▼ fallback — SortableJS handles touch + mouse.
 function initMenuSort(){ if(!window.Sortable) return;
+  const lockScroll=(e)=>e.preventDefault();   // stop the PAGE from scrolling while dragging (SortableJS auto-scroll still works)
   ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,
     forceFallback:true, fallbackOnBody:true, fallbackTolerance:4,   // reliable pointer-drag on iPad (native touch-drag couldn't move items up)
     scroll:true, scrollSensitivity:70, scrollSpeed:14,              // auto-scroll the list while dragging up/down
-    onEnd:saveMenuOrder}); } }); }
+    onStart:()=>{ document.addEventListener('touchmove', lockScroll, {passive:false}); document.body.style.overflow='hidden'; },
+    onEnd:(evt)=>{ document.removeEventListener('touchmove', lockScroll, {passive:false}); document.body.style.overflow=''; saveMenuOrder(evt); } }); } }); }
 window.saveMenuOrder=async(evt)=>{ const el=evt&&evt.to; if(!el) return;
   const ids=[...el.querySelectorAll('[data-id]')].map(n=>Number(n.dataset.id)).filter(Boolean);
   if(!ids.length) return;
