@@ -176,6 +176,7 @@
         </div>
       </div>
     </div>
+    <div id="tTimeline" style="display:none;margin:6px 2px 16px"></div>
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
       <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
@@ -1103,6 +1104,22 @@ window.saveQR=async()=>{
   }
 };
 
+// Order status timeline (Brewing→Ready style): รับออเดอร์ → กำลังทำ → พร้อมรับ → รับแล้ว
+const TL_STEPS=[{t:'รับออเดอร์',i:'📝'},{t:'กำลังทำ',i:'🍳'},{t:'พร้อมรับ',i:'🔔'},{t:'รับแล้ว',i:'🥤'}];
+function ticketStep(v){ if(v.status==='served') return 3; if(v.status==='called') return 2; if(v.making) return 1; if(v.status==='waiting') return 0; return -1; }
+function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
+  if(idx<0){ el.style.display='none'; return; } el.style.display='';
+  const prog=(idx/(TL_STEPS.length-1))*75;
+  el.innerHTML=`<div style="position:relative;padding-top:2px">
+    <div style="position:absolute;top:20px;left:12.5%;right:12.5%;height:3px;background:var(--line)"></div>
+    <div style="position:absolute;top:20px;left:12.5%;width:${prog}%;height:3px;background:var(--accent2)"></div>
+    <div style="position:relative;display:flex;justify-content:space-between">`
+    +TL_STEPS.map((s,i)=>{ const done=i<idx,cur=i===idx; const bg=done?'var(--accent2)':cur?'var(--accent)':'#fff';
+      const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--line)'; const icCol=(done||cur)?'#fff':'var(--muted)';
+      const tcol=cur?'var(--navy)':done?'var(--accent2)':'var(--muted)';
+      return `<div style="flex:1;text-align:center"><div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:16px;background:${bg};border:2px solid ${brd};color:${icCol}">${done?'✓':s.i}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
+    }).join('')+`</div></div>`;
+}
 function render(v){
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
@@ -1111,6 +1128,7 @@ function render(v){
   $('tCodeLabel').textContent = isPending ? 'ชำระเงินเพื่อรับหมายเลขคิว' : 'หมายเลขคิวของคุณ';
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
+  renderTimeline(ticketStep(v));   // status timeline (hidden for pending/cancelled)
   $('tLastCalled').textContent = (!isPending && v.last_called) ? ('กำลังเรียกคิว: '+v.last_called) : '';
   $('tRate').style.display='none';
   const cb=$('cancelBtn');
