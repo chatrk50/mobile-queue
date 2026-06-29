@@ -99,6 +99,7 @@
         <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
         <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
+        <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
         <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
@@ -279,6 +280,23 @@
       </div>
       <div id="loyLookupResult" style="margin-top:10px"></div>
     </div>
+  </div>
+
+  <!-- ANTI-FRAUD: revenue-reduction control (owner only) -->
+  <div id="controlCard" class="card" style="display:none;max-width:620px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>🛡️ ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideControl()">ปิด</button>
+    </div>
+    <div class="row between" style="align-items:center;margin-top:12px">
+      <h2 style="margin:0;font-size:15px">📅 รายวัน</h2>
+      <div class="row" style="gap:4px;align-items:center">
+        <button class="ghost" style="padding:4px 10px" onclick="ctlDay(-1)">‹</button>
+        <span id="ctlDate" style="font-size:13px;font-weight:700;min-width:104px;text-align:center">—</span>
+        <button class="ghost" style="padding:4px 10px" onclick="ctlDay(1)">›</button>
+      </div>
+    </div>
+    <div id="controlBody" style="margin-top:12px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
   </div>
 
   <!-- CASH DRAWER / Z-REPORT (owner/manager) -->
@@ -499,6 +517,7 @@
     <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
     <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
+    <div id="scanStatus" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--muted);white-space:pre-line"></div>
     <button class="ghost" style="width:100%;margin-top:10px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
 </div>
@@ -831,7 +850,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
@@ -840,6 +859,7 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
+  $('controlBtn').style.display='none'; const _cc=$('controlCard'); if(_cc) _cc.style.display='none';
   $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   $('adminBtn').style.display='none'; closeAdmin();
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
@@ -1270,6 +1290,25 @@ let CASH=null;
 window.hideCash=()=>{ $('cashCard').style.display='none'; $('dash').style.display=''; };
 window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   CMDATE=null; await loadCash(); loadCashMoves(); };
+// ---------- Anti-fraud: revenue-reduction control (owner) ----------
+let CTLDATE=null;
+window.hideControl=()=>{ $('controlCard').style.display='none'; $('dash').style.display=''; };
+window.showControl=async()=>{ ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
+window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
+window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };
+const _ctlHM=(at)=>{ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } };
+const _ctlType={ void:{t:'ยกเลิก',c:'var(--danger)'}, waste:{t:'ของเสีย',c:'#b45309'}, discount:{t:'ลดราคา',c:'#7c3aed'} };
+function renderControl(d){ $('ctlDate').textContent=d.date||'—'; const tt=_ctlType;
+  const tiles=`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="flex:1;min-width:120px;background:var(--surface,#f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div class="muted" style="font-size:11px">ลดยอดรวมวันนี้</div><div style="font-size:20px;font-weight:800;color:var(--danger)">฿${d.total||0}</div><div class="muted" style="font-size:11px">${d.count||0} รายการ</div></div>
+    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.void.c}">ยกเลิก</div><div style="font-weight:800">฿${d.byType.void||0}</div></div>
+    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.waste.c}">ของเสีย</div><div style="font-weight:800">฿${d.byType.waste||0}</div></div>
+    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.discount.c}">ลดราคา</div><div style="font-weight:800">฿${d.byType.discount||0}</div></div>
+  </div>`;
+  const staff=(d.byStaff&&d.byStaff.length)?`<div style="margin-bottom:14px"><h2 style="margin:0 0 6px;font-size:14px">👤 แยกตามพนักงาน</h2>${d.byStaff.map(s=>`<div class="row between" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>${esc(s.staff)}</b><span style="font-weight:800">฿${s.amount}</span></div>`).join('')}</div>`:'';
+  const ev=(d.events&&d.events.length)?d.events.map(e=>{const m=tt[e.type]||{t:e.type,c:'var(--muted)'}; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);min-width:42px">${_ctlHM(e.at)}</span><span class="pill" style="font-size:10px;background:${m.c};color:#fff;flex:none">${m.t}</span><div style="flex:1;min-width:0"><div style="font-size:13px"><b>฿${e.amount}</b>${e.ticketNo?(' · คิว '+e.ticketNo):''}${e.customer?(' · '+esc(e.customer)):''}</div>${e.reason?('<div class="muted" style="font-size:11px">'+esc(e.reason)+'</div>'):''}</div><span style="font-size:11px;color:var(--muted);flex:none">${esc(e.staff)}</span></div>`;}).join(''):'<p class="muted" style="font-size:13px;padding:10px">ไม่มีการลดยอดในวันนี้ ✓</p>';
+  const redeem=(d.redeems&&d.redeems.length)?`<div style="margin-top:14px"><h2 style="margin:0 0 6px;font-size:14px">🎁 แลกของรางวัล/วันเกิด (เคาน์เตอร์)</h2>${d.redeems.map(r=>`<div class="row between" style="padding:6px 10px;border-bottom:1px solid var(--line)"><div style="font-size:12.5px">${esc(r.customer||'—')}<div class="muted" style="font-size:11px">${esc(r.note||'')}</div></div><span style="font-size:11px;color:var(--muted)">${_ctlHM(r.at)}</span></div>`).join('')}</div>`:'';
+  $('controlBody').innerHTML=tiles+staff+`<h2 style="margin:0 0 4px;font-size:14px">📋 รายการ</h2><div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${ev}</div>`+redeem; }
 window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); renderCash(); }catch(e){ toast(err(e)); } };
 // Pay In/Out ledger (per Bangkok day, navigable). pay_out shown as a deduction; pay_in as added cash.
 let CMDATE=null;
@@ -2596,21 +2635,30 @@ window.closeCheckin=()=>{ $('checkinPop').style.display='none'; $('checkinImg').
 
 // Scan a customer's member QR (เbackend /m?u=<lineUserId>) → look them up → show the profile card.
 let _scanStream=null, _scanRAF=null;
+const _scanSay=(m)=>{ const s=$('scanStatus'); if(s) s.textContent=m||''; };
+// Legacy getUserMedia shim (very old WebKit exposed it only on navigator.*) so we never hard-fail on capability checks.
+function _getCam(constraints){
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) return navigator.mediaDevices.getUserMedia(constraints);
+  const legacy=navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
+  if(legacy) return new Promise((res,rej)=>legacy.call(navigator,constraints,res,rej));
+  return Promise.reject(new Error('no-getusermedia'));
+}
 window.openScanner=async()=>{
-  if(typeof jsQR==='undefined'){ toast('ตัวสแกนยังโหลดไม่เสร็จ — ลองอีกครั้ง'); return; }
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('อุปกรณ์นี้เปิดกล้องไม่ได้'); return; }
-  if(!window.isSecureContext){ toast('ต้องเปิดผ่าน https เท่านั้นจึงจะใช้กล้องได้'); return; }
-  $('scanPop').style.display='flex';
-  try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}}); }
+  $('scanPop').style.display='flex'; _scanSay('กำลังเปิดกล้อง…');
+  if(typeof jsQR==='undefined'){ _scanSay('ตัวอ่าน QR ยังโหลดไม่เสร็จ — ปิดแล้วลองใหม่อีกครั้ง'); return; }
+  if(!window.isSecureContext){ _scanSay('⚠️ ต้องเปิดผ่าน https:// เท่านั้น\nURL ปัจจุบัน: '+location.protocol+'//'+location.host); return; }
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(navigator.getUserMedia||navigator.webkitGetUserMedia)){ _scanSay('⚠️ เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง (getUserMedia)\nลองเปิดด้วย Safari หรือ Chrome เวอร์ชันล่าสุด — อย่าเปิดผ่านแอปอื่น'); return; }
+  try{ _scanStream=await _getCam({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}}); }
   catch(e){
     // Some front-camera-only devices (older iPads/laptops) reject 'environment' — retry with any camera.
-    try{ _scanStream=await navigator.mediaDevices.getUserMedia({video:true}); }
+    try{ _scanStream=await _getCam({video:true}); }
     catch(e2){ const n=(e2&&e2.name)||'';
-      const msg = (n==='NotAllowedError'||n==='SecurityError') ? 'กล้องถูกปฏิเสธ — ไปตั้งค่าเบราว์เซอร์ > อนุญาตกล้องของเว็บนี้ แล้วลองใหม่'
-        : (n==='NotFoundError'||n==='OverconstrainedError') ? 'ไม่พบกล้องบนอุปกรณ์นี้'
-        : (n==='NotReadableError') ? 'กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอปนั้นแล้วลองใหม่'
-        : 'เปิดกล้องไม่ได้ — ตรวจสอบสิทธิ์กล้องในเบราว์เซอร์';
-      toast(msg); closeScanner(); return; } }
+      const msg = (n==='NotAllowedError'||n==='SecurityError') ? '🚫 กล้องถูกปฏิเสธ\nแตะไอคอน 🔒/AA บนแถบ URL > ตั้งค่าเว็บไซต์ > กล้อง > อนุญาต แล้วกดสแกนใหม่'
+        : (n==='NotFoundError'||n==='OverconstrainedError') ? '📷 ไม่พบกล้องบนอุปกรณ์นี้'
+        : (n==='NotReadableError') ? '⚠️ กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอป/แท็บที่ใช้กล้องแล้วลองใหม่'
+        : ('เปิดกล้องไม่ได้ ['+(n||'unknown')+']\n'+((e2&&e2.message)||'')+'\nลองพิมพ์เบอร์แทนได้ด้านล่าง');
+      _scanSay(msg); return; } }   // keep popup open so the cashier can read the error + use the phone fallback
+  _scanSay('');
   const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.onloadedmetadata=()=>{ v.play().catch(()=>{}); }; try{ await v.play(); }catch(e){}
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;

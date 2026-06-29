@@ -877,6 +877,11 @@ app.get('/api/cash/moves', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.listCashMoves(cashBranch(req), req.query.date || null));
 });
+// Anti-fraud control: owner-only view of every revenue-reducing action (void/waste/discount/redeem) by day + staff.
+app.get('/api/control/reductions', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.listReductions(cashBranch(req), req.query.date || null));
+});
 app.post('/api/cash/move', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.addCashMove(cashBranch(req), req.body?.kind, req.body?.amount, req.body?.remark || null, req.staff?.id || null)); }
