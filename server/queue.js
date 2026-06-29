@@ -1330,6 +1330,32 @@ export function loyaltyByPhone(phone) {
 // line_user_id (LINE) OR customer_key ('tel:<phone>') matches the key. ----
 /** Full profile for one customer key (LINE userId or 'tel:<digits>'). `found` is false for an
  *  unknown phone with zero history. Safe to call regardless of the loyalty-rewards toggle. */
+/** A customer's own order history for the LIFF "ประวัติการสั่ง" screen: each order with its
+ *  items, total, time and a human status. Keyed by their LINE id (or tel: key) — read-only. */
+export function customerOrders(key, limit = 20) {
+  if (!key) return [];
+  const lim = Math.min(50, Math.max(1, Number(limit) || 20));
+  const orders = db.prepare(
+    `SELECT t.id AS ticket_id, t.code, t.status AS tstatus, o.id AS order_id, o.total, o.discount,
+            o.payment_status, o.void_kind, o.created_at, o.paid_at
+       FROM tickets t JOIN orders o ON o.ticket_id=t.id
+      WHERE (t.line_user_id=? OR t.customer_key=?)
+      ORDER BY o.id DESC LIMIT ?`
+  ).all(key, key, lim);
+  const itemStmt = db.prepare("SELECT name, qty, price FROM order_items WHERE order_id=? AND kind='base'");
+  return orders.map((o) => {
+    const status = o.payment_status === 'void' ? (o.void_kind === 'refund' ? 'คืนเงินแล้ว' : 'ยกเลิกแล้ว')
+      : o.payment_status === 'paid' ? (o.tstatus === 'served' ? 'รับแล้ว' : 'ชำระแล้ว')
+      : 'รอชำระเงิน';
+    const kind = o.payment_status === 'void' ? 'void' : (o.payment_status === 'paid' ? 'paid' : 'pending');
+    return {
+      ticketId: o.ticket_id, code: o.code || null, status, kind,
+      at: o.paid_at || o.created_at,
+      total: r2((o.total || 0) - (o.discount || 0)), discount: r2(o.discount || 0),
+      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+    };
+  });
+}
 export function customerProfile(key) {
   if (!key) return { found: false };
   const isPhone = key.startsWith('tel:');

@@ -354,6 +354,11 @@ app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
   try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
   catch (e) { res.status(200).json({ known: false, error: e.message }); }
 });
+// Customer's own order history (LIFF "ประวัติการสั่ง") — keyed by their LINE id, read-only.
+app.get('/api/customers/:lineUserId/orders', (req, res) => {
+  try { res.json({ orders: Q.customerOrders(req.params.lineUserId, req.query.limit) }); }
+  catch (e) { res.status(200).json({ orders: [], error: e.message }); }
+});
 
 // ---------- Stores & zones ----------
 app.get('/api/stores', (req, res) => {

@@ -79,6 +79,7 @@
       </div>
       <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
     </div>
+    <div id="historyLink" style="display:none;margin:8px 2px 0;text-align:right"><span style="font-size:12.5px;color:var(--accent);font-weight:700;cursor:pointer" onclick="openOrderHistory()"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px;vertical-align:-2px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> ประวัติการสั่ง ›</span></div>
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -323,6 +324,12 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
+<!-- ประวัติการสั่ง (customer order history) -->
+<div id="historyLiffCard" class="card" style="display:none;max-width:480px;margin:0 auto">
+  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()">✕</button></div>
+  <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+</div>
+
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
@@ -541,6 +548,7 @@ let FAV=null;
 async function loadMemberStrip(){
   const el=$('memberStrip'); if(!el) return; el.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
+  const hl=$('historyLink'); if(hl) hl.style.display='block';   // order history is for any LINE customer (independent of loyalty)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
     if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
@@ -849,6 +857,36 @@ function renderBasket(){
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
 window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); };
 window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+// ---------- ประวัติการสั่ง (customer order history) ----------
+window.openOrderHistory=async()=>{ if(!lineUserId) return;
+  show('getCard',false); show('historyLiffCard',true);
+  const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
+  try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
+  catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
+window.closeOrderHistory=()=>{ show('historyLiffCard',false); show('getCard',true); };
+function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
+const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
+function renderOrderHistory(orders){ const box=$('historyLiffList');
+  if(!orders.length){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">ยังไม่มีประวัติการสั่ง 🙂</p>'; return; }
+  box.innerHTML=orders.map((o,i)=>{
+    const summary=o.items.map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
+    const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0"><span>${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
+    return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px">
+      <div class="row between" style="align-items:flex-start;cursor:pointer" onclick="toggleHistDetail(${i})">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;color:var(--navy);font-size:15px">${o.code?('คิว '+o.code):('ออเดอร์ #'+o.ticketId)}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${fmtHistDate(o.at)}</div>
+          <div class="muted" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summary}</div>
+        </div>
+        <div style="text-align:right;flex:none;margin-left:10px">
+          <div style="font-weight:800;color:var(--navy);font-size:15px">฿${o.total}</div>
+          <span style="display:inline-block;font-size:11px;margin-top:5px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
+        </div>
+      </div>
+      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--accent2);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
+    </div>`;}).join('');
+}
+window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=(d.style.display==='none')?'':'none'; };
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
   if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
