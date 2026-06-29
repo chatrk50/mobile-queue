@@ -1229,6 +1229,15 @@ export function composeDailySummary(branchId = null) {
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
+  // Anti-fraud: surface today's revenue-reductions (who reduced revenue) in the owner's daily push.
+  try {
+    const red = listReductions(branchId || 1);
+    if (red.total > 0 || (red.redeems && red.redeems.length)) {
+      lines.push(`🛡️ ลดยอดรวม ฿${red.total} (ยกเลิก ฿${red.byType.void} · ของเสีย ฿${red.byType.waste} · ลดราคา ฿${red.byType.discount})`);
+      if (red.byStaff && red.byStaff.length) lines.push('👤 ' + red.byStaff.map((s) => `${s.staff} ฿${s.amount}`).join(' · '));
+      if (red.redeems && red.redeems.length) lines.push(`🎁 แลกของรางวัล/วันเกิด ${red.redeems.length} รายการ`);
+    }
+  } catch { /* additive — never break the summary */ }
   return lines.join('\n');
 }
 export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
