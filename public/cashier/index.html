@@ -516,8 +516,9 @@
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
     <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
-    <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
-    <div id="scanStatus" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--muted);white-space:pre-line"></div>
+    <canvas id="scanCanvas" style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;display:block"></canvas>
+    <video id="scanVideo" playsinline muted autoplay style="display:none"></video>
+    <div id="scanStatus" style="font-size:13px;margin-top:8px;min-height:16px;color:var(--navy);font-weight:600;white-space:pre-line"></div>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="switchScanCam()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>สลับกล้อง (หน้า/หลัง)</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
@@ -2664,21 +2665,23 @@ window.openScanner=async()=>{
         : ('เปิดกล้องไม่ได้ ['+(n||'unknown')+']\n'+((e2&&e2.message)||'')+'\nลองพิมพ์เบอร์แทนได้ด้านล่าง');
       _scanSay(msg); return; } }   // keep popup open so the cashier can read the error + use the phone fallback
   _scanSay('📷 กำลังเปิดภาพ…');
+  const env=_scanEnv();
   const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.muted=true;
-  // BLACK SCREEN FIX: stream acquired but video won't render → retry play() on every ready event + tap-to-start (iOS).
   const tryPlay=()=>{ try{ const p=v.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} };
-  v.onloadedmetadata=tryPlay; v.oncanplay=()=>{ tryPlay(); if(v.videoWidth) _scanSay(''); };
-  v.onclick=tryPlay;   // tap-to-start: iOS sometimes needs a gesture ON the element to begin frames
-  tryPlay();
-  // Watchdog: if no frames after ~2.8s, it's the classic black screen — surface WHY (camera label) + the fixes.
-  _scanWatch=setTimeout(()=>{ if(_scanStream && (!v.videoWidth || v.readyState<2)){
+  v.onloadedmetadata=tryPlay; v.oncanplay=tryPlay; tryPlay();
+  const pc=$('scanCanvas'), pg=pc&&pc.getContext('2d'); if(pc){ pc.width=pc.height=480; pc.onclick=tryPlay; }   // tap-to-start on the visible canvas
+  // Watchdog: ALWAYS reports state+context after 2.8s, so a black screen tells us WHY (no-frames vs render vs PWA/in-app).
+  _scanWatch=setTimeout(()=>{ if(!_scanStream) return;
     const tr=(_scanStream.getVideoTracks&&_scanStream.getVideoTracks()[0])||null;
-    _scanSay('📷 กล้องเปิดแล้วแต่ภาพยังไม่มา\nกล้อง: '+(tr?(tr.label||'(ไม่มีชื่อ)'):'(ไม่พบ track)')+'\n• แตะที่จอดำเพื่อเริ่ม\n• กด "สลับกล้อง" ด้านล่าง\n• ถ้าเปิดในแอป LINE → เปิดด้วย Safari/Chrome แทน'); } }, 2800);
+    const ctx='['+env.os+(env.standalone?'·หน้าจอ(PWA)':'')+'·'+env.ctx+']';
+    if(v.videoWidth){ _scanSay(ctx+'\n✓ ได้ภาพ '+v.videoWidth+'×'+v.videoHeight+' — เล็ง QR สแกนได้เลย'); }
+    else { _scanSay(ctx+'\n📷 กล้องเปิด ('+(tr?(tr.label||'?'):'ไม่มี track')+') แต่ภาพไม่มา [state '+v.readyState+']'+(env.standalone?'\n⚠️ เปิดจากไอคอนหน้าจอ → ลองเปิดใน Safari ปกติ':'')+(env.ctx!=='browser'?'\n⚠️ เปิดในแอป '+env.ctx+' → เปิดใน Safari/Chrome แทน':'')); } }, 2800);
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;
     if(v.readyState>=2 && v.videoWidth){
       if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; _scanSay(''); }   // frames arrived → clear watchdog
-      // Downscale to ≤640px for jsQR — much faster per frame (the QR fills the frame at counter distance).
+      // VISIBLE PREVIEW via canvas — paints even if the <video> element refuses to render (THE black-screen fix).
+      if(pg){ const vw=v.videoWidth, vh=v.videoHeight, sz=Math.min(vw,vh); try{ pg.drawImage(v,(vw-sz)/2,(vh-sz)/2,sz,sz,0,0,480,480); }catch(e){} }
       const s=Math.min(1,640/v.videoWidth), cw=Math.round(v.videoWidth*s), ch=Math.round(v.videoHeight*s);
       c.width=cw; c.height=ch; g.drawImage(v,0,0,cw,ch);
       let r=null; try{ const d=g.getImageData(0,0,cw,ch); r=jsQR(d.data,d.width,d.height,{inversionAttempts:'dontInvert'}); }catch(e){}
@@ -2686,6 +2689,12 @@ window.openScanner=async()=>{
     _scanRAF=requestAnimationFrame(tick); };
   _scanRAF=requestAnimationFrame(tick);
 };
+// Detect the runtime context so the scanner diagnostic can pinpoint a black screen (iOS PWA / in-app webview block camera).
+function _scanEnv(){ const ua=navigator.userAgent||'';
+  const standalone=(window.navigator.standalone===true)||!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
+  const ctx=/Line\//i.test(ua)?'LINE':(/FBAN|FBAV|Instagram/i.test(ua)?'FB/IG':(/; wv\)|WebView/i.test(ua)?'WebView':'browser'));
+  const os=/iPhone|iPad|iPod/i.test(ua)?'iOS':(/Android/i.test(ua)?'Android':'PC');
+  return {os,standalone,ctx}; }
 // Toggle front/back camera — fixes black screen when the default (back) camera fails to render.
 window.switchScanCam=()=>{ _scanFacing = (_scanFacing==='environment') ? 'user' : 'environment'; _scanSay('🔄 สลับกล้อง…'); openScanner(); };
 window.closeScanner=()=>{ if(_scanRAF) cancelAnimationFrame(_scanRAF); _scanRAF=null; if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; } if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; } const v=$('scanVideo'); if(v){ v.onclick=null; v.srcObject=null; } _scanFacing='environment'; $('scanPop').style.display='none'; };
