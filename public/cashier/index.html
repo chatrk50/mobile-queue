@@ -523,7 +523,7 @@
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
     <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
     <div id="scanStatus" style="font-size:13px;margin-top:8px;min-height:16px;color:var(--navy);font-weight:600;white-space:pre-line"></div>
-    <button class="ok" style="width:100%;margin-top:8px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>🎥 อนุญาต / เปิดกล้องอีกครั้ง</button>
+    <button id="scanRetryBtn" class="ghost" style="width:100%;margin-top:8px;display:none;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>เปิดกล้องอีกครั้ง</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="switchScanCam()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>สลับกล้อง (หน้า/หลัง)</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
@@ -723,7 +723,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-06-29.3';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-06-29.4';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -2666,6 +2666,7 @@ window.openScanner=async()=>{
   if(_scanRAF){ cancelAnimationFrame(_scanRAF); _scanRAF=null; }
   if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
   if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; }
+  const _rb=$('scanRetryBtn'); if(_rb) _rb.style.display='none';   // retry/permission button stays hidden unless the camera actually fails
   if(typeof jsQR==='undefined'){ _scanSay('ตัวอ่าน QR ยังโหลดไม่เสร็จ — ปิดแล้วลองใหม่อีกครั้ง'); return; }
   if(!window.isSecureContext){ _scanSay('⚠️ ต้องเปิดผ่าน https:// เท่านั้น\nURL ปัจจุบัน: '+location.protocol+'//'+location.host); return; }
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(navigator.getUserMedia||navigator.webkitGetUserMedia)){ _scanSay('⚠️ เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง (getUserMedia)\nลองเปิดด้วย Safari หรือ Chrome เวอร์ชันล่าสุด — อย่าเปิดผ่านแอปอื่น'); return; }
@@ -2678,7 +2679,7 @@ window.openScanner=async()=>{
         : (n==='NotFoundError'||n==='OverconstrainedError') ? '📷 ไม่พบกล้องบนอุปกรณ์นี้'
         : (n==='NotReadableError') ? '⚠️ กล้องถูกใช้งานโดยแอปอื่นอยู่ — ปิดแอป/แท็บที่ใช้กล้องแล้วลองใหม่'
         : ('เปิดกล้องไม่ได้ ['+(n||'unknown')+']\n'+((e2&&e2.message)||'')+'\nลองพิมพ์เบอร์แทนได้ด้านล่าง');
-      _scanSay(msg); return; } }   // keep popup open so the cashier can read the error + use the phone fallback
+      _scanSay(msg); if(_rb) _rb.style.display=''; return; } }   // camera failed → surface retry + keep popup for the phone fallback
   _scanSay('📷 กำลังเปิดภาพ…');
   const env=_scanEnv();
   const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.muted=true;
@@ -2690,11 +2691,11 @@ window.openScanner=async()=>{
     const tr=(_scanStream.getVideoTracks&&_scanStream.getVideoTracks()[0])||null;
     const ctx='['+env.os+(env.standalone?'·หน้าจอ(PWA)':'')+'·'+env.ctx+']';
     if(v.videoWidth){ _scanSay(ctx+'\n✓ ได้ภาพ '+v.videoWidth+'×'+v.videoHeight+' — เล็ง QR สแกนได้เลย'); }
-    else { _scanSay(ctx+'\n📷 กล้องเปิด ('+(tr?(tr.label||'?'):'ไม่มี track')+') แต่ภาพไม่มา [state '+v.readyState+']'+(env.standalone?'\n⚠️ เปิดจากไอคอนหน้าจอ → ลองเปิดใน Safari ปกติ':'')+(env.ctx!=='browser'?'\n⚠️ เปิดในแอป '+env.ctx+' → เปิดใน Safari/Chrome แทน':'')); } }, 2800);
+    else { _scanSay(ctx+'\n📷 กล้องเปิด ('+(tr?(tr.label||'?'):'ไม่มี track')+') แต่ภาพไม่มา [state '+v.readyState+']'+(env.standalone?'\n⚠️ เปิดจากไอคอนหน้าจอ → ลองเปิดใน Safari ปกติ':'')+(env.ctx!=='browser'?'\n⚠️ เปิดในแอป '+env.ctx+' → เปิดใน Safari/Chrome แทน':'')); if(_rb) _rb.style.display=''; } }, 2800);
   const c=document.createElement('canvas'), g=c.getContext('2d',{willReadFrequently:true});
   const tick=()=>{ if(!_scanStream) return;
     if(v.readyState>=2 && v.videoWidth){
-      if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; _scanSay(''); }   // frames arrived → clear watchdog
+      if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; _scanSay(''); if(_rb) _rb.style.display='none'; }   // frames arrived → clear watchdog + hide retry
       // VISIBLE PREVIEW via canvas — paints even if the <video> element refuses to render (THE black-screen fix).
       if(pg){ const vw=v.videoWidth, vh=v.videoHeight, sz=Math.min(vw,vh); try{ pg.drawImage(v,(vw-sz)/2,(vh-sz)/2,sz,sz,0,0,480,480); }catch(e){} }
       const s=Math.min(1,640/v.videoWidth), cw=Math.round(v.videoWidth*s), ch=Math.round(v.videoHeight*s);
