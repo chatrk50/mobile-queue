@@ -107,6 +107,7 @@
         <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
         <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
         <button id="featuresBtn" class="ghost adm" style="display:none" onclick="showFeatures()"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>ตั้งค่าระบบ</button>
+        <button class="ghost adm" onclick="forceUpdate()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>อัปเดตแอป (เวอร์ชันล่าสุด)</button>
       </div>
     </div>
   </div>
@@ -124,6 +125,10 @@
     </div>
     <button id="loginBtn" style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
     <p id="loginErr" style="color:var(--danger);min-height:18px;margin-top:10px"></p>
+    <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px">
+      <button class="ghost" style="width:100%;font-size:13px;padding:9px;color:var(--muted)" onclick="forceUpdate()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>อัปเดตแอป (โหลดเวอร์ชันล่าสุด)</button>
+      <div class="muted" style="font-size:10px;margin-top:6px">เวอร์ชัน <span id="appVer">…</span></div>
+    </div>
   </div>
 
   <!-- DAILY REPORT -->
@@ -715,6 +720,15 @@
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
+// Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
+// This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
+const APP_VER='2026-06-29.1';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+window.forceUpdate=async()=>{
+  try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
+  try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
+  location.replace(location.pathname.replace(/[?#].*$/,'')+'?v='+Date.now());
+};
+try{ const _setVer=()=>{ const av=document.getElementById('appVer'); if(av) av.textContent=APP_VER; }; _setVer(); document.addEventListener('DOMContentLoaded',_setVer); }catch(e){}
 const zoneOpenState={};
 // "เรียกแล้ว" strip shows 5 by default; per-zone expand state + last snapshot so the
 // "แสดงทั้งหมด" toggle can re-render without waiting for the next SSE push.
