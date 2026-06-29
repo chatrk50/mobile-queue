@@ -1105,7 +1105,13 @@ window.saveQR=async()=>{
 };
 
 // Order status timeline (Brewing→Ready style): รับออเดอร์ → กำลังทำ → พร้อมรับ → รับแล้ว
-const TL_STEPS=[{t:'รับออเดอร์',i:'📝'},{t:'กำลังทำ',i:'🍳'},{t:'พร้อมรับ',i:'🔔'},{t:'รับแล้ว',i:'🥤'}];
+const TL_STEPS=[
+  {t:'รับออเดอร์',ic:'<rect x="8.5" y="2.5" width="7" height="3.5" rx="1"/><path d="M9 4H6a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-3"/><path d="M9 12h6M9 16h4"/>'},
+  {t:'กำลังทำ',ic:'<path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 4v4.5h-4.5"/>'},
+  {t:'พร้อมรับ',ic:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'},
+  {t:'รับแล้ว',ic:'<path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/>'},
+];
+const TL_CHECK='<path d="M20 6L9 17l-5-5"/>';
 function ticketStep(v){ if(v.status==='served') return 3; if(v.status==='called') return 2; if(v.making) return 1; if(v.status==='waiting') return 0; return -1; }
 function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
   if(idx<0){ el.style.display='none'; return; } el.style.display='';
@@ -1117,7 +1123,8 @@ function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
     +TL_STEPS.map((s,i)=>{ const done=i<idx,cur=i===idx; const bg=done?'var(--accent2)':cur?'var(--accent)':'#fff';
       const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--line)'; const icCol=(done||cur)?'#fff':'var(--muted)';
       const tcol=cur?'var(--navy)':done?'var(--accent2)':'var(--muted)';
-      return `<div style="flex:1;text-align:center"><div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:16px;background:${bg};border:2px solid ${brd};color:${icCol}">${done?'✓':s.i}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
+      const svg=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="stroke:${icCol};stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${done?TL_CHECK:s.ic}</svg>`;
+      return `<div style="flex:1;text-align:center"><div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
     }).join('')+`</div></div>`;
 }
 function render(v){

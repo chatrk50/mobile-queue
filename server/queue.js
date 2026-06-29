@@ -87,14 +87,9 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   const ticket = tx();
   const ahead = aheadCount(ticket);
 
-  // Confirmation push (fire and forget)
-  pushQueue(lineUserId,
-    `🎫 รับคิวเรียบร้อย\n` +
-    `หมายเลขคิวของคุณ: ${ticket.code}\n` +
-    `คิวรอก่อนหน้า: ${ahead}\n` +
-    `เราจะแจ้งเตือนทาง LINE เมื่อใกล้ถึงคิวของคุณค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน');
-
+  // Order-confirmation push removed to conserve the LINE OA monthly message quota — the customer
+  // already sees their queue number in the LIFF the moment they order; the 'almost your turn' and
+  // 'your turn' pushes (the ones that actually bring them back) still fire.
   return { ticket, ahead };
 }
 
