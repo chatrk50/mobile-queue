@@ -327,14 +327,15 @@
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
-    <div id="basketList" class="queue-list" style="margin:12px 0"></div>
-    <div style="margin-bottom:12px">
-      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:6px"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
-      <div class="row between" style="align-items:center"><span class="muted" style="font-size:13px;font-weight:700">ยอดชำระ</span><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
+    <div id="basketList" style="margin:14px 0"></div>
+    <div style="border-top:1px solid var(--line);padding-top:12px">
+      <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
+      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
-    <div class="row" style="gap:8px">
-      <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก</button>
-      <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยันสั่ง</button>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="ghost danger" style="flex:none;padding:13px 18px" onclick="cancelBasket()">ล้าง</button>
+      <button class="ok" id="basketConfirm" style="flex:1;font-size:16px;font-weight:800" onclick="confirmBasket()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน · ฿<span id="basketBtnAmt">0</span></button>
     </div>
   </div>
 </div>
@@ -818,20 +819,36 @@ function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge
 const FREE_TAG='<span style="background:#7c3aed;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle">ฟรี</span>';
 function renderBasket(){
   const groups=cartGroups(); const FREE=freeNameSet();
-  $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e;
-    return `<div class="qitem"><div style="flex:1">
-      <div class="row between"><b>${g.qty}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
-      ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 ${unit()}" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
+  $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e; const line=entryTotal(e)*g.qty;
+    const sweet = (e.sweet!=null&&e.sweet!==100)?`<div class="muted" style="font-size:12px;margin-top:2px">หวาน ${e.sweet}%</div>`:'';
+    const tops = (e.toppings||[]).map(t=>`<div class="muted" style="font-size:12px;margin-top:2px">+ ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</div>`).join('');
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:var(--navy);font-size:15px;line-height:1.3">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
+        ${sweet}${tops}
+        <div style="display:inline-flex;align-items:center;gap:14px;margin-top:11px;border:1px solid var(--line);border-radius:999px;padding:3px 5px">
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
+          <b style="min-width:16px;text-align:center;font-size:15px;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
+        </div>
+      </div>
+      <div style="text-align:right;flex:none">
+        <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
+        <button class="ghost danger" style="padding:5px 9px;margin-top:12px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+      </div>
+    </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
   let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
   disc=Math.min(disc,sub); const net=sub-disc;
+  $('basketSub').textContent = sub;
   const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
-  $('basketTotal').textContent = net;
+  $('basketTotal').textContent = net; const ba=$('basketBtnAmt'); if(ba) ba.textContent=net;
   $('basketConfirm').disabled = !cart.length;
   updateNudges();
 }
+// Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
+window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); };
+window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
   if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
