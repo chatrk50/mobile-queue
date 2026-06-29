@@ -2286,10 +2286,13 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
+    const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled
     pushQueue(t.line_user_id,
-      `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n` +
+      (byRequest
+        ? `✅ ยกเลิกออเดอร์ ${t.code} ให้เรียบร้อยแล้วค่ะ ตามที่คุณขอ\n`
+        : `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n`) +
       (pointsReturned > 0 ? `🔄 คืน ${pointsReturned} ดวงเข้าบัญชีของคุณแล้ว\n` : '') +
-      `หากมีข้อสงสัย กรุณาสอบถามพนักงาน ขอบคุณค่ะ`, null);
+      `สั่งใหม่ได้ตลอดเลยนะคะ ขอบคุณค่ะ 🙂`, null);
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
