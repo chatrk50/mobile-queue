@@ -521,9 +521,9 @@
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
     <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
-    <canvas id="scanCanvas" style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;display:block"></canvas>
-    <video id="scanVideo" playsinline muted autoplay style="display:none"></video>
+    <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
     <div id="scanStatus" style="font-size:13px;margin-top:8px;min-height:16px;color:var(--navy);font-weight:600;white-space:pre-line"></div>
+    <button class="ok" style="width:100%;margin-top:8px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>🎥 อนุญาต / เปิดกล้องอีกครั้ง</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="switchScanCam()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>สลับกล้อง (หน้า/หลัง)</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="closeScanner();openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5"/><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M9 16h.01M13 16h2"/></svg>สแกนไม่ติด? พิมพ์เบอร์แทน</button>
   </div>
@@ -722,7 +722,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-06-29.1';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-06-29.2';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -2682,8 +2682,8 @@ window.openScanner=async()=>{
   const env=_scanEnv();
   const v=$('scanVideo'); v.srcObject=_scanStream; v.setAttribute('playsinline',''); v.muted=true;
   const tryPlay=()=>{ try{ const p=v.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} };
-  v.onloadedmetadata=tryPlay; v.oncanplay=tryPlay; tryPlay();
-  const pc=$('scanCanvas'), pg=pc&&pc.getContext('2d'); if(pc){ pc.width=pc.height=480; pc.onclick=tryPlay; }   // tap-to-start on the visible canvas
+  v.onloadedmetadata=tryPlay; v.oncanplay=tryPlay; v.onclick=tryPlay; tryPlay();   // visible video preview + tap-to-start (iOS)
+  const pc=$('scanCanvas'), pg=pc&&pc.getContext('2d'); if(pc){ pc.width=pc.height=480; pc.onclick=tryPlay; }   // canvas optional (guarded)
   // Watchdog: ALWAYS reports state+context after 2.8s, so a black screen tells us WHY (no-frames vs render vs PWA/in-app).
   _scanWatch=setTimeout(()=>{ if(!_scanStream) return;
     const tr=(_scanStream.getVideoTracks&&_scanStream.getVideoTracks()[0])||null;
