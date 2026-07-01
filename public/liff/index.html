@@ -1025,7 +1025,8 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',false);
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
-      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen); show('counterInfo',true);
+      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
+      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', cfg.payCounter!==false);   // counter option only if a counter tender is active
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
@@ -1047,7 +1048,10 @@ const PAY_OPTS=[
   {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
 ];
 window.openPayPicker=()=>{
-  const opts = cfg.promptPay ? PAY_OPTS : PAY_OPTS.filter(o=>o.m==='counter');
+  // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
+  // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
+  let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay);
+  if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
   $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>

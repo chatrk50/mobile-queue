@@ -427,6 +427,17 @@ let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
 ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
 
+// ---- Tender toggle drives the customer picker: /api/config derives payCounter/payOnline from the
+//      ACTIVE tenders (listTenders(false)), so a toggled-off channel must leave that list. ----
+console.log('\n== Payment tender toggle → active list (customer picker source) ==');
+Q.addTender({ label: 'ZZ-online-test', kind: 'online' });
+const ot = Q.listTenders(true).find((t) => t.label === 'ZZ-online-test');
+ok(!!ot && Q.listTenders(false).some((t) => t.id === ot.id && t.kind === 'online'),
+  'a new active online tender shows in the active list');
+Q.updateTender(ot.id, { active: 0 });
+ok(!Q.listTenders(false).some((t) => t.id === ot.id),
+  'INVARIANT a toggled-off tender drops from the active list (LIFF picker filters by kind on this)');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
