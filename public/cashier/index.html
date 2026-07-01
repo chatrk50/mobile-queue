@@ -767,7 +767,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-01.1';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-01.2';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -938,7 +938,11 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
     || (t.customer_name||'').toLowerCase().includes(q)
     || (t.lines||[]).some(l=>(l.name||'').toLowerCase().includes(q)) );
   renderHistory(f, q); };
-window.showHistory=async()=>{ try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
+// One canonical list of every full-screen admin panel — every show* hides them ALL first
+// so two panels can never stack (previous per-function hide-lists drifted out of sync).
+const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
+function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
+window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
 function renderHistory(list, q){
@@ -971,7 +975,7 @@ window.refundHistory=async(tid,label)=>{
 // ---------- Sell history (daily / monthly) ----------
 let SALES=null, salesView='daily';
 window.hideSales=()=>{ $('salesCard').style.display='none'; $('dash').style.display=''; };
-window.showSales=async()=>{ try{ SALES=await api('/api/sales-history');
+window.showSales=async()=>{ hideAllPanels(); try{ SALES=await api('/api/sales-history');
   $('salesCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
@@ -1044,7 +1048,7 @@ function renderSales(){
 // ---------- Staff management (owner) ----------
 const ROLE_TH={owner:'เจ้าของร้าน',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
 window.hideStaff=()=>{ $('staffCard').style.display='none'; $('dash').style.display=''; };
-window.showStaff=async()=>{ try{ const list=await api('/api/staff');
+window.showStaff=async()=>{ hideAllPanels(); try{ const list=await api('/api/staff');
   $('staffCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   renderStaff(list);
 }catch(e){ toast(err(e)); } };
@@ -1098,7 +1102,7 @@ window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POS
 // ---------- Detailed reports (owner/manager) ----------
 let DET=null, detView='tx';
 window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
-window.showDetail=async()=>{ if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
+window.showDetail=async()=>{ hideAllPanels(); if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
   $('detailCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadDetail(); };
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
@@ -1196,7 +1200,7 @@ function renderDetail(){
 
 // ---------- Branch management (owner) ----------
 window.hideBranch=()=>{ $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showBranch=async()=>{ $('branchCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+window.showBranch=async()=>{ hideAllPanels(); $('branchCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   try{ renderBranch(await api('/api/branches')); }catch(e){ toast(err(e)); } };
 let _selBranchId=null, BRANCHES=[];
 function renderBranch(list){
@@ -1246,11 +1250,11 @@ window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{me
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
 window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showStock=async()=>{ $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
+window.showStock=async()=>{ hideAllPanels(); $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
   await loadStock(); };
 // ---------- Loyalty admin (owner/manager): earn-rate, rewards, lookup/redeem ----------
 window.hideLoyalty=()=>{ $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
-window.showLoyalty=async()=>{ $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
+window.showLoyalty=async()=>{ hideAllPanels(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='';
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
 window.onEarnMode=()=>{ const baht=$('earnBaht')&&$('earnBaht').checked; if($('loyBahtInp')) $('loyBahtInp').disabled=!baht; };
@@ -1349,45 +1353,45 @@ window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
 // ---------- Cash drawer / Z-report (owner/manager) ----------
 let CASH=null;
 window.hideCash=()=>{ $('cashCard').style.display='none'; $('dash').style.display=''; };
-window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+window.showCash=async()=>{ hideAllPanels(); $('cashCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   CMDATE=null; await loadCash(); loadCashMoves(); };
 // ---------- Anti-fraud: revenue-reduction control (owner) ----------
 let CTLDATE=null;
 window.hideControl=()=>{ $('controlCard').style.display='none'; $('dash').style.display=''; };
 // ---------- Payment tenders management (owner) ----------
 window.hideTenders=()=>{ $('tenderCard').style.display='none'; $('dash').style.display=''; };
-window.showTenders=async()=>{ ['cashCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('tenderCard').style.display=''; loadTenders(); };
+window.showTenders=async()=>{ hideAllPanels(); ['cashCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('tenderCard').style.display=''; loadTenders(); };
 window.loadTenders=async()=>{ const box=$('tenderList'); try{ renderTenders(await api('/api/tenders/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
 function renderTenders(list){ $('tenderList').innerHTML=(list&&list.length)?list.map(t=>`<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${t.active?'':'opacity:.55'}">
     <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(t.label)}</b> <span style="font-size:10px;padding:1px 7px;border-radius:999px;background:${t.kind==='online'?'rgba(0,181,216,.15)':'rgba(0,0,0,.05)'};color:${t.kind==='online'?'#0e7c93':'var(--muted)'};font-weight:700">${t.kind==='online'?'ในแอป':'เคาน์เตอร์'}</span></div>
-    <label style="display:flex;align-items:center;gap:5px;margin:0 8px;font-size:12px;cursor:pointer"><input type="checkbox" ${t.active?'checked':''} onchange="toggleTender(${t.id},this.checked)"> เปิด</label>
+    <button class="tgl ${t.active?'on':'off'}" style="margin:0 10px" aria-label="${t.active?'ปิดใช้':'เปิดใช้'}ช่องทางนี้" onclick="toggleTender(${t.id},${t.active?0:1})"></button>
     <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delTender(${t.id})">ลบ</button>
   </div>`).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีช่องทาง</p>'; }
-window.toggleTender=async(id,active)=>{ try{ await api('/api/tenders/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); }catch(e){ toast(err(e)); loadTenders(); } };
+window.toggleTender=async(id,active)=>{ try{ await api('/api/tenders/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadTenders(); }catch(e){ toast(err(e)); loadTenders(); } };
 window.addTender=async()=>{ const label=$('tenderNewLabel').value.trim(), kind=$('tenderNewKind').value; if(!label){ toast('ใส่ชื่อช่องทางก่อน'); return; }
   try{ await api('/api/tenders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,kind})}); $('tenderNewLabel').value=''; toast('เพิ่มช่องทางแล้ว ✓'); loadTenders(); }catch(e){ toast(err(e)); } };
 window.delTender=async(id)=>{ if(!(await appConfirm({title:'ลบช่องทางชำระเงิน',message:'ลบช่องทางนี้? (ยอดขายเก่าไม่กระทบ)',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/tenders/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadTenders(); }catch(e){ toast(err(e)); } };
 // ---------- Coupons management (owner) ----------
 window.hideCoupons=()=>{ $('couponCard').style.display='none'; $('dash').style.display=''; };
-window.showCoupons=async()=>{ ['cashCard','tenderCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('couponCard').style.display=''; loadCoupons(); };
+window.showCoupons=async()=>{ hideAllPanels(); ['cashCard','tenderCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('couponCard').style.display=''; loadCoupons(); };
 window.loadCoupons=async()=>{ const box=$('couponList'); try{ renderCoupons(await api('/api/coupons/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
 function renderCoupons(list){ $('couponList').innerHTML=(list&&list.length)?list.map(c=>{
     const disc=c.disc_type==='percent'?(c.disc_value+'%'+(c.max_disc>0?' (สูงสุด ฿'+c.max_disc+')':'')):('฿'+c.disc_value);
     const exp=c.expires_at?('หมดอายุ '+c.expires_at):'ไม่มีวันหมดอายุ';
     return `<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${c.active?'':'opacity:.55'}">
       <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(c.label)}</b> <span style="font-size:11px;font-weight:800;color:var(--accent2)">ลด ${disc}</span><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.code)} · ขั้นต่ำ ฿${c.min_spend} · ${exp}${c.usage_limit>0?(' · ใช้ '+c.used_count+'/'+c.usage_limit):''}</div></div>
-      <label style="display:flex;align-items:center;gap:5px;margin:0 8px;font-size:12px;cursor:pointer"><input type="checkbox" ${c.active?'checked':''} onchange="toggleCoupon(${c.id},this.checked)"> เปิด</label>
+      <button class="tgl ${c.active?'on':'off'}" style="margin:0 10px" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
       <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delCoupon(${c.id})">ลบ</button>
     </div>`;}).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง'; }
-window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); }catch(e){ toast(err(e)); loadCoupons(); } };
+window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
 window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabel').value.trim(), disc_type=$('cpType').value, disc_value=Number($('cpValue').value), min_spend=Number($('cpMin').value)||0, expires_at=$('cpExp').value||null;
   if(!code){ toast('ใส่โค้ดคูปอง'); return; } if(!(disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
   try{ await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,label,disc_type,disc_value,min_spend,expires_at})});
     ['cpCode','cpLabel','cpValue','cpMin','cpExp'].forEach(id=>{const el=$(id); if(el) el.value='';}); toast('สร้างคูปองแล้ว ✓'); loadCoupons(); }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };
-window.showControl=async()=>{ ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
+window.showControl=async()=>{ hideAllPanels(); ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
 window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
 window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };
 const _ctlHM=(at)=>{ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } };
@@ -1515,7 +1519,7 @@ function chartBars(rows, fmt){
     </div>`;}).join('')+'</div>';
 }
 window.hideCharts=()=>{ $('chartsCard').style.display='none'; $('dash').style.display=''; };
-window.showCharts=async()=>{ $('adminMenu').style.display='none';
+window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none';
   ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
   $('dash').style.display='none'; $('chartsCard').style.display='';
   $('chartsBody').innerHTML='<p class="muted">กำลังโหลด…</p>'; renderCharts(); };
@@ -1546,7 +1550,7 @@ async function renderCharts(){
 let _reportDate='';   // '' = today (live); 'YYYY-MM-DD' = a past Bangkok day (from the durable orders table)
 const bkkToday=()=> new Date(Date.now()+7*3600*1000).toISOString().slice(0,10);
 window.setReportDate=(d)=>{ _reportDate=(d&&d!==bkkToday())?d:''; showReport(); };
-window.showReport=async()=>{
+window.showReport=async()=>{ hideAllPanels();
   try{ const r=await api('/api/report'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); const p=r.pnl||{};
     const di=$('reportDateInp'); if(di) di.value=_reportDate||bkkToday();
     const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
@@ -1658,7 +1662,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 // ---------- Menu management ----------
 let MENU=[];
 async function loadMenu(channelId){ try{ MENU=await (await fetch('/api/menu'+(channelId?('?channelId='+channelId):''))).json(); }catch(e){ MENU=[]; } }
-window.showMenu=async()=>{ await loadMenu(); renderMenuMgr(); loadPriceMgr();
+window.showMenu=async()=>{ hideAllPanels(); await loadMenu(); renderMenuMgr(); loadPriceMgr();
   $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 // Owner-only: set delivery markup % per tier + platform commission % per channel.
 async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
