@@ -341,10 +341,28 @@
       <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
       <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
+    <div style="margin-top:10px;border-top:1px solid var(--line)">
+      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
+        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer" onclick="openPayPicker()">
+        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
+        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
     <div class="row" style="gap:8px;margin-top:14px">
       <button class="ghost danger" style="flex:none;padding:13px 18px" onclick="cancelBasket()">ล้าง</button>
       <button class="ok" id="basketConfirm" style="flex:1;font-size:16px;font-weight:800" onclick="confirmBasket()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน · ฿<span id="basketBtnAmt">0</span></button>
     </div>
+  </div>
+</div>
+
+<!-- Payment method picker (opened from the cart's ช่องทางชำระเงิน row) -->
+<div id="payPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกช่องทางชำระเงิน</h1><button class="ghost" style="padding:6px 12px" onclick="closePayPicker()">✕</button></div>
+    <div id="payPickerList" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -713,7 +731,7 @@ function itemImg(m){
   return fb;
 }
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
-window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
+window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
@@ -853,6 +871,7 @@ function renderBasket(){
   const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
   $('basketTotal').textContent = net; const ba=$('basketBtnAmt'); if(ba) ba.textContent=net;
   $('basketConfirm').disabled = !cart.length;
+  updateCartPayLabel();
   updateNudges();
 }
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
@@ -898,13 +917,15 @@ window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
 window.confirmBasket=async()=>{
   if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
+  if(cfg.promptPay && !cartPayMethod){ toast('เลือกช่องทางชำระเงินก่อนค่ะ'); openPayPicker(); return; }   // must pick a channel first
+  if(!cfg.promptPay) cartPayMethod='counter';   // counter-only shop → no choice needed
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
   const items=[];
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
-    ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
+    ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
     cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
@@ -967,8 +988,9 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
-      ['payReassure','payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
-      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
+      const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
+      show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
+      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen); show('counterInfo',true);
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
@@ -982,6 +1004,29 @@ function renderOrderBlock(v){
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
+// Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
+let cartPayMethod=null;
+const PAY_OPTS=[
+  {m:'kbank',t:'PromptPay · K PLUS (Kbank)',s:'ลูกค้า Kbank — กรอกยอดเอง',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'promptpay',t:'PromptPay · ธนาคารอื่น',s:'ยอดใส่อัตโนมัติ สแกนจ่ายได้เลย',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
+];
+window.openPayPicker=()=>{
+  const opts = cfg.promptPay ? PAY_OPTS : PAY_OPTS.filter(o=>o.m==='counter');
+  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
+    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
+      <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
+        <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
+      <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
+    </div>`;}).join('');
+  $('payPickerPop').style.display='flex';
+};
+window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
+window.selectPayMethod=(m)=>{ cartPayMethod=m; updateCartPayLabel(); closePayPicker(); };
+function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
+  const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
+  if(o){ el.style.color='var(--navy)'; el.innerHTML=esc(o.t)+' '+chev; } else { el.style.color='var(--muted)'; el.innerHTML='เลือก '+chev; } }
+window.openCoupon=()=>{ toast('🎟️ เร็ว ๆ นี้ — ตอนนี้แจ้งพนักงานที่เคาน์เตอร์เพื่อใช้สิทธิ์/แต้มค่ะ'); };
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
