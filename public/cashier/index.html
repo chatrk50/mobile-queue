@@ -2404,7 +2404,7 @@ function renderZone(snap){
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${makeBtns(t)}${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const called=snap.recentCalled||[];
   const calledCard=(t)=>`
