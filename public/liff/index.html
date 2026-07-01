@@ -9,6 +9,8 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
+  /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
+  :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
@@ -284,7 +286,7 @@
 <!-- "SURPRISE ME" random menu suggester -->
 <div id="randomPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
-    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()">✕</button></div>
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()" aria-label="ปิด">✕</button></div>
     <div id="randomReveal" style="min-height:188px;display:flex;align-items:center;justify-content:center;margin:8px 0 4px"></div>
     <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้</button>
     <div class="row" style="gap:9px">
@@ -303,7 +305,7 @@
         <!-- FRONT: data dropped into the art's baked boxes -->
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()">✕</button>
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div id="memberName" style="position:absolute;top:7.2%;left:6.9%;width:45%;height:17%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
           <div id="memberLevel" style="position:absolute;top:23%;left:65.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:75.6%;left:4%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
@@ -312,7 +314,7 @@
         </div>
         <!-- BACK: QR + details on the same tier colour -->
         <div id="memberBack" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()">✕</button>
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div style="background:#fff;border-radius:13px;padding:9px;box-shadow:0 4px 14px rgba(14,40,55,.18)"><img id="memberQR" alt="QR สมาชิก" style="width:132px;height:132px;display:block;object-fit:contain"></div>
           <p style="font-size:11px;margin:7px 0 0;text-align:center;color:#16314f;font-weight:600">แสดง QR ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
           <div id="memberStamp" style="display:none;margin-top:7px;background:rgba(255,255,255,.8);border-radius:10px;padding:6px 10px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
@@ -331,13 +333,13 @@
 <!-- BASKET REVIEW (step 4) -->
 <!-- ประวัติการสั่ง (customer order history) -->
 <div id="historyLiffCard" class="card" style="display:none;max-width:480px;margin:0 auto">
-  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()">✕</button></div>
+  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
   <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
 </div>
 
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" style="margin:14px 0"></div>
     <div style="border-top:1px solid var(--line);padding-top:12px">
@@ -365,7 +367,7 @@
 <!-- Payment method picker (opened from the cart's ช่องทางชำระเงิน row) -->
 <div id="payPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
   <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
-    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกช่องทางชำระเงิน</h1><button class="ghost" style="padding:6px 12px" onclick="closePayPicker()">✕</button></div>
+    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกช่องทางชำระเงิน</h1><button class="ghost" style="padding:6px 12px" onclick="closePayPicker()" aria-label="ปิด">✕</button></div>
     <div id="payPickerList" style="margin-top:14px"></div>
   </div>
 </div>

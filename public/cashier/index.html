@@ -9,6 +9,8 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
+  /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
+  :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) — left aligned */
   #adminMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
   #adminMenu button.adm svg{ flex:none; margin:0; }
