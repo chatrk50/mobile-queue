@@ -1161,8 +1161,27 @@ export function validateCoupon(code, customerKey, orderNet) {
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
 export function availableCoupons(customerKey, orderNet) {
   return listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
-    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value,
+    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+}
+/** Apply a coupon to an order at creation: re-validate SERVER-SIDE, add its discount (respecting any
+ *  existing free-giveaway discount + the coupon's stackable flag), record the use, bump used_count. */
+export function applyCouponToOrder(ticketId, code, customerKey = null) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  const existing = Math.max(0, Number(order.discount) || 0);
+  const v = validateCoupon(code, customerKey, order.total);
+  if (!v.ok) return { ok: false, reason: v.reason };
+  if (existing > 0 && !v.stackable) return { ok: false, reason: 'ใช้ร่วมกับส่วนลดอื่นไม่ได้' };
+  const couponDisc = Math.min(v.discount, Math.max(0, order.total - existing));
+  if (couponDisc <= 0) return { ok: false, reason: 'ไม่มีส่วนลดที่ใช้ได้' };
+  const totalDisc = r2(existing + couponDisc);
+  const reason = (order.discount_reason ? order.discount_reason + ' + ' : '') + 'คูปอง ' + v.code;
+  db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(totalDisc, reason, order.id);
+  db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)').run(v.couponId, order.id, customerKey, couponDisc);
+  db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id=?').run(v.couponId);
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: couponDisc, actor: null, meta: { coupon: v.code } });
+  return { ok: true, discount: couponDisc, totalDiscount: totalDisc, code: v.code };
 }
 /**
  * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
@@ -1946,7 +1965,7 @@ function freeGiveawayDiscount(lines, total) {
 }
 
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -2059,6 +2078,12 @@ export function createOrder(zoneId, items, opts = {}) {
     const ex = db.prepare('SELECT * FROM tickets WHERE client_token=?').get(clientToken);
     const o = ex ? db.prepare('SELECT total FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ex.id) : null;
     return { ticket: ex, total: o?.total ?? 0, idempotent: true };
+  }
+
+  // Apply a customer-selected coupon — the server re-validates (source of truth) + records the use.
+  // A now-invalid coupon (expired between pick and confirm) is ignored so the order still stands.
+  if (couponCode && r.ticket && !r.idempotent) {
+    try { applyCouponToOrder(r.ticket.id, couponCode, lineUserId); } catch { /* order stands without the discount */ }
   }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
@@ -2576,7 +2601,7 @@ export function ticketView(ticketId) {
     cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, discount: o.discount, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
+    order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
     loyalty,
   };
 }

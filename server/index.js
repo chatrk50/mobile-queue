@@ -483,6 +483,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
       source: 'customer',
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
+      couponCode: (req.body?.couponCode || '').toString().slice(0, 40) || null,
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));

@@ -345,6 +345,7 @@
     <div style="border-top:1px solid var(--line);padding-top:12px">
       <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
       <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div id="basketCouponRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
       <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--line)">
@@ -369,6 +370,13 @@
   <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
     <div class="row between"><h1 style="margin:0;font-size:19px">เลือกช่องทางชำระเงิน</h1><button class="ghost" style="padding:6px 12px" onclick="closePayPicker()" aria-label="ปิด">✕</button></div>
     <div id="payPickerList" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<div id="couponPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกคูปองส่วนลด</h1><button class="ghost" style="padding:6px 12px" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
+    <div id="couponPickerList" style="margin-top:14px"><p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p></div>
   </div>
 </div>
 
@@ -744,7 +752,7 @@ function itemImg(m){
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{
   if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
-  await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+  await loadMenu(); cart=[]; cartCoupon=null; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
@@ -879,12 +887,14 @@ function renderBasket(){
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
   let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
-  disc=Math.min(disc,sub); const net=sub-disc;
+  disc=Math.min(disc,sub); const preNet=sub-disc;
+  const cDisc=couponDiscountFor(preNet); const net=preNet-cDisc;
   $('basketSub').textContent = sub;
   const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
+  const cr=$('basketCouponRow'); if(cr){ if(cDisc>0){ cr.style.display='flex'; $('basketCouponLbl').textContent='คูปอง '+(cartCoupon.label||cartCoupon.code); $('basketCouponDisc').textContent='-฿'+cDisc; } else cr.style.display='none'; }
   $('basketTotal').textContent = net; const ba=$('basketBtnAmt'); if(ba) ba.textContent=net;
   $('basketConfirm').disabled = !cart.length;
-  updateCartPayLabel();
+  updateCartPayLabel(); updateCartCouponLabel();
   updateNudges();
 }
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
@@ -937,10 +947,10 @@ window.confirmBasket=async()=>{
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({items,lineUserId,customerName:displayName})});
+      body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
-    cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
+    cart=[]; cartCoupon=null; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
@@ -986,7 +996,8 @@ function renderOrderBlock(v){
     (l.toppings||[]).map(t=>`<div class="row between" style="margin-left:12px;color:var(--muted)"><span>- ${esc(t.name)}</span><span>฿${t.price*t.qty}</span></div>`).join('')
   ).join('');
   const disc=v.order.discount||0;
-  if(disc>0){ $('tOrderItems').innerHTML += `<div class="row between" style="color:#7c3aed;font-weight:800;margin-top:4px"><span>ส่วนลดของแถม (ฟรี)</span><span>-฿${disc}</span></div>`; }
+  if(disc>0){ const dlabel = v.order.discount_reason ? esc(v.order.discount_reason) : 'ส่วนลดของแถม (ฟรี)';
+    $('tOrderItems').innerHTML += `<div class="row between" style="color:#7c3aed;font-weight:800;margin-top:4px"><span>${dlabel}</span><span>-฿${disc}</span></div>`; }
   const net=Math.max(0, v.order.total - disc);
   $('tOrderTotal').textContent = '฿'+net;
   const pill=$('tPayPill'), st=v.order.status, total=net;
@@ -1047,12 +1058,15 @@ const PAY_OPTS=[
   {m:'promptpay',t:'PromptPay · ธนาคารอื่น',s:'ยอดใส่อัตโนมัติ สแกนจ่ายได้เลย',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
   {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
 ];
-window.openPayPicker=()=>{
+let _payPickMode='cart';   // 'cart' = choosing before the order · 'ticket' = re-choosing on the ticket (เปลี่ยนวิธีจ่าย)
+window.openPayPicker=(mode)=>{
+  _payPickMode = mode==='ticket' ? 'ticket' : 'cart';
+  const cur = _payPickMode==='ticket' ? payMethod : cartPayMethod;
   // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
   // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
   let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay);
   if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
-  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
+  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cur===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
@@ -1061,11 +1075,49 @@ window.openPayPicker=()=>{
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
-window.selectPayMethod=(m)=>{ cartPayMethod=m; updateCartPayLabel(); closePayPicker(); };
+window.selectPayMethod=(m)=>{
+  closePayPicker();
+  if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
+    payMethod=m; counterConfirmed=false;
+    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); }
+  } else { cartPayMethod=m; updateCartPayLabel(); }
+};
 function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
   if(o){ el.style.color='var(--navy)'; el.innerHTML=esc(o.t)+' '+chev; } else { el.style.color='var(--muted)'; el.innerHTML='เลือก '+chev; } }
-window.openCoupon=()=>{ toast('🎟️ เร็ว ๆ นี้ — ตอนนี้แจ้งพนักงานที่เคาน์เตอร์เพื่อใช้สิทธิ์/แต้มค่ะ'); };
+// ---- Coupon picker (Shopee-style): only REAL coupons, server-validated; grayed if not usable ----
+let cartCoupon=null, _availCoupons=[];
+function cartPreCouponNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
+  let d=0; cart.forEach(e=>{ if(FREE.has(e.name)) d+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty; }); });
+  return sub-Math.min(d,sub); }
+function couponDiscountFor(net){ if(!cartCoupon) return 0; if(net < (cartCoupon.min_spend||0)) return 0;
+  let d = cartCoupon.disc_type==='percent' ? net*cartCoupon.disc_value/100 : cartCoupon.disc_value;
+  if(cartCoupon.disc_type==='percent' && cartCoupon.max_disc>0) d=Math.min(d,cartCoupon.max_disc);
+  return Math.min(Math.round(d*100)/100, net); }
+function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
+  const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
+  el.innerHTML = cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev); }
+window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; };
+window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
+window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return; cartCoupon=c; closeCoupon(); renderBasket(); };
+window.openCoupon=async()=>{
+  const net=cartPreCouponNet(); const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
+  const box=$('couponPickerList'); box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p>';
+  $('couponPickerPop').style.display='flex';
+  try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total='+net); _availCoupons=r.coupons||[]; }
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;color:var(--danger);padding:16px 0">โหลดคูปองไม่สำเร็จ</p>'; return; }
+  if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
+  const clr = cartCoupon ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
+  box.innerHTML = clr + _availCoupons.map(c=>{
+    const disc = c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value);
+    const sel = cartCoupon && cartCoupon.code===c.code;
+    const meta = (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):'');
+    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':'#fff'};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
+      <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${esc(c.label)} <span style="color:var(--accent2)">ลด ${disc}</span></div>
+        <div class="muted" style="font-size:12px">${esc(c.code)}${meta?(' · '+meta):''}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div></span>
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
+    </div>`;}).join('');
+};
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
@@ -1270,7 +1322,7 @@ function renderStars(sel){
   $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
 }
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
-window.changePay=()=>{ payMethod=null; counterConfirmed=false; if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };   // #2 re-choose the payment channel
+window.changePay=()=>{ openPayPicker('ticket'); };   // re-choose via the SAME clean picker the cart uses (not the old inline chooser)
 window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
