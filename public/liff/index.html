@@ -1047,12 +1047,15 @@ const PAY_OPTS=[
   {m:'promptpay',t:'PromptPay · ธนาคารอื่น',s:'ยอดใส่อัตโนมัติ สแกนจ่ายได้เลย',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
   {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
 ];
-window.openPayPicker=()=>{
+let _payPickMode='cart';   // 'cart' = choosing before the order · 'ticket' = re-choosing on the ticket (เปลี่ยนวิธีจ่าย)
+window.openPayPicker=(mode)=>{
+  _payPickMode = mode==='ticket' ? 'ticket' : 'cart';
+  const cur = _payPickMode==='ticket' ? payMethod : cartPayMethod;
   // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
   // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
   let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay);
   if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
-  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
+  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cur===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
@@ -1061,7 +1064,13 @@ window.openPayPicker=()=>{
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
-window.selectPayMethod=(m)=>{ cartPayMethod=m; updateCartPayLabel(); closePayPicker(); };
+window.selectPayMethod=(m)=>{
+  closePayPicker();
+  if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
+    payMethod=m; counterConfirmed=false;
+    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); }
+  } else { cartPayMethod=m; updateCartPayLabel(); }
+};
 function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
   if(o){ el.style.color='var(--navy)'; el.innerHTML=esc(o.t)+' '+chev; } else { el.style.color='var(--muted)'; el.innerHTML='เลือก '+chev; } }
@@ -1270,7 +1279,7 @@ function renderStars(sel){
   $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
 }
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
-window.changePay=()=>{ payMethod=null; counterConfirmed=false; if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };   // #2 re-choose the payment channel
+window.changePay=()=>{ openPayPicker('ticket'); };   // re-choose via the SAME clean picker the cart uses (not the old inline chooser)
 window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
