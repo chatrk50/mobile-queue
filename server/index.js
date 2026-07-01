@@ -151,7 +151,12 @@ const pinOK = (req) => {
 
 // ---------- Public config (for frontends) ----------
 app.get('/api/config', (req, res) => {
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, promptPay: PAY_ONLINE && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
+  // Which payment KINDS the owner has enabled in ช่องทางชำระเงิน — the LIFF picker filters by these
+  // so toggling a tender off actually removes it from what the customer sees (owner choice: by kind).
+  const _act = Q.listTenders(false);
+  const payCounter = _act.some((t) => t.kind === 'counter');
+  const payOnline = _act.some((t) => t.kind === 'online');
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));

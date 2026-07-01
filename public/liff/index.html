@@ -1010,11 +1010,11 @@ function renderOrderBlock(v){
     show('counterConfirmedMsg',true);
     return;
   }
-  if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
-  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
+  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
-    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='⏳ ยังไม่ชำระ ฿'+total;
+    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
     show('payChoice',true);
     if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
@@ -1025,7 +1025,8 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',false);
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
-      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen); show('counterInfo',true);
+      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
+      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', cfg.payCounter!==false);   // counter option only if a counter tender is active
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
@@ -1036,7 +1037,7 @@ function renderOrderBlock(v){
       applyPayChoice();
     }
   }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
@@ -1047,7 +1048,10 @@ const PAY_OPTS=[
   {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
 ];
 window.openPayPicker=()=>{
-  const opts = cfg.promptPay ? PAY_OPTS : PAY_OPTS.filter(o=>o.m==='counter');
+  // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
+  // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
+  let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay);
+  if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
   $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
