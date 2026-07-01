@@ -2547,11 +2547,24 @@ export function ticketView(ticketId) {
       loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: loyaltyBalance(t.line_user_id).points, per: getStampsPerReward() };
     }
   }
+  // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones
+  // are already covered by cancelRequested), and only a whitelist so internal void notes such as
+  // "ทำพลาด" / "ลูกค้าไม่พอใจ" never leave the building.
+  let cancelReason = null;
+  if (t.status === 'cancelled' && !t.cancel_requested) {
+    const vr = db.prepare('SELECT void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
+    const raw = (vr && vr.void_reason) || '';
+    const MAP = {
+      'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
+      'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
+    };
+    cancelReason = MAP[raw] || (raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+  }
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
     // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
     canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
-    cancelRequested: !!t.cancel_requested, making: !!t.making_at,
+    cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,

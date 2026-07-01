@@ -991,9 +991,11 @@ function renderOrderBlock(v){
     const byReq=!!v.cancelRequested;
     const box=$('counterConfirmedMsg');
     box.style.background='#fef2f2'; box.style.border='1px solid #fca5a5';
+    const _reason = (!byReq && v.cancelReason) ? '<div style="font-size:13px;color:#7f1d1d;margin-top:8px;background:#fff;border:1px dashed #fca5a5;border-radius:10px;padding:8px 10px">'+esc(v.cancelReason)+'</div>' : '';
     box.innerHTML='<div style="font-weight:800;color:var(--danger);font-size:17px">ออเดอร์ถูกยกเลิกแล้ว</div>'
       +'<div style="font-size:13.5px;color:#b91c1c;margin-top:6px;font-weight:600">'
-      +(byReq?'ยกเลิกตามคำขอของคุณแล้ว · กรุณาทำรายการใหม่':'ออเดอร์นี้ถูกยกเลิก · กรุณาทำรายการใหม่')+'</div>';
+      +(byReq?'ยกเลิกตามคำขอของคุณแล้ว · กรุณาทำรายการใหม่':'ออเดอร์นี้ถูกยกเลิก · กรุณาทำรายการใหม่')+'</div>'
+      +_reason;
     show('counterConfirmedMsg',true);
     return;
   }
