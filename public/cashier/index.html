@@ -767,7 +767,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.1';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.2';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -897,11 +897,14 @@ window.login=async()=>{
     // Per-staff login FIRST: each staffer signs in with their own PIN and gets a signed
     // session cookie; all requests then ride that cookie (PIN stays null). Actions are
     // attributed to the real staff member.
+    const LOCK_MSG='ใส่ PIN ผิดหลายครั้ง — ระบบล็อกชั่วคราว กรุณารอสักครู่แล้วลองใหม่';
     const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+    if(sr.status===429){ $('loginErr').textContent=LOCK_MSG; return; }   // locked: DON'T keep trying (each try extends nothing but stays stuck)
     if(sr.ok){ ME=(await sr.json().catch(()=>null))?.staff||null; PIN=null; }
     else {
       // Legacy fallback: the shared admin CASHIER_PIN (sends x-cashier-pin per request).
       const lr=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
+      if(lr.status===429){ $('loginErr').textContent=LOCK_MSG; return; }
       if(!((await lr.json().catch(()=>({}))).ok)){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
       PIN=pin; ME=null;
     }
@@ -1771,6 +1774,7 @@ window.delItem=async(id)=>{ if(!(await appConfirm({title:'ลบเมนู',me
 let cart=[], orderZoneId=null, pendingDrink=null, pendingTops={}, CHANNELS=[], orderChannel=null, _editTicket=null, _editEntryIdx=null, _detailIdx=null, _orderCust=null;
 let _kitchenStatus={};  // "ticketId:lineIndex" -> null | 'making' | 'done' (per drink line)
 const _makingSent=new Set();  // tickets we've already flipped to making_at from a kitchen mark (idempotent guard)
+const _readySent=new Set();   // tickets we've already announced พร้อมรับ (all lines done)
 async function loadChannels(){ if(CHANNELS.length) return; try{ CHANNELS=await api('/api/channels'); }catch(e){ CHANNELS=[]; } }
 function renderChannelSel(){ const sel=$('orderChannelSel'); if(!sel) return;
   if(!CHANNELS.length){ sel.style.display='none'; return; } sel.style.display='';
@@ -2248,7 +2252,12 @@ window.toggleKitchen=(tid,i)=>{
   const card=document.getElementById('kcard-'+tid);
   if(card){ const n=Number(card.dataset.klines||0); let done=0,making=0;
     for(let j=0;j<n;j++){ const st=_kitchenStatus[tid+':'+j]; if(st==='done')done++; else if(st==='making')making++; }
-    card.style.background=(n>0&&done===n)?'rgba(22,135,111,.16)':making>0?'rgba(243,157,18,.12)':''; } };
+    const allDone=(n>0&&done===n);
+    card.style.background=allDone?'rgba(22,135,111,.16)':making>0?'rgba(243,157,18,.12)':'';
+    // Every drink finished → mark the order พร้อมรับ + notify the customer (paid orders only, server-guarded).
+    if(allDone && !_readySent.has(tid)){ _readySent.add(tid);
+      api('/api/tickets/'+tid+'/ready',{method:'POST'}).then(r=>{ if(r&&r.ok&&!r.already) toast('แจ้งลูกค้าแล้ว · พร้อมรับ'); else if(r&&r.reason==='unpaid'){ _readySent.delete(tid); } }).catch(()=>_readySent.delete(tid)); }
+  } };
 function renderZone(snap){
   if(!snap||!snap.zone) return;
   const z=snap.zone, id=z.id, open=z.is_open===1;

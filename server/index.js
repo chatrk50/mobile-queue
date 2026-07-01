@@ -96,7 +96,7 @@ app.use((req, res, next) => {
 });
 
 // ---- PIN brute-force protection: lock an IP after repeated wrong PINs ----
-const PIN_MAX_FAILS = 8, PIN_LOCK_MS = 10 * 60 * 1000;
+const PIN_MAX_FAILS = 8, PIN_LOCK_MS = 3 * 60 * 1000;   // single physical till → 3-min cooldown is enough deterrent
 const pinFails = new Map(); // ip -> { count, until }
 const ipOf = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
 function pinLocked(ip) { const a = pinFails.get(ip); return !!(a && a.until > Date.now()); }
@@ -183,7 +183,9 @@ app.post('/api/staff/login', (req, res) => {
   const pin = (req.body?.pin || '').toString();
   if (!pin) return res.status(400).json({ error: 'pin_required' });
   const staff = db.prepare('SELECT * FROM staff WHERE active=1').all().find((s) => verifyPin(pin, s.pin_hash));
-  if (!staff) { countPinFail(ip); return res.status(401).json({ error: 'bad_pin' }); }
+  // Don't count a fail here: the login UI always falls back to /api/auth on a bad staff PIN, and
+  // that path counts — counting in both doubled every wrong attempt (locked the till in ~4 tries).
+  if (!staff) { return res.status(401).json({ error: 'bad_pin' }); }
   pinFails.delete(ip);
   const branchIds = staff.role === 'owner' ? []
     : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
@@ -526,6 +528,14 @@ app.post('/api/tickets/:ticketId/start-making', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { const t = Q.startMaking(req.params.ticketId, { actorId: req.staff?.id || null });
     emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal })); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: every drink line finished → mark the order "พร้อมรับ" + notify the customer.
+app.post('/api/tickets/:ticketId/ready', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const r = Q.markReady(req.params.ticketId, THRESHOLD);
+    if (r.zoneId) emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
+    res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier: nudge the LINE customer to pay before the kitchen makes it (queue-first waste guard).
