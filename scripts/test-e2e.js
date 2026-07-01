@@ -427,6 +427,18 @@ let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
 ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
 
+// ---- Coupon apply: the LIFF picker passes a code; createOrder re-validates SERVER-SIDE, applies the
+//      discount, records the use, and enforces the per-customer limit. ----
+console.log('\n== Coupon apply (server-enforced from the customer order) ==');
+const ck = 'Ucouponcust000000000000000000001';
+Q.createCoupon({ code: 'E2E50', label: 'ทดสอบ', disc_type: 'baht', disc_value: 50, min_spend: 0 });
+const co = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: ck, couponCode: 'E2E50' });
+const cord = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(co.ticket.id);
+ok(cord && Number(cord.discount) === 50, `INVARIANT coupon discount applied server-side — got ฿${cord && cord.discount}`);
+ok(db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE customer_key=?').get(ck).n === 1, 'INVARIANT coupon use recorded once');
+ok(Q.validateCoupon('E2E50', ck, 100).ok === false, 'INVARIANT per-customer limit blocks a second use');
+ok(Q.validateCoupon('NOPE-NOT-REAL', ck, 100).ok === false, 'INVARIANT a fake code never validates');
+
 // ---- Tender toggle drives the customer picker: /api/config derives payCounter/payOnline from the
 //      ACTIVE tenders (listTenders(false)), so a toggled-off channel must leave that list. ----
 console.log('\n== Payment tender toggle → active list (customer picker source) ==');
