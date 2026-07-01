@@ -64,6 +64,11 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+  // Also refuse when the branch is closed by its own opening hours (auto-close) or the manual
+  // store toggle — the LIFF hides the order button then, but a member-card / deep-link entry
+  // could still reach here, so the server is the real gate.
+  const store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
+  if (store && (store.is_open === 0 || !isStoreOpenRow(store))) throw new Error('store_closed');
 
   // No duplicate numbers per customer: if they already hold an active ticket in
   // this zone, return it instead of issuing a new one (and skip the extra push).
@@ -87,14 +92,9 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   const ticket = tx();
   const ahead = aheadCount(ticket);
 
-  // Confirmation push (fire and forget)
-  pushQueue(lineUserId,
-    `🎫 รับคิวเรียบร้อย\n` +
-    `หมายเลขคิวของคุณ: ${ticket.code}\n` +
-    `คิวรอก่อนหน้า: ${ahead}\n` +
-    `เราจะแจ้งเตือนทาง LINE เมื่อใกล้ถึงคิวของคุณค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน');
-
+  // Order-confirmation push removed to conserve the LINE OA monthly message quota — the customer
+  // already sees their queue number in the LIFF the moment they order; the 'almost your turn' and
+  // 'your turn' pushes (the ones that actually bring them back) still fire.
   return { ticket, ahead };
 }
 
@@ -1095,6 +1095,75 @@ export function updateTender(id, { label, active, fee_pct, sort } = {}) {
   db.prepare('UPDATE tenders SET label=?, active=?, fee_pct=?, sort=? WHERE id=?').run(lb, a, f, s, id);
   return db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
 }
+/** Owner adds a new payment tender (channel). kind: counter (cashier collects) | online (customer app). */
+export function addTender({ code, label, kind = 'counter', fee_pct = 0 } = {}) {
+  const lb = (label || '').toString().trim().slice(0, 40);
+  if (!lb) throw new Error('label_required');
+  let cd = (code || '').toString().trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) || ('t' + Date.now());
+  if (db.prepare('SELECT 1 FROM tenders WHERE code=?').get(cd)) cd = cd + Date.now().toString().slice(-4);
+  const k = kind === 'online' ? 'online' : 'counter';
+  const maxSort = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM tenders').get().m;
+  const info = db.prepare('INSERT INTO tenders (code, label, kind, fee_pct, active, sort) VALUES (?,?,?,?,1,?)')
+    .run(cd, lb, k, Math.max(0, Math.min(100, Number(fee_pct) || 0)), maxSort + 1);
+  return db.prepare('SELECT * FROM tenders WHERE id=?').get(info.lastInsertRowid);
+}
+/** Owner removes a tender. (Historical sales keep their pay-method string; this only affects the picker.) */
+export function deleteTender(id) { db.prepare('DELETE FROM tenders WHERE id=?').run(Number(id)); return { ok: true }; }
+
+// ---------- Coupons (validated + priced SERVER-SIDE = anti-fraud) ----------
+function _couponByCode(code) { return db.prepare('SELECT * FROM coupons WHERE code=? COLLATE NOCASE').get((code || '').toString().trim()); }
+export function listCoupons(includeInactive = false) {
+  return db.prepare(`SELECT * FROM coupons ${includeInactive ? '' : 'WHERE active=1'} ORDER BY created_at DESC, id DESC`).all();
+}
+export function createCoupon(c = {}) {
+  const code = (c.code || '').toString().trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24);
+  if (!code) throw new Error('code_required');
+  if (_couponByCode(code)) throw new Error('code_exists');
+  const label = (c.label || '').toString().trim().slice(0, 60) || code;
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+      c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
+      Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
+      (c.expires_at || null) && String(c.expires_at).slice(0, 10),
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
+}
+export function updateCoupon(id, c = {}) {
+  const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
+  const g = (k, d) => (c[k] != null ? c[k] : d);
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,active=? WHERE id=?`)
+    .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
+      Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
+      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
+      Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+}
+export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
+/** Validate a coupon for a customer + order net → the ONE source of truth (re-run on payment). */
+export function validateCoupon(code, customerKey, orderNet) {
+  const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
+  if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
+  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
+  if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
+  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
+  if (c.per_customer > 0 && customerKey) {
+    const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
+    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
+  }
+  let disc = c.disc_type === 'percent' ? (orderNet * c.disc_value / 100) : c.disc_value;
+  if (c.disc_type === 'percent' && c.max_disc > 0) disc = Math.min(disc, c.max_disc);
+  disc = Math.min(r2(disc), orderNet);
+  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
+}
+/** Coupons a customer can see for their current order (each with eligibility + computed discount). */
+export function availableCoupons(customerKey, orderNet) {
+  return listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value,
+      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+}
 /**
  * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
  * (0 if unused that day) so the owner can tick each line against what the app/bank actually
@@ -1330,6 +1399,32 @@ export function loyaltyByPhone(phone) {
 // line_user_id (LINE) OR customer_key ('tel:<phone>') matches the key. ----
 /** Full profile for one customer key (LINE userId or 'tel:<digits>'). `found` is false for an
  *  unknown phone with zero history. Safe to call regardless of the loyalty-rewards toggle. */
+/** A customer's own order history for the LIFF "ประวัติการสั่ง" screen: each order with its
+ *  items, total, time and a human status. Keyed by their LINE id (or tel: key) — read-only. */
+export function customerOrders(key, limit = 20) {
+  if (!key) return [];
+  const lim = Math.min(50, Math.max(1, Number(limit) || 20));
+  const orders = db.prepare(
+    `SELECT t.id AS ticket_id, t.code, t.status AS tstatus, o.id AS order_id, o.total, o.discount,
+            o.payment_status, o.void_kind, o.created_at, o.paid_at
+       FROM tickets t JOIN orders o ON o.ticket_id=t.id
+      WHERE (t.line_user_id=? OR t.customer_key=?)
+      ORDER BY o.id DESC LIMIT ?`
+  ).all(key, key, lim);
+  const itemStmt = db.prepare("SELECT name, qty, price FROM order_items WHERE order_id=? AND kind='base'");
+  return orders.map((o) => {
+    const status = o.payment_status === 'void' ? (o.void_kind === 'refund' ? 'คืนเงินแล้ว' : 'ยกเลิกแล้ว')
+      : o.payment_status === 'paid' ? (o.tstatus === 'served' ? 'รับแล้ว' : 'ชำระแล้ว')
+      : 'รอชำระเงิน';
+    const kind = o.payment_status === 'void' ? 'void' : (o.payment_status === 'paid' ? 'paid' : 'pending');
+    return {
+      ticketId: o.ticket_id, code: o.code || null, status, kind,
+      at: o.paid_at || o.created_at,
+      total: r2((o.total || 0) - (o.discount || 0)), discount: r2(o.discount || 0),
+      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+    };
+  });
+}
 export function customerProfile(key) {
   if (!key) return { found: false };
   const isPhone = key.startsWith('tel:');
@@ -1863,6 +1958,10 @@ export function createOrder(zoneId, items, opts = {}) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+  // Off-hours / manually-closed branch: reject here too — this is the customer LINE order path,
+  // reachable from the member card / deep link even when the LIFF order button is hidden.
+  const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
+  if (_store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.
@@ -2260,10 +2359,13 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
+    const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled
     pushQueue(t.line_user_id,
-      `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n` +
+      (byRequest
+        ? `✅ ยกเลิกออเดอร์ ${t.code} ให้เรียบร้อยแล้วค่ะ ตามที่คุณขอ\n`
+        : `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n`) +
       (pointsReturned > 0 ? `🔄 คืน ${pointsReturned} ดวงเข้าบัญชีของคุณแล้ว\n` : '') +
-      `หากมีข้อสงสัย กรุณาสอบถามพนักงาน ขอบคุณค่ะ`, null);
+      `สั่งใหม่ได้ตลอดเลยนะคะ ขอบคุณค่ะ 🙂`, null);
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
@@ -2454,11 +2556,24 @@ export function ticketView(ticketId) {
       loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: loyaltyBalance(t.line_user_id).points, per: getStampsPerReward() };
     }
   }
+  // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones
+  // are already covered by cancelRequested), and only a whitelist so internal void notes such as
+  // "ทำพลาด" / "ลูกค้าไม่พอใจ" never leave the building.
+  let cancelReason = null;
+  if (t.status === 'cancelled' && !t.cancel_requested) {
+    const vr = db.prepare('SELECT void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
+    const raw = (vr && vr.void_reason) || '';
+    const MAP = {
+      'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
+      'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
+    };
+    cancelReason = MAP[raw] || (raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+  }
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
     // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
     canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
-    cancelRequested: !!t.cancel_requested, making: !!t.making_at,
+    cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,

@@ -9,6 +9,8 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
+  /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
+  :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) — left aligned */
   #adminMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
   #adminMenu button.adm svg{ flex:none; margin:0; }
@@ -100,6 +102,8 @@
         <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
         <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
+        <button id="tenderBtn" class="ghost adm" style="display:none" onclick="showTenders()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</button>
+        <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
         <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
@@ -284,6 +288,46 @@
         <button class="ghost" style="padding:8px 16px" onclick="loyLookupGo()">ดูแต้ม</button>
       </div>
       <div id="loyLookupResult" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- PAYMENT TENDERS management (owner only) -->
+  <div id="tenderCard" class="card" style="display:none;max-width:560px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>💳 ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()">ปิด</button>
+    </div>
+    <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+      <div style="font-weight:800;color:var(--navy);margin-bottom:8px">➕ เพิ่มช่องทางใหม่</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <input id="tenderNewLabel" placeholder="ชื่อ เช่น ทรูมันนี่ วอลเล็ท" style="flex:1;min-width:150px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+        <select id="tenderNewKind" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option value="counter">จ่ายที่เคาน์เตอร์</option><option value="online">ลูกค้าจ่ายในแอป</option></select>
+        <button class="ok" style="padding:9px 18px" onclick="addTender()">เพิ่ม</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COUPONS management (owner only) -->
+  <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1>🎟️ คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+    </div>
+    <div id="couponList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+      <div style="font-weight:800;color:var(--navy);margin-bottom:8px">➕ สร้างคูปองใหม่</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <input id="cpCode" placeholder="โค้ด เช่น SAVE20" style="flex:1;min-width:120px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-transform:uppercase">
+        <input id="cpLabel" placeholder="ชื่อคูปอง" style="flex:1.4;min-width:130px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <select id="cpType" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option value="baht">ลด ฿</option><option value="percent">ลด %</option></select>
+        <input id="cpValue" type="number" inputmode="decimal" placeholder="จำนวน" style="width:88px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+        <input id="cpMin" type="number" inputmode="decimal" placeholder="ขั้นต่ำ ฿" style="width:96px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+        <input id="cpExp" type="date" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px" title="วันหมดอายุ (ไม่บังคับ)">
+      </div>
+      <button class="ok" style="width:100%;padding:11px" onclick="addCoupon()">สร้างคูปอง</button>
     </div>
   </div>
 
@@ -723,7 +767,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-06-29.4';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-01.1';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -867,7 +911,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
@@ -1310,6 +1354,39 @@ window.showCash=async()=>{ $('cashCard').style.display=''; $('dash').style.displ
 // ---------- Anti-fraud: revenue-reduction control (owner) ----------
 let CTLDATE=null;
 window.hideControl=()=>{ $('controlCard').style.display='none'; $('dash').style.display=''; };
+// ---------- Payment tenders management (owner) ----------
+window.hideTenders=()=>{ $('tenderCard').style.display='none'; $('dash').style.display=''; };
+window.showTenders=async()=>{ ['cashCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('tenderCard').style.display=''; loadTenders(); };
+window.loadTenders=async()=>{ const box=$('tenderList'); try{ renderTenders(await api('/api/tenders/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
+function renderTenders(list){ $('tenderList').innerHTML=(list&&list.length)?list.map(t=>`<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${t.active?'':'opacity:.55'}">
+    <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(t.label)}</b> <span style="font-size:10px;padding:1px 7px;border-radius:999px;background:${t.kind==='online'?'rgba(0,181,216,.15)':'rgba(0,0,0,.05)'};color:${t.kind==='online'?'#0e7c93':'var(--muted)'};font-weight:700">${t.kind==='online'?'ในแอป':'เคาน์เตอร์'}</span></div>
+    <label style="display:flex;align-items:center;gap:5px;margin:0 8px;font-size:12px;cursor:pointer"><input type="checkbox" ${t.active?'checked':''} onchange="toggleTender(${t.id},this.checked)"> เปิด</label>
+    <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delTender(${t.id})">ลบ</button>
+  </div>`).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีช่องทาง</p>'; }
+window.toggleTender=async(id,active)=>{ try{ await api('/api/tenders/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); }catch(e){ toast(err(e)); loadTenders(); } };
+window.addTender=async()=>{ const label=$('tenderNewLabel').value.trim(), kind=$('tenderNewKind').value; if(!label){ toast('ใส่ชื่อช่องทางก่อน'); return; }
+  try{ await api('/api/tenders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,kind})}); $('tenderNewLabel').value=''; toast('เพิ่มช่องทางแล้ว ✓'); loadTenders(); }catch(e){ toast(err(e)); } };
+window.delTender=async(id)=>{ if(!(await appConfirm({title:'ลบช่องทางชำระเงิน',message:'ลบช่องทางนี้? (ยอดขายเก่าไม่กระทบ)',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
+  try{ await api('/api/tenders/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadTenders(); }catch(e){ toast(err(e)); } };
+// ---------- Coupons management (owner) ----------
+window.hideCoupons=()=>{ $('couponCard').style.display='none'; $('dash').style.display=''; };
+window.showCoupons=async()=>{ ['cashCard','tenderCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('couponCard').style.display=''; loadCoupons(); };
+window.loadCoupons=async()=>{ const box=$('couponList'); try{ renderCoupons(await api('/api/coupons/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
+function renderCoupons(list){ $('couponList').innerHTML=(list&&list.length)?list.map(c=>{
+    const disc=c.disc_type==='percent'?(c.disc_value+'%'+(c.max_disc>0?' (สูงสุด ฿'+c.max_disc+')':'')):('฿'+c.disc_value);
+    const exp=c.expires_at?('หมดอายุ '+c.expires_at):'ไม่มีวันหมดอายุ';
+    return `<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${c.active?'':'opacity:.55'}">
+      <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(c.label)}</b> <span style="font-size:11px;font-weight:800;color:var(--accent2)">ลด ${disc}</span><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.code)} · ขั้นต่ำ ฿${c.min_spend} · ${exp}${c.usage_limit>0?(' · ใช้ '+c.used_count+'/'+c.usage_limit):''}</div></div>
+      <label style="display:flex;align-items:center;gap:5px;margin:0 8px;font-size:12px;cursor:pointer"><input type="checkbox" ${c.active?'checked':''} onchange="toggleCoupon(${c.id},this.checked)"> เปิด</label>
+      <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delCoupon(${c.id})">ลบ</button>
+    </div>`;}).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง'; }
+window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); }catch(e){ toast(err(e)); loadCoupons(); } };
+window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabel').value.trim(), disc_type=$('cpType').value, disc_value=Number($('cpValue').value), min_spend=Number($('cpMin').value)||0, expires_at=$('cpExp').value||null;
+  if(!code){ toast('ใส่โค้ดคูปอง'); return; } if(!(disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
+  try{ await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,label,disc_type,disc_value,min_spend,expires_at})});
+    ['cpCode','cpLabel','cpValue','cpMin','cpExp'].forEach(id=>{const el=$(id); if(el) el.value='';}); toast('สร้างคูปองแล้ว ✓'); loadCoupons(); }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
+window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
+  try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };
 window.showControl=async()=>{ ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
 window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
 window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };
@@ -1815,17 +1892,33 @@ const FREE_TAG='<span class="mbadge" style="background:#7c3aed;margin-left:6px">
 function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge==='free') s.add(m.name); }); return s; }
 function cartFreeDiscount(){ const FREE=freeNameSet(); let d=0; cart.forEach(e=>{ const q=e.qty||1; if(FREE.has(e.name)) d+=e.price*q; e.toppings.forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty*q; }); });
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0); return Math.min(d, sub); }
-// Live bill (left pane of the split-screen order taker). Re-rendered on every cart change.
+// Signature = same drink + sweetness + toppings → identical items collapse to one "N× …" line.
+function billGroupSig(e){ return (e.name||'')+'|'+(e.sweet==null?100:e.sweet)+'|'+(e.toppings||[]).map(t=>t.name+'x'+t.qty).sort().join(','); }
+function billGroups(){ const map=new Map();
+  cart.forEach((e,i)=>{ const s=billGroupSig(e); if(!map.has(s)) map.set(s,{sig:s,e,qty:0,idx:i}); map.get(s).qty+=(e.qty||1); });
+  return [...map.values()]; }
+// Live bill (left pane of the split-screen order taker). Groups identical items + inline − N + stepper.
 function renderBill(){
   const list=$('billList'); if(!list) return;
-  const FREE=freeNameSet();
-  list.innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
-      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
-      ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
-      <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('')
+  const FREE=freeNameSet(); const groups=billGroups();
+  list.innerHTML = groups.length ? groups.map((g)=>{ const e=g.e; const unit=e.price+e.toppings.reduce((s,t)=>s+t.price*t.qty,0); const line=unit*g.qty;
+    const sweet=(e.sweet!=null&&e.sweet!==100)?`<div class="muted" style="font-size:12px;margin-top:2px">หวาน ${e.sweet}%</div>`:'';
+    const tops=e.toppings.map(t=>`<div class="muted" style="font-size:12px;margin-top:2px">+ ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</div>`).join('');
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:var(--navy);cursor:pointer" onclick="openItemDetail(${g.idx})">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
+        ${sweet}${tops}
+        <div style="display:inline-flex;align-items:center;gap:12px;margin-top:9px;border:1px solid var(--line);border-radius:999px;padding:2px 4px">
+          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1" onclick="billDec(${g.idx})" aria-label="ลด">−</button>
+          <b style="min-width:16px;text-align:center;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1;color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่ม">+</button>
+        </div>
+      </div>
+      <div style="text-align:right;flex:none">
+        <div style="font-weight:800;color:var(--navy)">฿${line}</div>
+        <button class="ghost danger" style="padding:4px 8px;margin-top:8px;font-size:12px" onclick="billRemoveGroup(${g.idx})">ลบ</button>
+      </div>
+    </div>`;}).join('')
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0); const disc=cartFreeDiscount();
   const dr=$('billDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; const dd=$('billDisc'); if(dd) dd.textContent=disc; } else dr.style.display='none'; }
@@ -1840,6 +1933,10 @@ function renderBasketCount(){ const c=$('basketCount'); if(c){ c.textContent=car
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasketCount(); };
+// Bill qty stepper (groups identical items): + adds one, − removes one, ลบ drops the whole group.
+window.billInc=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); const j=cart.findIndex(x=>billGroupSig(x)===s); if(j>=0) cart[j].qty=(cart[j].qty||1)+1; renderBasketCount(); };
+window.billDec=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); const j=cart.findIndex(x=>billGroupSig(x)===s); if(j>=0){ cart[j].qty=(cart[j].qty||1)-1; if(cart[j].qty<=0) cart.splice(j,1); } renderBasketCount(); };
+window.billRemoveGroup=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); cart=cart.filter(x=>billGroupSig(x)!==s); renderBasketCount(); };
 // ---------- Item details: tap a bill line → change quantity / topping-sweet / remove ----------
 window.openItemDetail=(i)=>{ const e=cart[i]; if(!e) return; _detailIdx=i;
   $('detailName').textContent=e.name;
@@ -2309,7 +2406,7 @@ function renderZone(snap){
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+makeBtns(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${makeBtns(t)}${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const called=snap.recentCalled||[];
   const calledCard=(t)=>`

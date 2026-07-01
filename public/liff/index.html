@@ -9,6 +9,8 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
+  /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
+  :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
@@ -79,6 +81,7 @@
       </div>
       <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
     </div>
+    <div id="historyLink" style="display:none;margin:8px 2px 0;text-align:right"><span style="font-size:12.5px;color:var(--accent);font-weight:700;cursor:pointer" onclick="openOrderHistory()"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px;vertical-align:-2px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> ประวัติการสั่ง ›</span></div>
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -175,6 +178,7 @@
         </div>
       </div>
     </div>
+    <div id="tTimeline" style="display:none;margin:6px 2px 16px"></div>
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
       <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
@@ -233,7 +237,11 @@
       <div id="tStars" style="font-size:34px;letter-spacing:6px"></div>
       <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">ขอบคุณสำหรับความคิดเห็นค่ะ 🙏</p>
     </div>
-    <button id="cancelBtn" class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">ยกเลิกคิวของฉัน</button>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <button id="changePayBtn" class="ghost" style="flex:1;display:none" onclick="changePay()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6l-4 4 4 4M5 10h11a4 4 0 0 1 0 8h-1"/></svg>เปลี่ยนวิธีจ่าย</button>
+      <button id="cancelBtn" class="ghost danger" style="flex:1" onclick="cancelTicket()">ขอยกเลิกออเดอร์</button>
+    </div>
+    <button id="goHomeBtn" class="ok" style="width:100%;margin-top:12px;display:none" onclick="goHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>กลับหน้าหลัก · สั่งใหม่</button>
   </div>
 
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
@@ -278,7 +286,7 @@
 <!-- "SURPRISE ME" random menu suggester -->
 <div id="randomPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
-    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()">✕</button></div>
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:19px">🎲 สุ่มเมนูให้คุณ</h1><button class="ghost" style="padding:6px 12px" onclick="closeRandom()" aria-label="ปิด">✕</button></div>
     <div id="randomReveal" style="min-height:188px;display:flex;align-items:center;justify-content:center;margin:8px 0 4px"></div>
     <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้</button>
     <div class="row" style="gap:9px">
@@ -297,7 +305,7 @@
         <!-- FRONT: data dropped into the art's baked boxes -->
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()">✕</button>
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div id="memberName" style="position:absolute;top:7.2%;left:6.9%;width:45%;height:17%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
           <div id="memberLevel" style="position:absolute;top:23%;left:65.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:75.6%;left:4%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
@@ -306,7 +314,7 @@
         </div>
         <!-- BACK: QR + details on the same tier colour -->
         <div id="memberBack" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()">✕</button>
+          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div style="background:#fff;border-radius:13px;padding:9px;box-shadow:0 4px 14px rgba(14,40,55,.18)"><img id="memberQR" alt="QR สมาชิก" style="width:132px;height:132px;display:block;object-fit:contain"></div>
           <p style="font-size:11px;margin:7px 0 0;text-align:center;color:#16314f;font-weight:600">แสดง QR ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
           <div id="memberStamp" style="display:none;margin-top:7px;background:rgba(255,255,255,.8);border-radius:10px;padding:6px 10px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
@@ -323,19 +331,44 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
+<!-- ประวัติการสั่ง (customer order history) -->
+<div id="historyLiffCard" class="card" style="display:none;max-width:480px;margin:0 auto">
+  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
+  <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+</div>
+
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()">✕</button></div>
+    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
-    <div id="basketList" class="queue-list" style="margin:12px 0"></div>
-    <div style="margin-bottom:12px">
-      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:6px"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
-      <div class="row between" style="align-items:center"><span class="muted" style="font-size:13px;font-weight:700">ยอดชำระ</span><div style="font-size:22px;font-weight:800;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
+    <div id="basketList" style="margin:14px 0"></div>
+    <div style="border-top:1px solid var(--line);padding-top:12px">
+      <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
+      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
-    <div class="row" style="gap:8px">
-      <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ยกเลิก</button>
-      <button class="ok" id="basketConfirm" style="flex:1" onclick="confirmBasket()">ยืนยันสั่ง</button>
+    <div style="margin-top:10px;border-top:1px solid var(--line)">
+      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
+        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer" onclick="openPayPicker()">
+        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
+        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
     </div>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="ghost danger" style="flex:none;padding:13px 18px" onclick="cancelBasket()">ล้าง</button>
+      <button class="ok" id="basketConfirm" style="flex:1;font-size:16px;font-weight:800" onclick="confirmBasket()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน · ฿<span id="basketBtnAmt">0</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment method picker (opened from the cart's ช่องทางชำระเงิน row) -->
+<div id="payPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกช่องทางชำระเงิน</h1><button class="ghost" style="padding:6px 12px" onclick="closePayPicker()" aria-label="ปิด">✕</button></div>
+    <div id="payPickerList" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -471,6 +504,9 @@ window.openMember=async()=>{
   if($('memberPerk')) $('memberPerk').textContent = TIER.perk ? ('🎁 '+TIER.perk) : '';
   // Never-ordered customer → invite to start; returning → "order something else".
   $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
+  // Store closed → don't dangle live order buttons on the member card (showOrderUI also hard-blocks).
+  if(!storeOpen){ $('memberReorder').style.display='none'; const b=$('memberOrderBtn'); b.disabled=true; b.style.opacity=.5; b.textContent='⏰ ร้านปิดอยู่'; }
+  else { const b=$('memberOrderBtn'); b.disabled=false; b.style.opacity=1; }
   // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
   try{ const conf=await api('/api/loyalty/config');
     if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
@@ -505,6 +541,7 @@ async function doClaim(){
     err(map[m]||('เช็คอินไม่สำเร็จ: '+m));
   }
 }
+let storeOpen=true;   // set by loadZone — the single source of truth for "can we take an order now"
 async function loadZone(){
   if(!zoneId) return err('ไม่พบโซนใน QR code');
   const z = await api('/api/zones/'+zoneId);
@@ -518,6 +555,7 @@ async function loadZone(){
   $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
   // Open = zone is open AND the branch is within its own opening hours (auto-close).
   const open = z.is_open===1 && (store ? store.open_now!==false : true);
+  storeOpen = open;   // gate every ordering entry point (order button, member card, reorder, deep link)
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'เปิด':'ปิด';
   if(!open && z.is_open===1 && store && store.open_now===false && store.hours_open){
@@ -540,6 +578,7 @@ let FAV=null;
 async function loadMemberStrip(){
   const el=$('memberStrip'); if(!el) return; el.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
+  const hl=$('historyLink'); if(hl) hl.style.display='block';   // order history is for any LINE customer (independent of loyalty)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
     if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
@@ -703,7 +742,9 @@ function itemImg(m){
   return fb;
 }
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
-window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; submitting=false;
+window.showOrderUI=async()=>{
+  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+  await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
@@ -818,20 +859,67 @@ function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge
 const FREE_TAG='<span style="background:#7c3aed;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle">ฟรี</span>';
 function renderBasket(){
   const groups=cartGroups(); const FREE=freeNameSet();
-  $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e;
-    return `<div class="qitem"><div style="flex:1">
-      <div class="row between"><b>${g.qty}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span class="muted">฿${entryTotal(e)*g.qty}</span></div>
-      ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${(e.toppings||[]).map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}${g.qty>1?' ×'+g.qty:''}</span><span>฿${t.price*t.qty*g.qty}</span></div>`).join('')}</div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" title="ลบ 1 ${unit()}" onclick="removeOne(${gi})">✕</button></div>`;}).join('') : '<p class="muted">ตะกร้าว่าง</p>';
+  $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e; const line=entryTotal(e)*g.qty;
+    const sweet = (e.sweet!=null&&e.sweet!==100)?`<div class="muted" style="font-size:12px;margin-top:2px">หวาน ${e.sweet}%</div>`:'';
+    const tops = (e.toppings||[]).map(t=>`<div class="muted" style="font-size:12px;margin-top:2px">+ ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</div>`).join('');
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:var(--navy);font-size:15px;line-height:1.3">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
+        ${sweet}${tops}
+        <div style="display:inline-flex;align-items:center;gap:14px;margin-top:11px;border:1px solid var(--line);border-radius:999px;padding:3px 5px">
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
+          <b style="min-width:16px;text-align:center;font-size:15px;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
+        </div>
+      </div>
+      <div style="text-align:right;flex:none">
+        <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
+        <button class="ghost danger" style="padding:5px 9px;margin-top:12px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+      </div>
+    </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
   let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
   disc=Math.min(disc,sub); const net=sub-disc;
+  $('basketSub').textContent = sub;
   const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
-  $('basketTotal').textContent = net;
+  $('basketTotal').textContent = net; const ba=$('basketBtnAmt'); if(ba) ba.textContent=net;
   $('basketConfirm').disabled = !cart.length;
+  updateCartPayLabel();
   updateNudges();
 }
+// Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
+window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); };
+window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+// ---------- ประวัติการสั่ง (customer order history) ----------
+window.openOrderHistory=async()=>{ if(!lineUserId) return;
+  show('getCard',false); show('historyLiffCard',true);
+  const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
+  try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
+  catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
+window.closeOrderHistory=()=>{ show('historyLiffCard',false); show('getCard',true); };
+function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
+const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
+function renderOrderHistory(orders){ const box=$('historyLiffList');
+  if(!orders.length){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">ยังไม่มีประวัติการสั่ง 🙂</p>'; return; }
+  box.innerHTML=orders.map((o,i)=>{
+    const summary=o.items.map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
+    const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0"><span>${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
+    return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px">
+      <div class="row between" style="align-items:flex-start;cursor:pointer" onclick="toggleHistDetail(${i})">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;color:var(--navy);font-size:15px">${o.code?('คิว '+o.code):('ออเดอร์ #'+o.ticketId)}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${fmtHistDate(o.at)}</div>
+          <div class="muted" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summary}</div>
+        </div>
+        <div style="text-align:right;flex:none;margin-left:10px">
+          <div style="font-weight:800;color:var(--navy);font-size:15px">฿${o.total}</div>
+          <span style="display:inline-block;font-size:11px;margin-top:5px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
+        </div>
+      </div>
+      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--accent2);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
+    </div>`;}).join('');
+}
+window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=(d.style.display==='none')?'':'none'; };
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
   if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
@@ -842,13 +930,15 @@ window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
 window.confirmBasket=async()=>{
   if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
+  if(cfg.promptPay && !cartPayMethod){ toast('เลือกช่องทางชำระเงินก่อนค่ะ'); openPayPicker(); return; }   // must pick a channel first
+  if(!cfg.promptPay) cartPayMethod='counter';   // counter-only shop → no choice needed
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
   const items=[];
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({items,lineUserId,customerName:displayName})});
-    ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
+    ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
     cart=[]; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
   }catch(e){
@@ -857,7 +947,11 @@ window.confirmBasket=async()=>{
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
       ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
-    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
+    const _err=(e.data&&e.data.error)||e.message;
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
+    if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
+      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ closeBasket(); }catch(_){}; try{ await loadZone(); }catch(_){}
+    } else { toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
 
@@ -898,6 +992,24 @@ function renderOrderBlock(v){
   const pill=$('tPayPill'), st=v.order.status, total=net;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
+  // Ticket cancelled/skipped → the order is void. Collapse EVERY pay affordance into one clear
+  // RED panel so the screen never shows a green "saved!" box that contradicts the cancelled
+  // status. The full-width "กลับหน้าหลัก · สั่งใหม่" button below is the way out (goHome).
+  if(v.status==='cancelled' || v.status==='skipped'){
+    pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
+    show('payChoice',true);
+    ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
+    const byReq=!!v.cancelRequested;
+    const box=$('counterConfirmedMsg');
+    box.style.background='#fef2f2'; box.style.border='1px solid #fca5a5';
+    const _reason = (!byReq && v.cancelReason) ? '<div style="font-size:13px;color:#7f1d1d;margin-top:8px;background:#fff;border:1px dashed #fca5a5;border-radius:10px;padding:8px 10px">'+esc(v.cancelReason)+'</div>' : '';
+    box.innerHTML='<div style="font-weight:800;color:var(--danger);font-size:17px">ออเดอร์ถูกยกเลิกแล้ว</div>'
+      +'<div style="font-size:13.5px;color:#b91c1c;margin-top:6px;font-weight:600">'
+      +(byReq?'ยกเลิกตามคำขอของคุณแล้ว · กรุณาทำรายการใหม่':'ออเดอร์นี้ถูกยกเลิก · กรุณาทำรายการใหม่')+'</div>'
+      +_reason;
+    show('counterConfirmedMsg',true);
+    return;
+  }
   if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
@@ -911,11 +1023,12 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
-      ['payReassure','payChoiceLabel','payBtnRow'].forEach(id=>show(id,true));
-      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay); show('counterInfo',true);
+      const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
+      show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
+      show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen); show('counterInfo',true);
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
-      show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
+      show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
       $('onePhoneTipStep4').textContent = cfg.slipVerify ? 'กลับมาแนบสลิป (ตรวจอัตโนมัติ)' : 'กลับมาแนบสลิป (แคชเชียร์ตรวจ)';
       $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
@@ -926,6 +1039,29 @@ function renderOrderBlock(v){
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='💵 ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
+// Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
+let cartPayMethod=null;
+const PAY_OPTS=[
+  {m:'kbank',t:'PromptPay · K PLUS (Kbank)',s:'ลูกค้า Kbank — กรอกยอดเอง',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'promptpay',t:'PromptPay · ธนาคารอื่น',s:'ยอดใส่อัตโนมัติ สแกนจ่ายได้เลย',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
+];
+window.openPayPicker=()=>{
+  const opts = cfg.promptPay ? PAY_OPTS : PAY_OPTS.filter(o=>o.m==='counter');
+  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cartPayMethod===o.m;
+    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
+      <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
+        <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
+      <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
+    </div>`;}).join('');
+  $('payPickerPop').style.display='flex';
+};
+window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
+window.selectPayMethod=(m)=>{ cartPayMethod=m; updateCartPayLabel(); closePayPicker(); };
+function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
+  const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
+  if(o){ el.style.color='var(--navy)'; el.innerHTML=esc(o.t)+' '+chev; } else { el.style.color='var(--muted)'; el.innerHTML='เลือก '+chev; } }
+window.openCoupon=()=>{ toast('🎟️ เร็ว ๆ นี้ — ตอนนี้แจ้งพนักงานที่เคาน์เตอร์เพื่อใช้สิทธิ์/แต้มค่ะ'); };
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
@@ -1048,6 +1184,29 @@ window.saveQR=async()=>{
   }
 };
 
+// Order status timeline (Brewing→Ready style): รับออเดอร์ → กำลังทำ → พร้อมรับ → รับแล้ว
+const TL_STEPS=[
+  {t:'รับออเดอร์',ic:'<rect x="8.5" y="2.5" width="7" height="3.5" rx="1"/><path d="M9 4H6a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-3"/><path d="M9 12h6M9 16h4"/>'},
+  {t:'กำลังทำ',ic:'<path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 4v4.5h-4.5"/>'},
+  {t:'พร้อมรับ',ic:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'},
+  {t:'รับแล้ว',ic:'<path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/>'},
+];
+const TL_CHECK='<path d="M20 6L9 17l-5-5"/>';
+function ticketStep(v){ if(v.status==='served') return 3; if(v.status==='called') return 2; if(v.making) return 1; if(v.status==='waiting') return 0; return -1; }
+function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
+  if(idx<0){ el.style.display='none'; return; } el.style.display='';
+  const prog=(idx/(TL_STEPS.length-1))*75;
+  el.innerHTML=`<div style="position:relative;padding-top:2px">
+    <div style="position:absolute;top:20px;left:12.5%;right:12.5%;height:3px;background:var(--line)"></div>
+    <div style="position:absolute;top:20px;left:12.5%;width:${prog}%;height:3px;background:var(--accent2)"></div>
+    <div style="position:relative;display:flex;justify-content:space-between">`
+    +TL_STEPS.map((s,i)=>{ const done=i<idx,cur=i===idx; const bg=done?'var(--accent2)':cur?'var(--accent)':'#fff';
+      const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--line)'; const icCol=(done||cur)?'#fff':'var(--muted)';
+      const tcol=cur?'var(--navy)':done?'var(--accent2)':'var(--muted)';
+      const svg=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="stroke:${icCol};stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${done?TL_CHECK:s.ic}</svg>`;
+      return `<div style="flex:1;text-align:center"><div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
+    }).join('')+`</div></div>`;
+}
 function render(v){
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
@@ -1056,6 +1215,7 @@ function render(v){
   $('tCodeLabel').textContent = isPending ? 'ชำระเงินเพื่อรับหมายเลขคิว' : 'หมายเลขคิวของคุณ';
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
+  renderTimeline(ticketStep(v));   // status timeline (hidden for pending/cancelled)
   $('tLastCalled').textContent = (!isPending && v.last_called) ? ('กำลังเรียกคิว: '+v.last_called) : '';
   $('tRate').style.display='none';
   const cb=$('cancelBtn');
@@ -1063,6 +1223,10 @@ function render(v){
   else if(v.canCancel){ cb.style.display=''; cb.disabled=false; cb.style.opacity=1; cb.textContent = isPending ? 'ยกเลิกออเดอร์' : 'ขอยกเลิกออเดอร์'; }
   else if(v.making){ cb.style.display=''; cb.disabled=true; cb.style.opacity=.6; cb.textContent='🍳 กำลังทำแล้ว — ติดต่อหน้าร้าน'; }
   else { cb.style.display='none'; }
+  // #2 change-payment button (re-choose channel while still unpaid) · #4 go-home on a cancelled order
+  const _unpaid = v.order && !['paid','claimed'].includes(v.order.status) && !['cancelled','served'].includes(v.status);
+  show('changePayBtn', !!(_unpaid && payMethod && !counterConfirmed));
+  show('goHomeBtn', v.status==='cancelled');
   if(isPending){
     show('tAheadWrap',false); show('tCalled',false);
     // Only show a bottom note for the claimed (waiting-on-cashier) state — the pay prompt is
@@ -1089,9 +1253,11 @@ function render(v){
     $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
     $('cancelBtn').style.display='none'; $('tRate').style.display='';
     if(v.rating){ renderStars(v.rating); $('tRateThanks').style.display=''; } else renderStars(0);
-  } else {
+  } else {   // cancelled / skipped / unknown
     show('tAheadWrap',false); show('tCalled',false);
-    $('tNotifyNote').textContent='สถานะ: '+v.status;
+    if(v.status==='cancelled'){ $('tCodeLabel').textContent='ออเดอร์นี้ถูกยกเลิกแล้ว';
+      $('tNotifyNote').innerHTML='<span style="color:var(--danger);font-weight:800;font-size:15px">❌ ออเดอร์ถูกยกเลิก</span><br><span class="muted" style="font-size:12.5px">กดปุ่มด้านล่างเพื่อกลับไปสั่งใหม่ได้เลยค่ะ</span>'; }
+    else $('tNotifyNote').textContent='สถานะ: '+v.status;
     $('cancelBtn').style.display='none';
   }
 }
@@ -1099,10 +1265,13 @@ function render(v){
 function renderStars(sel){
   $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
 }
+window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
+window.changePay=()=>{ payMethod=null; counterConfirmed=false; if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };   // #2 re-choose the payment channel
 window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
     $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
+    setTimeout(()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} location.reload(); }, 2000);   // order done → back to home after 2s
   }catch(e){ toast('บันทึกคะแนนไม่สำเร็จ'); }
 };
 

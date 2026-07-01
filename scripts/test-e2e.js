@@ -388,6 +388,45 @@ const tgL = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], {});
 Q.tagOrderCustomer(tgL.ticket.id, 'Utagline0000000000000000000000001', 'LINE');
 ok(db.prepare('SELECT line_user_id FROM tickets WHERE id=?').get(tgL.ticket.id).line_user_id === 'Utagline0000000000000000000000001', 'INVARIANT tagging by LINE id sets the ticket identity');
 
+// ---- Cancelled-ticket contract: the LIFF collapses ALL pay affordances when a ticket is
+//      cancelled, so the server payload must never look payable, and a SHOP reason must surface
+//      to the customer in a safe (whitelisted) form. Guards the "green saved! box on a cancelled
+//      order" regression. ----
+console.log('\n== Cancelled-ticket contract (no contradictory pay state) ==');
+const cx = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {});   // unpaid, pay-at-counter style
+Q.cancelOrderTicket(cx.ticket.id, null, { reason: 'ของหมด/ทำไม่ได้' });
+const cv = Q.ticketView(cx.ticket.id);
+ok(cv.status === 'cancelled' && cv.canCancel === false && cv.making === false,
+  `INVARIANT a cancelled ticket is never payable (status=${cv.status}, canCancel=${cv.canCancel}, making=${cv.making})`);
+ok(cv.cancelReason === 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
+  `INVARIANT shop cancel surfaces a customer-safe reason — got ${JSON.stringify(cv.cancelReason)}`);
+
+const cx2 = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {});
+Q.cancelOrderTicket(cx2.ticket.id, null, { reason: 'ของเสีย/ทำพลาด', kind: 'waste' });
+ok(Q.ticketView(cx2.ticket.id).cancelReason === null,
+  `INVARIANT internal void note never leaks to the customer — got ${JSON.stringify(Q.ticketView(cx2.ticket.id).cancelReason)}`);
+
+const cx3 = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {});
+db.prepare("UPDATE tickets SET cancel_requested=datetime('now') WHERE id=?").run(cx3.ticket.id);
+Q.cancelOrderTicket(cx3.ticket.id, null, { reason: 'ลูกค้ายกเลิก' });
+const cv3 = Q.ticketView(cx3.ticket.id);
+ok(cv3.cancelRequested === true && cv3.cancelReason === null,
+  `INVARIANT customer-requested cancel is by-request with no shop reason — got requested=${cv3.cancelRequested}, reason=${JSON.stringify(cv3.cancelReason)}`);
+
+// ---- Closed-store gate: an order must be rejected server-side when the branch is outside its
+//      opening hours, even though the zone toggle is still on (the member-card / deep-link bypass
+//      the LIFF order button). Set hours to a weekday that is NOT today → definitely closed now. ----
+console.log('\n== Closed-store order gate (server is the real door) ==');
+const bkkDay = new Date(Date.now() + 7 * 3600 * 1000).getUTCDay();
+Q.updateStore(1, { hoursDays: String((bkkDay + 1) % 7), hoursOpen: '08:00', hoursClose: '20:00' });   // open only on another day
+let closedThrew = false;
+try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); } catch (e) { closedThrew = e.message === 'store_closed'; }
+ok(closedThrew, `INVARIANT off-hours order rejected server-side (store_closed) — threw=${closedThrew}`);
+Q.updateStore(1, { hoursDays: '', hoursOpen: '', hoursClose: '' });   // clear hours → open again
+let reopened = false;
+try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
+ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

@@ -236,10 +236,31 @@ app.post('/api/channels/:id', (req, res) => {
 app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
 // Owner: manage tenders (rename / toggle / fee%).
 app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listTenders(true)); });
+app.post('/api/tenders', (req, res) => {   // create (before /:id so it isn't captured as an id)
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.addTender(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/tenders/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateTender(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.delete('/api/tenders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deleteTender(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Coupons — customer reads available/validates (public); owner manages (managerOK). Specific paths before /:id.
+app.get('/api/coupons', (req, res) => {
+  try { res.json({ coupons: Q.availableCoupons(req.query.customer || null, req.query.total) }); }
+  catch (e) { res.status(200).json({ coupons: [], error: e.message }); }
+});
+app.post('/api/coupons/validate', (req, res) => {
+  try { res.json(Q.validateCoupon(req.body?.code, req.body?.customer || null, req.body?.total)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/coupons/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listCoupons(true)); });
+app.post('/api/coupons', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.createCoupon(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); } });
+app.post('/api/coupons/:id', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.updateCoupon(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); } });
+app.delete('/api/coupons/:id', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.deleteCoupon(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); } });
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -353,6 +374,11 @@ app.post('/api/item-prices', (req, res) => {
 app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
   try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
   catch (e) { res.status(200).json({ known: false, error: e.message }); }
+});
+// Customer's own order history (LIFF "ประวัติการสั่ง") — keyed by their LINE id, read-only.
+app.get('/api/customers/:lineUserId/orders', (req, res) => {
+  try { res.json({ orders: Q.customerOrders(req.params.lineUserId, req.query.limit) }); }
+  catch (e) { res.status(200).json({ orders: [], error: e.message }); }
 });
 
 // ---------- Stores & zones ----------
