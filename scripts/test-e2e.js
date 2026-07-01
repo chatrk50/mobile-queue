@@ -413,6 +413,20 @@ const cv3 = Q.ticketView(cx3.ticket.id);
 ok(cv3.cancelRequested === true && cv3.cancelReason === null,
   `INVARIANT customer-requested cancel is by-request with no shop reason — got requested=${cv3.cancelRequested}, reason=${JSON.stringify(cv3.cancelReason)}`);
 
+// ---- Closed-store gate: an order must be rejected server-side when the branch is outside its
+//      opening hours, even though the zone toggle is still on (the member-card / deep-link bypass
+//      the LIFF order button). Set hours to a weekday that is NOT today → definitely closed now. ----
+console.log('\n== Closed-store order gate (server is the real door) ==');
+const bkkDay = new Date(Date.now() + 7 * 3600 * 1000).getUTCDay();
+Q.updateStore(1, { hoursDays: String((bkkDay + 1) % 7), hoursOpen: '08:00', hoursClose: '20:00' });   // open only on another day
+let closedThrew = false;
+try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); } catch (e) { closedThrew = e.message === 'store_closed'; }
+ok(closedThrew, `INVARIANT off-hours order rejected server-side (store_closed) — threw=${closedThrew}`);
+Q.updateStore(1, { hoursDays: '', hoursOpen: '', hoursClose: '' });   // clear hours → open again
+let reopened = false;
+try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
+ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

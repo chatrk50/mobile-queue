@@ -64,6 +64,11 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+  // Also refuse when the branch is closed by its own opening hours (auto-close) or the manual
+  // store toggle — the LIFF hides the order button then, but a member-card / deep-link entry
+  // could still reach here, so the server is the real gate.
+  const store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
+  if (store && (store.is_open === 0 || !isStoreOpenRow(store))) throw new Error('store_closed');
 
   // No duplicate numbers per customer: if they already hold an active ticket in
   // this zone, return it instead of issuing a new one (and skip the extra push).
@@ -1953,6 +1958,10 @@ export function createOrder(zoneId, items, opts = {}) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
+  // Off-hours / manually-closed branch: reject here too — this is the customer LINE order path,
+  // reachable from the member card / deep link even when the LIFF order button is hidden.
+  const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
+  if (_store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.

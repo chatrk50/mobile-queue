@@ -504,6 +504,9 @@ window.openMember=async()=>{
   if($('memberPerk')) $('memberPerk').textContent = TIER.perk ? ('🎁 '+TIER.perk) : '';
   // Never-ordered customer → invite to start; returning → "order something else".
   $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
+  // Store closed → don't dangle live order buttons on the member card (showOrderUI also hard-blocks).
+  if(!storeOpen){ $('memberReorder').style.display='none'; const b=$('memberOrderBtn'); b.disabled=true; b.style.opacity=.5; b.textContent='⏰ ร้านปิดอยู่'; }
+  else { const b=$('memberOrderBtn'); b.disabled=false; b.style.opacity=1; }
   // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
   try{ const conf=await api('/api/loyalty/config');
     if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
@@ -538,6 +541,7 @@ async function doClaim(){
     err(map[m]||('เช็คอินไม่สำเร็จ: '+m));
   }
 }
+let storeOpen=true;   // set by loadZone — the single source of truth for "can we take an order now"
 async function loadZone(){
   if(!zoneId) return err('ไม่พบโซนใน QR code');
   const z = await api('/api/zones/'+zoneId);
@@ -551,6 +555,7 @@ async function loadZone(){
   $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
   // Open = zone is open AND the branch is within its own opening hours (auto-close).
   const open = z.is_open===1 && (store ? store.open_now!==false : true);
+  storeOpen = open;   // gate every ordering entry point (order button, member card, reorder, deep link)
   $('zoneState').className = 'pill '+(open?'open':'closed');
   $('zoneState').textContent = open?'เปิด':'ปิด';
   if(!open && z.is_open===1 && store && store.open_now===false && store.hours_open){
@@ -737,7 +742,9 @@ function itemImg(m){
   return fb;
 }
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
-window.showOrderUI=async()=>{ await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+window.showOrderUI=async()=>{
+  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+  await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
   // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
@@ -940,7 +947,11 @@ window.confirmBasket=async()=>{
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
       ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
     }
-    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง'; toast('สั่งไม่สำเร็จ: '+e.message);
+    const _err=(e.data&&e.data.error)||e.message;
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
+    if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
+      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ closeBasket(); }catch(_){}; try{ await loadZone(); }catch(_){}
+    } else { toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
 
