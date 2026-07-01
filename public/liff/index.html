@@ -993,7 +993,7 @@ function renderOrderBlock(v){
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen); show('counterInfo',true);
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
-      show('claimBtn', !!cfg.promptPay && !cfg.slipVerify);
+      show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
       $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
       $('onePhoneTipStep4').textContent = cfg.slipVerify ? 'กลับมาแนบสลิป (ตรวจอัตโนมัติ)' : 'กลับมาแนบสลิป (แคชเชียร์ตรวจ)';
       $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
@@ -1228,6 +1228,7 @@ window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
     $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
+    setTimeout(()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} location.reload(); }, 2000);   // order done → back to home after 2s
   }catch(e){ toast('บันทึกคะแนนไม่สำเร็จ'); }
 };
 
