@@ -236,9 +236,17 @@ app.post('/api/channels/:id', (req, res) => {
 app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
 // Owner: manage tenders (rename / toggle / fee%).
 app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listTenders(true)); });
+app.post('/api/tenders', (req, res) => {   // create (before /:id so it isn't captured as an id)
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.addTender(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/tenders/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateTender(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.delete('/api/tenders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.deleteTender(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {

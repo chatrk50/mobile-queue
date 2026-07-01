@@ -1090,6 +1090,20 @@ export function updateTender(id, { label, active, fee_pct, sort } = {}) {
   db.prepare('UPDATE tenders SET label=?, active=?, fee_pct=?, sort=? WHERE id=?').run(lb, a, f, s, id);
   return db.prepare('SELECT * FROM tenders WHERE id=?').get(id);
 }
+/** Owner adds a new payment tender (channel). kind: counter (cashier collects) | online (customer app). */
+export function addTender({ code, label, kind = 'counter', fee_pct = 0 } = {}) {
+  const lb = (label || '').toString().trim().slice(0, 40);
+  if (!lb) throw new Error('label_required');
+  let cd = (code || '').toString().trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) || ('t' + Date.now());
+  if (db.prepare('SELECT 1 FROM tenders WHERE code=?').get(cd)) cd = cd + Date.now().toString().slice(-4);
+  const k = kind === 'online' ? 'online' : 'counter';
+  const maxSort = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM tenders').get().m;
+  const info = db.prepare('INSERT INTO tenders (code, label, kind, fee_pct, active, sort) VALUES (?,?,?,?,1,?)')
+    .run(cd, lb, k, Math.max(0, Math.min(100, Number(fee_pct) || 0)), maxSort + 1);
+  return db.prepare('SELECT * FROM tenders WHERE id=?').get(info.lastInsertRowid);
+}
+/** Owner removes a tender. (Historical sales keep their pay-method string; this only affects the picker.) */
+export function deleteTender(id) { db.prepare('DELETE FROM tenders WHERE id=?').run(Number(id)); return { ok: true }; }
 /**
  * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
  * (0 if unused that day) so the owner can tick each line against what the app/bank actually
