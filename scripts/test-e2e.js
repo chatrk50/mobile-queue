@@ -450,6 +450,16 @@ Q.updateTender(ot.id, { active: 0 });
 ok(!Q.listTenders(false).some((t) => t.id === ot.id),
   'INVARIANT a toggled-off tender drops from the active list (LIFF picker filters by kind on this)');
 
+// ---- "พร้อมรับ" trigger: finishing every drink line marks the order ready + notifies the customer,
+//      but only when it's PAID (never announce before payment). ----
+console.log('\n== Ready (พร้อมรับ) per-ticket trigger ==');
+const rt = sale({ items: [{ name: 'Drink', price: 50, qty: 1 }], method: 'cash' });   // paid
+ok(Q.markReady(rt, 5).ok === true, 'paid order can be marked พร้อมรับ');
+ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(rt).status === 'called', 'INVARIANT ready sets status=called (พร้อมรับ)');
+ok(Q.markReady(rt, 5).already === true, 'INVARIANT ready is idempotent (announced once)');
+const upr = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Ureadytest0000000000000000000001' });
+ok(Q.markReady(upr.ticket.id, 5).reason === 'unpaid', 'INVARIANT an unpaid order is never announced ready');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

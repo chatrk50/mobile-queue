@@ -127,6 +127,25 @@ export function callNext(zoneId, threshold) {
   return { called: next };
 }
 
+/** Mark ONE ticket "พร้อมรับ" (ready for pickup) — set status='called' + notify the customer.
+ *  Fired when the cashier finishes every drink line (all ✅). Only a PAID order is announced
+ *  (never tell a customer to come before they've paid). Idempotent + safe on a closed ticket. */
+export function markReady(ticketId, threshold) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (['served', 'cancelled', 'no_show', 'skipped'].includes(t.status)) return { ok: false, status: t.status, zoneId: t.zone_id };
+  if (t.status === 'called') return { ok: true, already: true, zoneId: t.zone_id };   // already announced
+  const o = orderForTicket(ticketId);
+  if (o && o.payment_status !== 'paid') return { ok: false, reason: 'unpaid', zoneId: t.zone_id };   // pay-first: don't announce ready before payment
+  db.prepare("UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?").run(ticketId);
+  if (t.number > 0) db.prepare('UPDATE zones SET last_called=? WHERE id=?').run(t.number, t.zone_id);
+  if (t.line_user_id) pushQueue(t.line_user_id,
+    `🔔 เครื่องดื่มของคุณพร้อมรับแล้ว!\nหมายเลข: ${t.code}\nเชิญรับที่เคาน์เตอร์ได้เลยค่ะ`,
+    queueLink(t.zone_id), 'ดูคิวของฉัน');
+  if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
+  return { ok: true, zoneId: t.zone_id };
+}
+
 /** Mark a called ticket served, or skip / cancel any ticket. */
 export function setStatus(ticketId, status, threshold) {
   const allowed = ['served', 'skipped', 'cancelled', 'no_show'];
