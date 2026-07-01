@@ -1104,6 +1104,61 @@ export function addTender({ code, label, kind = 'counter', fee_pct = 0 } = {}) {
 }
 /** Owner removes a tender. (Historical sales keep their pay-method string; this only affects the picker.) */
 export function deleteTender(id) { db.prepare('DELETE FROM tenders WHERE id=?').run(Number(id)); return { ok: true }; }
+
+// ---------- Coupons (validated + priced SERVER-SIDE = anti-fraud) ----------
+function _couponByCode(code) { return db.prepare('SELECT * FROM coupons WHERE code=? COLLATE NOCASE').get((code || '').toString().trim()); }
+export function listCoupons(includeInactive = false) {
+  return db.prepare(`SELECT * FROM coupons ${includeInactive ? '' : 'WHERE active=1'} ORDER BY created_at DESC, id DESC`).all();
+}
+export function createCoupon(c = {}) {
+  const code = (c.code || '').toString().trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24);
+  if (!code) throw new Error('code_required');
+  if (_couponByCode(code)) throw new Error('code_exists');
+  const label = (c.label || '').toString().trim().slice(0, 60) || code;
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+      c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
+      Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
+      (c.expires_at || null) && String(c.expires_at).slice(0, 10),
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
+}
+export function updateCoupon(id, c = {}) {
+  const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
+  const g = (k, d) => (c[k] != null ? c[k] : d);
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,active=? WHERE id=?`)
+    .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
+      Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
+      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
+      Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+}
+export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
+/** Validate a coupon for a customer + order net → the ONE source of truth (re-run on payment). */
+export function validateCoupon(code, customerKey, orderNet) {
+  const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
+  if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
+  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
+  if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
+  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
+  if (c.per_customer > 0 && customerKey) {
+    const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
+    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
+  }
+  let disc = c.disc_type === 'percent' ? (orderNet * c.disc_value / 100) : c.disc_value;
+  if (c.disc_type === 'percent' && c.max_disc > 0) disc = Math.min(disc, c.max_disc);
+  disc = Math.min(r2(disc), orderNet);
+  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
+}
+/** Coupons a customer can see for their current order (each with eligibility + computed discount). */
+export function availableCoupons(customerKey, orderNet) {
+  return listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value,
+      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+}
 /**
  * Per-tender settlement totals for a day (default = today, BKK). Returns EVERY active tender
  * (0 if unused that day) so the owner can tick each line against what the app/bank actually

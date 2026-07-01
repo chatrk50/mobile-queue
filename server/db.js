@@ -399,6 +399,30 @@ CREATE TABLE IF NOT EXISTS tenders (
   active  INTEGER NOT NULL DEFAULT 1,
   sort    INTEGER NOT NULL DEFAULT 0
 );
+-- Coupons / vouchers the customer can apply to an order (validated + priced SERVER-SIDE on payment).
+CREATE TABLE IF NOT EXISTS coupons (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  code         TEXT NOT NULL UNIQUE,               -- e.g. WELCOME50 (case-insensitive on lookup)
+  label        TEXT NOT NULL,
+  disc_type    TEXT NOT NULL DEFAULT 'baht',        -- baht | percent
+  disc_value   REAL NOT NULL DEFAULT 0,
+  max_disc     REAL NOT NULL DEFAULT 0,             -- cap for percent (0 = no cap)
+  min_spend    REAL NOT NULL DEFAULT 0,             -- minimum order net to qualify
+  expires_at   TEXT,                                -- 'YYYY-MM-DD' Bangkok-local, null = no expiry
+  usage_limit  INTEGER NOT NULL DEFAULT 0,          -- total redemptions allowed (0 = unlimited)
+  used_count   INTEGER NOT NULL DEFAULT 0,
+  per_customer INTEGER NOT NULL DEFAULT 1,          -- max per customer (0 = unlimited)
+  stackable    INTEGER NOT NULL DEFAULT 0,          -- can combine with the free-giveaway discount
+  applies_to   TEXT,                                -- Phase 2: JSON of item names/categories (null = whole order)
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS coupon_uses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  coupon_id INTEGER, order_id INTEGER, customer_key TEXT, discount REAL,
+  at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_coupon_uses_cust ON coupon_uses(coupon_id, customer_key);
 -- Payment slips a customer attaches for the cashier to verify manually (works without SlipOK).
 -- One per order (latest wins). Stored as a data: URL; only written when a slip is attached.
 CREATE TABLE IF NOT EXISTS slips (
