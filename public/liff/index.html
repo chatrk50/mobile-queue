@@ -235,7 +235,11 @@
       <div id="tStars" style="font-size:34px;letter-spacing:6px"></div>
       <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">ขอบคุณสำหรับความคิดเห็นค่ะ 🙏</p>
     </div>
-    <button id="cancelBtn" class="ghost danger" style="margin-top:10px" onclick="cancelTicket()">ยกเลิกคิวของฉัน</button>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <button id="changePayBtn" class="ghost" style="flex:1;display:none" onclick="changePay()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6l-4 4 4 4M5 10h11a4 4 0 0 1 0 8h-1"/></svg>เปลี่ยนวิธีจ่าย</button>
+      <button id="cancelBtn" class="ghost danger" style="flex:1" onclick="cancelTicket()">ขอยกเลิกออเดอร์</button>
+    </div>
+    <button id="goHomeBtn" class="ok" style="width:100%;margin-top:12px;display:none" onclick="goHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>กลับหน้าหลัก · สั่งใหม่</button>
   </div>
 
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
@@ -1188,6 +1192,10 @@ function render(v){
   else if(v.canCancel){ cb.style.display=''; cb.disabled=false; cb.style.opacity=1; cb.textContent = isPending ? 'ยกเลิกออเดอร์' : 'ขอยกเลิกออเดอร์'; }
   else if(v.making){ cb.style.display=''; cb.disabled=true; cb.style.opacity=.6; cb.textContent='🍳 กำลังทำแล้ว — ติดต่อหน้าร้าน'; }
   else { cb.style.display='none'; }
+  // #2 change-payment button (re-choose channel while still unpaid) · #4 go-home on a cancelled order
+  const _unpaid = v.order && !['paid','claimed'].includes(v.order.status) && !['cancelled','served'].includes(v.status);
+  show('changePayBtn', !!(_unpaid && payMethod && !counterConfirmed));
+  show('goHomeBtn', v.status==='cancelled');
   if(isPending){
     show('tAheadWrap',false); show('tCalled',false);
     // Only show a bottom note for the claimed (waiting-on-cashier) state — the pay prompt is
@@ -1214,9 +1222,11 @@ function render(v){
     $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
     $('cancelBtn').style.display='none'; $('tRate').style.display='';
     if(v.rating){ renderStars(v.rating); $('tRateThanks').style.display=''; } else renderStars(0);
-  } else {
+  } else {   // cancelled / skipped / unknown
     show('tAheadWrap',false); show('tCalled',false);
-    $('tNotifyNote').textContent='สถานะ: '+v.status;
+    if(v.status==='cancelled'){ $('tCodeLabel').textContent='ออเดอร์นี้ถูกยกเลิกแล้ว';
+      $('tNotifyNote').innerHTML='<span style="color:var(--danger);font-weight:800;font-size:15px">❌ ออเดอร์ถูกยกเลิก</span><br><span class="muted" style="font-size:12.5px">กดปุ่มด้านล่างเพื่อกลับไปสั่งใหม่ได้เลยค่ะ</span>'; }
+    else $('tNotifyNote').textContent='สถานะ: '+v.status;
     $('cancelBtn').style.display='none';
   }
 }
@@ -1224,6 +1234,8 @@ function render(v){
 function renderStars(sel){
   $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
 }
+window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
+window.changePay=()=>{ payMethod=null; counterConfirmed=false; if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };   // #2 re-choose the payment channel
 window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
