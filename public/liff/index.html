@@ -981,6 +981,22 @@ function renderOrderBlock(v){
   const pill=$('tPayPill'), st=v.order.status, total=net;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
+  // Ticket cancelled/skipped → the order is void. Collapse EVERY pay affordance into one clear
+  // RED panel so the screen never shows a green "saved!" box that contradicts the cancelled
+  // status. The full-width "กลับหน้าหลัก · สั่งใหม่" button below is the way out (goHome).
+  if(v.status==='cancelled' || v.status==='skipped'){
+    pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
+    show('payChoice',true);
+    ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
+    const byReq=!!v.cancelRequested;
+    const box=$('counterConfirmedMsg');
+    box.style.background='#fef2f2'; box.style.border='1px solid #fca5a5';
+    box.innerHTML='<div style="font-weight:800;color:var(--danger);font-size:17px">ออเดอร์ถูกยกเลิกแล้ว</div>'
+      +'<div style="font-size:13.5px;color:#b91c1c;margin-top:6px;font-weight:600">'
+      +(byReq?'ยกเลิกตามคำขอของคุณแล้ว · กรุณาทำรายการใหม่':'ออเดอร์นี้ถูกยกเลิก · กรุณาทำรายการใหม่')+'</div>';
+    show('counterConfirmedMsg',true);
+    return;
+  }
   if(st==='paid'){ pill.className='pill open'; pill.textContent='ชำระแล้ว ✓'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
   else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.textContent='⏳ รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
