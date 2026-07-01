@@ -1815,17 +1815,33 @@ const FREE_TAG='<span class="mbadge" style="background:#7c3aed;margin-left:6px">
 function freeNameSet(){ const s=new Set(); (MENU||[]).forEach(m=>{ if(m&&m.badge==='free') s.add(m.name); }); return s; }
 function cartFreeDiscount(){ const FREE=freeNameSet(); let d=0; cart.forEach(e=>{ const q=e.qty||1; if(FREE.has(e.name)) d+=e.price*q; e.toppings.forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty*q; }); });
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0); return Math.min(d, sub); }
-// Live bill (left pane of the split-screen order taker). Re-rendered on every cart change.
+// Signature = same drink + sweetness + toppings → identical items collapse to one "N× …" line.
+function billGroupSig(e){ return (e.name||'')+'|'+(e.sweet==null?100:e.sweet)+'|'+(e.toppings||[]).map(t=>t.name+'x'+t.qty).sort().join(','); }
+function billGroups(){ const map=new Map();
+  cart.forEach((e,i)=>{ const s=billGroupSig(e); if(!map.has(s)) map.set(s,{sig:s,e,qty:0,idx:i}); map.get(s).qty+=(e.qty||1); });
+  return [...map.values()]; }
+// Live bill (left pane of the split-screen order taker). Groups identical items + inline − N + stepper.
 function renderBill(){
   const list=$('billList'); if(!list) return;
-  const FREE=freeNameSet();
-  list.innerHTML = cart.length ? cart.map((e,i)=>`
-    <div class="qitem"><div style="flex:1;cursor:pointer" onclick="openItemDetail(${i})">
-      <div class="row between"><b>${e.qty||1}× ${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</b><span style="font-weight:700">฿${entryTotal(e)}</span></div>
-      ${e.sweet!=null&&e.sweet!==100?`<div class="muted" style="font-size:12px;margin-left:12px">• หวาน ${e.sweet}%</div>`:''}
-      ${e.toppings.map(t=>`<div class="row between muted" style="font-size:12px;margin-left:12px"><span>- ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</span><span>฿${t.price*t.qty}</span></div>`).join('')}
-      <div style="font-size:11px;color:var(--accent2,#0e6b7e);margin-top:2px">✏️ แตะเพื่อแก้ไข / จำนวน</div></div>
-      <button class="ghost danger" style="padding:6px 10px;margin-left:8px" onclick="removeEntry(${i})">✕</button></div>`).join('')
+  const FREE=freeNameSet(); const groups=billGroups();
+  list.innerHTML = groups.length ? groups.map((g)=>{ const e=g.e; const unit=e.price+e.toppings.reduce((s,t)=>s+t.price*t.qty,0); const line=unit*g.qty;
+    const sweet=(e.sweet!=null&&e.sweet!==100)?`<div class="muted" style="font-size:12px;margin-top:2px">หวาน ${e.sweet}%</div>`:'';
+    const tops=e.toppings.map(t=>`<div class="muted" style="font-size:12px;margin-top:2px">+ ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</div>`).join('');
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;color:var(--navy);cursor:pointer" onclick="openItemDetail(${g.idx})">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
+        ${sweet}${tops}
+        <div style="display:inline-flex;align-items:center;gap:12px;margin-top:9px;border:1px solid var(--line);border-radius:999px;padding:2px 4px">
+          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1" onclick="billDec(${g.idx})" aria-label="ลด">−</button>
+          <b style="min-width:16px;text-align:center;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1;color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่ม">+</button>
+        </div>
+      </div>
+      <div style="text-align:right;flex:none">
+        <div style="font-weight:800;color:var(--navy)">฿${line}</div>
+        <button class="ghost danger" style="padding:4px 8px;margin-top:8px;font-size:12px" onclick="billRemoveGroup(${g.idx})">ลบ</button>
+      </div>
+    </div>`;}).join('')
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0); const disc=cartFreeDiscount();
   const dr=$('billDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; const dd=$('billDisc'); if(dd) dd.textContent=disc; } else dr.style.display='none'; }
@@ -1840,6 +1856,10 @@ function renderBasketCount(){ const c=$('basketCount'); if(c){ c.textContent=car
 window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasketCount(); };
+// Bill qty stepper (groups identical items): + adds one, − removes one, ลบ drops the whole group.
+window.billInc=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); const j=cart.findIndex(x=>billGroupSig(x)===s); if(j>=0) cart[j].qty=(cart[j].qty||1)+1; renderBasketCount(); };
+window.billDec=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); const j=cart.findIndex(x=>billGroupSig(x)===s); if(j>=0){ cart[j].qty=(cart[j].qty||1)-1; if(cart[j].qty<=0) cart.splice(j,1); } renderBasketCount(); };
+window.billRemoveGroup=(i)=>{ const e=cart[i]; if(!e) return; const s=billGroupSig(e); cart=cart.filter(x=>billGroupSig(x)!==s); renderBasketCount(); };
 // ---------- Item details: tap a bill line → change quantity / topping-sweet / remove ----------
 window.openItemDetail=(i)=>{ const e=cart[i]; if(!e) return; _detailIdx=i;
   $('detailName').textContent=e.name;
