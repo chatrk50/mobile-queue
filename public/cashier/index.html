@@ -754,7 +754,8 @@
 <div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
     <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
-    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:60vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
+    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:52vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
+    <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
     <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
   </div>
 </div>
@@ -767,7 +768,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.2';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.3';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -785,7 +786,14 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPop').style.display='flex'; };
 window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
-window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
+window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image;
+    const p=s.prelim||{}, pb=$('slipPrelim'); if(pb){
+      const dupBox = p.duplicate
+        ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
+        : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
+      pb.innerHTML = dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:12.5px;line-height:1.75"><b>ยืนยันด้วยตาก่อนกดชำระ:</b><br>• ยอดต้องเป็น <b>฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b><br>• วันที่ในสลิป = <b>'+(p.today||'วันนี้')+'</b> · เวลาใกล้เคียงตอนนี้<br>• ผู้รับ = บัญชีร้าน (ธรรมนูญ / YODEE YOGURT)</div>';
+    }
+    $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 // White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
 // Defaults to YO-DEE server-side, so this is a no-op for the existing shop.

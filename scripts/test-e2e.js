@@ -460,6 +460,18 @@ ok(Q.markReady(rt, 5).already === true, 'INVARIANT ready is idempotent (announce
 const upr = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Ureadytest0000000000000000000001' });
 ok(Q.markReady(upr.ticket.id, 5).reason === 'unpaid', 'INVARIANT an unpaid order is never announced ready');
 
+// ---- Preliminary slip check (free): the SAME slip image reused on another order is flagged. ----
+console.log('\n== Slip preliminary check (duplicate image) ==');
+const sd1 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000001' });
+const sd2 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000002' });
+Q.attachSlip(sd1.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');
+Q.attachSlip(sd2.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');   // reused → duplicate
+ok(Q.slipPrelim(sd2.ticket.id).duplicate != null, 'INVARIANT a reused slip image is flagged as duplicate');
+const sd3 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000003' });
+Q.attachSlip(sd3.ticket.id, 'data:image/png;base64,UNIQUESLIPIMAGE');
+ok(Q.slipPrelim(sd3.ticket.id).duplicate == null, 'INVARIANT a unique slip is not flagged');
+ok(Q.slipPrelim(sd3.ticket.id).expectedAmount === 50, 'INVARIANT prelim hands the cashier the expected amount');
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

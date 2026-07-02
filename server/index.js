@@ -624,7 +624,7 @@ app.get('/api/tickets/:ticketId/slip', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   const s = Q.getSlip(req.params.ticketId);
   if (!s) return res.status(404).json({ error: 'no_slip' });
-  res.json(s);
+  res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId) });
 });
 // LINE Pay (scaffold): reserve a payment → customer is redirected to LINE Pay's page.
 app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
