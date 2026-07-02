@@ -751,13 +751,14 @@
   </div>
 </div>
 
-<div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
-    <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
-    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:52vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
+<div id="slipPop" onclick="if(event.target===this)closeSlip()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:flex-start;justify-content:center;padding:14px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div class="card" style="max-width:420px;width:100%;margin:auto;text-align:center;max-height:none">
+    <div class="row between" style="position:sticky;top:-1px;background:#fff;padding:6px 0 8px;z-index:2;border-bottom:1px solid var(--line)"><h1 style="margin:0;font-size:19px">สลิปจากลูกค้า</h1><button class="ghost" style="padding:8px 14px;font-size:16px" onclick="closeSlip()" aria-label="ปิด">✕</button></div>
+    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:46vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
     <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
     <div id="slipOcr" style="text-align:left;margin:8px 0"></div>
     <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+    <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()">ปิด</button>
   </div>
 </div>
 
@@ -769,7 +770,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.4';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.5';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
