@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { pushQueue, pushText } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
@@ -2250,10 +2251,29 @@ export function attachSlip(ticketId, imageData) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') return { ok: true, already: true };
-  db.prepare(`INSERT INTO slips (order_id, ticket_id, image) VALUES (?,?,?)
-              ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, at=datetime('now')`).run(order.id, Number(ticketId), imageData);
+  const sha = createHash('sha256').update(imageData || '').digest('hex');   // fingerprint → catch the SAME slip reused
+  db.prepare(`INSERT INTO slips (order_id, ticket_id, image, sha) VALUES (?,?,?,?)
+              ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, sha=excluded.sha, at=datetime('now')`).run(order.id, Number(ticketId), imageData, sha);
   db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
   return { ok: true };
+}
+/** Preliminary (free) slip check for the cashier — this does NOT prove the slip is genuine (that
+ *  needs SlipOK's QR-vs-bank check). It flags the SAME slip image reused on another order, and hands
+ *  the cashier the expected amount + today's date to eyeball against the slip. */
+export function slipPrelim(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return null;
+  const s = db.prepare('SELECT sha FROM slips WHERE order_id=?').get(order.id);
+  let duplicate = null;
+  if (s && s.sha) {
+    const dup = db.prepare(
+      `SELECT t.code, t.id FROM slips sl JOIN tickets t ON t.id=sl.ticket_id
+        WHERE sl.sha=? AND sl.order_id<>? ORDER BY sl.at DESC LIMIT 1`
+    ).get(s.sha, order.id);
+    if (dup) duplicate = { code: dup.code, ticketId: dup.id };
+  }
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  return { expectedAmount: Math.max(0, order.total - (order.discount || 0)), today, duplicate };
 }
 /** Customer asks for a refund (paid online but can't come). Flags the order so the cashier
  *  sees it in history and processes the refund. */

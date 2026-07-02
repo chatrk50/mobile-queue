@@ -522,6 +522,8 @@ for (const stmt of [
   `ALTER TABLE sales_history ADD COLUMN cogs REAL`,
   `ALTER TABLE sales_history ADD COLUMN opex REAL`,
   `ALTER TABLE sales_history ADD COLUMN waste_cost REAL`,
+  // Preliminary slip check: hash of the attached slip image → detect the SAME slip reused across orders.
+  `ALTER TABLE slips ADD COLUMN sha TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

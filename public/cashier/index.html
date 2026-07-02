@@ -751,12 +751,27 @@
   </div>
 </div>
 
-<div id="slipPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:420px;width:100%;margin:0;text-align:center">
-    <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
-    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:60vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
-    <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+<div id="slipPop" onclick="if(event.target===this)closeSlip()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:flex-start;justify-content:center;padding:14px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div class="card" style="max-width:420px;width:100%;margin:auto;text-align:center;max-height:none;padding-top:0">
+    <div style="position:sticky;top:0;background:linear-gradient(180deg,#fff 82%,rgba(255,255,255,0));display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px 12px;z-index:2">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+        <span style="width:34px;height:34px;flex:none;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px;stroke:var(--accent)"><path d="M4 3h16v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M8 8h8M8 12h8"/></svg></span>
+        <div style="text-align:left;min-width:0"><div style="font-weight:800;color:var(--navy);font-size:16px;line-height:1.2">ตรวจสลิปการโอน</div><div class="muted" style="font-size:11px">อ่านสลิปอัตโนมัติ · เทียบยอด</div></div>
+      </div>
+      <button class="ghost" style="padding:8px 13px;font-size:16px;flex:none" onclick="closeSlip()" aria-label="ปิด">✕</button>
+    </div>
+    <div id="slipOcr" style="text-align:left;margin:2px 0 8px"></div>
+    <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
+    <img id="slipPopImg" alt="สลิป" onclick="zoomSlip()" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 2px;cursor:zoom-in">
+    <div class="muted" style="font-size:11.5px;margin-bottom:4px">แตะรูปเพื่อดูขนาดเต็ม</div>
+    <p class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+    <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()">ปิด</button>
   </div>
+</div>
+
+<div id="slipZoom" onclick="closeZoom()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:60;overflow:auto;-webkit-overflow-scrolling:touch;text-align:center">
+  <button class="ghost" onclick="event.stopPropagation();closeZoom()" aria-label="ปิด" style="position:fixed;top:12px;right:12px;background:rgba(255,255,255,.92);z-index:2;padding:8px 14px;font-size:18px">✕</button>
+  <img id="slipZoomImg" alt="สลิปเต็มจอ" style="width:100%;max-width:900px;margin:0 auto;display:block">
 </div>
 
 <!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on shop wifi). -->
@@ -767,7 +782,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.2';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.7';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -785,7 +800,64 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPop').style.display='flex'; };
 window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
-window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image; $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
+window.zoomSlip=()=>{ const z=$('slipZoom'), i=$('slipZoomImg'), s=$('slipPopImg'); if(z&&i&&s&&s.src){ i.src=s.src; z.style.display='block'; } };   // full-size slip viewer (pinch-zoom / scroll)
+window.closeZoom=()=>{ const z=$('slipZoom'); if(z) z.style.display='none'; };
+window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image;
+    const p=s.prelim||{}, pb=$('slipPrelim'); if(pb){
+      const dupBox = p.duplicate
+        ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
+        : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
+      pb.innerHTML = dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
+    }
+    $('slipPop').style.display='flex';
+    if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
+  }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
+// --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
+//     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
+const SHOP_RECV=['ธรรมนูญ','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
+const TH_MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+let _tess=null,_tessLoading=null;
+function loadTesseract(){ if(_tess) return Promise.resolve(_tess); if(_tessLoading) return _tessLoading;
+  _tessLoading=new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload=()=>res(window.Tesseract); s.onerror=()=>rej(new Error('load_failed')); document.head.appendChild(s); })
+    .then(T=>{ _tess=T; return T; }); return _tessLoading; }
+function _row(label,ok,detail){ const c=ok?'#047857':'var(--danger)', tag=ok?'ตรง':'ไม่พบ/ไม่ตรง';
+  return `<div class="row between" style="font-size:13px;padding:3px 0"><span>${label}</span><span style="color:${c};font-weight:800">${tag}${detail?` <span class="muted" style="font-weight:400">${detail}</span>`:''}</span></div>`; }
+async function runSlipOcr(imgData, prelim){
+  const box=$('slipOcr'); if(!box) return; prelim=prelim||{};
+  box.innerHTML='<div class="muted" style="font-size:12px">กำลังอ่านสลิป (OCR)…</div>';
+  let T; try{ T=await loadTesseract(); }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">อ่านสลิปอัตโนมัติไม่พร้อม (โหลดตัวอ่านไม่ได้) — โปรดตรวจด้วยตา</div>'; return; }
+  try{
+    const { data } = await T.recognize(imgData,'tha+eng');
+    const raw=(data&&data.text)||''; const flat=raw.replace(/\s+/g,''); const flatND=flat.replace(/\./g,'');   // no-dot for Thai abbrev matching
+    // Is this even a transfer slip? A real slip has these keywords; a random photo/screenshot doesn't.
+    const isSlip = /สลิป|โอนเง|ชำระเง|จำนวนเง|พร้อมเพย|รหัสอ้างอิง|เลขที่รายการ|ค่าธรรมเนียม|เติมเงิน|บาท|promptpay|kbank|k\s*plus|scb|krungthai|ttb|bangkokbank|ธนาคาร|บัญชี/i.test(raw);
+    if(!isSlip){
+      box.innerHTML='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:11px 13px"><div style="color:var(--danger);font-weight:800;font-size:14px">รูปนี้อาจไม่ใช่สลิปการโอน</div><div class="muted" style="font-size:11.5px;margin-top:4px;line-height:1.5">OCR ไม่พบข้อมูลสลิป (ยอด/ธนาคาร/รหัสอ้างอิง) — โปรดขอสลิปที่ถูกต้อง แล้วดูรูปด้วยตาอีกครั้ง</div></div>';
+      return;
+    }
+    // ยอด: เทียบแบบเข้ม — ต้องเจอ "59.00" หรือ 59 ติดกับ ฿/บาท (กันเลขลอย ๆ ในรูปที่ไม่ใช่ยอด)
+    const amt=Number(prelim.expectedAmount); const amtDec=isNaN(amt)?'':amt.toFixed(2); const amtInt=String(amt);
+    const amtOk = !isNaN(amt) && ( flat.includes(amtDec) || new RegExp('(?:฿|บาท)'+amtInt+'(?![0-9])').test(flat) || new RegExp(amtInt+'(?:บาท|฿)').test(flat) );
+    // วันที่วันนี้ (สลิปไทยเป็น พ.ศ. + บางแบงก์ย่อปีเหลือ 2 หลัก และมีจุดในเดือน) — จับแบบยืดหยุ่น
+    let dOk=false, dDetail='';
+    if(prelim.today){ const [y,m,d]=prelim.today.split('-').map(Number); const be=y+543; const dd=String(d); const mo=TH_MONTHS[m-1]||'';
+      const dayOk = flat.includes(dd) || flat.includes('0'+dd);                         // '2' หรือ '02'
+      const monOk = mo && flatND.includes(mo.replace(/\./g,''));                        // 'กค' (ตัดจุด)
+      const yrOk  = flat.includes(String(be)) || flat.includes(String(y));              // 2569 หรือ 2026 (เลี่ยงเลข 2 หลักที่ชนง่าย)
+      dOk = dayOk && (monOk || yrOk);
+      dDetail=dd+' '+mo+' '+be; }
+    // ผู้รับ: ต้องเป็นบัญชีร้าน
+    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/\s+/g,'\\s*'),'i').test(raw)); const rcvOk=!!rcvHit;
+    box.innerHTML='<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
+      +'<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">อ่านสลิปอัตโนมัติ (OCR) · เทียบผล</div>'
+      +_row('ยอด ฿'+(prelim.expectedAmount!=null?prelim.expectedAmount:'-'), amtOk, '')
+      +_row('วันที่วันนี้', dOk, dDetail)
+      +_row('ผู้รับ = บัญชีร้าน', rcvOk, rcvHit?('พบ '+rcvHit):'')
+      +'<div class="muted" style="font-size:11px;margin-top:6px;line-height:1.5">อ่านจากรูปด้วย OCR อาจคลาดเคลื่อน — เป็นตัวช่วย ไม่ใช่การยืนยันกับธนาคาร ถ้าไม่ชัดให้ดูสลิปจริง (เวลาในสลิปตรวจด้วยตา)</div></div>';
+  }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">อ่านสลิปไม่สำเร็จ — โปรดตรวจด้วยตา</div>'; }
+}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 // White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
 // Defaults to YO-DEE server-side, so this is a no-op for the existing shop.
