@@ -762,10 +762,16 @@
     </div>
     <div id="slipOcr" style="text-align:left;margin:2px 0 8px"></div>
     <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
-    <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 4px">
+    <img id="slipPopImg" alt="สลิป" onclick="zoomSlip()" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 2px;cursor:zoom-in">
+    <div class="muted" style="font-size:11.5px;margin-bottom:4px">แตะรูปเพื่อดูขนาดเต็ม</div>
     <p class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
     <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()">ปิด</button>
   </div>
+</div>
+
+<div id="slipZoom" onclick="closeZoom()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:60;overflow:auto;-webkit-overflow-scrolling:touch;text-align:center">
+  <button class="ghost" onclick="event.stopPropagation();closeZoom()" aria-label="ปิด" style="position:fixed;top:12px;right:12px;background:rgba(255,255,255,.92);z-index:2;padding:8px 14px;font-size:18px">✕</button>
+  <img id="slipZoomImg" alt="สลิปเต็มจอ" style="width:100%;max-width:900px;margin:0 auto;display:block">
 </div>
 
 <!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on shop wifi). -->
@@ -776,7 +782,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.6';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.7';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -794,6 +800,8 @@ window.showPromptPay=(amount)=>{ $('ppPopAmt').textContent=amount;
   $('ppPop').style.display='flex'; };
 window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
+window.zoomSlip=()=>{ const z=$('slipZoom'), i=$('slipZoomImg'), s=$('slipPopImg'); if(z&&i&&s&&s.src){ i.src=s.src; z.style.display='block'; } };   // full-size slip viewer (pinch-zoom / scroll)
+window.closeZoom=()=>{ const z=$('slipZoom'); if(z) z.style.display='none'; };
 window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image;
     const p=s.prelim||{}, pb=$('slipPrelim'); if(pb){
       const dupBox = p.duplicate
@@ -823,9 +831,15 @@ async function runSlipOcr(imgData, prelim){
   try{
     const { data } = await T.recognize(imgData,'tha+eng');
     const raw=(data&&data.text)||''; const flat=raw.replace(/\s+/g,''); const flatND=flat.replace(/\./g,'');   // no-dot for Thai abbrev matching
-    // ยอด: หาเลขยอดในสลิป (เทียบทั้งแบบมี/ไม่มีทศนิยม + คั่นหลักพัน)
-    const amt=Number(prelim.expectedAmount);
-    const amtOk = !isNaN(amt) && (flat.includes(amt.toFixed(2)) || flat.includes(String(amt)) || flat.includes(amt.toLocaleString('en-US')) );
+    // Is this even a transfer slip? A real slip has these keywords; a random photo/screenshot doesn't.
+    const isSlip = /สลิป|โอนเง|ชำระเง|จำนวนเง|พร้อมเพย|รหัสอ้างอิง|เลขที่รายการ|ค่าธรรมเนียม|เติมเงิน|บาท|promptpay|kbank|k\s*plus|scb|krungthai|ttb|bangkokbank|ธนาคาร|บัญชี/i.test(raw);
+    if(!isSlip){
+      box.innerHTML='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:11px 13px"><div style="color:var(--danger);font-weight:800;font-size:14px">รูปนี้อาจไม่ใช่สลิปการโอน</div><div class="muted" style="font-size:11.5px;margin-top:4px;line-height:1.5">OCR ไม่พบข้อมูลสลิป (ยอด/ธนาคาร/รหัสอ้างอิง) — โปรดขอสลิปที่ถูกต้อง แล้วดูรูปด้วยตาอีกครั้ง</div></div>';
+      return;
+    }
+    // ยอด: เทียบแบบเข้ม — ต้องเจอ "59.00" หรือ 59 ติดกับ ฿/บาท (กันเลขลอย ๆ ในรูปที่ไม่ใช่ยอด)
+    const amt=Number(prelim.expectedAmount); const amtDec=isNaN(amt)?'':amt.toFixed(2); const amtInt=String(amt);
+    const amtOk = !isNaN(amt) && ( flat.includes(amtDec) || new RegExp('(?:฿|บาท)'+amtInt+'(?![0-9])').test(flat) || new RegExp(amtInt+'(?:บาท|฿)').test(flat) );
     // วันที่วันนี้ (สลิปไทยเป็น พ.ศ. + บางแบงก์ย่อปีเหลือ 2 หลัก และมีจุดในเดือน) — จับแบบยืดหยุ่น
     let dOk=false, dDetail='';
     if(prelim.today){ const [y,m,d]=prelim.today.split('-').map(Number); const be=y+543; const dd=String(d); const mo=TH_MONTHS[m-1]||'';
