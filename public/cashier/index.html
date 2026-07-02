@@ -756,6 +756,7 @@
     <div class="row between"><h1 style="margin:0">สลิปจากลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeSlip()">✕</button></div>
     <img id="slipPopImg" alt="สลิป" style="width:100%;max-height:52vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:12px 0 4px">
     <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
+    <div id="slipOcr" style="text-align:left;margin:8px 0"></div>
     <p class="muted" style="font-size:12px">ตรวจยอด/บัญชี/เวลาให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
   </div>
 </div>
@@ -768,7 +769,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.3';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.4';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -793,7 +794,46 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
         : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
       pb.innerHTML = dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:12.5px;line-height:1.75"><b>ยืนยันด้วยตาก่อนกดชำระ:</b><br>• ยอดต้องเป็น <b>฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b><br>• วันที่ในสลิป = <b>'+(p.today||'วันนี้')+'</b> · เวลาใกล้เคียงตอนนี้<br>• ผู้รับ = บัญชีร้าน (ธรรมนูญ / YODEE YOGURT)</div>';
     }
-    $('slipPop').style.display='flex'; }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
+    $('slipPop').style.display='flex';
+    if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
+  }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
+// --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
+//     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
+const SHOP_RECV=['ธรรมนูญ','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
+const TH_MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+let _tess=null,_tessLoading=null;
+function loadTesseract(){ if(_tess) return Promise.resolve(_tess); if(_tessLoading) return _tessLoading;
+  _tessLoading=new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload=()=>res(window.Tesseract); s.onerror=()=>rej(new Error('load_failed')); document.head.appendChild(s); })
+    .then(T=>{ _tess=T; return T; }); return _tessLoading; }
+function _row(label,ok,detail){ const c=ok?'#047857':'var(--danger)', tag=ok?'ตรง':'ไม่พบ/ไม่ตรง';
+  return `<div class="row between" style="font-size:13px;padding:3px 0"><span>${label}</span><span style="color:${c};font-weight:800">${tag}${detail?` <span class="muted" style="font-weight:400">${detail}</span>`:''}</span></div>`; }
+async function runSlipOcr(imgData, prelim){
+  const box=$('slipOcr'); if(!box) return; prelim=prelim||{};
+  box.innerHTML='<div class="muted" style="font-size:12px">กำลังอ่านสลิป (OCR)…</div>';
+  let T; try{ T=await loadTesseract(); }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">อ่านสลิปอัตโนมัติไม่พร้อม (โหลดตัวอ่านไม่ได้) — โปรดตรวจด้วยตา</div>'; return; }
+  try{
+    const { data } = await T.recognize(imgData,'tha+eng');
+    const raw=(data&&data.text)||''; const flat=raw.replace(/\s+/g,'');
+    // ยอด: หาเลขยอดในสลิป (เทียบทั้งแบบมี/ไม่มีทศนิยม)
+    const amt=Number(prelim.expectedAmount);
+    const amtOk = !isNaN(amt) && (flat.includes(amt.toFixed(2)) || flat.includes(String(amt)) || flat.includes(amt.toLocaleString('en-US')) );
+    // วันที่วันนี้ (สลิปไทยเป็น พ.ศ.) — เทียบ วัน+เดือนไทย หรือ วัน+ปี พ.ศ.
+    let dOk=false, dDetail='';
+    if(prelim.today){ const [y,m,d]=prelim.today.split('-').map(Number); const be=y+543; const dd=String(d); const mo=TH_MONTHS[m-1]||'';
+      dOk = (flat.includes(dd)&&flat.includes(String(be))) || (flat.includes(dd)&&mo&&flat.includes(mo.replace(/\./g,'')));
+      dDetail=dd+' '+mo+' '+be; }
+    // ผู้รับ: ต้องเป็นบัญชีร้าน
+    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/\s+/g,'\\s*'),'i').test(raw)); const rcvOk=!!rcvHit;
+    box.innerHTML='<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
+      +'<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">อ่านสลิปอัตโนมัติ (OCR) · เทียบผล</div>'
+      +_row('ยอด ฿'+(prelim.expectedAmount!=null?prelim.expectedAmount:'-'), amtOk, '')
+      +_row('วันที่วันนี้', dOk, dDetail)
+      +_row('ผู้รับ = บัญชีร้าน', rcvOk, rcvHit?('พบ '+rcvHit):'')
+      +'<div class="muted" style="font-size:11px;margin-top:6px;line-height:1.5">อ่านจากรูปด้วย OCR อาจคลาดเคลื่อน — เป็นตัวช่วย ไม่ใช่การยืนยันกับธนาคาร ถ้าไม่ชัดให้ดูสลิปจริง (เวลาในสลิปตรวจด้วยตา)</div></div>';
+  }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">อ่านสลิปไม่สำเร็จ — โปรดตรวจด้วยตา</div>'; }
+}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 // White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
 // Defaults to YO-DEE server-side, so this is a no-op for the existing shop.
