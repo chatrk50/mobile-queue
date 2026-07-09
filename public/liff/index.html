@@ -662,6 +662,7 @@ window.openMember=async()=>{
   let bal={points:0};
   if(conf.enabled){ try{ bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); }catch(e){} }
   if(!memberOn && !stampEligible){ toast('ระบบสมาชิกยังไม่เปิดใช้งานค่ะ'); return; }
+  setNavTab('member');   // only mark the tab active once we know the popup will actually open
 
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
@@ -723,7 +724,7 @@ window.openMember=async()=>{
   // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
   try{ loadReferral(); }catch(e){}
 };
-window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; };
+window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; setNavTab('home'); };
 // Tap the card to flip between identity (front) and QR (back).
 window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; el.style.transform = (el.style.transform||'').includes('180') ? 'rotateY(0deg)' : 'rotateY(180deg)'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
@@ -1151,18 +1152,19 @@ window.openOrderHistory=async()=>{ if(!lineUserId) return;
   const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
   try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
   catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
-window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; };
+window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; setNavTab('home'); };
 // บัญชี hub: profile summary + a menu list (ประวัติการสั่งซื้อ / บัตรสมาชิก are sub-items reached
 // from here, not the direct destination of the บัญชี nav tab itself).
 window.openAccount=()=>{
   closeAllPopups();
+  setNavTab('account');
   $('accountPop').style.display='flex';
   $('acctName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
   const img=$('acctAvatarImg'), fb=$('acctAvatarFallback');
   if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
   else { img.style.display='none'; fb.style.display='block'; }
 };
-window.closeAccount=()=>{ $('accountPop').style.display='none'; };
+window.closeAccount=()=>{ $('accountPop').style.display='none'; setNavTab('home'); };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
 const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
 let _histOrders=[];
@@ -1419,7 +1421,7 @@ function couponDiscountFor(net){ if(!cartCoupon) return 0;
 function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
   el.innerHTML = cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev); }
-window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; };
+window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; if(_couponMode!=='cart') setNavTab('home'); };
 window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
 let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar "my coupons" list (no active order yet)
 window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
@@ -1789,20 +1791,28 @@ async function proceed(){
 (function(){ const gc=document.getElementById('getCard'), nav=document.getElementById('bottomNav');
   if(!gc || !nav) return;
   const sync=()=>{ const on = gc.style.display!=='none'; nav.style.display = on?'block':'none'; document.body.classList.toggle('has-bottomnav',on);
-    if(on) document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab==='home')); };
+    if(on) setNavTab('home'); };
   sync();
   new MutationObserver(sync).observe(gc,{attributes:true,attributeFilter:['style']}); })();
+// Marks the tapped tab active. Only called once the destination is actually confirmed to open —
+// a toggled-off feature (e.g. member/loyalty disabled) shows its toast and leaves the CURRENT tab
+// (home) highlighted instead of falsely lighting up a page that never opened.
+function setNavTab(tab){ document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); }
 window.navGo=(tab)=>{
-  document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  if(tab==='home'){ return; }   // already home — the bar only shows here anyway
-  if(tab==='coupon'){ openCoupon('browse'); return; }
-  if(tab==='member'){ if(lineUserId) openMember(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัตรสมาชิกนะคะ'); return; }
-  if(tab==='account'){ if(lineUserId) openAccount(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }
+  if(tab==='home'){ setNavTab('home'); return; }   // already home — the bar only shows here anyway
+  if(tab==='coupon'){ setNavTab('coupon'); openCoupon('browse'); return; }
+  if(tab==='member'){ if(lineUserId) openMember(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัตรสมาชิกนะคะ'); return; }   // setNavTab happens inside openMember, only on success
+  if(tab==='account'){ if(lineUserId) openAccount(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }   // setNavTab happens inside openAccount
 };
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 let _promoTimer=null;
 window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; if(_promoTimer){ clearTimeout(_promoTimer); _promoTimer=null; } };
-async function maybePromo(){ try{ if(sessionStorage.getItem('promoSeen')) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; sessionStorage.setItem('promoSeen','1');
+// Once per CALENDAR DAY, not once per browser session — sessionStorage survives as long as LINE's
+// in-app webview stays alive (which can be the customer's whole day, or a whole UAT testing
+// session), so a session-based gate looked like the banner had silently stopped showing at all.
+function promoSeenToday(){ try{ return localStorage.getItem('promoSeenDate')===new Date().toISOString().slice(0,10); }catch(e){ return false; } }
+function markPromoSeenToday(){ try{ localStorage.setItem('promoSeenDate', new Date().toISOString().slice(0,10)); }catch(e){} }
+async function maybePromo(){ try{ if(promoSeenToday()) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; markPromoSeenToday();
   _promoTimer=setTimeout(()=>{ closePromoOvl(); },3000); } }catch(e){} }
 (async ()=>{
   const _t0=Date.now();
