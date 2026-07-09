@@ -13,8 +13,8 @@
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   @keyframes loadfill{ from{width:8%} to{width:100%} }
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
-  .glass-ovl .card, #drinkSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
-  .glass-ovl, #drinkSheet{ overscroll-behavior:contain; }
+  .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+  .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
   body.noscroll{ overflow:hidden; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
@@ -195,10 +195,15 @@
       </div>
     </div>
     <div id="tTimeline" style="display:none;margin:6px 2px 16px"></div>
-    <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
+    <!-- compact order-details row → tap opens the order-details bottom sheet (itemized breakdown) -->
+    <div id="tOrderCompact" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px;cursor:pointer" onclick="openOrderDetail()">
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
-      <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
-      <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
+      <div class="row between" style="margin-top:8px;align-items:center">
+        <span class="muted" style="font-size:13px" id="tOrderSummaryTxt">—</span>
+        <span style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px;flex:none">ดูรายละเอียด <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+    <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 12px">
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
         <div id="payReassure" style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
@@ -263,6 +268,15 @@
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
 </div>
 <div id="toast" class="toast"></div>
+
+<!-- ORDER DETAILS bottom sheet: itemized breakdown, opened by tapping the order summary row -->
+<div id="orderDetailSheet" onclick="if(event.target===this)closeOrderDetail()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:flex-end;justify-content:center">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:78vh;overflow:auto;padding:16px">
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:18px">รายละเอียดออเดอร์</h1><button class="ghost" onclick="closeOrderDetail()" aria-label="ปิด" style="padding:6px 12px">✕</button></div>
+    <div id="tOrderItems" style="font-size:13.5px;margin-top:12px"></div>
+    <div class="row between" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
+  </div>
+</div>
 
 <!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
 <div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
@@ -360,6 +374,14 @@
           <div style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
         </div>
       </div>
+    </div>
+    <!-- STAMP/REWARD CARD: visual punch-card art (10 slots) — filled stars = progress toward a free redeem. -->
+    <div id="memberStampCard" style="display:none;margin-top:11px;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(14,40,55,.4)">
+      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" style="width:100%;display:block">
+      <div id="stampName" style="position:absolute;top:4.5%;left:4.8%;width:28%;height:18%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9.5px;font-weight:800;color:#8a5a12;line-height:1.15;padding:0 3px;overflow:hidden"></div>
+      <div id="stampGrid" style="position:absolute;top:47%;left:12%;width:76%;height:26%;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr)"></div>
+      <div id="stampMsg1" style="position:absolute;bottom:3.5%;left:4%;width:44%;height:15%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
+      <div id="stampMsg2" style="position:absolute;bottom:3.5%;right:4%;width:44%;height:15%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;font-weight:700;color:#8a5a12;line-height:1.15;padding:0 4px"></div>
     </div>
     <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
     <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
@@ -528,7 +550,7 @@ window.openMember=async()=>{
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
   $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
   $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
-  $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  $('memberStamp').style.display='none'; $('memberStampCard').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
   let visits=0;
   try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
     visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
@@ -554,11 +576,31 @@ window.openMember=async()=>{
   if(!storeOpen){ $('memberReorder').style.display='none'; const b=$('memberOrderBtn'); b.disabled=true; b.style.opacity=.5; b.textContent='⏰ ร้านปิดอยู่'; }
   else { const b=$('memberOrderBtn'); b.disabled=false; b.style.opacity=1; }
   // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
+  // Visual punch-card (card-reward.png, 10 slots) when the shop uses the default 10-per-reward; plain text otherwise.
   try{ const conf=await api('/api/loyalty/config');
-    if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
-      $('memberStamp').innerHTML = (pts>=per) ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
-        : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
-      $('memberStamp').style.display=''; }
+    if(conf&&conf.enabled){
+      const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId));
+      const per=conf.stampsPerReward||10, pts=bal.points||0;
+      const ready = pts>0 && (pts%per===0);
+      const filled = ready ? per : (pts%per);
+      const toGo = per-filled;
+      if(per===10){
+        $('stampName').textContent = displayName?('คุณ '+displayName):'สมาชิก';
+        const grid=$('stampGrid'); grid.innerHTML='';
+        for(let i=0;i<per;i++){
+          const on=i<filled;
+          grid.insertAdjacentHTML('beforeend','<div style="display:flex;align-items:center;justify-content:center">'+(on?'<svg viewBox="0 0 24 24" style="width:56%;height:56%;fill:#e55b6b;stroke:#c23553;stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>':'')+'</div>');
+        }
+        $('stampMsg1').textContent = ready ? '🎁 พร้อมแลกฟรี!' : ('อีก '+toGo+' ดวง ฟรี!');
+        $('stampMsg2').textContent = ready ? 'แสดงบัตรที่เคาน์เตอร์' : (filled+'/'+per+' ดวง');
+        $('memberStampCard').style.display='block';
+        $('memberStamp').style.display='none';
+      } else {
+        $('memberStamp').innerHTML = ready ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
+          : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
+        $('memberStamp').style.display='';
+      }
+    }
   }catch(e){}
   // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
   try{ loadReferral(); }catch(e){}
@@ -1069,8 +1111,8 @@ function showWow(loy){
   try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
 }
 function renderOrderBlock(v){
-  if(!v.order){ show('tOrder',false); return; }
-  show('tOrder',true);
+  if(!v.order){ show('tOrder',false); show('tOrderCompact',false); return; }
+  show('tOrder',true); show('tOrderCompact',true);
   const lines = v.order.lines || (v.order.items||[]).map(i=>({...i,toppings:[]}));
   $('tOrderItems').innerHTML = lines.map(l=>
     `<div class="row between"><span>${l.qty}× ${esc(l.name)}</span><span class="muted">฿${l.price*l.qty}</span></div>`+
@@ -1081,6 +1123,8 @@ function renderOrderBlock(v){
     $('tOrderItems').innerHTML += `<div class="row between" style="color:#7c3aed;font-weight:800;margin-top:4px"><span>${dlabel}</span><span>-฿${disc}</span></div>`; }
   const net=Math.max(0, v.order.total - disc);
   $('tOrderTotal').textContent = '฿'+net;
+  const nQty = lines.reduce((s,l)=>s+(l.qty||1),0);
+  $('tOrderSummaryTxt').textContent = nQty+' รายการ · ฿'+net;
   const pill=$('tPayPill'), st=v.order.status, total=net;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
@@ -1157,6 +1201,8 @@ window.openPayPicker=(mode)=>{
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
+window.openOrderDetail=()=>{ $('orderDetailSheet').style.display='flex'; };
+window.closeOrderDetail=()=>{ $('orderDetailSheet').style.display='none'; };
 window.selectPayMethod=(m)=>{
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
@@ -1442,7 +1488,7 @@ async function proceed(){
 }
 
 // Lock the background from scrolling while ANY popup/sheet is open (watch their display style).
-(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard'];
+(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet'];
   const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
   const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
