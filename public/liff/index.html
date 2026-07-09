@@ -135,7 +135,7 @@
       </div>
       <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
     </div>
-    <div id="historyLink" style="display:none;margin:8px 2px 0;text-align:right"><span style="font-size:12.5px;color:var(--accent);font-weight:700;cursor:pointer" onclick="openOrderHistory()"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px;vertical-align:-2px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> ประวัติการสั่ง ›</span></div>
+    <!-- ประวัติการสั่ง link removed from here — now reachable via the บัญชี bottom-nav tab, this was a duplicate. -->
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -267,14 +267,15 @@
           <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5;margin-bottom:10px;color:#334155">
             <b style="color:var(--navy)">จ่ายในมือถือเครื่องเดียว</b> · บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span>
           </div>
-          <!-- bank-app legend: informational only (PromptPay QR is read by any Thai banking app) -->
-          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <span class="muted" style="font-size:10.5px;width:100%;margin-bottom:2px">สแกนได้ทุกแอปธนาคาร</span>
-            <span style="background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">K PLUS</span>
-            <span style="background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">SCB EASY</span>
-            <span style="background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">KTB NEXT</span>
-            <span style="background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">Bualuang</span>
-            <span style="background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">ttb touch</span>
+          <!-- bank-app strip: tap opens that bank's app (best-effort deep link) — when payMethod is
+               kbank, setQrFor() hides all but K PLUS since that QR only works with Kbank's app. -->
+          <div id="bankIconStrip" style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <span id="bankIconHint" class="muted" style="font-size:10.5px;width:100%;margin-bottom:2px">แตะไอคอนเพื่อเปิดแอปธนาคาร</span>
+            <span data-bank="kplus" onclick="openBankApp('kplus')" style="cursor:pointer;background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">K PLUS</span>
+            <span data-bank="scbeasy" onclick="openBankApp('scbeasy')" style="cursor:pointer;background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">SCB EASY</span>
+            <span data-bank="ktbnext" onclick="openBankApp('ktbnext')" style="cursor:pointer;background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">KTB NEXT</span>
+            <span data-bank="bualuang" onclick="openBankApp('bualuang')" style="cursor:pointer;background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">Bualuang</span>
+            <span data-bank="ttbtouch" onclick="openBankApp('ttbtouch')" style="cursor:pointer;background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">ttb touch</span>
           </div>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
           <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
@@ -507,6 +508,11 @@ let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = nul
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// These full-screen popups are mutually exclusive — nothing used to close the others before opening
+// a new one, so e.g. tapping "บัญชี" while the member card was open left BOTH stacked on screen at
+// once. Every open*() below calls this first.
+const ALL_POPUPS=['drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','randomPop','historyLiffCard','orderDetailSheet'];
+function closeAllPopups(){ ALL_POPUPS.forEach(id=>{ const e=$(id); if(e) e.style.display='none'; }); }
 // In-app modal: appPrompt (text input) + appConfirm (yes/no) — replaces native prompt()/confirm().
 let _amRes=null;
 window.amOk=()=>{ const inp=$('amInput'); const shown=inp.style.display!=='none'; _amClose(shown?inp.value:true); };
@@ -613,6 +619,7 @@ window.showMemberTab=(tab)=>{
   $('memberStampCard').style.display = isCard?'none':'block';
 };
 window.openMember=async()=>{
+  closeAllPopups();
   // Two independent owner toggles decide what this popup can show: memberEnabled (identity/tier card
   // + QR) and loyalty "enabled" (stamp programme). Only reward → only the stamp view. Only member →
   // only the identity view. Both → tab toggle. Neither → don't open the popup at all.
@@ -746,7 +753,6 @@ let FAV=null;
 async function loadMemberStrip(){
   const el=$('memberStrip'); if(!el) return; el.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
-  const hl=$('historyLink'); if(hl) hl.style.display='block';   // order history is for any LINE customer (independent of loyalty)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
     if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
@@ -903,6 +909,7 @@ function itemImg(m){
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{
   if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+  closeAllPopups();
   await loadMenu(); cart=[]; cartCoupon=null; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
@@ -929,7 +936,7 @@ window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketP
 let dsSweet=100, dsQty=1, dsEditSig=null;
 const SWEET_LABEL={0:'0% · ไม่หวานเลย',25:'25% · หวานน้อย',50:'50% · ปานกลาง',100:'100% · ปกติ',125:'125% · เพิ่มหวาน'};
 const BULKY_TOP=['เฉาก๋วย','บุก','บัวลอย'];   // heavy/bulky toppings — limit total toppings to 2 if one is chosen
-window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; dsEditSig=null; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
+window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; dsEditSig=null; closeAllPopups(); renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
 // Edit an existing cart line: open the same sheet pre-filled; "อัปเดต" replaces that whole group.
 window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=MENU.find(x=>x.name===g.e.name); if(!d){ toast('เมนูนี้ไม่มีแล้ว'); return; }
   pendingDrink=d; pendingTops={}; (g.e.toppings||[]).forEach(t=>{ const tm=MENU.find(x=>x.name===t.name && x.category==='topping'); if(tm) pendingTops[tm.id]={name:t.name,price:t.price,qty:t.qty||1}; });
@@ -1005,7 +1012,7 @@ function randomCard(m, spinning){
   </div>`;
 }
 window.openRandom=()=>{ if(!randomPool().length){ toast('ขณะนี้ยังไม่มีเครื่องดื่มให้สุ่ม'); return; }
-  $('randomPop').style.display='flex'; spinRandom(); };
+  closeAllPopups(); $('randomPop').style.display='flex'; spinRandom(); };
 window.closeRandom=()=>{ $('randomPop').style.display='none'; };
 window.spinRandom=()=>{
   const pool=randomPool(); if(!pool.length){ closeRandom(); return; }
@@ -1046,7 +1053,7 @@ function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.t
     else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
   updateNudges(); }
 // Step 4: review basket -> confirm or cancel.
-window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
+window.openBasket=()=>{ closeAllPopups(); renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount(); };
 // Identical drinks (same name + sweetness + toppings) collapse to one line "N× …"; any
@@ -1067,16 +1074,16 @@ function renderBasket(){
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;color:var(--navy);font-size:15px;line-height:1.3">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
-        <div style="display:inline-flex;align-items:center;gap:14px;margin-top:11px;border:1px solid var(--line);border-radius:999px;padding:3px 5px">
-          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
-          <b style="min-width:16px;text-align:center;font-size:15px;color:var(--navy)">${g.qty}</b>
-          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
+        <div style="display:inline-flex;align-items:center;gap:10px;margin-top:9px">
+          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
+          <b style="min-width:14px;text-align:center;font-size:14px;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
         </div>
       </div>
       <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
-        <button class="ghost" style="padding:4px 10px;font-size:12px;color:var(--accent)" onclick="editDrinkItem(${gi})">แก้ไข</button>
-        <button class="ghost danger" style="padding:4px 10px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+        <button class="ghost" style="width:56px;padding:4px 0;font-size:12px;color:var(--accent)" onclick="editDrinkItem(${gi})">แก้ไข</button>
+        <button class="ghost danger" style="width:56px;padding:4px 0;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
       </div>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
@@ -1096,6 +1103,7 @@ window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g
 window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 // ---------- ประวัติการสั่ง (customer order history) ----------
 window.openOrderHistory=async()=>{ if(!lineUserId) return;
+  closeAllPopups();
   $('historyLiffCard').style.display='flex';   // overlay ON TOP of getCard (not a replacement) — same pattern as memberPop/basketPop
   const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
   try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
@@ -1365,6 +1373,7 @@ window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!
   cartCoupon=c; closeCoupon(); renderBasket(); };
 window.openCoupon=async(mode)=>{
   _couponMode = mode==='browse' ? 'browse' : 'cart';
+  if(_couponMode==='browse') closeAllPopups();   // top-level (nav bar) — 'cart' mode is nested INSIDE basketPop, must not close it
   $('couponPickerTitle').textContent = _couponMode==='browse' ? 'คูปองของฉัน' : 'เลือกคูปองส่วนลด';
   const net = _couponMode==='browse' ? 999999 : cartPreCouponNet();   // browse mode: don't gate on min-spend, there's no order yet
   const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
@@ -1433,8 +1442,28 @@ function setQrFor(isKbank){
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal;
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
   }
+  // The static KBank QR only works scanned from K PLUS — hide the other bank icons in that case.
+  const strip=$('bankIconStrip');
+  if(strip){
+    strip.querySelectorAll('[data-bank]').forEach(el=>{ el.style.display = (isKbank && el.dataset.bank!=='kplus') ? 'none' : ''; });
+    const hint=$('bankIconHint'); if(hint) hint.textContent = isKbank ? 'แตะไอคอนเพื่อเปิดแอป K PLUS' : 'แตะไอคอนเพื่อเปิดแอปธนาคาร';
+  }
   startQrCountdown();
 }
+// Best-effort bank-app deep links — these custom URL schemes are NOT officially documented by the
+// banks, so they may stop working after an app update. Always confirm + remind about the slip first,
+// and never treat a silent no-op (unknown scheme) as an error — worst case the customer just opens
+// the app manually, same as before this existed.
+const BANK_SCHEMES={ kplus:'kplus://', scbeasy:'scbeasy://', ktbnext:'krungthainext://', bualuang:'bualuang://', ttbtouch:'ttbtouch://' };
+const BANK_NAMES={ kplus:'K PLUS', scbeasy:'SCB EASY', ktbnext:'Krungthai NEXT', bualuang:'Bualuang mBanking', ttbtouch:'ttb touch' };
+window.openBankApp=async(bank)=>{
+  const name=BANK_NAMES[bank]||bank;
+  const ok=await appConfirm({title:'เปิดแอป '+name, message:'ระบบจะพาไปเปิดแอป '+name+' ให้ค่ะ\nจ่ายเงินเสร็จแล้ว อย่าลืมกลับมาหน้านี้เพื่อแนบสลิปด้วยนะคะ', okText:'ไปเปิดแอป', cancelText:'ยกเลิก'});
+  if(!ok) return;
+  const scheme=BANK_SCHEMES[bank];
+  if(scheme){ try{ window.location.href=scheme; }catch(e){} }
+  setTimeout(()=>{ toast('ถ้าแอปไม่เปิดเอง ลองเปิดเองแล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ'); },1200);
+};
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
 window.confirmCounter=()=>{
@@ -1686,8 +1715,10 @@ window.navGo=(tab)=>{
   if(tab==='account'){ if(lineUserId) openOrderHistory(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }
 };
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
-window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; };
-async function maybePromo(){ try{ if(sessionStorage.getItem('promoSeen')) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; sessionStorage.setItem('promoSeen','1'); } }catch(e){} }
+let _promoTimer=null;
+window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; if(_promoTimer){ clearTimeout(_promoTimer); _promoTimer=null; } };
+async function maybePromo(){ try{ if(sessionStorage.getItem('promoSeen')) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; sessionStorage.setItem('promoSeen','1');
+  _promoTimer=setTimeout(()=>{ closePromoOvl(); },3000); } }catch(e){} }
 (async ()=>{
   const _t0=Date.now();
   try{
