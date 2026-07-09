@@ -1442,6 +1442,8 @@ export function setCustomerBirthday(key, birthday) {
   if (!key) throw new Error('customer_required');
   if (!birthdayMD(birthday)) throw new Error('bad_birthday');
   const val = String(birthday).slice(0, 10);
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;   // a date of birth can never be in the future
+  if (val > today) throw new Error('bad_birthday');
   db.prepare(`INSERT INTO customers (line_user_id, birthday) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET birthday=excluded.birthday`).run(key, val);
   return { ok: true, birthday: val, isBirthday: isBirthdayToday(val) };
 }
