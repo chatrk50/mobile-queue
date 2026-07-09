@@ -1786,14 +1786,22 @@ async function proceed(){
 (function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
   const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
   const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
-// #5: bottom nav bar — only visible on the home screen (getCard); auto-syncs so no other
-// show('getCard',...) call site needs to know the nav bar exists.
+// #5: bottom nav bar — only visible on the home screen (getCard), AND hidden again whenever one of
+// the full-page views (member/history/account/coupon-browse) is open on top of it. Those pages are
+// truly edge-to-edge now (no bottom gap reserved for the nav), so leaving the nav floating over them
+// at a higher z-index would cover/steal taps from whatever content lands at the very bottom.
 (function(){ const gc=document.getElementById('getCard'), nav=document.getElementById('bottomNav');
   if(!gc || !nav) return;
-  const sync=()=>{ const on = gc.style.display!=='none'; nav.style.display = on?'block':'none'; document.body.classList.toggle('has-bottomnav',on);
+  const coverIds=['memberPop','historyLiffCard','accountPop','couponPickerPop'];
+  const sync=()=>{
+    const gcOn = gc.style.display!=='none';
+    const covered = coverIds.some(id=>{ const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none'; });
+    const on = gcOn && !covered;
+    nav.style.display = on?'block':'none'; document.body.classList.toggle('has-bottomnav',on);
     if(on) setNavTab('home'); };
   sync();
-  new MutationObserver(sync).observe(gc,{attributes:true,attributeFilter:['style']}); })();
+  new MutationObserver(sync).observe(gc,{attributes:true,attributeFilter:['style']});
+  coverIds.forEach(id=>{ const e=document.getElementById(id); if(e) new MutationObserver(sync).observe(e,{attributes:true,attributeFilter:['style']}); }); })();
 // Marks the tapped tab active. Only called once the destination is actually confirmed to open —
 // a toggled-off feature (e.g. member/loyalty disabled) shows its toast and leaves the CURRENT tab
 // (home) highlighted instead of falsely lighting up a page that never opened.
