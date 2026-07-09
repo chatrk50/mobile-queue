@@ -470,6 +470,23 @@ const rwReconLine = rwRecon.lines.find((l) => l.code === 'reward');
 ok(!!rwReconLine && rwReconLine.orders >= 1, `INVARIANT reward redemptions show up in tenderRecon (found=${!!rwReconLine}, orders=${rwReconLine && rwReconLine.orders})`);
 ok(rwReconLine && rwReconLine.label === 'แลกด้วยแต้มสะสม (ฟรี)', `INVARIANT reward line has a friendly label, not the raw code — got ${JSON.stringify(rwReconLine && rwReconLine.label)}`);
 
+// ---- Birthday capture: date-of-birth can't be in the future, and can't be within the last year
+//      either (a customer entering their OWN birthday to order themselves can't be that young —
+//      almost certainly a mistyped year). Both give a specific, distinguishable error reason. ----
+console.log('\n== Birthday validation (future + too-recent dates rejected) ==');
+const bdCust = 'Ubdaytest0000000000000000000001';
+const futureDate = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);   // +2d clears the UTC/Bangkok (+7h) date-boundary overlap
+let bdErr = null;
+try { Q.setCustomerBirthday(bdCust, futureDate); } catch (e) { bdErr = e.message; }
+ok(bdErr === 'future_birthday', `INVARIANT a future birthday is rejected with a specific reason — got ${bdErr}`);
+const recentDate = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);   // 30 days ago
+bdErr = null;
+try { Q.setCustomerBirthday(bdCust, recentDate); } catch (e) { bdErr = e.message; }
+ok(bdErr === 'birthday_too_recent', `INVARIANT a birthday within the last year is rejected — got ${bdErr}`);
+const validDate = '1995-06-15';
+const bdSaved = Q.setCustomerBirthday(bdCust, validDate);
+ok(bdSaved.ok === true && bdSaved.birthday === validDate, 'INVARIANT a birthday over a year old saves fine');
+
 // ---- Tender toggle drives the customer picker: /api/config derives payCounter/payOnline from the
 //      ACTIVE tenders (listTenders(false)), so a toggled-off channel must leave that list. ----
 console.log('\n== Payment tender toggle → active list (customer picker source) ==');

@@ -1446,8 +1446,12 @@ export function setCustomerBirthday(key, birthday) {
   if (!key) throw new Error('customer_required');
   if (!birthdayMD(birthday)) throw new Error('bad_birthday');
   const val = String(birthday).slice(0, 10);
-  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;   // a date of birth can never be in the future
-  if (val > today) throw new Error('bad_birthday');
+  // A date of birth can't be in the future, and — since the customer is entering their OWN
+  // birthday to order by themselves — it can't be less than a year ago either; that's almost
+  // always a mistyped year rather than a real self-ordering infant.
+  const { today, cutoff } = db.prepare("SELECT date(datetime('now','+7 hours')) today, date(datetime('now','+7 hours'),'-1 year') cutoff").get();
+  if (val > today) throw new Error('future_birthday');
+  if (val > cutoff) throw new Error('birthday_too_recent');
   db.prepare(`INSERT INTO customers (line_user_id, birthday) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET birthday=excluded.birthday`).run(key, val);
   return { ok: true, birthday: val, isBirthday: isBirthdayToday(val) };
 }
