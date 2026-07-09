@@ -1255,11 +1255,15 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
     return { code: t.code, label: t.label, kind: t.kind, fee_pct: t.fee_pct || 0,
              orders: hit.orders || 0, amount, fee, net: r2(amount - fee) };
   });
+  // Orders paid via a code that isn't a registered tender (legacy promptpay/slip/other, or a
+  // fully stamp-redeemed free order) still show up here, not lost — just labeled generically
+  // by their raw code unless we give it a friendlier name (e.g. 'reward').
+  const OTHER_LABELS = { reward: 'แลกด้วยแต้มสะสม (ฟรี)' };
   const known = new Set(tenders.map((t) => t.code));
   for (const r of rows) {
     if (!known.has(r.code)) {
       const amount = r2(r.amount);
-      lines.push({ code: r.code, label: r.code, kind: 'other', fee_pct: 0, orders: r.orders, amount, fee: 0, net: amount });
+      lines.push({ code: r.code, label: OTHER_LABELS[r.code] || r.code, kind: 'other', fee_pct: 0, orders: r.orders, amount, fee: 0, net: amount });
     }
   }
   const total = lines.reduce((a, l) => ({ orders: a.orders + l.orders, amount: r2(a.amount + l.amount), net: r2(a.net + l.net) }), { orders: 0, amount: 0, net: 0 });

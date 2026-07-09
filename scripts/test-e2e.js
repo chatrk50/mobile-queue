@@ -462,6 +462,13 @@ ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service reward
 const rwBal1 = Q.loyaltyBalance(rwCust).points;
 ok(rwBal1 === rwBal0 - rwCoupon.costPoints, `INVARIANT points are deducted on redemption (${rwBal0} -> ${rwBal1}, cost ${rwCoupon.costPoints})`);
 ok(!Q.availableCoupons(rwCust, 100).find((c) => c.isReward), 'INVARIANT the reward drops off the list once the balance is below its cost (no double-redeem)');
+// A fully stamp-redeemed order (net ฿0) is paid with method='reward', which isn't a registered
+// tender — confirm it still surfaces in the tender reconciliation report with a friendly label,
+// not silently dropped from the owner's daily reconciliation.
+const rwRecon = Q.tenderRecon();
+const rwReconLine = rwRecon.lines.find((l) => l.code === 'reward');
+ok(!!rwReconLine && rwReconLine.orders >= 1, `INVARIANT reward redemptions show up in tenderRecon (found=${!!rwReconLine}, orders=${rwReconLine && rwReconLine.orders})`);
+ok(rwReconLine && rwReconLine.label === 'แลกด้วยแต้มสะสม (ฟรี)', `INVARIANT reward line has a friendly label, not the raw code — got ${JSON.stringify(rwReconLine && rwReconLine.label)}`);
 
 // ---- Tender toggle drives the customer picker: /api/config derives payCounter/payOnline from the
 //      ACTIVE tenders (listTenders(false)), so a toggled-off channel must leave that list. ----

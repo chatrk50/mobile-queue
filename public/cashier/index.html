@@ -826,7 +826,11 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
   }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 // --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
 //     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
-const SHOP_RECV=['ธรรมนูญ','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
+// Real slips from GSB MyMo / Make by KBank / Krungthai NEXT all print the receiver as "YO-DEE
+// YOGURT" — WITH the hyphen. The plain 'YODEE' string never matched that (regex demanded the
+// letters adjacent, no hyphen), so the receiver check silently failed on every real slip
+// regardless of bank. Matching now tolerates a hyphen/space between YO and DEE.
+const SHOP_RECV=['ธรรมนูญ','YO-DEE','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
 const TH_MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 let _tess=null,_tessLoading=null;
 function loadTesseract(){ if(_tess) return Promise.resolve(_tess); if(_tessLoading) return _tessLoading;
@@ -861,7 +865,7 @@ async function runSlipOcr(imgData, prelim){
       dOk = dayOk && (monOk || yrOk);
       dDetail=dd+' '+mo+' '+be; }
     // ผู้รับ: ต้องเป็นบัญชีร้าน
-    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/\s+/g,'\\s*'),'i').test(raw)); const rcvOk=!!rcvHit;
+    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/[\s-]+/g,'[\\s-]*'),'i').test(raw)); const rcvOk=!!rcvHit;
     box.innerHTML='<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
       +'<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">อ่านสลิปอัตโนมัติ (OCR) · เทียบผล</div>'
       +_row('ยอด ฿'+(prelim.expectedAmount!=null?prelim.expectedAmount:'-'), amtOk, '')

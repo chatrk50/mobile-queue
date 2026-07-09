@@ -1495,18 +1495,35 @@ function setQrFor(isKbank){
   startQrCountdown();
 }
 // Best-effort bank-app deep links — these custom URL schemes are NOT officially documented by the
-// banks, so they may stop working after an app update. Always confirm + remind about the slip first,
-// and never treat a silent no-op (unknown scheme) as an error — worst case the customer just opens
-// the app manually, same as before this existed.
-const BANK_SCHEMES={ kplus:'kplus://', scbeasy:'scbeasy://', ktbnext:'krungthainext://', bualuang:'bualuang://', ttbtouch:'ttbtouch://' };
+// banks, so they drift/break across app updates (confirmed: scbeasy:// works, the other 4 guesses
+// didn't for the owner). Each bank now tries a SHORT LIST of candidate schemes in sequence instead
+// of a single guess — if the OS actually switches apps, the page fires 'visibilitychange' (hidden),
+// which stops the loop early; if none fire it, we fall through to the "open it yourself" toast.
+// Always confirm + remind about the slip first regardless of which (if any) scheme actually works.
+const BANK_SCHEMES={
+  kplus:['kplus://'],
+  scbeasy:['scbeasy://'],
+  ktbnext:['krungthainext://','ktbnext://','krungthai://'],
+  bualuang:['bualuang://','bblm://','bblmbanking://'],
+  ttbtouch:['ttbtouch://','ttb://'],
+};
 const BANK_NAMES={ kplus:'K PLUS', scbeasy:'SCB EASY', ktbnext:'Krungthai NEXT', bualuang:'Bualuang mBanking', ttbtouch:'ttb touch' };
 window.openBankApp=async(bank)=>{
   const name=BANK_NAMES[bank]||bank;
   const ok=await appConfirm({title:'เปิดแอป '+name, message:'ระบบจะพาไปเปิดแอป '+name+' ให้ค่ะ\nจ่ายเงินเสร็จแล้ว อย่าลืมกลับมาหน้านี้เพื่อแนบสลิปด้วยนะคะ', okText:'ไปเปิดแอป', cancelText:'ยกเลิก'});
   if(!ok) return;
-  const scheme=BANK_SCHEMES[bank];
-  if(scheme){ try{ window.location.href=scheme; }catch(e){} }
-  setTimeout(()=>{ toast('ถ้าแอปไม่เปิดเอง ลองเปิดเองแล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ'); },1200);
+  const schemes=BANK_SCHEMES[bank]||[];
+  let opened=false;
+  const onHide=()=>{ if(document.hidden) opened=true; };
+  document.addEventListener('visibilitychange',onHide);
+  for(const scheme of schemes){
+    if(opened) break;
+    try{ window.location.href=scheme; }catch(e){}
+    await new Promise(r=>setTimeout(r,900));
+  }
+  document.removeEventListener('visibilitychange',onHide);
+  if(opened) return;
+  setTimeout(()=>{ toast('ถ้าแอปไม่เปิดเอง ลองเปิดเองแล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ'); },300);
 };
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
