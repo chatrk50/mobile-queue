@@ -782,7 +782,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.7';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.8';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -1075,6 +1075,9 @@ window.archivePastDay=async()=>{
   }catch(e){ toast(err(e)); } };
 function baht(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
 function pctf2(n,d){ return (d?Math.round((n/d)*1000)/10:0)+'%'; }
+// Report times: DB timestamps are stored UTC ("YYYY-MM-DD HH:MM:SS"); show them in Thai time (BKK).
+function tHM(at){ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } }
+function tDHM(at){ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } }
 function shortPeriod(s){ s=String(s||'');
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(5);                 // daily: MM-DD
   if(/^\d{4}-W\d{2}$/.test(s)) return 'W'+s.slice(6);                  // weekly: Www
@@ -1224,7 +1227,7 @@ function renderDetail(){
     const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
     const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
     box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=(r.paid_at||r.created_at||'').slice(11,16);
+      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=tHM(r.paid_at||r.created_at);
         return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
@@ -1247,7 +1250,7 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     const vlabel=(k)=> k==='refund'?'คืนเงิน':k==='waste'?'ของเสีย':'ยกเลิก';
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)}) · 🗑️ ของเสีย ${vt.waste?.count||0} (${baht2(vt.waste?.amount||0)})</div>`+
-      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${tHM(v.voided_at)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
   } else if(t==='chan'){
     // Order-source mix first (how orders came in: LINE vs walk-in vs delivery), then channel revenue.
     const srcs=(DET.sources||[]); const stot=DET.sourceTotalOrders||0; const sMax=Math.max(...srcs.map(s=>s.orders),1);
@@ -1492,7 +1495,7 @@ function renderCashMoves(d){
   const rows=(d.moves||[]).map(m=>{ const out=m.kind==='pay_out';
     return `<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:center">
       <div style="flex:1;min-width:0"><b>${esc(m.remark||(out?'จ่ายออก':'รับเข้า'))}</b>
-        <div class="muted" style="font-size:11px">${(m.at||'').slice(11,16)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
+        <div class="muted" style="font-size:11px">${tHM(m.at)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
       <b style="color:${out?'var(--danger)':'#16a34a'};white-space:nowrap">${out?'−':'+'}${baht2(m.amount)}</b>
       <button class="ghost" style="padding:2px 8px;margin-left:8px;font-size:13px;color:var(--danger)" title="ลบ" onclick="delCashMove(${m.id})">✕</button></div>`; }).join('');
   $('cashMovesList').innerHTML=`
@@ -1519,7 +1522,7 @@ function renderCash(){
   }
   const s=CASH;
   box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px">
-    <div class="row between"><span class="muted">เปิดรอบเมื่อ</span><b>${(s.session.opened_at||'').slice(0,16).replace('T',' ')}</b></div>
+    <div class="row between"><span class="muted">เปิดรอบเมื่อ</span><b>${fmtDT(s.session.opened_at)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินทอนเริ่มต้น</span><b>${baht2(s.session.open_float)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินสดที่รับ (กะนี้)</span><b style="color:var(--ok,#16a34a)">+${baht2(s.cashIn)}</b></div>
     ${s.cashRefund?`<div class="row between" style="margin-top:6px"><span>คืนเงินสด</span><b style="color:var(--danger)">−${baht2(s.cashRefund)}</b></div>`:''}
@@ -2056,7 +2059,7 @@ function renderCustProfile(p){
   if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin:4px 0 0">ยังไม่มีประวัติของเบอร์นี้ — สั่งให้เลยเพื่อเริ่มเก็บประวัติ</p></div>${_crmCta(p)}`;
   const tier=p.loyalty&&p.loyalty.tier?p.loyalty.tier.emoji+' ':'';
   const favs=(p.favourites||[]).map(f=>`${esc(f.name)} ×${f.qty}`).join(' · ')||'—';
-  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${(r.paid_at||'').slice(5,16).replace('T',' ')}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
+  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${tDHM(r.paid_at)}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
   const bday=p.loyalty&&p.loyalty.isBirthday?'<span class="pill" style="background:#fde2e7;color:#c43a4b;margin-left:6px;font-size:11px">🎂 วันเกิดวันนี้</span>':'';
   const pts=p.loyalty?`<div class="row between" style="font-size:13px;margin-top:4px"><span class="muted">แต้มสะสม</span><b style="color:#7c3aed">${tier}${p.loyalty.points} ดวง</b></div>`:'';
   return `

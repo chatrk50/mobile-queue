@@ -835,6 +835,20 @@ export function listMenu(channelId = null, branchId = null) {
     ).all()) soldMap.set(s.base, s.q);
     rows.forEach((r) => { r.sold = soldMap.get(r.name) || 0; });
   } catch (e) { rows.forEach((r) => { r.sold = 0; }); }
+  // "Likes" = how many DISTINCT identifiable customers (LINE / phone) have bought this item on a
+  // paid order → shown on the customer card as a heart count (social proof, not raw cups sold).
+  try {
+    const likeMap = new Map();
+    for (const s of db.prepare(
+      `SELECT base, COUNT(DISTINCT cust) AS n FROM (
+         SELECT CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END AS base,
+                COALESCE(t.line_user_id, t.customer_key) AS cust
+           FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+          WHERE o.payment_status='paid'
+       ) WHERE cust IS NOT NULL GROUP BY base`
+    ).all()) likeMap.set(s.base, s.n);
+    rows.forEach((r) => { r.likes = likeMap.get(r.name) || 0; });
+  } catch (e) { rows.forEach((r) => { r.likes = 0; }); }
   return rows;
 }
 

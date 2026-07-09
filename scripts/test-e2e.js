@@ -472,6 +472,13 @@ Q.attachSlip(sd3.ticket.id, 'data:image/png;base64,UNIQUESLIPIMAGE');
 ok(Q.slipPrelim(sd3.ticket.id).duplicate == null, 'INVARIANT a unique slip is not flagged');
 ok(Q.slipPrelim(sd3.ticket.id).expectedAmount === 50, 'INVARIANT prelim hands the cashier the expected amount');
 
+// ---- Menu "likes" = distinct identifiable customers who bought the item (customer card heart). ----
+console.log('\n== Menu likes (distinct customers) ==');
+const lk = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Ulikes000000000000000000000001' });
+Q.setOrderPaid(lk.ticket.id, { method: 'cash' });
+const drinkRow = Q.listMenu().find((m) => m.name === 'Drink');
+ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable customer counts as a like (got ${drinkRow && drinkRow.likes})`);
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
