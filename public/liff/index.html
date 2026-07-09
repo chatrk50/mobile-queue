@@ -402,8 +402,14 @@
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
 <div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:312px;width:100%;margin:0;max-height:94vh;overflow:auto;padding:14px">
+    <!-- Only shown when the stamp card is eligible (per===10 stamp programme) — lets the customer
+         switch between the identity card and the stamp card instead of both stacked at once. -->
+    <div id="memberTabs" style="display:none;gap:6px;margin-bottom:10px;background:var(--surface);border-radius:999px;padding:3px">
+      <button id="memberTabCard" class="ok" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('card')">บัตรสมาชิก</button>
+      <button id="memberTabStamp" class="ghost" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('stamp')">สะสมแต้ม</button>
+    </div>
     <!-- FLIP CARD: tap anywhere to flip. front = tier card (art + boxes), back = QR + details (same tier colour). -->
-    <div style="perspective:1400px">
+    <div id="memberFlipWrap" style="perspective:1400px">
       <div id="memberFlipInner" style="position:relative;width:100%;aspect-ratio:1/1;transition:transform .55s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d">
         <!-- FRONT: data dropped into the art's baked boxes -->
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
@@ -442,14 +448,17 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
-<!-- ประวัติการสั่ง (customer order history) -->
-<div id="historyLiffCard" class="card" style="display:none;max-width:480px;margin:0 auto">
-  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
-  <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+<!-- ประวัติการสั่ง (customer order history) — a proper fixed overlay (was a normal in-flow card,
+     which could "leak" into the page below other fixed popups if left open when navigating away). -->
+<div id="historyLiffCard" onclick="if(event.target===this)closeOrderHistory()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:480px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:86vh;overflow:auto">
+    <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
+    <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+  </div>
 </div>
 
-<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
+<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0;border-radius:20px 20px 0 0">
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" style="margin:14px 0"></div>
@@ -597,11 +606,19 @@ const MEMBER_LEVELS=[
 ];
 function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[MEMBER_LEVELS.length-1]; }
 // "บัตรของฉัน" member card: tier banner + QR สมาชิก + แต้ม/แลกฟรี + สั่งซ้ำ in one place.
+// Only one of {identity card, stamp card} is ever visible at a time — tab switches between them.
+window.showMemberTab=(tab)=>{
+  const isCard = tab!=='stamp';
+  $('memberTabCard').className = isCard?'ok':'ghost';
+  $('memberTabStamp').className = isCard?'ghost':'ok';
+  $('memberFlipWrap').style.display = isCard?'':'none';
+  $('memberStampCard').style.display = isCard?'none':'block';
+};
 window.openMember=async()=>{
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
   $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
   $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
-  $('memberStamp').style.display='none'; $('memberStampCard').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  $('memberStamp').style.display='none'; $('memberTabs').style.display='none'; showMemberTab('card'); $('memberFav').textContent=''; $('memberReorder').style.display='none';
   let visits=0;
   try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
     visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
@@ -644,7 +661,7 @@ window.openMember=async()=>{
         }
         $('stampMsg1').textContent = ready ? '🎁 พร้อมแลกฟรี!' : ('อีก '+toGo+' ดวง ฟรี!');
         $('stampMsg2').textContent = ready ? 'แสดงบัตรที่เคาน์เตอร์' : (filled+'/'+per+' ดวง');
-        $('memberStampCard').style.display='block';
+        $('memberTabs').style.display='flex';   // eligible for the stamp view — let the customer switch to it, don't force-show both
         $('memberStamp').style.display='none';
       } else {
         $('memberStamp').innerHTML = ready ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
@@ -1076,11 +1093,11 @@ window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g
 window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 // ---------- ประวัติการสั่ง (customer order history) ----------
 window.openOrderHistory=async()=>{ if(!lineUserId) return;
-  show('getCard',false); show('historyLiffCard',true);
+  $('historyLiffCard').style.display='flex';   // overlay ON TOP of getCard (not a replacement) — same pattern as memberPop/basketPop
   const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
   try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
   catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
-window.closeOrderHistory=()=>{ show('historyLiffCard',false); show('getCard',true); };
+window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
 const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
 let _histOrders=[];
@@ -1218,7 +1235,7 @@ function showWow(loy){
 }
 function renderOrderBlock(v){
   if(!v.order){ show('tOrder',false); show('tOrderCompact',false); return; }
-  show('tOrder',true); show('tOrderCompact',true);
+  show('tOrderCompact',true);   // #tOrder itself only wraps payChoice now — its own visibility is set per-branch below so it's never an empty box
   const lines = v.order.lines || (v.order.items||[]).map(i=>({...i,toppings:[]}));
   $('tOrderItems').innerHTML = lines.map(l=>
     `<div class="row between"><span>${l.qty}× ${esc(l.name)}</span><span class="muted">฿${l.price*l.qty}</span></div>`+
@@ -1240,7 +1257,7 @@ function renderOrderBlock(v){
   if(v.status==='cancelled' || v.status==='skipped'){
     stopQrCountdown();
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
-    show('payChoice',true);
+    show('tOrder',true); show('payChoice',true);
     ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
     const byReq=!!v.cancelRequested;
     const box=$('counterConfirmedMsg');
@@ -1253,13 +1270,13 @@ function renderOrderBlock(v){
     show('counterConfirmedMsg',true);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
-  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
+  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
-    show('payChoice',true);
+    show('tOrder',true); show('payChoice',true);
     if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
       // Hide the top reassurance — the green confirmed box is now the single source of truth.
       ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
@@ -1280,7 +1297,7 @@ function renderOrderBlock(v){
       applyPayChoice();
     }
   }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',false); }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
@@ -1326,7 +1343,11 @@ let cartCoupon=null, _availCoupons=[];
 function cartPreCouponNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
   let d=0; cart.forEach(e=>{ if(FREE.has(e.name)) d+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty; }); });
   return sub-Math.min(d,sub); }
-function couponDiscountFor(net){ if(!cartCoupon) return 0; if(net < (cartCoupon.min_spend||0)) return 0;
+function couponDiscountFor(net){ if(!cartCoupon) return 0;
+  if(cartCoupon.isReward){   // stamp-card reward: free 1 cup, capped ฿49 or the cheapest item — matches redeemRewardOnOrder's math (server re-checks at order time)
+    const prices=cart.filter(e=>e.price>0).map(e=>e.price); const cheapest=prices.length?Math.min(...prices):0;
+    return Math.min(49, cheapest||net, net); }
+  if(net < (cartCoupon.min_spend||0)) return 0;
   let d = cartCoupon.disc_type==='percent' ? net*cartCoupon.disc_value/100 : cartCoupon.disc_value;
   if(cartCoupon.disc_type==='percent' && cartCoupon.max_disc>0) d=Math.min(d,cartCoupon.max_disc);
   return Math.min(Math.round(d*100)/100, net); }
@@ -1351,11 +1372,12 @@ window.openCoupon=async(mode)=>{
   if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
   const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   box.innerHTML = clr + _availCoupons.map(c=>{
-    const disc = c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value);
+    const isReward = c.disc_type==='reward';
+    const disc = isReward ? 'ฟรี 1 แก้ว (สูงสุด ฿49)' : (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     const sel = cartCoupon && cartCoupon.code===c.code;
-    const meta = (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):'');
-    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':'#fff'};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
-      <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${esc(c.label)} <span style="color:var(--accent2)">ลด ${disc}</span></div>
+    const meta = isReward ? ('ใช้แต้มสะสม ' + c.costPoints + ' ดวง') : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
+    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
+      <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${isReward?'🎁 ':''}${esc(c.label)} <span style="color:var(--accent2)">${isReward?'':'ลด '}${disc}</span></div>
         <div class="muted" style="font-size:12px">${esc(c.code)}${meta?(' · '+meta):''}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div></span>
       <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('');

@@ -1194,9 +1194,22 @@ export function validateCoupon(code, customerKey, orderNet) {
 }
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
 export function availableCoupons(customerKey, orderNet) {
-  return listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+  // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
+  // can pick it like any other discount — one tap in the cart applies it as a free-drink discount
+  // (redeemRewardOnOrder re-checks their balance server-side at order time, so this is advisory only).
+  if (loyaltyEnabled() && customerKey) {
+    const bal = loyaltyBalance(customerKey).points;
+    const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
+    if (reward) {
+      list.unshift({ id: 'reward-' + reward.id, code: 'REWARD:' + reward.id, label: reward.name, disc_type: 'reward',
+        disc_value: 0, max_disc: 0, min_spend: 0, expires_at: null, usable: true, discount: 0, reason: null,
+        isReward: true, rewardId: reward.id, costPoints: reward.cost_points });
+    }
+  }
+  return list;
 }
 /** Apply a coupon to an order at creation: re-validate SERVER-SIDE, add its discount (respecting any
  *  existing free-giveaway discount + the coupon's stackable flag), record the use, bump used_count. */
@@ -2124,8 +2137,13 @@ export function createOrder(zoneId, items, opts = {}) {
 
   // Apply a customer-selected coupon — the server re-validates (source of truth) + records the use.
   // A now-invalid coupon (expired between pick and confirm) is ignored so the order still stands.
+  // A "REWARD:<id>" pseudo-code is a self-service stamp-card redemption (see availableCoupons) —
+  // route it to redeemRewardOnOrder instead, which re-checks the customer's own points balance.
   if (couponCode && r.ticket && !r.idempotent) {
-    try { applyCouponToOrder(r.ticket.id, couponCode, lineUserId); } catch { /* order stands without the discount */ }
+    try {
+      if (couponCode.startsWith('REWARD:')) redeemRewardOnOrder(r.ticket.id, Number(couponCode.slice(7)), null);
+      else applyCouponToOrder(r.ticket.id, couponCode, lineUserId);
+    } catch { /* order stands without the discount */ }
   }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the

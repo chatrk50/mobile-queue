@@ -439,6 +439,30 @@ ok(db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE customer_key=?').get(ck)
 ok(Q.validateCoupon('E2E50', ck, 100).ok === false, 'INVARIANT per-customer limit blocks a second use');
 ok(Q.validateCoupon('NOPE-NOT-REAL', ck, 100).ok === false, 'INVARIANT a fake code never validates');
 
+// ---- Stamp-card reward surfaces as a self-service "coupon" once earned (owner ask: a customer
+//      who reaches the threshold should see it in the SAME coupon list and be able to apply it
+//      themselves, one at a time — not just via the cashier's manual "แลกฟรี" tap). ----
+console.log('\n== Loyalty reward surfaces as a self-service coupon ==');
+Q.setLoyaltyEnabled(true);
+const rwCust = 'Urewardcust00000000000000000001';
+// cup mode = 1 stamp/cup; qty 8 + the first-order welcome bonus (2) = 10 = the default reward's cost.
+const rwSetup = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 8 }], { source: 'customer', lineUserId: rwCust });
+Q.setOrderPaid(rwSetup.ticket.id, { method: 'cash' });
+Q.setStatus(rwSetup.ticket.id, 'served');   // customer already picked this one up — free to place a new order
+const rwBal0 = Q.loyaltyBalance(rwCust).points;
+ok(rwBal0 >= 10, `stamps accrued for the reward test (got ${rwBal0})`);
+const rwCoupons0 = Q.availableCoupons(rwCust, 100);
+const rwCoupon = rwCoupons0.find((c) => c.isReward);
+ok(!!rwCoupon, `INVARIANT an earned reward surfaces in the coupon list — got ${JSON.stringify(rwCoupons0.map((c) => c.code))}`);
+// Selecting it (couponCode = the "REWARD:<id>" pseudo-code) applies the free-drink discount at
+// order time, same math as the cashier's redeemRewardOnOrder, and deducts the points.
+const rwOrder = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
+const rwOrderRow = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(rwOrder.ticket.id);
+ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service reward redemption discounts the order — got ฿${rwOrderRow && rwOrderRow.discount}`);
+const rwBal1 = Q.loyaltyBalance(rwCust).points;
+ok(rwBal1 === rwBal0 - rwCoupon.costPoints, `INVARIANT points are deducted on redemption (${rwBal0} -> ${rwBal1}, cost ${rwCoupon.costPoints})`);
+ok(!Q.availableCoupons(rwCust, 100).find((c) => c.isReward), 'INVARIANT the reward drops off the list once the balance is below its cost (no double-redeem)');
+
 // ---- Tender toggle drives the customer picker: /api/config derives payCounter/payOnline from the
 //      ACTIVE tenders (listTenders(false)), so a toggled-off channel must leave that list. ----
 console.log('\n== Payment tender toggle → active list (customer picker source) ==');
