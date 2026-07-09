@@ -300,7 +300,7 @@
 </div>
 
 <!-- PRODUCT DETAIL SHEET (LINE-MAN style): image + ความหวาน (radio) + ท็อปปิ้ง (checkbox) + sticky add bar -->
-<div id="drinkSheet" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center">
+<div id="drinkSheet" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
   <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:90vh;overflow:auto;padding:0;position:relative">
     <button class="ghost" onclick="closeDrinkSheet()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
     <div id="dsImg" style="width:100%;height:186px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
@@ -316,7 +316,7 @@
         <b id="dsQtyN" style="min-width:16px;text-align:center;font-size:16px;color:var(--navy)">1</b>
         <button class="ghost" onclick="dsIncQty()" aria-label="เพิ่ม" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1;color:var(--accent)">+</button>
       </div>
-      <button class="ok" onclick="dsAdd()" style="flex:1;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:800;padding:14px 16px"><span>เพิ่มลงตะกร้า</span><span>฿<span id="dsAddAmt">0</span></span></button>
+      <button class="ok" onclick="dsAdd()" style="flex:1;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:800;padding:14px 16px"><span id="dsAddLbl">เพิ่มลงตะกร้า</span><span>฿<span id="dsAddAmt">0</span></span></button>
     </div>
   </div>
 </div>
@@ -806,9 +806,13 @@ window.showOrderUI=async()=>{
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 // LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
-let dsSweet=100, dsQty=1;
+let dsSweet=100, dsQty=1, dsEditSig=null;
 const SWEET_LABEL={0:'ไม่หวานเลย',25:'หวานน้อย',50:'หวานปานกลาง',100:'หวานปกติ'};
-window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
+window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; dsEditSig=null; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
+// Edit an existing cart line: open the same sheet pre-filled; "อัปเดต" replaces that whole group.
+window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=MENU.find(x=>x.name===g.e.name); if(!d){ toast('เมนูนี้ไม่มีแล้ว'); return; }
+  pendingDrink=d; pendingTops={}; (g.e.toppings||[]).forEach(t=>{ const tm=MENU.find(x=>x.name===t.name && x.category==='topping'); if(tm) pendingTops[tm.id]={name:t.name,price:t.price,qty:t.qty||1}; });
+  dsSweet=(g.e.sweet==null?100:g.e.sweet); dsQty=g.qty; dsEditSig=g.sig; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
 window.closeDrinkSheet=()=>{ $('drinkSheet').style.display='none'; };
 function dsRadio(on){ return '<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:'+(on?'var(--accent)':'var(--line)')+';stroke-width:2">'+(on?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>')+'</svg>'; }
 function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
@@ -826,8 +830,11 @@ window.dsTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return; if(pendi
 window.dsIncQty=()=>{ dsQty=Math.min(20,dsQty+1); dsUpdateBar(); };
 window.dsDecQty=()=>{ dsQty=Math.max(1,dsQty-1); dsUpdateBar(); };
 function dsUnit(){ let p=pendingDrink?pendingDrink.price:0; Object.values(pendingTops).forEach(t=>p+=t.price*t.qty); return p; }
-function dsUpdateBar(){ const q=$('dsQtyN'); if(q) q.textContent=dsQty; const a=$('dsAddAmt'); if(a) a.textContent=dsUnit()*dsQty; }
-window.dsAdd=()=>{ if(!pendingDrink) return; for(let i=0;i<dsQty;i++) cart.push({name:pendingDrink.name,price:pendingDrink.price,toppings:Object.values(pendingTops).map(t=>({...t})),sweet:dsSweet}); closeDrinkSheet(); renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } toast('เพิ่มลงตะกร้าแล้ว'); };
+function dsUpdateBar(){ const q=$('dsQtyN'); if(q) q.textContent=dsQty; const a=$('dsAddAmt'); if(a) a.textContent=dsUnit()*dsQty; const l=$('dsAddLbl'); if(l) l.textContent=dsEditSig?'อัปเดต':'เพิ่มลงตะกร้า'; }
+window.dsAdd=()=>{ if(!pendingDrink) return;
+  if(dsEditSig){ cart=cart.filter(e=>entrySig(e)!==dsEditSig); }   // editing: drop the old group, then re-add
+  for(let i=0;i<dsQty;i++) cart.push({name:pendingDrink.name,price:pendingDrink.price,toppings:Object.values(pendingTops).map(t=>({...t})),sweet:dsSweet});
+  const wasEdit=!!dsEditSig; dsEditSig=null; closeDrinkSheet(); renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } toast(wasEdit?'อัปเดตรายการแล้ว':'เพิ่มลงตะกร้าแล้ว'); };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
@@ -939,9 +946,10 @@ function renderBasket(){
           <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
         </div>
       </div>
-      <div style="text-align:right;flex:none">
+      <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
-        <button class="ghost danger" style="padding:5px 9px;margin-top:12px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+        <button class="ghost" style="padding:4px 10px;font-size:12px;color:var(--accent)" onclick="editDrinkItem(${gi})">แก้ไข</button>
+        <button class="ghost danger" style="padding:4px 10px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
       </div>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
