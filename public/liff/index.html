@@ -239,12 +239,24 @@
           <div class="muted" style="font-size:11.5px;margin-top:8px">เปลี่ยนใจ? กด "ยกเลิกออเดอร์" ด้านล่างเพื่อสั่งใหม่</div>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
+          <div id="qrCountdown" style="display:inline-flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-weight:800;font-size:12.5px;padding:6px 12px;border-radius:999px;margin-bottom:10px"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>กรุณาชำระภายใน <span id="qrCountdownTxt">15:00</span> นาที</div>
+          <div>
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line);object-fit:contain;background:#fff">
+          </div>
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
           <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>บันทึกรูป QR</button>
           <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
           <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5;margin-bottom:10px;color:#334155">
             <b style="color:var(--navy)">จ่ายในมือถือเครื่องเดียว</b> · บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span>
+          </div>
+          <!-- bank-app legend: informational only (PromptPay QR is read by any Thai banking app) -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <span class="muted" style="font-size:10.5px;width:100%;margin-bottom:2px">สแกนได้ทุกแอปธนาคาร</span>
+            <span style="background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">K PLUS</span>
+            <span style="background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">SCB EASY</span>
+            <span style="background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">KTB NEXT</span>
+            <span style="background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">Bualuang</span>
+            <span style="background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">ttb touch</span>
           </div>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
           <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
@@ -1173,6 +1185,7 @@ function renderOrderBlock(v){
   // RED panel so the screen never shows a green "saved!" box that contradicts the cancelled
   // status. The full-width "กลับหน้าหลัก · สั่งใหม่" button below is the way out (goHome).
   if(v.status==='cancelled' || v.status==='skipped'){
+    stopQrCountdown();
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
     show('payChoice',true);
     ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
@@ -1187,9 +1200,9 @@ function renderOrderBlock(v){
     show('counterConfirmedMsg',true);
     return;
   }
-  if(st==='paid'){ pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
-  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
+  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
@@ -1248,7 +1261,8 @@ window.selectPayMethod=(m)=>{
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
     payMethod=m; counterConfirmed=false;
-    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); }
+    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
+      if((m==='promptpay'||m==='kbank') && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },400); } }
   } else { cartPayMethod=m; updateCartPayLabel(); }
 };
 function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
@@ -1287,7 +1301,24 @@ window.openCoupon=async()=>{
       <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('');
 };
-window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
+// Phase 7: once the customer picks a QR method, auto-trigger the save-to-album flow
+// (same share-sheet/download path as the manual button) so they don't need a second tap.
+// Guarded per-ticket — never re-fires on background poll re-renders.
+const _qrAutoSaved=new Set();
+window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice();
+  if((m==='promptpay'||m==='kbank') && ticketId && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },300); } };
+// Phase 7: soft countdown nudge (visual only — no auto-cancel) shown while the QR is up.
+// Starts once per ticket when the QR first appears; stops once payChoice is no longer relevant.
+let _qrTimer=null; const _qrStarted=new Set();
+function startQrCountdown(){
+  if(!ticketId || _qrStarted.has(ticketId)) return; _qrStarted.add(ticketId);
+  let left=15*60;
+  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return; const m=Math.floor(left/60), s=left%60; el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); };
+  tick();
+  if(_qrTimer) clearInterval(_qrTimer);
+  _qrTimer=setInterval(()=>{ left=Math.max(0,left-1); tick(); if(left<=0){ clearInterval(_qrTimer); _qrTimer=null; } },1000);
+}
+function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } }
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
 // then the attached slip is checked by SlipOK against the order total.
@@ -1299,6 +1330,7 @@ function setQrFor(isKbank){
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal;
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
   }
+  startQrCountdown();
 }
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
