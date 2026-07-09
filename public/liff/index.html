@@ -308,7 +308,7 @@
       <div id="dsName" style="font-weight:800;font-size:20px;color:var(--navy);line-height:1.25"></div>
       <div style="margin:16px 0 2px;display:flex;align-items:center;justify-content:space-between"><b style="font-size:15px;color:var(--navy)">ความหวาน</b><span style="font-size:11px;font-weight:800;background:#eef3f6;color:var(--muted);padding:3px 10px;border-radius:999px">จำเป็น · เลือก 1</span></div>
       <div id="dsSweet"></div>
-      <div id="dsTopsWrap"><div style="margin:16px 0 2px;display:flex;align-items:center;justify-content:space-between"><b style="font-size:15px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:11px;font-weight:800;background:#eef3f6;color:var(--muted);padding:3px 10px;border-radius:999px">เลือกได้หลายอย่าง</span></div><div id="dsTops"></div></div>
+      <div id="dsTopsWrap"><div style="margin:16px 0 2px;display:flex;align-items:center;justify-content:space-between"><b style="font-size:15px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:11px;font-weight:800;background:#eef3f6;color:var(--muted);padding:3px 10px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
     </div>
     <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
       <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
@@ -801,13 +801,14 @@ window.showOrderUI=async()=>{
     return `<button class="dish-card" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${out?'':'<span aria-hidden="true" style="width:30px;height:30px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 7px rgba(47,194,166,.4)"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>'}</div></div></button>`; };
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${out?'':'<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>'}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 // LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
 let dsSweet=100, dsQty=1, dsEditSig=null;
-const SWEET_LABEL={0:'ไม่หวานเลย',25:'หวานน้อย',50:'หวานปานกลาง',100:'หวานปกติ'};
+const SWEET_LABEL={0:'0% · ไม่หวานเลย',25:'25% · หวานน้อย',50:'50% · ปานกลาง',100:'100% · ปกติ',125:'125% · เพิ่มหวาน'};
+const BULKY_TOP=['เฉาก๋วย','บุก','บัวลอย'];   // heavy/bulky toppings — limit total toppings to 2 if one is chosen
 window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; dsEditSig=null; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
 // Edit an existing cart line: open the same sheet pre-filled; "อัปเดต" replaces that whole group.
 window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=MENU.find(x=>x.name===g.e.name); if(!d){ toast('เมนูนี้ไม่มีแล้ว'); return; }
@@ -826,7 +827,13 @@ function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
   dsUpdateBar();
 }
 window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
-window.dsTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return; if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderDrinkSheet(); };
+window.dsTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return;
+  if(pendingTops[id]){ delete pendingTops[id]; renderDrinkSheet(); return; }
+  // adding: max 3 toppings, but only 2 if a bulky one (เฉาก๋วย/บุก/บัวลอย) is in the mix (fits the cup)
+  const names=[...Object.values(pendingTops).map(t=>t.name), m.name];
+  const bulky=names.some(n=>BULKY_TOP.some(b=>n.includes(b))); const lim=bulky?2:3;
+  if(names.length>lim){ toast(bulky?'ท็อปปิ้งชิ้นใหญ่ (เฉาก๋วย/บุก/บัวลอย) เลือกได้รวม 2 อย่าง':'เลือกท็อปปิ้งได้สูงสุด 3 อย่าง'); return; }
+  pendingTops[id]={name:m.name,price:m.price,qty:1}; renderDrinkSheet(); };
 window.dsIncQty=()=>{ dsQty=Math.min(20,dsQty+1); dsUpdateBar(); };
 window.dsDecQty=()=>{ dsQty=Math.max(1,dsQty-1); dsUpdateBar(); };
 function dsUnit(){ let p=pendingDrink?pendingDrink.price:0; Object.values(pendingTops).forEach(t=>p+=t.price*t.qty); return p; }
@@ -847,7 +854,7 @@ function renderTopPop(){
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
 // Step 3: sweetness (default 100%).
-const SWEETS=[0,25,50,100];
+const SWEETS=[0,25,50,100,125];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
@@ -1104,7 +1111,7 @@ function renderOrderBlock(v){
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
-      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', cfg.payCounter!==false);   // counter option only if a counter tender is active
+      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', false);   // ไทยช่วยไทย poster moved into the payment picker
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
@@ -1115,7 +1122,7 @@ function renderOrderBlock(v){
       applyPayChoice();
     }
   }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',false); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
@@ -1138,7 +1145,8 @@ window.openPayPicker=(mode)=>{
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
-    </div>`;}).join('');
+    </div>`;}).join('')
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" style="width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
