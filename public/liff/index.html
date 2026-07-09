@@ -1508,6 +1508,20 @@ const BANK_SCHEMES={
   ttbtouch:['ttbtouch://','ttb://'],
 };
 const BANK_NAMES={ kplus:'K PLUS', scbeasy:'SCB EASY', ktbnext:'Krungthai NEXT', bualuang:'Bualuang mBanking', ttbtouch:'ttb touch' };
+// Attempt a custom scheme via a hidden iframe instead of location.href — navigating the TOP-LEVEL
+// page to an unrecognized scheme makes Safari show a blocking native "Cannot Open Page" alert
+// (confirmed on a real device), which is jarring and interrupts the rest of the fallback chain.
+// A hidden iframe's failed navigation is silent — no dialog — while a successful one still hands
+// off to the OS the same way.
+function tryScheme(scheme){
+  return new Promise(resolve=>{
+    const f=document.createElement('iframe');
+    f.style.display='none';
+    f.src=scheme;
+    document.body.appendChild(f);
+    setTimeout(()=>{ try{ f.remove(); }catch(e){} resolve(); },50);
+  });
+}
 window.openBankApp=async(bank)=>{
   const name=BANK_NAMES[bank]||bank;
   const ok=await appConfirm({title:'เปิดแอป '+name, message:'ระบบจะพาไปเปิดแอป '+name+' ให้ค่ะ\nจ่ายเงินเสร็จแล้ว อย่าลืมกลับมาหน้านี้เพื่อแนบสลิปด้วยนะคะ', okText:'ไปเปิดแอป', cancelText:'ยกเลิก'});
@@ -1518,7 +1532,7 @@ window.openBankApp=async(bank)=>{
   document.addEventListener('visibilitychange',onHide);
   for(const scheme of schemes){
     if(opened) break;
-    try{ window.location.href=scheme; }catch(e){}
+    await tryScheme(scheme);
     await new Promise(r=>setTimeout(r,900));
   }
   document.removeEventListener('visibilitychange',onHide);
