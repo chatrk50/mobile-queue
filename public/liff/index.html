@@ -67,10 +67,11 @@
   <div style="width:180px;height:7px;border-radius:999px;background:rgba(255,255,255,.35);overflow:hidden"><div id="loadBar" style="height:100%;width:8%;background:#fff;border-radius:999px;animation:loadfill 1.05s ease-out forwards"></div></div>
 </div>
 <!-- Promo/ad splash (capture 2): owner-uploaded banner, shown once per session after loading -->
-<div id="promoOvl" onclick="closePromoOvl()" style="display:none;position:fixed;inset:0;z-index:88;background:rgba(0,0,0,.84);flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px">
+<div id="promoOvl" onclick="closePromoOvl()" style="display:none;position:fixed;inset:0;z-index:88;background:#000">
+  <img id="promoOvlImg" alt="โปรโมชั่น" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.35) 0%,transparent 18%,transparent 72%,rgba(0,0,0,.6) 100%)"></div>
   <button class="ghost" onclick="event.stopPropagation();closePromoOvl()" aria-label="ปิด" style="position:fixed;top:14px;right:14px;background:rgba(255,255,255,.92);width:40px;height:40px;border-radius:50%;padding:0;font-size:18px;z-index:2">✕</button>
-  <img id="promoOvlImg" alt="โปรโมชั่น" style="max-width:100%;max-height:80vh;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.45)">
-  <button class="ok" onclick="closePromoOvl()" style="min-width:190px;font-weight:800">เริ่มสั่งเลย</button>
+  <button class="ok" onclick="event.stopPropagation();closePromoOvl()" style="position:fixed;left:20px;right:20px;bottom:28px;font-weight:800;z-index:2">เริ่มสั่งเลย</button>
 </div>
 <!-- Phase 6: "sending order" grace-period screen (LINE-MAN style) — shown between "สั่งเลย" and the real ticket -->
 <div id="sendingScreen" style="display:none;position:fixed;inset:0;z-index:89;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center">
@@ -396,7 +397,9 @@
 </div>
 
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
-<div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
+<!-- Solid opaque background (not a translucent backdrop) — a semi-transparent overlay left the
+     home screen visibly "peeking" behind it, which read as a stacking bug even when it wasn't one. -->
+<div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:var(--surface);z-index:53;align-items:center;justify-content:center;padding:16px">
   <!-- Fixed to the viewport (not inside the scrollable .card below) so it's always reachable even if
        the card's content needs to scroll — the old per-face close buttons scrolled away with the
        flip card and could leave the customer stuck with no way to close/navigate. -->
@@ -449,10 +452,38 @@
 <!-- BASKET REVIEW (step 4) -->
 <!-- ประวัติการสั่ง (customer order history) — a proper fixed overlay (was a normal in-flow card,
      which could "leak" into the page below other fixed popups if left open when navigating away). -->
-<div id="historyLiffCard" onclick="if(event.target===this)closeOrderHistory()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:flex-end;justify-content:center;padding:0">
-  <div class="card" style="max-width:480px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:86vh;overflow:auto">
+<div id="historyLiffCard" onclick="if(event.target===this)closeOrderHistory()" style="display:none;position:fixed;inset:0;background:var(--surface);z-index:53;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:480px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:96vh;overflow:auto">
     <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
     <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+  </div>
+</div>
+
+<!-- บัญชี (account hub): profile summary + menu list — ประวัติการสั่งซื้อ/บัตรสมาชิก are SUB-items
+     reached from here, not the direct destination of the บัญชี nav tab. -->
+<div id="accountPop" onclick="if(event.target===this)closeAccount()" style="display:none;position:fixed;inset:0;background:var(--surface);z-index:53;align-items:flex-start;justify-content:center;padding:0">
+  <div class="card" style="max-width:480px;width:100%;min-height:100%;margin:0;border-radius:0;overflow:auto;padding:18px">
+    <div class="row between" style="align-items:center"><h1 style="margin:0">บัญชีของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeAccount()" aria-label="ปิด">✕</button></div>
+    <div style="display:flex;align-items:center;gap:12px;margin:20px 0 24px">
+      <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#fff;border:1px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center">
+        <img id="acctAvatarImg" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
+        <svg id="acctAvatarFallback" viewBox="0 0 24 24" style="width:28px;height:28px;fill:none;stroke:var(--muted);stroke-width:2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
+      <div style="min-width:0">
+        <div id="acctName" style="font-weight:800;color:var(--navy);font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <div class="muted" style="font-size:12.5px;margin-top:2px" data-brand-name>YO-DEE Yogurt</div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:14px;border:1px solid var(--line);overflow:hidden">
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openOrderHistory()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติการสั่งซื้อ</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer" onclick="closeAccount();openMember()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -492,8 +523,8 @@
   </div>
 </div>
 
-<div id="couponPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
-  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
+<div id="couponPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:var(--surface);z-index:54;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:96vh;overflow:auto">
     <div class="row between"><h1 id="couponPickerTitle" style="margin:0;font-size:19px">เลือกคูปองส่วนลด</h1><button class="ghost" style="padding:6px 12px" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
     <div id="couponPickerList" style="margin-top:14px"><p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p></div>
   </div>
@@ -503,7 +534,7 @@
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
-let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
+let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
@@ -511,7 +542,7 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 // These full-screen popups are mutually exclusive — nothing used to close the others before opening
 // a new one, so e.g. tapping "บัญชี" while the member card was open left BOTH stacked on screen at
 // once. Every open*() below calls this first.
-const ALL_POPUPS=['drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','randomPop','historyLiffCard','orderDetailSheet'];
+const ALL_POPUPS=['drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
 function closeAllPopups(){ ALL_POPUPS.forEach(id=>{ const e=$(id); if(e) e.style.display='none'; }); }
 // In-app modal: appPrompt (text input) + appConfirm (yes/no) — replaces native prompt()/confirm().
 let _amRes=null;
@@ -560,7 +591,7 @@ async function initLiff(){
       if(!liff.isLoggedIn()){ liff.login(); return; }
       inLine = true;
       const p = await liff.getProfile();
-      lineUserId = p.userId; displayName = p.displayName;
+      lineUserId = p.userId; displayName = p.displayName; pictureUrl = p.pictureUrl||null;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
     }catch(e){
       // LIFF init/getProfile failed — fall back to a STABLE id so the server's per-customer
@@ -1082,8 +1113,10 @@ function renderBasket(){
       </div>
       <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
-        <button class="ghost" style="width:56px;padding:4px 0;font-size:12px;color:var(--accent)" onclick="editDrinkItem(${gi})">แก้ไข</button>
-        <button class="ghost danger" style="width:56px;padding:4px 0;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+        <div style="display:flex;gap:6px">
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;color:var(--accent)" onclick="editDrinkItem(${gi})" aria-label="แก้ไข"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button class="ghost danger" style="width:30px;height:30px;padding:0;border-radius:50%" onclick="removeOne(${gi})" aria-label="ลบ"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        </div>
       </div>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
@@ -1109,6 +1142,17 @@ window.openOrderHistory=async()=>{ if(!lineUserId) return;
   try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
   catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
 window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; };
+// บัญชี hub: profile summary + a menu list (ประวัติการสั่งซื้อ / บัตรสมาชิก are sub-items reached
+// from here, not the direct destination of the บัญชี nav tab itself).
+window.openAccount=()=>{
+  closeAllPopups();
+  $('accountPop').style.display='flex';
+  $('acctName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+  const img=$('acctAvatarImg'), fb=$('acctAvatarFallback');
+  if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
+  else { img.style.display='none'; fb.style.display='block'; }
+};
+window.closeAccount=()=>{ $('accountPop').style.display='none'; };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
 const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
 let _histOrders=[];
@@ -1696,7 +1740,7 @@ async function proceed(){
 }
 
 // Lock the background from scrolling while ANY popup/sheet is open (watch their display style).
-(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet'];
+(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
   const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
   const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
 // #5: bottom nav bar — only visible on the home screen (getCard); auto-syncs so no other
@@ -1712,7 +1756,7 @@ window.navGo=(tab)=>{
   if(tab==='home'){ return; }   // already home — the bar only shows here anyway
   if(tab==='coupon'){ openCoupon('browse'); return; }
   if(tab==='member'){ if(lineUserId) openMember(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัตรสมาชิกนะคะ'); return; }
-  if(tab==='account'){ if(lineUserId) openOrderHistory(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }
+  if(tab==='account'){ if(lineUserId) openAccount(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }
 };
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 let _promoTimer=null;
