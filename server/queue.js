@@ -2446,10 +2446,12 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled
+    const safeReason = !byRequest ? safeCancelReason(reason || '') : null;   // same whitelist the web ticket screen uses
     pushQueue(t.line_user_id,
       (byRequest
         ? `✅ ยกเลิกออเดอร์ ${t.code} ให้เรียบร้อยแล้วค่ะ ตามที่คุณขอ\n`
         : `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n`) +
+      (safeReason ? `${safeReason}\n` : '') +
       (pointsReturned > 0 ? `🔄 คืน ${pointsReturned} ดวงเข้าบัญชีของคุณแล้ว\n` : '') +
       `สั่งใหม่ได้ตลอดเลยนะคะ ขอบคุณค่ะ 🙂`, null);
   }
@@ -2626,6 +2628,18 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   return { zone, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
 
+// Customer-safe cancellation reason: whitelist-maps an internal void_reason to wording that's
+// safe to show/send to the customer. Internal notes like "ทำพลาด"/"ลูกค้าไม่พอใจ" never leave
+// the building. Shared by ticketView() (web) and cancelOrderTicket()'s LINE push, so both
+// channels always say the same thing.
+function safeCancelReason(raw) {
+  const MAP = {
+    'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
+    'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
+  };
+  return MAP[raw] || (raw && raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+}
+
 export function ticketView(ticketId) {
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) return null;
@@ -2649,11 +2663,7 @@ export function ticketView(ticketId) {
   if (t.status === 'cancelled' && !t.cancel_requested) {
     const vr = db.prepare('SELECT void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
     const raw = (vr && vr.void_reason) || '';
-    const MAP = {
-      'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
-      'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
-    };
-    cancelReason = MAP[raw] || (raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+    cancelReason = safeCancelReason(raw);
   }
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
