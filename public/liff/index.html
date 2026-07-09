@@ -303,12 +303,12 @@
 <div id="drinkSheet" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
   <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:90vh;overflow:auto;padding:0;position:relative">
     <button class="ghost" onclick="closeDrinkSheet()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
-    <div id="dsImg" style="width:100%;height:186px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
-    <div style="padding:15px 16px 4px">
-      <div id="dsName" style="font-weight:800;font-size:20px;color:var(--navy);line-height:1.25"></div>
-      <div style="margin:16px 0 2px;display:flex;align-items:center;justify-content:space-between"><b style="font-size:15px;color:var(--navy)">ความหวาน</b><span style="font-size:11px;font-weight:800;background:#eef3f6;color:var(--muted);padding:3px 10px;border-radius:999px">จำเป็น · เลือก 1</span></div>
+    <div id="dsImg" style="width:100%;height:148px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
+    <div style="padding:13px 16px 4px">
+      <div id="dsName" style="font-weight:800;font-size:18px;color:var(--navy);line-height:1.25"></div>
+      <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
       <div id="dsSweet"></div>
-      <div id="dsTopsWrap"><div style="margin:16px 0 2px;display:flex;align-items:center;justify-content:space-between"><b style="font-size:15px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:11px;font-weight:800;background:#eef3f6;color:var(--muted);padding:3px 10px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
+      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
     </div>
     <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
       <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
@@ -791,19 +791,26 @@ async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[];
 window.showOrderUI=async()=>{
   if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
   await loadMenu(); cart=[]; cartCoupon=null; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+  paintMenu();
+  renderBasketCount(); show('getCard',false); show('orderCard',true); };
+// Re-callable so cart-count badges on the cards update when the cart changes. (declaration = hoisted,
+// callable bare from showOrderUI/dsAdd/basket ops inside this module).
+function paintMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
   const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;background:${b.bg};color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
   window._BADGE=badge;   // reuse for the topping picker
-  const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
+  const btn=(m)=>{ const out=m.soldout||m.stockSoldout; const n=cart.filter(e=>e.name===m.name).length;
     const sold = (m.likes>0) ? `<div class="dsold"><svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;fill:#e55b6b;stroke:#e55b6b;stroke-width:1.5"><path d="M12 20.5s-6.5-4.3-9-7.8C1 9.9 2.3 6.5 5.6 6.5c1.9 0 3.1 1 4.4 2.4 1.3-1.4 2.5-2.4 4.4-2.4 3.3 0 4.6 3.4 2.6 6.2-2.5 3.5-9 7.8-9 7.8z"/></svg> ${m.likes} ถูกใจ</div>` : '';
-    return `<button class="dish-card" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
+    const cnr = out ? '' : (n>0
+      ? `<span aria-hidden="true" style="min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--accent2);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;font-weight:800;font-size:14px;box-sizing:border-box">${n}</span>`
+      : '<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>');
+    return `<button class="dish-card${n>0?' ordered':''}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${out?'':'<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>'}</div></div></button>`; };
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${cnr}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
-  renderBasketCount(); show('getCard',false); show('orderCard',true); };
+};
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
 // LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
 let dsSweet=100, dsQty=1, dsEditSig=null;
@@ -820,10 +827,10 @@ function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;heig
 function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
   $('dsImg').innerHTML=itemImg(d); $('dsName').textContent=d.name;
   $('dsSweet').innerHTML=SWEETS.map(s=>{ const on=dsSweet===s;
-    return '<div onclick="dsSetSweet('+s+')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer"><span style="font-size:15px;color:var(--navy)">'+(SWEET_LABEL[s]||(s+'%'))+'</span>'+dsRadio(on)+'</div>'; }).join('');
+    return '<div onclick="dsSetSweet('+s+')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);cursor:pointer"><span style="font-size:14px;color:var(--navy)">'+(SWEET_LABEL[s]||(s+'%'))+'</span>'+dsRadio(on)+'</div>'; }).join('');
   const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('dsTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
   $('dsTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout||m.stockSoldout;
-    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:15px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
+    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
   dsUpdateBar();
 }
 window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
@@ -841,7 +848,7 @@ function dsUpdateBar(){ const q=$('dsQtyN'); if(q) q.textContent=dsQty; const a=
 window.dsAdd=()=>{ if(!pendingDrink) return;
   if(dsEditSig){ cart=cart.filter(e=>entrySig(e)!==dsEditSig); }   // editing: drop the old group, then re-add
   for(let i=0;i<dsQty;i++) cart.push({name:pendingDrink.name,price:pendingDrink.price,toppings:Object.values(pendingTops).map(t=>({...t})),sweet:dsSweet});
-  const wasEdit=!!dsEditSig; dsEditSig=null; closeDrinkSheet(); renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } toast(wasEdit?'อัปเดตรายการแล้ว':'เพิ่มลงตะกร้าแล้ว'); };
+  const wasEdit=!!dsEditSig; dsEditSig=null; closeDrinkSheet(); renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } toast(wasEdit?'อัปเดตรายการแล้ว':'เพิ่มลงตะกร้าแล้ว'); };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
@@ -972,8 +979,8 @@ function renderBasket(){
   updateNudges();
 }
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
-window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); };
-window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
+window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 // ---------- ประวัติการสั่ง (customer order history) ----------
 window.openOrderHistory=async()=>{ if(!lineUserId) return;
   show('getCard',false); show('historyLiffCard',true);
@@ -1007,7 +1014,7 @@ window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
   if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
-  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
@@ -1146,7 +1153,7 @@ window.openPayPicker=(mode)=>{
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('')
-    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" style="width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
