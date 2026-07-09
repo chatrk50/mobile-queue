@@ -540,7 +540,7 @@ window.openMember=async()=>{
   const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',perk:tcfg.essencePerk,bg:'#e6dcf6'}
              : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',perk:tcfg.bloomPerk,bg:'#d9f0d9'}
              :                           {key:'pure',name:'PURE',perk:tcfg.purePerk,bg:'#cfe6f5'};
-  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=2)';   // ?v bump busts stale browser cache when art is replaced
+  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=3)';   // ?v bump busts stale browser cache when art is replaced
   if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
   $('memberLevel').textContent = TIER.name;
   $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
