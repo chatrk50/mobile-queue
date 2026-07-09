@@ -12,6 +12,10 @@
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   @keyframes loadfill{ from{width:8%} to{width:100%} }
+  /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
+  .glass-ovl .card, #drinkSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+  .glass-ovl, #drinkSheet{ overscroll-behavior:contain; }
+  body.noscroll{ overflow:hidden; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
@@ -1282,7 +1286,7 @@ window.saveQR=async()=>{
     // Best on mobile/LINE: native share sheet → "บันทึกรูปภาพ" / Save to Photos.
     if(navigator.canShare && navigator.canShare({files:[file]})){
       await navigator.share({files:[file], title:'YO-DEE YOGURT — QR ชำระเงิน'});
-      toast('เลือก "บันทึกรูปภาพ" → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
+      toast('✓ บันทึกรูป QR ลงอัลบั้มแล้ว · เปิดแอปธนาคาร แล้วสแกนจากอัลบั้มได้เลย');
       return;
     }
     // Fallback: download link (works in some browsers).
@@ -1414,6 +1418,10 @@ async function proceed(){
     else localStorage.removeItem('ticket_'+zoneId); }catch(e){ localStorage.removeItem('ticket_'+zoneId); } }
 }
 
+// Lock the background from scrolling while ANY popup/sheet is open (watch their display style).
+(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard'];
+  const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
+  const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; };
 async function maybePromo(){ try{ if(sessionStorage.getItem('promoSeen')) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; sessionStorage.setItem('promoSeen','1'); } }catch(e){} }
