@@ -13,6 +13,8 @@
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   @keyframes loadfill{ from{width:8%} to{width:100%} }
   @keyframes sendspin{ to{transform:rotate(360deg)} }
+  body.has-bottomnav .wrap{ padding-bottom:78px; }
+  .navtab.active{ color:var(--accent) !important; }
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
   .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
   .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
@@ -78,6 +80,27 @@
   <div style="color:#fff;font-weight:800;font-size:18px">กำลังส่งออเดอร์ไปยังร้าน…</div>
   <div id="sendCountdown" style="color:#fff;font-weight:900;font-size:15px;opacity:.9">00:03</div>
   <button class="ghost" style="background:rgba(255,255,255,.92);min-width:150px" onclick="cancelSending()">ยกเลิก</button>
+</div>
+<!-- #5: bottom nav bar — only on the home screen (getCard); hidden during ordering/tracking -->
+<div id="bottomNav" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(14,40,55,.06);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))">
+  <div style="display:flex;align-items:stretch;justify-content:space-around;max-width:480px;margin:0 auto">
+    <button class="navtab" data-tab="home" onclick="navGo('home')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span style="font-size:10.5px;font-weight:700">หน้าหลัก</span>
+    </button>
+    <button class="navtab" data-tab="coupon" onclick="navGo('coupon')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>
+      <span style="font-size:10.5px;font-weight:700">คูปอง</span>
+    </button>
+    <button class="navtab" data-tab="member" onclick="navGo('member')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 14.5h4"/></svg>
+      <span style="font-size:10.5px;font-weight:700">บัตรสมาชิก</span>
+    </button>
+    <button class="navtab" data-tab="account" onclick="navGo('account')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span style="font-size:10.5px;font-weight:700">บัญชี</span>
+    </button>
+  </div>
 </div>
 <div class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
@@ -463,7 +486,7 @@
 
 <div id="couponPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
   <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
-    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกคูปองส่วนลด</h1><button class="ghost" style="padding:6px 12px" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
+    <div class="row between"><h1 id="couponPickerTitle" style="margin:0;font-size:19px">เลือกคูปองส่วนลด</h1><button class="ghost" style="padding:6px 12px" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
     <div id="couponPickerList" style="margin-top:14px"><p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p></div>
   </div>
 </div>
@@ -1312,15 +1335,21 @@ function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   el.innerHTML = cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev); }
 window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; };
 window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
-window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return; cartCoupon=c; closeCoupon(); renderBasket(); };
-window.openCoupon=async()=>{
-  const net=cartPreCouponNet(); const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
+let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar "my coupons" list (no active order yet)
+window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
+  if(_couponMode==='browse'){ closeCoupon(); toast('มีคูปองนี้พร้อมใช้ · เลือกใช้ได้ตอนสั่งซื้อในตะกร้า'); return; }
+  cartCoupon=c; closeCoupon(); renderBasket(); };
+window.openCoupon=async(mode)=>{
+  _couponMode = mode==='browse' ? 'browse' : 'cart';
+  $('couponPickerTitle').textContent = _couponMode==='browse' ? 'คูปองของฉัน' : 'เลือกคูปองส่วนลด';
+  const net = _couponMode==='browse' ? 999999 : cartPreCouponNet();   // browse mode: don't gate on min-spend, there's no order yet
+  const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
   const box=$('couponPickerList'); box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p>';
   $('couponPickerPop').style.display='flex';
   try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total='+net); _availCoupons=r.coupons||[]; }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;color:var(--danger);padding:16px 0">โหลดคูปองไม่สำเร็จ</p>'; return; }
   if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
-  const clr = cartCoupon ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
+  const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   box.innerHTML = clr + _availCoupons.map(c=>{
     const disc = c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value);
     const sel = cartCoupon && cartCoupon.code===c.code;
@@ -1597,6 +1626,21 @@ async function proceed(){
 (function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet'];
   const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
   const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
+// #5: bottom nav bar — only visible on the home screen (getCard); auto-syncs so no other
+// show('getCard',...) call site needs to know the nav bar exists.
+(function(){ const gc=document.getElementById('getCard'), nav=document.getElementById('bottomNav');
+  if(!gc || !nav) return;
+  const sync=()=>{ const on = gc.style.display!=='none'; nav.style.display = on?'block':'none'; document.body.classList.toggle('has-bottomnav',on);
+    if(on) document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab==='home')); };
+  sync();
+  new MutationObserver(sync).observe(gc,{attributes:true,attributeFilter:['style']}); })();
+window.navGo=(tab)=>{
+  document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  if(tab==='home'){ return; }   // already home — the bar only shows here anyway
+  if(tab==='coupon'){ openCoupon('browse'); return; }
+  if(tab==='member'){ if(lineUserId) openMember(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัตรสมาชิกนะคะ'); return; }
+  if(tab==='account'){ if(lineUserId) openOrderHistory(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }
+};
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; };
 async function maybePromo(){ try{ if(sessionStorage.getItem('promoSeen')) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; sessionStorage.setItem('promoSeen','1'); } }catch(e){} }
