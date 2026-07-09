@@ -801,7 +801,7 @@ window.showOrderUI=async()=>{
     return `<button class="dish-card" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
-    <div class="dpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></div></button>`; };
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${out?'':'<span aria-hidden="true" style="width:30px;height:30px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 7px rgba(47,194,166,.4)"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>'}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
   renderBasketCount(); show('getCard',false); show('orderCard',true); };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
