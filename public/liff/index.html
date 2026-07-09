@@ -12,6 +12,7 @@
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   @keyframes loadfill{ from{width:8%} to{width:100%} }
+  @keyframes sendspin{ to{transform:rotate(360deg)} }
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
   .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
   .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
@@ -68,6 +69,15 @@
   <button class="ghost" onclick="event.stopPropagation();closePromoOvl()" aria-label="ปิด" style="position:fixed;top:14px;right:14px;background:rgba(255,255,255,.92);width:40px;height:40px;border-radius:50%;padding:0;font-size:18px;z-index:2">✕</button>
   <img id="promoOvlImg" alt="โปรโมชั่น" style="max-width:100%;max-height:80vh;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.45)">
   <button class="ok" onclick="closePromoOvl()" style="min-width:190px;font-weight:800">เริ่มสั่งเลย</button>
+</div>
+<!-- Phase 6: "sending order" grace-period screen (LINE-MAN style) — shown between "สั่งเลย" and the real ticket -->
+<div id="sendingScreen" style="display:none;position:fixed;inset:0;z-index:89;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center">
+  <div style="width:74px;height:74px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 26px rgba(0,0,0,.2)">
+    <svg viewBox="0 0 24 24" style="width:36px;height:36px;fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:sendspin 1s linear infinite"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  </div>
+  <div style="color:#fff;font-weight:800;font-size:18px">กำลังส่งออเดอร์ไปยังร้าน…</div>
+  <div id="sendCountdown" style="color:#fff;font-weight:900;font-size:15px;opacity:.9">00:03</div>
+  <button class="ghost" style="background:rgba(255,255,255,.92);min-width:150px" onclick="cancelSending()">ยกเลิก</button>
 </div>
 <div class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
@@ -1060,12 +1070,43 @@ window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
 window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
+// Phase 6: brief "sending order" screen (LINE-MAN style) with a grace-period countdown —
+// the order is only actually POSTed after the countdown completes; cancelling during it
+// aborts the send entirely (nothing was created server-side, so there's nothing to void).
+let _sendTimer=null, _sendCancelled=false, _sendResolve=null;
+function showSending(seconds){
+  return new Promise(resolve=>{
+    _sendCancelled=false;
+    _sendResolve=resolve;
+    let left=seconds;
+    const tick=()=>{ const el=$('sendCountdown'); if(el) el.textContent='00:0'+left; };
+    tick();
+    $('sendingScreen').style.display='flex';
+    _sendTimer=setInterval(()=>{
+      left--; tick();
+      if(left<=0){ clearInterval(_sendTimer); _sendTimer=null; $('sendingScreen').style.display='none'; _sendResolve=null; resolve(!_sendCancelled); }
+    },1000);
+  });
+}
+window.cancelSending=()=>{
+  _sendCancelled=true;
+  if(_sendTimer){ clearInterval(_sendTimer); _sendTimer=null; }
+  $('sendingScreen').style.display='none';
+  if(_sendResolve){ const r=_sendResolve; _sendResolve=null; r(false); }
+};
 window.confirmBasket=async()=>{
   if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
   if(cfg.promptPay && !cartPayMethod){ toast('เลือกช่องทางชำระเงินก่อนค่ะ'); openPayPicker(); return; }   // must pick a channel first
   if(!cfg.promptPay) cartPayMethod='counter';   // counter-only shop → no choice needed
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
+  ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none');
+  const proceedOk = await showSending(3);
+  if(!proceedOk){   // customer cancelled during the grace period — nothing was sent, just reopen the basket
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
+    show('orderCard',true); openBasket(); renderBasketCount();
+    return;
+  }
   const items=[];
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
@@ -1073,18 +1114,18 @@ window.confirmBasket=async()=>{
       body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
-    cart=[]; cartCoupon=null; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
+    cart=[]; cartCoupon=null; show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
+      show('ticketCard',true); startPolling(); submitting=false; return;
     }
     const _err=(e.data&&e.data.error)||e.message;
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
     if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
-      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ closeBasket(); }catch(_){}; try{ await loadZone(); }catch(_){}
-    } else { toast('สั่งไม่สำเร็จ: '+_err); }
+      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
+    } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
 
