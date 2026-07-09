@@ -79,7 +79,7 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   res.sendStatus(200);
 });
 
-app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
+app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + promo banner (base64 data URLs)
 
 // ---- Staff session: a valid signed 'sess' cookie attaches req.staff (Phase 1). This
 // runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
@@ -160,6 +160,12 @@ app.get('/api/config', (req, res) => {
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
+// Owner-uploadable promo/ad splash shown in the LIFF after loading.
+app.get('/api/promo', (req, res) => res.json(Q.getPromo()));
+app.post('/api/promo', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setPromo(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {

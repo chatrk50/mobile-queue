@@ -104,6 +104,7 @@
         <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
         <button id="tenderBtn" class="ghost adm" style="display:none" onclick="showTenders()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</button>
         <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
+        <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
         <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
@@ -309,6 +310,17 @@
   </div>
 
   <!-- COUPONS management (owner only) -->
+  <div id="promoCard" class="card" style="display:none;max-width:520px;margin:14px auto">
+    <div class="row between"><div><h1>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()">ปิด</button></div>
+    <div id="promoPreview" style="margin:14px 0;text-align:center"></div>
+    <input id="promoFile" type="file" accept="image/*" style="display:none" onchange="promoPick(this)">
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <button class="ghost" style="flex:1" onclick="document.getElementById('promoFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 20V9"/><path d="M7 14l5-5 5 5"/><path d="M5 4h14"/></svg>อัปโหลดรูป</button>
+      <button class="ghost danger" style="flex:1" onclick="promoRemove()">ลบรูป</button>
+    </div>
+    <label class="row between" style="align-items:center;padding:10px 2px;font-weight:700;font-size:15px"><span>แสดงให้ลูกค้าเห็น</span><button id="promoTgl" class="tgl off" aria-label="เปิด/ปิดโปรโมชั่น" onclick="promoToggle()"></button></label>
+    <button class="ok" style="width:100%;margin-top:8px;min-height:48px" onclick="promoSave()">บันทึก</button>
+  </div>
   <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>🎟️ คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
@@ -782,7 +794,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.8';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.9';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -986,7 +998,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
@@ -1015,7 +1027,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
+const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -1469,6 +1481,15 @@ window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabe
     ['cpCode','cpLabel','cpValue','cpMin','cpExp'].forEach(id=>{const el=$(id); if(el) el.value='';}); toast('สร้างคูปองแล้ว ✓'); loadCoupons(); }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };
+// ---------- Promo banner (owner uploads the ad shown in the LIFF after loading) ----------
+let _promo={image:'',enabled:false};
+window.hidePromo=()=>{ $('promoCard').style.display='none'; $('dash').style.display=''; };
+window.showPromo=async()=>{ hideAllPanels(); $('promoCard').style.display=''; try{ _promo=await api('/api/promo'); }catch(e){ _promo={image:'',enabled:false}; } renderPromo(); };
+function renderPromo(){ const pv=$('promoPreview'); if(pv) pv.innerHTML=_promo.image?('<img src="'+_promo.image+'" alt="โปรโมชั่น" style="max-width:100%;max-height:340px;border-radius:14px;border:1px solid var(--line)">'):'<div class="muted" style="padding:26px;border:1px dashed var(--line);border-radius:14px;font-size:13px">ยังไม่มีรูป — อัปโหลดรูปโปรฯ (แนะนำแนวตั้ง)</div>'; const t=$('promoTgl'); if(t) t.className='tgl '+(_promo.enabled?'on':'off'); }
+window.promoPick=async(inp)=>{ const f=inp&&inp.files&&inp.files[0]; if(!f) return; try{ _promo.image=await resizeImage(f,900); renderPromo(); toast('เลือกรูปแล้ว · กดบันทึก'); }catch(e){ toast('อ่านรูปไม่สำเร็จ'); } inp.value=''; };
+window.promoRemove=()=>{ _promo.image=''; renderPromo(); };
+window.promoToggle=()=>{ _promo.enabled=!_promo.enabled; renderPromo(); };
+window.promoSave=async()=>{ try{ await api('/api/promo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:_promo.image,enabled:_promo.enabled?1:0})}); toast('บันทึกโปรโมชั่นแล้ว'); }catch(e){ toast(err(e)); } };
 window.showControl=async()=>{ hideAllPanels(); ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
 window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
 window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };

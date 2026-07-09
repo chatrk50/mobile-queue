@@ -1265,6 +1265,14 @@ export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
 export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
+// Owner-uploadable promo/ad splash shown in the LIFF after loading (a data-URL image the owner
+// can change anytime in ⚙ จัดการ). enabled gates whether the customer actually sees it.
+export function getPromo() { return { image: getSetting('promo:image', '') || '', enabled: getSetting('promo:enabled', '0') === '1' }; }
+export function setPromo({ image, enabled } = {}) {
+  if (image !== undefined) setSetting('promo:image', (image || '').toString().slice(0, 1500000));
+  if (enabled !== undefined) setSetting('promo:enabled', enabled ? '1' : '0');
+  return getPromo();
+}
 export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); return { slipAuto: !!on }; }
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
