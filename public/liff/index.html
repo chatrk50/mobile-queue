@@ -496,30 +496,32 @@
   </div>
 </div>
 
+<!-- Basket: header + the whole totals→pay block are PINNED (flex column, overflow:hidden on the
+     card) — only the item list scrolls, so ยอดสุทธิ and the pay button never scroll out of reach. -->
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center;padding:0">
-  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0;border-radius:20px 20px 0 0">
-    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
-    <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
-    <div id="basketList" style="margin:14px 0"></div>
-    <div style="padding-top:4px">
+  <div class="card" style="max-width:440px;width:100%;height:92vh;max-height:92vh;overflow:hidden;margin:0;border-radius:20px 20px 0 0;display:flex;flex-direction:column">
+    <div class="row between" style="flex:none"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
+    <div id="cartNudge" style="display:none;flex:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
+    <div id="basketList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:12px 0"></div>
+    <div style="flex:none;padding-top:4px">
       <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
       <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
       <div id="basketCouponRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
       <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
-    <div style="margin-top:12px;border-top:1px solid var(--line)">
-      <div class="row between" style="align-items:center;padding:12px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+    <div style="flex:none;margin-top:10px;border-top:1px solid var(--line)">
+      <div class="row between" style="align-items:center;padding:10px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
         <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
         <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </div>
-      <div class="row between" style="align-items:center;padding:12px 2px;cursor:pointer" onclick="openPayPicker()">
+      <div class="row between" style="align-items:center;padding:10px 2px;cursor:pointer" onclick="openPayPicker()">
         <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
         <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </div>
     </div>
-    <div class="row" style="gap:8px;margin-top:14px">
-      <button class="ghost danger" style="flex:none;padding:13px 18px" onclick="cancelBasket()">ล้าง</button>
-      <button class="ok" id="basketConfirm" style="flex:1;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:space-between;padding:14px 18px" onclick="confirmBasket()"><span>สั่งเลย</span><span>฿<span id="basketBtnAmt">0</span></span></button>
+    <div class="row" style="flex:none;gap:8px;margin-top:10px">
+      <button class="ghost danger" style="flex:none;padding:10px 14px;font-size:13.5px" onclick="cancelBasket()">ล้าง</button>
+      <button class="ok" id="basketConfirm" style="flex:1;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:space-between;padding:11px 15px" onclick="confirmBasket()"><span>สั่งเลย</span><span>฿<span id="basketBtnAmt">0</span></span></button>
     </div>
   </div>
 </div>
@@ -893,7 +895,7 @@ async function loadLoyalty(){
 // home loyalty card or the member popup's stamp tab — same markup, different mount point.
 function renderBday(bal, boxId){
   const box=$(boxId||'loyBday'); if(!box) return; box.style.display='';
-  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! วันนี้สั่งผ่านไลน์ รับของรางวัลฟรี 1 '+unit()+'</div>'; return; }
+  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! มีคูปองของขวัญรออยู่ในเมนูคูปอง 🎁</div>'; return; }
   if(bal.birthday){ box.style.display='none'; box.innerHTML=''; return; }
   // A birthday the customer enters for THEMSELVES can't be in the future, and can't be less than a
   // year ago either (no self-ordering infants) — the date picker enforces this up front, and the
@@ -1340,10 +1342,10 @@ function showReward(loy){
     <p class="muted" style="margin:0 0 12px">คุณได้รางวัลฟรีแล้ว 🥤</p>
     <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:#fff;border-radius:14px;padding:16px">
       <div style="font-size:13px;opacity:.95">รางวัลของคุณ</div>
-      <div style="font-size:26px;font-weight:900;line-height:1.15">ฟรี 1 ${unit()}</div>
-      <div style="font-size:12px;margin-top:4px;opacity:.95">เลือกใช้ตอนสั่งครั้งถัดไป หรือแสดงบัตรที่เคาน์เตอร์</div>
+      <div style="font-size:26px;font-weight:900;line-height:1.15">คูปองฟรี 1 ${unit()}</div>
+      <div style="font-size:12px;margin-top:4px;opacity:.95">อยู่ในเมนูคูปองแล้ว · ใช้ได้ภายใน 30 วัน</div>
     </div>
-    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openMember()">ดูบัตรสะสมแต้ม</button>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openCoupon('browse')">ดูคูปองของฉัน</button>
     <button class="ghost" style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
   </div>`;
   p.style.display='flex';
@@ -1461,9 +1463,10 @@ function cartPreCouponNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,
   let d=0; cart.forEach(e=>{ if(FREE.has(e.name)) d+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty; }); });
   return sub-Math.min(d,sub); }
 function couponDiscountFor(net){ if(!cartCoupon) return 0;
-  if(cartCoupon.isReward){   // stamp-card reward: free 1 cup, capped ฿49 or the cheapest item — matches redeemRewardOnOrder's math (server re-checks at order time)
+  if(cartCoupon.isReward){   // issued coupon: free 1 cup, capped at the coupon's value (฿49 reward / ฿100 birthday) or the cheapest item — server re-checks at order time
+    const cap=cartCoupon.freeCap||49;
     const prices=cart.filter(e=>e.price>0).map(e=>e.price); const cheapest=prices.length?Math.min(...prices):0;
-    return Math.min(49, cheapest||net, net); }
+    return Math.min(cap, cheapest||net, net); }
   if(net < (cartCoupon.min_spend||0)) return 0;
   let d = cartCoupon.disc_type==='percent' ? net*cartCoupon.disc_value/100 : cartCoupon.disc_value;
   if(cartCoupon.disc_type==='percent' && cartCoupon.max_disc>0) d=Math.min(d,cartCoupon.max_disc);
@@ -1493,28 +1496,31 @@ window.openCoupon=async(mode)=>{
     const isReward = c.disc_type==='reward';
     const sel = cartCoupon && cartCoupon.code===c.code;
     let discLine;
+    const cap = c.freeCap||49;
     if(isReward){
-      // In cart mode, show the REAL amount this reward will discount THIS order (capped at ฿49 or
-      // the cheapest item, same math as redeemRewardOnOrder) instead of a generic "up to ฿49" that
-      // can read as a broken promise when the cheapest item costs less than 49.
+      // In cart mode, show the REAL amount this coupon will discount THIS order (capped at the
+      // coupon's value or the cheapest item, same math as the server) instead of a generic
+      // "up to ฿X" that can read as a broken promise when the cheapest item costs less.
       if(_couponMode==='cart' && cart.length){
         const prices=cart.filter(e=>e.price>0).map(e=>e.price);
         const cheapest=prices.length?Math.min(...prices):0;
         const net=cartPreCouponNet();
-        const est=Math.min(49, cheapest||net, net);
-        discLine = 'ลดออเดอร์นี้ ฿'+est+(est<49?' · แก้วนี้ราคาต่ำกว่า ฿49':'');
+        const est=Math.min(cap, cheapest||net, net);
+        discLine = 'ลดออเดอร์นี้ ฿'+est+(est<cap?(' · แก้วนี้ราคาต่ำกว่า ฿'+cap):'');
       } else {
-        discLine = 'ฟรี 1 แก้ว · ไม่เกิน ฿49 หรือราคาแก้วนั้น';
+        discLine = 'ฟรี 1 แก้ว · ไม่เกิน ฿'+cap+' หรือราคาแก้วนั้น';
       }
     } else {
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
-    const meta = isReward ? ('ใช้แต้มสะสม ' + c.costPoints + ' ดวง' + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):'')) : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
+    const meta = isReward
+      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
+      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
       <span style="min-width:0;display:block">
         <div style="font-weight:800;color:var(--navy);font-size:14.5px;line-height:1.3">${isReward?'🎁 ':''}${esc(c.label)}</div>
         <div style="color:var(--accent2);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3">${discLine}</div>
-        <div class="muted" style="font-size:11.5px;margin-top:3px">${esc(c.code)}${meta?(' · '+meta):''}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:3px">${isReward?meta:(esc(c.code)+(meta?(' · '+meta):''))}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div>
       </span>
       <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('');

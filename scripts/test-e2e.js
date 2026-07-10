@@ -449,19 +449,20 @@ const rwCust = 'Urewardcust00000000000000000001';
 const rwSetup = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 8 }], { source: 'customer', lineUserId: rwCust });
 Q.setOrderPaid(rwSetup.ticket.id, { method: 'cash' });
 Q.setStatus(rwSetup.ticket.id, 'served');   // customer already picked this one up — free to place a new order
+// Conversion model: completing the card SPENDS the 10 stamps immediately and issues a 30-day coupon.
 const rwBal0 = Q.loyaltyBalance(rwCust).points;
-ok(rwBal0 >= 10, `stamps accrued for the reward test (got ${rwBal0})`);
+ok(rwBal0 === 0, `INVARIANT the full card is spent into a coupon at completion (balance ${rwBal0})`);
 const rwCoupons0 = Q.availableCoupons(rwCust, 100);
 const rwCoupon = rwCoupons0.find((c) => c.isReward);
-ok(!!rwCoupon, `INVARIANT an earned reward surfaces in the coupon list — got ${JSON.stringify(rwCoupons0.map((c) => c.code))}`);
-// Selecting it (couponCode = the "REWARD:<id>" pseudo-code) applies the free-drink discount at
-// order time, same math as the cashier's redeemRewardOnOrder, and deducts the points.
+ok(!!rwCoupon && rwCoupon.code.startsWith('CCOUP:'), `INVARIANT the converted coupon surfaces in the coupon list — got ${JSON.stringify(rwCoupons0.map((c) => c.code))}`);
+ok(rwCoupon && rwCoupon.freeCap === 49, `INVARIANT the reward coupon is capped at ฿49 (got ${rwCoupon && rwCoupon.freeCap})`);
+// Selecting it (couponCode = "CCOUP:<id>") applies the free-drink discount at order time and marks
+// the coupon used — no further points are touched (they were spent at conversion).
 const rwOrder = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
 const rwOrderRow = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(rwOrder.ticket.id);
-ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service reward redemption discounts the order — got ฿${rwOrderRow && rwOrderRow.discount}`);
-const rwBal1 = Q.loyaltyBalance(rwCust).points;
-ok(rwBal1 === rwBal0 - rwCoupon.costPoints, `INVARIANT points are deducted on redemption (${rwBal0} -> ${rwBal1}, cost ${rwCoupon.costPoints})`);
-ok(!Q.availableCoupons(rwCust, 100).find((c) => c.isReward), 'INVARIANT the reward drops off the list once the balance is below its cost (no double-redeem)');
+ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service coupon redemption discounts the order — got ฿${rwOrderRow && rwOrderRow.discount}`);
+ok(Q.loyaltyBalance(rwCust).points === rwBal0, 'INVARIANT redeeming the coupon touches no further points');
+ok(!Q.availableCoupons(rwCust, 100).find((c) => c.isReward), 'INVARIANT a used coupon drops off the list (no double-redeem)');
 // A fully stamp-redeemed order (net ฿0) is paid with method='reward', which isn't a registered
 // tender — confirm it still surfaces in the tender reconciliation report with a friendly label,
 // not silently dropped from the owner's daily reconciliation.
@@ -486,11 +487,12 @@ Q.setOrderPaid(rj2.ticket.id, { method: 'cash' });   // 7 -> 12 crosses the 10 b
 const rjV2 = Q.ticketView(rj2.ticket.id);
 ok(rjV2.loyalty && rjV2.loyalty.rewardJustReady === true, `INVARIANT completing a stamp card fires the reward celebration (balance ${rjV2.loyalty && rjV2.loyalty.balance})`);
 ok(rjV2.loyalty && rjV2.loyalty.firstOrder === false, 'INVARIANT the completion celebration is separate from the first-order welcome (bonus=0)');
-// Stability: a counter redeem BETWEEN paying and the customer's next poll must not swallow the
-// celebration — the boundary math runs on the balance as of this order's earns, not the live one.
-Q.redeemReward(rjCust, 1, null);   // cashier redeems the freshly-completed card (−10)
+// Conversion happens INSIDE the paid flow (12 → coupon + 2 left) — the celebration must survive it,
+// since the boundary math runs on the balance as of this order's earns, not the live one.
+ok(Q.loyaltyBalance(rjCust).points === 2, `INVARIANT the full card is spent into a coupon at completion (balance ${Q.loyaltyBalance(rjCust).points})`);
+ok(Q.customerCoupons(rjCust).length === 1, 'INVARIANT completing a card converts into exactly 1 coupon');
 const rjV2b = Q.ticketView(rj2.ticket.id);
-ok(rjV2b.loyalty && rjV2b.loyalty.rewardJustReady === true, `INVARIANT a redeem before the poll doesn't cancel the celebration (bal now ${rjV2b.loyalty && rjV2b.loyalty.balance})`);
+ok(rjV2b.loyalty && rjV2b.loyalty.rewardJustReady === true, `INVARIANT the conversion itself doesn't cancel the celebration (bal now ${rjV2b.loyalty && rjV2b.loyalty.balance})`);
 
 // Referral: on the invited friend's first order, awardPoints also logs the REFERRER's bonus under
 // the SAME order_id — ticketView must not count that row into the friend's ticket.
@@ -506,35 +508,48 @@ ok(rfV.loyalty && rfV.loyalty.bonus === Q.getWelcomeBonus(),
   `INVARIANT the friend's ticket shows only THEIR welcome bonus, not the referrer's row (got ${rfV.loyalty && rfV.loyalty.bonus}, want ${Q.getWelcomeBonus()})`);
 ok(rfV.loyalty && rfV.loyalty.firstOrder === true, 'INVARIANT a referred first order still counts as a first order');
 
-// Birthday: a LONG-TIME customer ordering on their birthday gets a noted bonus — that must NOT
-// masquerade as a first order (the old any-note check showed ยินดีต้อนรับสมาชิกใหม่ to regulars).
+// Birthday gift: a ฿100 free-drink coupon issued by the morning sweep, once per calendar year,
+// visible in the coupon list and self-applicable. (The old auto "+10 stamps on a birthday order"
+// is retired — the coupon IS the gift now.)
+console.log('\n== Birthday coupon (morning sweep) ==');
 const bdOld = 'Ubdayregular00000000000000000001';
 const bo1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 5 }], { source: 'customer', lineUserId: bdOld });
-Q.setOrderPaid(bo1.ticket.id, { method: 'cash' }); Q.setStatus(bo1.ticket.id, 'served');   // history: 5 cups + 2 welcome = 7
+Q.setOrderPaid(bo1.ticket.id, { method: 'cash' }); Q.setStatus(bo1.ticket.id, 'served');   // an existing regular
 const bkkMD = new Date(Date.now() + 7 * 3600e3).toISOString().slice(5, 10);
 Q.setCustomerBirthday(bdOld, `${new Date().getUTCFullYear() - 20}-${bkkMD}`);   // birthday = today (20 years back)
-const bo2 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: bdOld });
-Q.setOrderPaid(bo2.ticket.id, { method: 'cash' });   // 1 cup + 10 birthday stamps → crosses 10
-const boV = Q.ticketView(bo2.ticket.id);
-ok(boV.loyalty && boV.loyalty.firstOrder === false, `INVARIANT a birthday bonus is NOT a first-order welcome (firstOrder=${boV.loyalty && boV.loyalty.firstOrder})`);
-ok(boV.loyalty && boV.loyalty.rewardJustReady === true, 'INVARIANT a birthday bonus that completes the card fires the reward celebration (not the welcome)');
+const bdIssued = Q.issueBirthdayCoupons();
+ok(bdIssued.issued >= 1, `INVARIANT the sweep issues a birthday coupon on the customer's birthday (issued ${bdIssued.issued})`);
+const bdC = Q.customerCoupons(bdOld).find((c) => c.kind === 'birthday');
+ok(!!bdC && bdC.free_cap === 100, `INVARIANT the birthday coupon is a free drink capped at ฿100 (got ${bdC && bdC.free_cap})`);
+ok(Q.issueBirthdayCoupons().issued === 0, 'INVARIANT the sweep is idempotent — one birthday coupon per customer per year');
+const bdBalBefore = Q.loyaltyBalance(bdOld).points;
+const bdList = Q.availableCoupons(bdOld, 100).find((c) => c.couponKind === 'birthday');
+ok(!!bdList, 'INVARIANT the birthday coupon shows in the customer coupon list');
+const bdOrder = Q.createOrder(1, [{ name: 'Drink', price: 65, qty: 1 }], { source: 'customer', lineUserId: bdOld, couponCode: bdList.code });
+const bdRow = db.prepare('SELECT discount, payment_status, payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(bdOrder.ticket.id);
+ok(bdRow && Number(bdRow.discount) === 65, `INVARIANT the birthday coupon covers a ฿65 drink in full (discount ฿${bdRow && bdRow.discount})`);
+ok(Q.loyaltyBalance(bdOld).points >= bdBalBefore, 'INVARIANT using the birthday coupon never touches earned stamps');
+// Cashier visibility: the customer profile panel lists the coupons the customer holds. (The
+// birthday coupon was just spent above, so assert the array exists rather than its contents.)
+ok(Array.isArray(Q.customerProfile(bdOld).coupons), 'INVARIANT the cashier customer panel exposes the coupons array');
 
-// ---- Reward coupon 30-day window: the self-serve coupon expires 30 days after the stamp card
-//      completed; stamps are NOT forfeited — the cashier path stays open as the counter escape hatch. ----
-console.log('\n== Reward coupon 30-day window ==');
+// ---- Coupon 30-day window (conversion model): the coupon carries expiry = issue + 30 days; when
+//      expired it's gone (owner policy) — remaining stamps are untouched. ----
+console.log('\n== Coupon 30-day window ==');
 const exCust = 'Uexpiry000000000000000000000001';
 const exO1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 10 }], { source: 'customer', lineUserId: exCust });
-Q.setOrderPaid(exO1.ticket.id, { method: 'cash' }); Q.setStatus(exO1.ticket.id, 'served');   // 10 cups + 2 welcome → card complete
+Q.setOrderPaid(exO1.ticket.id, { method: 'cash' }); Q.setStatus(exO1.ticket.id, 'served');   // 10 cups + 2 welcome = 12 → converts, 2 left
 const exC1 = Q.availableCoupons(exCust, 100).find((c) => c.isReward);
-const expWant = db.prepare("SELECT date(datetime('now'),'+30 days') d").get().d;
-ok(!!exC1 && exC1.expires_at === expWant, `INVARIANT the reward coupon carries a 30-day expiry from card completion (got ${exC1 && exC1.expires_at}, want ${expWant})`);
-db.prepare("UPDATE loyalty_moves SET at=datetime('now','-31 days') WHERE customer_key=?").run(exCust);   // fast-forward 31 days
-ok(!Q.availableCoupons(exCust, 100).find((c) => c.isReward), 'INVARIANT an expired reward coupon drops off the self-serve list');
+const expWant = db.prepare("SELECT date(datetime('now','+7 hours'),'+30 days') d").get().d;
+ok(!!exC1 && exC1.expires_at === expWant, `INVARIANT the coupon carries a 30-day expiry from conversion (got ${exC1 && exC1.expires_at}, want ${expWant})`);
+const exBalBefore = Q.loyaltyBalance(exCust).points;
+db.prepare("UPDATE customer_coupons SET expires_at=date('now','-1 day') WHERE customer_key=?").run(exCust);   // fast-forward past expiry
+ok(!Q.availableCoupons(exCust, 100).find((c) => c.isReward), 'INVARIANT an expired coupon drops off the list');
 const exO2 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: exCust });
-let exErr = null; try { Q.redeemRewardOnOrder(exO2.ticket.id, null, null); } catch (e) { exErr = e.message; }
-ok(exErr === 'reward_expired', `INVARIANT self-serve redemption of an expired reward is blocked (got ${exErr})`);
-const exCashier = Q.redeemRewardOnOrder(exO2.ticket.id, null, 1);
-ok(exCashier && exCashier.ok === true, 'INVARIANT the cashier can still redeem after expiry — expired stamps are never dead value');
+const exCCID = db.prepare('SELECT id FROM customer_coupons WHERE customer_key=?').get(exCust).id;
+let exErr = null; try { Q.redeemCustomerCoupon(exO2.ticket.id, exCCID, null); } catch (e) { exErr = e.message; }
+ok(exErr === 'coupon_expired', `INVARIANT redeeming an expired coupon is blocked (got ${exErr})`);
+ok(Q.loyaltyBalance(exCust).points === exBalBefore, `INVARIANT expiry never claws back remaining stamps (still ${exBalBefore})`);
 
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----

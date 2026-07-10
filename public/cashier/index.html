@@ -2099,7 +2099,17 @@ function renderCustProfile(p){
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
    ${pts}
+   ${_crmCoupons(p)}
    <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_bdayRedeem(p)}${_crmCta(p)}`;
+}
+// Live coupons the customer holds (stamp-card conversions + birthday gifts) — read-only info so the
+// cashier sees exactly what the customer sees in the LIFF's coupon list.
+function _crmCoupons(p){
+  const cs=(p&&p.coupons)||[]; if(!cs.length) return '';
+  return '<div style="margin-top:10px"><div class="muted" style="font-size:12px;margin-bottom:4px">คูปองที่ลูกค้าถืออยู่</div>'+
+    cs.map(c=>`<div class="row between" style="font-size:12.5px;background:${c.kind==='birthday'?'#fde2e7':'#fffbea'};border:1px solid ${c.kind==='birthday'?'#f9a8b4':'#f3cb55'};border-radius:10px;padding:7px 10px;margin-bottom:5px">
+      <span style="font-weight:700;color:var(--navy)">${c.kind==='birthday'?'🎂':'🎁'} ${esc(c.label)}</span>
+      <span class="muted" style="white-space:nowrap">฿${c.freeCap} · ถึง ${esc(c.expiresAt)}</span></div>`).join('')+'</div>';
 }
 // Birthday free-drink redeem button — cashier-initiated; server is the source of truth (the customer card only prompts).
 function _bdayRedeem(p){

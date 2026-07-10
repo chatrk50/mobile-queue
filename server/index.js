@@ -1171,6 +1171,12 @@ setInterval(() => {
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
 
+// Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose
+// saved birthday is today. Hourly + once at boot; idempotent per customer per calendar year.
+const birthdaySweep = () => { try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ } };
+birthdaySweep();
+setInterval(birthdaySweep, 60 * 60 * 1000);
+
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
 // (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:
 // only fires when explicitly set, so YO-DEE (no SEED) is untouched.
