@@ -1320,6 +1320,29 @@ function showWow(loy){
   p.style.display='flex';
   try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
 }
+// Reward-earned "wow": fires once per ticket when a paid order completes a stamp card (server flags
+// rewardJustReady). Reuses the same celebratory overlay + confetti as the welcome wow.
+function maybeReward(v){ const k='rw_'+v.id; try{ if(localStorage.getItem(k)) return; localStorage.setItem(k,'1'); }catch(e){} showReward(v.loyalty); }
+function showReward(loy){
+  let p=$('wowPop'); if(!p){ p=document.createElement('div'); p.id='wowPop'; p.onclick=()=>closeWow(); document.body.appendChild(p); }
+  const per=loy.per||10;
+  const colors=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f'];
+  let conf=''; for(let i=0;i<28;i++){ const l=Math.round(Math.random()*100), d=(2.6+Math.random()*1.8).toFixed(2), dl=(Math.random()*0.6).toFixed(2); conf+=`<span class="confetti" style="left:${l}%;background:${colors[i%colors.length]};animation-duration:${d}s;animation-delay:${dl}s"></span>`; }
+  p.innerHTML=conf+`<div class="wowcard" onclick="event.stopPropagation()">
+    <div class="wowemoji">🎉</div>
+    <h1 style="margin:10px 0 2px;color:var(--navy)">สะสมครบ ${per} ดวงแล้ว!</h1>
+    <p class="muted" style="margin:0 0 12px">คุณได้รางวัลฟรีแล้ว 🥤</p>
+    <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:#fff;border-radius:14px;padding:16px">
+      <div style="font-size:13px;opacity:.95">รางวัลของคุณ</div>
+      <div style="font-size:26px;font-weight:900;line-height:1.15">ฟรี 1 ${unit()}</div>
+      <div style="font-size:12px;margin-top:4px;opacity:.95">เลือกใช้ตอนสั่งครั้งถัดไป หรือแสดงบัตรที่เคาน์เตอร์</div>
+    </div>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openMember()">ดูบัตรสะสมแต้ม</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
+  </div>`;
+  p.style.display='flex';
+  try{ if(navigator.vibrate) navigator.vibrate([40,50,40]); }catch(e){}
+}
 function renderOrderBlock(v){
   if(!v.order){ show('tOrder',false); show('tOrderCompact',false); return; }
   show('tOrderCompact',true);   // #tOrder itself only wraps payChoice now — its own visibility is set per-branch below so it's never an empty box
@@ -1358,7 +1381,8 @@ function renderOrderBlock(v){
     return;
   }
   if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
-    if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
+    if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
+    else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
   else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;

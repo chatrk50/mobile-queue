@@ -2681,7 +2681,16 @@ export function ticketView(ticketId) {
     if (earns.length) {
       const awarded = earns.filter((e) => !e.note).reduce((s, e) => s + e.points, 0);
       const bonus = earns.filter((e) => e.note).reduce((s, e) => s + e.points, 0);
-      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: loyaltyBalance(t.line_user_id).points, per: getStampsPerReward() };
+      const bal = loyaltyBalance(t.line_user_id).points;
+      const per = getStampsPerReward();
+      const earnedThis = awarded + bonus;
+      // Did THIS order complete a fresh stamp card (cross a multiple of `per`)? If so — and a real reward
+      // is actually redeemable — flag it so the LIFF fires the reward-celebration moment. The client shows
+      // it once per ticket; the first-order welcome "wow" takes precedence when both would apply.
+      const rewardJustReady = earnedThis > 0 && per > 0
+        && Math.floor(bal / per) > Math.floor((bal - earnedThis) / per)
+        && listRewards(false).length > 0;
+      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady };
     }
   }
   // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones

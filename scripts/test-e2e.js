@@ -470,6 +470,23 @@ const rwReconLine = rwRecon.lines.find((l) => l.code === 'reward');
 ok(!!rwReconLine && rwReconLine.orders >= 1, `INVARIANT reward redemptions show up in tenderRecon (found=${!!rwReconLine}, orders=${rwReconLine && rwReconLine.orders})`);
 ok(rwReconLine && rwReconLine.label === 'แลกด้วยแต้มสะสม (ฟรี)', `INVARIANT reward line has a friendly label, not the raw code — got ${JSON.stringify(rwReconLine && rwReconLine.label)}`);
 
+// ---- Reward-celebration signal: a paid order that COMPLETES a stamp card (crosses a multiple of
+//      `per`) sets ticketView().loyalty.rewardJustReady, so the LIFF can fire the celebration — but a
+//      partial order does not, and it stays distinct from the first-order welcome. ----
+console.log('\n== Reward celebration signal (stamp card completes) ==');
+Q.setLoyaltyEnabled(true); Q.setEarnMode('cup'); Q.setWelcomeBonus(2); Q.setStampsPerReward(10);
+const rjCust = 'Urewardjoy000000000000000000001';
+const rj1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 5 }], { source: 'customer', lineUserId: rjCust });
+Q.setOrderPaid(rj1.ticket.id, { method: 'cash' });   // first order: 5 cups + 2 welcome = 7 stamps (no card completed yet)
+const rjV1 = Q.ticketView(rj1.ticket.id);
+ok(rjV1.loyalty && rjV1.loyalty.rewardJustReady === false, `INVARIANT a partial order does NOT fire the reward celebration (balance ${rjV1.loyalty && rjV1.loyalty.balance})`);
+Q.setStatus(rj1.ticket.id, 'served');
+const rj2 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 5 }], { source: 'customer', lineUserId: rjCust });
+Q.setOrderPaid(rj2.ticket.id, { method: 'cash' });   // 7 -> 12 crosses the 10 boundary → a card completes
+const rjV2 = Q.ticketView(rj2.ticket.id);
+ok(rjV2.loyalty && rjV2.loyalty.rewardJustReady === true, `INVARIANT completing a stamp card fires the reward celebration (balance ${rjV2.loyalty && rjV2.loyalty.balance})`);
+ok(rjV2.loyalty && rjV2.loyalty.firstOrder === false, 'INVARIANT the completion celebration is separate from the first-order welcome (bonus=0)');
+
 // ---- Birthday capture: date-of-birth can't be in the future, and can't be within the last year
 //      either (a customer entering their OWN birthday to order themselves can't be that young —
 //      almost certainly a mistyped year). Both give a specific, distinguishable error reason. ----
