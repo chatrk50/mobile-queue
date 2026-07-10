@@ -20,12 +20,9 @@
     font-size:13px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;
     transition:background .12s,border-color .12s,color .12s}
   .sweetseg-b.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 12px -4px var(--accent)}
-  .dsChips{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
-  .topchip{border:1.5px solid var(--line);background:#fff;color:var(--navy);border-radius:999px;
-    padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;
-    transition:background .12s,border-color .12s,color .12s}
-  .topchip.on{border-color:var(--accent);background:var(--accent);color:#fff}
-  .topchip.out{opacity:.45;cursor:default;text-decoration:line-through}
+  /* Basket: no trailing divider under the last cart line (cleaner join to the totals).
+     !important overrides the per-row inline border-bottom that renderBasket writes. */
+  #basketList > div:last-child{ border-bottom:0 !important }
   /* Live queue ring on the ticket screen — fills as the customer approaches their turn. */
   .qring{position:relative;width:132px;height:132px;margin:4px auto 2px}
   .qring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
@@ -371,7 +368,7 @@
       <div id="dsName" style="font-weight:800;font-size:18px;color:var(--navy);line-height:1.25"></div>
       <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
       <div id="dsSweet"></div>
-      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops" class="dsChips"></div></div>
+      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
     </div>
     <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
       <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
@@ -497,20 +494,20 @@
     <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" style="margin:14px 0"></div>
-    <div style="border-top:1px solid var(--line);padding-top:12px">
+    <div style="padding-top:4px">
       <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
       <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
       <div id="basketCouponRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
       <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
-    <div style="margin-top:10px;border-top:1px solid var(--line)">
-      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
-        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
-        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+    <div style="margin-top:12px;border-top:1px solid var(--line)">
+      <div class="row between" style="align-items:center;padding:12px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+        <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
+        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </div>
-      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer" onclick="openPayPicker()">
-        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
-        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      <div class="row between" style="align-items:center;padding:12px 2px;cursor:pointer" onclick="openPayPicker()">
+        <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
+        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </div>
     </div>
     <div class="row" style="gap:8px;margin-top:14px">
@@ -999,7 +996,7 @@ function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
     '</div><div class="muted" style="font-size:11.5px;margin-top:6px;text-align:center">'+((SWEET_LABEL[dsSweet]||'').split('· ')[1]||'')+'</div>';
   const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('dsTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
   $('dsTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout||m.stockSoldout;
-    return '<button type="button" class="topchip'+(on?' on':'')+(out?' out':'')+'" '+(out?'disabled':'onclick="dsTogTop('+m.id+')"')+'>'+esc(m.name)+(out?' · หมด':' +฿'+m.price)+'</button>'; }).join('');
+    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
   dsUpdateBar();
 }
 window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
