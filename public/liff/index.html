@@ -35,8 +35,6 @@
   .qring-num{font-size:38px;font-weight:900;color:var(--navy);line-height:1}
   .qring-lbl{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
   @keyframes sendspin{ to{transform:rotate(360deg)} }
-  body.has-bottomnav .wrap{ padding-bottom:78px; }
-  .navtab.active{ color:var(--accent) !important; }
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
   .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
   .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
@@ -109,32 +107,9 @@
   <div id="sendCountdown" style="color:#fff;font-weight:900;font-size:15px;opacity:.9">00:03</div>
   <button class="ghost" style="background:rgba(255,255,255,.92);min-width:150px" onclick="cancelSending()">ยกเลิก</button>
 </div>
-<!-- #5: bottom nav bar — only on the home screen (getCard); hidden during ordering/tracking -->
-<!-- z-index 65: above memberPop/couponPickerPop/historyLiffCard's backdrops so the tapped tab's
-     highlight stays visible instead of being tinted by their dark overlay. Safe because those three
-     sheets all leave a clear gap below their card (max-height ≤ 86vh / centered), so the nav bar
-     never covers real content — it only ever shows while getCard is visible (home), and the ordering
-     flow (basket/drinkSheet/payment picker) hides getCard, so it hides the nav bar with it. -->
-<div id="bottomNav" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:65;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(14,40,55,.06);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))">
-  <div style="display:flex;align-items:stretch;justify-content:space-around;max-width:480px;margin:0 auto">
-    <button class="navtab" data-tab="home" onclick="navGo('home')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
-      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
-      <span style="font-size:10.5px;font-weight:700">หน้าหลัก</span>
-    </button>
-    <button class="navtab" data-tab="coupon" onclick="navGo('coupon')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
-      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>
-      <span style="font-size:10.5px;font-weight:700">คูปอง</span>
-    </button>
-    <button class="navtab" data-tab="member" onclick="navGo('member')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
-      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 14.5h4"/></svg>
-      <span style="font-size:10.5px;font-weight:700">บัตรสมาชิก</span>
-    </button>
-    <button class="navtab" data-tab="account" onclick="navGo('account')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted)">
-      <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      <span style="font-size:10.5px;font-weight:700">บัญชี</span>
-    </button>
-  </div>
-</div>
+<!-- Bottom nav removed: the order flow is a straight line (Home → order → ticket), and everything
+     account-related (member card, stamps, coupons, history) lives behind the avatar chip on Home
+     that opens the account hub. One door, no persistent tab bar to overlap the full-page views. -->
 <div class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
 
@@ -154,16 +129,12 @@
       <h1 id="zoneName" style="margin:0">—</h1>
       <span id="zoneState" class="pill open">เปิด</span>
     </div>
-    <!-- Auto member recognition for LINE customers — tap to open the full card -->
-    <div id="memberStrip" style="display:none;align-items:center;gap:11px;background:linear-gradient(135deg,#eaf6ff,#f4fbff);border:1px solid var(--line);border-radius:14px;padding:9px 12px;margin:12px 0 0;cursor:pointer;text-align:left" onclick="openMember()">
-      <span id="memberStripIcon" style="font-size:23px;flex:none">🌱</span>
-      <div style="flex:1;min-width:0">
-        <div id="memberStripName" style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-        <div id="memberStripSub" style="font-size:11.5px;color:var(--muted)"></div>
-      </div>
-      <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
-    </div>
-    <!-- ประวัติการสั่ง link removed from here — now reachable via the บัญชี bottom-nav tab, this was a duplicate. -->
+    <!-- Account entry: a compact avatar chip (top-left, mirrors the ✕). Opens the account hub — the
+         single door to the member card, stamps, coupons and history. Shown only for LINE members. -->
+    <button id="acctChip" onclick="openAccount()" aria-label="บัญชีของฉัน" style="display:none;position:absolute;top:8px;left:8px;width:38px;height:38px;border-radius:50%;padding:0;border:1px solid var(--line);background:#fff;overflow:hidden;cursor:pointer;align-items:center;justify-content:center">
+      <img id="acctChipImg" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
+      <span id="acctChipFb" style="font-size:19px;line-height:1">🌱</span>
+    </button>
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -505,12 +476,16 @@
       </div>
     </div>
     <div style="background:#fff;border-radius:14px;border:1px solid var(--line);overflow:hidden">
-      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openOrderHistory()">
-        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติการสั่งซื้อ</span>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
         <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
       </div>
-      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer" onclick="closeAccount();openMember()">
-        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openCoupon('browse')">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปองของฉัน</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer" onclick="closeAccount();openOrderHistory()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติการสั่งซื้อ</span>
         <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
       </div>
     </div>
@@ -811,20 +786,21 @@ async function loadZone(){
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
 let FAV=null;
-// Auto member recognition on the home: LINE customers see their tier + visits without opening the card.
+// Account chip on the home header: for LINE members, show their LINE picture (or a tier emoji as
+// fallback). Tapping opens the account hub. Hidden entirely when membership is off / non-LINE.
 async function loadMemberStrip(){
-  const el=$('memberStrip'); if(!el) return; el.style.display='none';
+  const chip=$('acctChip'); if(!chip) return; chip.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
-    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
+    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no chip
     let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
-    let t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
-    const T = visits>=t.essenceMin ? {n:'ESSENCE',i:'👑'} : visits>=t.bloomMin ? {n:'BLOOM',i:'🌷'} : {n:'PURE',i:'🌱'};
-    $('memberStripIcon').textContent = T.i;
-    $('memberStripName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
-    $('memberStripSub').textContent = T.n + ' · ' + (visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉');
-    el.style.display='flex';
+    const t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
+    const tierEmoji = visits>=t.essenceMin ? '👑' : visits>=t.bloomMin ? '🌷' : '🌱';
+    const img=$('acctChipImg'), fb=$('acctChipFb');
+    if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
+    else { fb.textContent=tierEmoji; fb.style.display=''; img.style.display='none'; }
+    chip.style.display='flex';
   }catch(e){}
 }
 // Non-LINE phone capture: format while typing (full digits, not masked — easier to verify), mask only when saved.
