@@ -1811,7 +1811,10 @@ function startPolling(){ tick(); poll=setInterval(tick,3000); }
 window.cancelTicket = async ()=>{
   if(!(await appConfirm({title:'ขอยกเลิกออเดอร์',message:'ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ',okText:'ขอยกเลิก',danger:true}))) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
-    toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');   // poll will refresh the button to "ส่งคำขอแล้ว"
+    toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');
+    // Lock the button NOW — waiting for the next poll leaves it tappable for a few seconds, letting
+    // the customer re-open the confirm dialog for a request that's already been sent.
+    { const cb=$('cancelBtn'); if(cb){ cb.disabled=true; cb.style.opacity=.6; cb.textContent='⏳ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยัน'; } }
   }catch(e){ const m=String(e.message||'');
     toast(m==='already_making'?'🍳 กำลังทำแล้ว ยกเลิกไม่ได้ — ติดต่อหน้าร้านค่ะ':m==='already_paid'?'ชำระแล้ว ยกเลิกไม่ได้ — ติดต่อหน้าร้านค่ะ':m==='too_late'?'เลยเวลายกเลิกแล้ว — ติดต่อหน้าร้านค่ะ':m); }
 };
