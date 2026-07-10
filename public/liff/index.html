@@ -11,6 +11,34 @@
 <style>
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
+  @keyframes loadslide{ 0%{left:-45%} 100%{left:105%} }
+  @keyframes loadpulse{ 0%,100%{opacity:.4} 50%{opacity:1} }
+  @media (prefers-reduced-motion:reduce){ #loadBar{ left:0!important;width:100%!important;animation:loadpulse 1.2s ease-in-out infinite!important } }
+  /* Sweetness = segmented pills (was a radio list); toppings = toggle chips (was a checkbox list). */
+  .sweetseg{display:flex;gap:6px;margin-top:9px}
+  .sweetseg-b{flex:1;padding:9px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);
+    font-size:13px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;
+    transition:background .12s,border-color .12s,color .12s}
+  .sweetseg-b.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 12px -4px var(--accent)}
+  /* Basket: no trailing divider under the last cart line (cleaner join to the totals).
+     !important overrides the per-row inline border-bottom that renderBasket writes. */
+  #basketList > div:last-child{ border-bottom:0 !important }
+  /* Live queue ring on the ticket screen — fills as the customer approaches their turn. */
+  .qring{position:relative;width:132px;height:132px;margin:4px auto 2px}
+  .qring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
+  .qring .track{fill:none;stroke:var(--line);stroke-width:9}
+  .qring .prog{fill:none;stroke:var(--accent);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .6s ease,stroke .3s}
+  .qring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .qring-num{font-size:38px;font-weight:900;color:var(--navy);line-height:1}
+  .qring-lbl{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
+  @keyframes sendspin{ to{transform:rotate(360deg)} }
+  @keyframes mascotBounce{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  .mascot-bounce{ animation:mascotBounce 1.8s ease-in-out infinite }
+  @media (prefers-reduced-motion:reduce){ .mascot-bounce{ animation:none } }
+  /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
+  .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+  .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
+  body.noscroll{ overflow:hidden; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
   #menuButtons .menu-btn .mimg svg{ width:38px; height:38px; }
@@ -53,8 +81,39 @@
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
+<!-- Loading splash (capture 1): logo + fill-bar, shown until the app is ready -->
+<div id="loadSplash" style="position:fixed;inset:0;z-index:90;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px">
+  <img src="/assets/logo.png" alt="" style="width:98px;height:98px;object-fit:contain;border-radius:24px;background:#fff;padding:12px;box-shadow:0 8px 26px rgba(0,0,0,.2)" onerror="this.style.display='none'">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+    <div style="width:180px;height:7px;border-radius:999px;background:rgba(255,255,255,.3);overflow:hidden;position:relative">
+      <div id="loadBar" style="position:absolute;top:0;bottom:0;left:-45%;width:42%;background:#fff;border-radius:999px;animation:loadslide 1.15s ease-in-out infinite"></div>
+    </div>
+    <div id="loadMsg" style="color:rgba(255,255,255,.92);font-size:12.5px;font-weight:600;letter-spacing:.02em">กำลังโหลด…</div>
+  </div>
+</div>
+<!-- Promo/ad splash (capture 2): owner-uploaded banner, shown once per session after loading -->
+<div id="promoOvl" onclick="closePromoOvl()" style="display:none;position:fixed;inset:0;z-index:88;background:#000">
+  <img id="promoOvlImg" alt="โปรโมชั่น" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.35) 0%,transparent 18%,transparent 72%,rgba(0,0,0,.6) 100%)"></div>
+  <button class="ghost" onclick="event.stopPropagation();closePromoOvl()" aria-label="ปิด" style="position:fixed;top:14px;right:14px;background:rgba(255,255,255,.92);width:40px;height:40px;border-radius:50%;padding:0;font-size:18px;z-index:2">✕</button>
+  <button class="ok" onclick="event.stopPropagation();closePromoOvl()" style="position:fixed;left:20px;right:20px;bottom:28px;font-weight:800;z-index:2">เริ่มสั่งเลย</button>
+</div>
+<!-- Phase 6: "sending order" grace-period screen (LINE-MAN style) — shown between "สั่งเลย" and the real ticket -->
+<div id="sendingScreen" style="display:none;position:fixed;inset:0;z-index:89;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center">
+  <div style="width:74px;height:74px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 26px rgba(0,0,0,.2)">
+    <svg viewBox="0 0 24 24" style="width:36px;height:36px;fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:sendspin 1s linear infinite"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  </div>
+  <div style="color:#fff;font-weight:800;font-size:18px">กำลังส่งออเดอร์ไปยังร้าน…</div>
+  <div id="sendCountdown" style="color:#fff;font-weight:900;font-size:15px;opacity:.9">00:03</div>
+  <button class="ghost" style="background:rgba(255,255,255,.92);min-width:150px" onclick="cancelSending()">ยกเลิก</button>
+</div>
+<!-- Bottom nav removed: the order flow is a straight line (Home → order → ticket), and everything
+     account-related (member card, stamps, coupons, history) lives behind the avatar chip on Home
+     that opens the account hub. One door, no persistent tab bar to overlap the full-page views. -->
 <div class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <!-- Mascot greeting (owner toggle mascotOn, default off) -->
+  <div id="mascotGreet" style="display:none;text-align:center;font-size:13px;color:var(--navy);font-weight:700;margin:-6px 0 12px">สวัสดีค่ะ! วันนี้อยากดื่มอะไรดี? 🥤</div>
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
@@ -72,16 +131,12 @@
       <h1 id="zoneName" style="margin:0">—</h1>
       <span id="zoneState" class="pill open">เปิด</span>
     </div>
-    <!-- Auto member recognition for LINE customers — tap to open the full card -->
-    <div id="memberStrip" style="display:none;align-items:center;gap:11px;background:linear-gradient(135deg,#eaf6ff,#f4fbff);border:1px solid var(--line);border-radius:14px;padding:9px 12px;margin:12px 0 0;cursor:pointer;text-align:left" onclick="openMember()">
-      <span id="memberStripIcon" style="font-size:23px;flex:none">🌱</span>
-      <div style="flex:1;min-width:0">
-        <div id="memberStripName" style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-        <div id="memberStripSub" style="font-size:11.5px;color:var(--muted)"></div>
-      </div>
-      <span style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">บัตรสมาชิก ›</span>
-    </div>
-    <div id="historyLink" style="display:none;margin:8px 2px 0;text-align:right"><span style="font-size:12.5px;color:var(--accent);font-weight:700;cursor:pointer" onclick="openOrderHistory()"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px;vertical-align:-2px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> ประวัติการสั่ง ›</span></div>
+    <!-- Account entry: a compact avatar chip (top-left, mirrors the ✕). Opens the account hub — the
+         single door to the member card, stamps, coupons and history. Shown only for LINE members. -->
+    <button id="acctChip" onclick="openAccount()" aria-label="บัญชีของฉัน" style="display:none;position:absolute;top:8px;left:8px;width:38px;height:38px;border-radius:50%;padding:0;border:1px solid var(--line);background:#fff;overflow:hidden;cursor:pointer;align-items:center;justify-content:center">
+      <img id="acctChipImg" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
+      <span id="acctChipFb" style="font-size:19px;line-height:1">🌱</span>
+    </button>
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -100,6 +155,8 @@
       <div id="aheadNow" style="font-size:48px;font-weight:900;color:var(--navy);line-height:1">–</div>
       <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– นาที</div>
     </div>
+    <!-- Social proof (owner toggle socialProof, default off): today's sold count -->
+    <div id="socialProof" style="display:none;font-size:12.5px;color:#c2410c;font-weight:800;margin:-6px 0 12px">🔥 วันนี้ขายไปแล้ว <span id="soldTodayN">0</span> แก้ว</div>
     <!-- Returning-customer one-tap reorder of their usual favourite (filled in by loadReorder) -->
     <div id="reorderCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;margin:0 0 14px;text-align:left">
       <div id="reorderHi" style="font-weight:800;color:var(--navy);margin-bottom:10px;text-align:center"></div>
@@ -108,19 +165,9 @@
         <span id="reorderLbl">สั่งเหมือนเดิม</span>
       </button>
     </div>
-    <!-- Loyalty points (filled by loadLoyalty); shown once the customer has earned anything -->
-    <div id="loyaltyCard" style="display:none;background:linear-gradient(135deg,#1e3a5f,#2c5a8f);color:#fff;border-radius:16px;padding:16px;margin:0 0 14px;text-align:left">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:13px;opacity:.85">⭐ สะสม<span data-unit>แก้ว</span>ของคุณ <span id="loyBadge" style="display:none;background:rgba(255,255,255,.22);border-radius:99px;padding:2px 9px;font-weight:800;margin-left:4px;font-size:12px"></span></div>
-        <div style="font-size:11px;opacity:.7" id="loyRate"></div>
-      </div>
-      <div style="font-size:38px;font-weight:900;line-height:1.1;margin:2px 0"><span id="loyPoints">0</span> <span style="font-size:16px;font-weight:600;opacity:.85">ดวง</span></div>
-      <div id="loyNext" style="font-size:12px;opacity:.9;margin-bottom:8px"></div>
-      <div style="height:8px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden"><div id="loyBar" style="height:100%;width:0%;background:#ffd166;border-radius:99px;transition:width .4s"></div></div>
-      <button id="loyRewardsBtn" class="ghost" style="width:100%;margin-top:12px;background:rgba(255,255,255,.15);color:#fff;border:none" onclick="toggleRewards()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>ดูของรางวัล</button>
-      <div id="loyRewards" style="display:none;margin-top:6px"></div>
-      <div id="loyBday" style="margin-top:10px"></div>
-    </div>
+    <!-- Loyalty stamp progress + birthday capture now live in the member popup's "สะสมแต้ม" tab
+         (บัตรสมาชิก ›) instead of a duplicate card here — loadLoyalty() still runs (for the
+         order-screen chip + cart nudge), it just no longer renders a visible card on the home screen. -->
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
     <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span id="orderNowLbl">สั่งเลย</span></button>
@@ -168,9 +215,12 @@
     <p id="tCodeLabel" class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
     <div id="tStatusWrap" style="margin:18px 0">
-      <div id="tAheadWrap"><span class="muted">คิวรอก่อนหน้า</span>
-        <div style="font-size:40px;font-weight:800" id="tAhead">–</div>
-        <div class="pill soon" id="tEta" style="display:inline-block;margin-top:8px"></div></div>
+      <div id="tAheadWrap">
+        <div class="qring">
+          <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"></circle><circle id="qringFill" class="prog" cx="60" cy="60" r="52" stroke-dasharray="326.726" stroke-dashoffset="326.726"></circle></svg>
+          <div class="qring-center"><div class="qring-num" id="tAhead">–</div><div class="qring-lbl">คิวก่อนหน้า</div></div>
+        </div>
+        <div class="pill soon" id="tEta" style="display:inline-block;margin-top:6px"></div></div>
       <div id="tCalled" style="display:none">
         <div class="callcard">
           <div style="font-size:15px;font-weight:700">🎉 ถึงคิวของคุณแล้ว!</div>
@@ -179,10 +229,15 @@
       </div>
     </div>
     <div id="tTimeline" style="display:none;margin:6px 2px 16px"></div>
-    <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px">
+    <!-- compact order-details row → tap opens the order-details bottom sheet (itemized breakdown) -->
+    <div id="tOrderCompact" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px;cursor:pointer" onclick="openOrderDetail()">
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
-      <div id="tOrderItems" style="font-size:13px;margin-top:6px"></div>
-      <div class="row between" style="margin-top:8px;font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
+      <div class="row between" style="margin-top:8px;align-items:center">
+        <span class="muted" style="font-size:13px" id="tOrderSummaryTxt">—</span>
+        <span style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px;flex:none">ดูรายละเอียด <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+    <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 12px">
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
         <div id="payReassure" style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
@@ -208,12 +263,25 @@
           <div class="muted" style="font-size:11.5px;margin-top:8px">เปลี่ยนใจ? กด "ยกเลิกออเดอร์" ด้านล่างเพื่อสั่งใหม่</div>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
+          <div id="qrCountdown" style="display:inline-flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-weight:800;font-size:12.5px;padding:6px 12px;border-radius:999px;margin-bottom:10px"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>กรุณาชำระภายใน <span id="qrCountdownTxt">15:00</span> นาที</div>
+          <div>
           <img id="ppQrImg" alt="PromptPay QR" style="width:210px;height:210px;border-radius:12px;border:1px solid var(--line);object-fit:contain;background:#fff">
+          </div>
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
           <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>บันทึกรูป QR</button>
           <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
           <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5;margin-bottom:10px;color:#334155">
             <b style="color:var(--navy)">จ่ายในมือถือเครื่องเดียว</b> · บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span>
+          </div>
+          <!-- bank-app strip: tap opens that bank's app (best-effort deep link) — when payMethod is
+               kbank, setQrFor() hides all but K PLUS since that QR only works with Kbank's app. -->
+          <div id="bankIconStrip" style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <span id="bankIconHint" class="muted" style="font-size:10.5px;width:100%;margin-bottom:2px">แตะไอคอนเพื่อเปิดแอปธนาคาร</span>
+            <span data-bank="kplus" onclick="openBankApp('kplus')" style="cursor:pointer;background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">K PLUS</span>
+            <span data-bank="scbeasy" onclick="openBankApp('scbeasy')" style="cursor:pointer;background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">SCB EASY</span>
+            <span data-bank="ktbnext" onclick="openBankApp('ktbnext')" style="cursor:pointer;background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">KTB NEXT</span>
+            <span data-bank="bualuang" onclick="openBankApp('bualuang')" style="cursor:pointer;background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">Bualuang</span>
+            <span data-bank="ttbtouch" onclick="openBankApp('ttbtouch')" style="cursor:pointer;background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">ttb touch</span>
           </div>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
           <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
@@ -232,10 +300,16 @@
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
-    <div id="tRate" style="display:none;margin-top:14px">
-      <p class="muted" style="font-size:14px">การบริการเป็นอย่างไรบ้าง?</p>
-      <div id="tStars" style="font-size:34px;letter-spacing:6px"></div>
-      <p id="tRateThanks" style="font-size:13px;display:none;color:var(--accent2);font-weight:600">ขอบคุณสำหรับความคิดเห็นค่ะ 🙏</p>
+    <div id="tRate" style="display:none;margin-top:16px;background:linear-gradient(160deg,#fff9ec,#fff);border:1px solid #fde9b8;border-radius:16px;padding:18px 16px;text-align:center">
+      <div id="tRateAsk">
+        <div style="font-size:15px;font-weight:800;color:var(--navy)">แก้วนี้เป็นอย่างไรบ้าง?</div>
+        <p class="muted" style="font-size:12.5px;margin:4px 0 14px">ให้คะแนนความประทับใจ ช่วยให้ร้านพัฒนาต่อได้ค่ะ</p>
+        <div id="tStars" style="display:flex;align-items:center;justify-content:center;gap:4px"></div>
+        <div id="tRateLabel" style="font-size:12.5px;font-weight:700;color:var(--muted);margin-top:8px;min-height:16px"></div>
+      </div>
+      <div id="tRateThanks" style="display:none;align-items:center;justify-content:center;gap:8px;color:var(--accent2);font-weight:800;font-size:14.5px">
+        <svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M20 6L9 17l-5-5"/></svg>ขอบคุณสำหรับความคิดเห็นค่ะ
+      </div>
     </div>
     <div class="row" style="gap:8px;margin-top:10px">
       <button id="changePayBtn" class="ghost" style="flex:1;display:none" onclick="changePay()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6l-4 4 4 4M5 10h11a4 4 0 0 1 0 8h-1"/></svg>เปลี่ยนวิธีจ่าย</button>
@@ -247,6 +321,15 @@
   <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
 </div>
 <div id="toast" class="toast"></div>
+
+<!-- ORDER DETAILS bottom sheet: itemized breakdown, opened by tapping the order summary row -->
+<div id="orderDetailSheet" onclick="if(event.target===this)closeOrderDetail()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:flex-end;justify-content:center">
+  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:78vh;overflow:auto;padding:16px">
+    <div class="row between" style="align-items:center"><h1 style="margin:0;font-size:18px">รายละเอียดออเดอร์</h1><button class="ghost" onclick="closeOrderDetail()" aria-label="ปิด" style="padding:6px 12px">✕</button></div>
+    <div id="tOrderItems" style="font-size:13.5px;margin-top:12px"></div>
+    <div class="row between" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-weight:800;color:var(--navy)"><span>รวม</span><span id="tOrderTotal">฿0</span></div>
+  </div>
+</div>
 
 <!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
 <div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
@@ -283,6 +366,28 @@
   </div>
 </div>
 
+<!-- PRODUCT DETAIL SHEET (LINE-MAN style): image + ความหวาน (radio) + ท็อปปิ้ง (checkbox) + sticky add bar -->
+<div id="drinkSheet" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
+  <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:90vh;overflow:auto;padding:0;position:relative">
+    <button class="ghost" onclick="closeDrinkSheet()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
+    <div id="dsImg" style="width:100%;height:148px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
+    <div style="padding:13px 16px 4px">
+      <div id="dsName" style="font-weight:800;font-size:18px;color:var(--navy);line-height:1.25"></div>
+      <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
+      <div id="dsSweet"></div>
+      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
+    </div>
+    <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
+      <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
+        <button class="ghost" onclick="dsDecQty()" aria-label="ลด" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1">−</button>
+        <b id="dsQtyN" style="min-width:16px;text-align:center;font-size:16px;color:var(--navy)">1</b>
+        <button class="ghost" onclick="dsIncQty()" aria-label="เพิ่ม" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1;color:var(--accent)">+</button>
+      </div>
+      <button class="ok" onclick="dsAdd()" style="flex:1;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:800;padding:14px 16px"><span id="dsAddLbl">เพิ่มลงตะกร้า</span><span>฿<span id="dsAddAmt">0</span></span></button>
+    </div>
+  </div>
+</div>
+
 <!-- "SURPRISE ME" random menu suggester -->
 <div id="randomPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center">
@@ -297,15 +402,27 @@
 </div>
 
 <!-- "บัตรของฉัน" member card: QR สมาชิก + แต้ม + สั่งซ้ำ in one place -->
-<div id="memberPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:53;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:312px;width:100%;margin:0;max-height:94vh;overflow:auto;padding:14px">
+<!-- True full page (not a floating dialog) — the close button sits inline in the header instead of
+     floating fixed over the content, and the body is a plain scrolling flex column, which also fixes
+     the earlier bug where the card couldn't scroll and clipped its bottom content. -->
+<div id="memberPop" class="full-page" style="display:none;z-index:53">
+  <div class="full-page-head">
+    <h1>บัตรสมาชิก</h1>
+    <button class="ghost" onclick="closeMember()" aria-label="ปิด">✕</button>
+  </div>
+  <div class="full-page-body" style="max-width:420px;width:100%;margin:0 auto">
+    <!-- Only shown when the stamp card is eligible (per===10 stamp programme) — lets the customer
+         switch between the identity card and the stamp card instead of both stacked at once. -->
+    <div id="memberTabs" style="display:none;gap:6px;margin-bottom:10px;background:var(--surface);border-radius:999px;padding:3px">
+      <button id="memberTabCard" class="ok" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('card')">บัตรสมาชิก</button>
+      <button id="memberTabStamp" class="ghost" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('stamp')">สะสมแต้ม</button>
+    </div>
     <!-- FLIP CARD: tap anywhere to flip. front = tier card (art + boxes), back = QR + details (same tier colour). -->
-    <div style="perspective:1400px">
+    <div id="memberFlipWrap" style="perspective:1400px">
       <div id="memberFlipInner" style="position:relative;width:100%;aspect-ratio:1/1;transition:transform .55s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d">
         <!-- FRONT: data dropped into the art's baked boxes -->
         <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;z-index:3;font-size:14px;line-height:1.45" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div id="memberName" style="position:absolute;top:7.2%;left:6.9%;width:45%;height:17%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
           <div id="memberLevel" style="position:absolute;top:23%;left:65.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:75.6%;left:4%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
@@ -314,7 +431,6 @@
         </div>
         <!-- BACK: QR + details on the same tier colour -->
         <div id="memberBack" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
-          <button class="ghost" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.82);border:none;color:#16314f;padding:1px 8px;border-radius:999px;font-size:14px;line-height:1.45;z-index:3" onclick="event.stopPropagation();closeMember()" aria-label="ปิด">✕</button>
           <div style="background:#fff;border-radius:13px;padding:9px;box-shadow:0 4px 14px rgba(14,40,55,.18)"><img id="memberQR" alt="QR สมาชิก" style="width:132px;height:132px;display:block;object-fit:contain"></div>
           <p style="font-size:11px;margin:7px 0 0;text-align:center;color:#16314f;font-weight:600">แสดง QR ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
           <div id="memberStamp" style="display:none;margin-top:7px;background:rgba(255,255,255,.8);border-radius:10px;padding:6px 10px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
@@ -323,6 +439,15 @@
         </div>
       </div>
     </div>
+    <!-- STAMP/REWARD CARD: visual punch-card art (10 slots) — filled stars = progress toward a free redeem. -->
+    <div id="memberStampCard" style="display:none;margin-top:11px;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(14,40,55,.4)">
+      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" style="width:100%;display:block">
+      <div id="stampName" style="position:absolute;top:4.5%;left:4.8%;width:28%;height:18%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9.5px;font-weight:800;color:#8a5a12;line-height:1.15;padding:0 3px;overflow:hidden"></div>
+      <div id="stampGrid" style="position:absolute;top:47%;left:12%;width:76%;height:26%;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr)"></div>
+      <div id="stampMsg1" style="position:absolute;bottom:3%;left:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
+      <div id="stampMsg2" style="position:absolute;bottom:3%;right:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;color:#8a5a12;line-height:1.15;padding:0 4px"></div>
+    </div>
+    <div id="loyBdayMember" style="margin-top:11px"></div>
     <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
     <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
     <button id="memberOrderBtn" class="ghost" style="width:100%;margin-top:8px" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
@@ -331,36 +456,72 @@
 </div>
 
 <!-- BASKET REVIEW (step 4) -->
-<!-- ประวัติการสั่ง (customer order history) -->
-<div id="historyLiffCard" class="card" style="display:none;max-width:480px;margin:0 auto">
-  <div class="row between"><h1 style="margin:0">ประวัติการสั่ง</h1><button class="ghost" style="padding:6px 12px" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
-  <div id="historyLiffList" style="margin-top:14px"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+<!-- ประวัติการสั่ง (customer order history) — true full page. -->
+<div id="historyLiffCard" style="display:none;z-index:53" class="full-page">
+  <div class="full-page-head"><h1>ประวัติการสั่ง</h1><button class="ghost" onclick="closeOrderHistory()" aria-label="ปิด">✕</button></div>
+  <div class="full-page-body" style="max-width:480px;width:100%;margin:0 auto">
+    <div id="historyLiffList"><p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p></div>
+  </div>
 </div>
 
-<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:440px;width:100%;max-height:88vh;overflow:auto;margin:0">
-    <div class="row between"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
-    <div id="cartNudge" style="display:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
-    <div id="basketList" style="margin:14px 0"></div>
-    <div style="border-top:1px solid var(--line);padding-top:12px">
-      <div class="row between" style="font-size:14px;margin-bottom:7px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
-      <div id="basketDiscRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
-      <div id="basketCouponRow" class="row between" style="display:none;font-size:14px;margin-bottom:7px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
-      <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:11px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:24px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
-    </div>
-    <div style="margin-top:10px;border-top:1px solid var(--line)">
-      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
-        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
-        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+<!-- บัญชี (account hub): profile summary + menu list — ประวัติการสั่งซื้อ/บัตรสมาชิก are SUB-items
+     reached from here, not the direct destination of the บัญชี nav tab. -->
+<div id="accountPop" style="display:none;z-index:53" class="full-page">
+  <div class="full-page-head"><h1>บัญชีของฉัน</h1><button class="ghost" onclick="closeAccount()" aria-label="ปิด">✕</button></div>
+  <div class="full-page-body" style="max-width:480px;width:100%;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin:4px 0 24px">
+      <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#fff;border:1px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center">
+        <img id="acctAvatarImg" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
+        <svg id="acctAvatarFallback" viewBox="0 0 24 24" style="width:28px;height:28px;fill:none;stroke:var(--muted);stroke-width:2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
       </div>
-      <div class="row between" style="align-items:center;padding:13px 2px;cursor:pointer" onclick="openPayPicker()">
-        <span style="font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
-        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></span>
+      <div style="min-width:0">
+        <div id="acctName" style="font-weight:800;color:var(--navy);font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <div class="muted" style="font-size:12.5px;margin-top:2px" data-brand-name>YO-DEE Yogurt</div>
       </div>
     </div>
-    <div class="row" style="gap:8px;margin-top:14px">
-      <button class="ghost danger" style="flex:none;padding:13px 18px" onclick="cancelBasket()">ล้าง</button>
-      <button class="ok" id="basketConfirm" style="flex:1;font-size:16px;font-weight:800" onclick="confirmBasket()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน · ฿<span id="basketBtnAmt">0</span></button>
+    <div style="background:#fff;border-radius:14px;border:1px solid var(--line);overflow:hidden">
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openCoupon('browse')">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปองของฉัน</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer" onclick="closeAccount();openOrderHistory()">
+        <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติการสั่งซื้อ</span>
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Basket: header + the whole totals→pay block are PINNED (flex column, overflow:hidden on the
+     card) — only the item list scrolls, so ยอดสุทธิ and the pay button never scroll out of reach. -->
+<div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center;padding:0">
+  <div class="card" style="max-width:440px;width:100%;height:92vh;max-height:92vh;overflow:hidden;margin:0;border-radius:20px 20px 0 0;display:flex;flex-direction:column">
+    <div class="row between" style="flex:none"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
+    <div id="cartNudge" style="display:none;flex:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
+    <div id="basketList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:8px 0"></div>
+    <div style="flex:none;padding-top:2px">
+      <div class="row between" style="font-size:13.5px;margin-bottom:4px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
+      <div id="basketDiscRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div id="basketCouponRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
+      <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:22px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
+    </div>
+    <div style="flex:none;margin-top:8px;border-top:1px solid var(--line)">
+      <div class="row between" style="align-items:center;padding:8px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+        <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
+        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <div class="row between" style="align-items:center;padding:8px 2px;cursor:pointer" onclick="openPayPicker()">
+        <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
+        <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+    <div class="row" style="flex:none;gap:8px;margin-top:8px">
+      <button class="ghost danger" style="flex:none;padding:10px 14px;font-size:13.5px" onclick="cancelBasket()">ล้าง</button>
+      <button class="ok" id="basketConfirm" style="flex:1;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:space-between;padding:11px 15px" onclick="confirmBasket()"><span>สั่งเลย</span><span>฿<span id="basketBtnAmt">0</span></span></button>
     </div>
   </div>
 </div>
@@ -373,10 +534,10 @@
   </div>
 </div>
 
-<div id="couponPickerPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:54;align-items:flex-end;justify-content:center;padding:0">
-  <div class="card" style="max-width:440px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:82vh;overflow:auto">
-    <div class="row between"><h1 style="margin:0;font-size:19px">เลือกคูปองส่วนลด</h1><button class="ghost" style="padding:6px 12px" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
-    <div id="couponPickerList" style="margin-top:14px"><p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p></div>
+<div id="couponPickerPop" style="display:none;z-index:54" class="full-page">
+  <div class="full-page-head"><h1 id="couponPickerTitle">เลือกคูปองส่วนลด</h1><button class="ghost" onclick="closeCoupon()" aria-label="ปิด">✕</button></div>
+  <div class="full-page-body" style="max-width:440px;width:100%;margin:0 auto">
+    <div id="couponPickerList"><p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p></div>
   </div>
 </div>
 
@@ -384,11 +545,16 @@
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
-let cfg = {}, lineUserId = null, displayName = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
+let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// These full-screen popups are mutually exclusive — nothing used to close the others before opening
+// a new one, so e.g. tapping "บัญชี" while the member card was open left BOTH stacked on screen at
+// once. Every open*() below calls this first.
+const ALL_POPUPS=['drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
+function closeAllPopups(){ ALL_POPUPS.forEach(id=>{ const e=$(id); if(e) e.style.display='none'; }); }
 // In-app modal: appPrompt (text input) + appConfirm (yes/no) — replaces native prompt()/confirm().
 let _amRes=null;
 window.amOk=()=>{ const inp=$('amInput'); const shown=inp.style.display!=='none'; _amClose(shown?inp.value:true); };
@@ -436,7 +602,7 @@ async function initLiff(){
       if(!liff.isLoggedIn()){ liff.login(); return; }
       inLine = true;
       const p = await liff.getProfile();
-      lineUserId = p.userId; displayName = p.displayName;
+      lineUserId = p.userId; displayName = p.displayName; pictureUrl = p.pictureUrl||null;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
     }catch(e){
       // LIFF init/getProfile failed — fall back to a STABLE id so the server's per-customer
@@ -486,46 +652,90 @@ const MEMBER_LEVELS=[
 ];
 function memberLevel(v){ return MEMBER_LEVELS.find(L=>v>=L.min)||MEMBER_LEVELS[MEMBER_LEVELS.length-1]; }
 // "บัตรของฉัน" member card: tier banner + QR สมาชิก + แต้ม/แลกฟรี + สั่งซ้ำ in one place.
+// Only one of {identity card, stamp card} is ever visible at a time — tab switches between them.
+window.showMemberTab=(tab)=>{
+  const isCard = tab!=='stamp';
+  $('memberTabCard').className = isCard?'ok':'ghost';
+  $('memberTabStamp').className = isCard?'ghost':'ok';
+  $('memberFlipWrap').style.display = isCard?'':'none';
+  $('memberStampCard').style.display = isCard?'none':'block';
+};
 window.openMember=async()=>{
+  closeAllPopups();
+  // Two independent owner toggles decide what this popup can show: memberEnabled (identity/tier card
+  // + QR) and loyalty "enabled" (stamp programme). Only reward → only the stamp view. Only member →
+  // only the identity view. Both → tab toggle. Neither → don't open the popup at all.
+  let conf={enabled:false,memberEnabled:true,stampsPerReward:10,tier:{bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''}};
+  try{ const c=await api('/api/loyalty/config'); if(c) conf=c; }catch(e){}
+  const memberOn = conf.memberEnabled!==false;
+  const per = conf.stampsPerReward||10;
+  const stampEligible = !!conf.enabled && per===10;   // per===10 is what the punch-card art assumes
+  let bal={points:0};
+  if(conf.enabled){ try{ bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); }catch(e){} }
+  if(!memberOn && !stampEligible){ toast('ระบบสมาชิกยังไม่เปิดใช้งานค่ะ'); return; }
+  setNavTab('member');   // only mark the tab active once we know the popup will actually open
+
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
-  $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
-  $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
-  let visits=0;
-  try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
-    visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
-    if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
-  }catch(e){}
-  // Owner-configurable 3-tier system (Pure/Bloom/Essence) by visit count — falls back to sensible defaults.
-  let tcfg={bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''};
-  try{ const c=await api('/api/loyalty/config'); if(c&&c.tier) tcfg=c.tier; }catch(e){}
-  const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',perk:tcfg.essencePerk,bg:'#e6dcf6'}
-             : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',perk:tcfg.bloomPerk,bg:'#d9f0d9'}
-             :                           {key:'pure',name:'PURE',perk:tcfg.purePerk,bg:'#cfe6f5'};
-  $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=2)';   // ?v bump busts stale browser cache when art is replaced
-  if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
-  $('memberLevel').textContent = TIER.name;
-  $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
-  const nextMin = visits<tcfg.bloomMin ? tcfg.bloomMin : (visits<tcfg.essenceMin ? tcfg.essenceMin : null);
-  const nextName = visits<tcfg.bloomMin ? '🌷 BLOOM' : '👑 ESSENCE';
-  $('memberNext').textContent = nextMin!=null ? ('อีก '+(nextMin-visits)+' → '+nextName) : '🎉 สูงสุดแล้ว';
-  if($('memberPerk')) $('memberPerk').textContent = TIER.perk ? ('🎁 '+TIER.perk) : '';
-  // Never-ordered customer → invite to start; returning → "order something else".
-  $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
-  // Store closed → don't dangle live order buttons on the member card (showOrderUI also hard-blocks).
-  if(!storeOpen){ $('memberReorder').style.display='none'; const b=$('memberOrderBtn'); b.disabled=true; b.style.opacity=.5; b.textContent='⏰ ร้านปิดอยู่'; }
-  else { const b=$('memberOrderBtn'); b.disabled=false; b.style.opacity=1; }
-  // Stamps + what they do (only when the stamp programme is on) — same system as the bracelet card.
-  try{ const conf=await api('/api/loyalty/config');
-    if(conf&&conf.enabled){ const bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); const per=conf.stampsPerReward||10, pts=bal.points||0, toGo=per-(pts%per||0);
-      $('memberStamp').innerHTML = (pts>=per) ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
+  $('memberTabs').style.display = (memberOn && stampEligible) ? 'flex' : 'none';
+  showMemberTab(memberOn ? 'card' : 'stamp');
+
+  if(memberOn){
+    $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
+    $('memberName').innerHTML = '<div style="font-weight:800;font-size:13.5px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(displayName?('คุณ '+displayName):'สมาชิก')+'</div><div style="font-size:8.5px;font-weight:700;letter-spacing:.8px;opacity:.6;margin-top:1px">YO-DEE MEMBER</div>';
+    let visits=0;
+    try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
+      visits=s.orderCount||0; const fav=(s.favourites||[]).find(f=>!f.soldout&&f.itemId);
+      if(fav){ FAV=fav; $('memberFav').textContent='💜 เมนูโปรด: '+fav.name; $('memberReorder').textContent='สั่งซ้ำ '+fav.name; $('memberReorder').style.display=''; }
+    }catch(e){}
+    // Owner-configurable 3-tier system (Pure/Bloom/Essence) by visit count — falls back to sensible defaults.
+    const tcfg = conf.tier || {bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''};
+    const TIER = visits>=tcfg.essenceMin ? {key:'essence',name:'ESSENCE',perk:tcfg.essencePerk,bg:'#e6dcf6'}
+               : visits>=tcfg.bloomMin   ? {key:'bloom',name:'BLOOM',perk:tcfg.bloomPerk,bg:'#d9f0d9'}
+               :                           {key:'pure',name:'PURE',perk:tcfg.purePerk,bg:'#cfe6f5'};
+    $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=3)';   // ?v bump busts stale browser cache when art is replaced
+    if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
+    $('memberLevel').textContent = TIER.name;
+    $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
+    const nextMin = visits<tcfg.bloomMin ? tcfg.bloomMin : (visits<tcfg.essenceMin ? tcfg.essenceMin : null);
+    const nextName = visits<tcfg.bloomMin ? '🌷 BLOOM' : '👑 ESSENCE';
+    $('memberNext').textContent = nextMin!=null ? ('อีก '+(nextMin-visits)+' → '+nextName) : '🎉 สูงสุดแล้ว';
+    if($('memberPerk')) $('memberPerk').textContent = TIER.perk ? ('🎁 '+TIER.perk) : '';
+    // Never-ordered customer → invite to start; returning → "order something else".
+    $('memberOrderBtn').textContent = visits>=1 ? 'สั่งเมนูอื่น' : 'เริ่มสั่งกันเลย';
+    // Store closed → don't dangle live order buttons on the member card (showOrderUI also hard-blocks).
+    if(!storeOpen){ $('memberReorder').style.display='none'; const b=$('memberOrderBtn'); b.disabled=true; b.style.opacity=.5; b.textContent='⏰ ร้านปิดอยู่'; }
+    else { const b=$('memberOrderBtn'); b.disabled=false; b.style.opacity=1; }
+  }
+
+  // Stamps + what they do — visual punch-card (card-reward.png, 10 slots) when the shop uses the
+  // default 10-per-reward; plain text on the QR-back face otherwise (only reachable if member is on).
+  if(conf.enabled){
+    const pts=bal.points||0;
+    const ready = pts>0 && (pts%per===0);
+    const filled = ready ? per : (pts%per);
+    const toGo = per-filled;
+    if(per===10){
+      $('stampName').textContent = displayName?('คุณ '+displayName):'สมาชิก';
+      const grid=$('stampGrid'); grid.innerHTML='';
+      for(let i=0;i<per;i++){
+        const on=i<filled;
+        grid.insertAdjacentHTML('beforeend','<div style="display:flex;align-items:center;justify-content:center">'+(on?'<svg viewBox="0 0 24 24" style="width:56%;height:56%;fill:#e55b6b;stroke:#c23553;stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>':'')+'</div>');
+      }
+      $('stampMsg1').textContent = ready ? '🎁 พร้อมแลกฟรี!' : ('อีก '+toGo+' ดวง ฟรี!');
+      $('stampMsg2').textContent = ready ? 'แสดงบัตรที่เคาน์เตอร์' : (filled+'/'+per+' ดวง');
+      try{ renderBday(bal,'loyBdayMember'); }catch(e){}
+    } else if(memberOn){
+      $('memberStamp').innerHTML = ready ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
         : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
-      $('memberStamp').style.display=''; }
-  }catch(e){}
+      $('memberStamp').style.display='';
+    }
+  } else { const bd=$('loyBdayMember'); if(bd){ bd.style.display='none'; bd.innerHTML=''; } }
+
   // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
   try{ loadReferral(); }catch(e){}
 };
-window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; };
+window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; setNavTab('home'); };
 // Tap the card to flip between identity (front) and QR (back).
 window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; el.style.transform = (el.style.transform||'').includes('180') ? 'rotateY(0deg)' : 'rotateY(180deg)'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
@@ -573,6 +783,7 @@ async function loadZone(){
   show('queueStatus', open);
   show('closedMsg', !open);
   show('getCard',true);
+  applySocialMascot();      // owner-toggleable social-proof line + mascot greeting (both default off)
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
   show('guestPhoneCard', !lineUserId && !!cfg.selfOrder);   // non-LINE: offer phone to collect stamps
@@ -582,21 +793,28 @@ async function loadZone(){
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
 let FAV=null;
-// Auto member recognition on the home: LINE customers see their tier + visits without opening the card.
+// Owner-toggleable home extras (both default OFF, gated by /api/config): the social-proof "sold
+// today" line and the mascot greeting + logo bounce. Purely cosmetic; never blocks ordering.
+function applySocialMascot(){
+  const sp=$('socialProof'); if(sp){ const on=!!cfg.socialProof && (cfg.soldToday||0)>0; if(on){ const n=$('soldTodayN'); if(n) n.textContent=cfg.soldToday; } sp.style.display=on?'':'none'; }
+  const mg=$('mascotGreet'); if(mg) mg.style.display=cfg.mascotOn?'':'none';
+  const logo=document.querySelector('.brand.hero .logo'); if(logo) logo.classList.toggle('mascot-bounce', !!cfg.mascotOn);
+}
+// Account chip on the home header: for LINE members, show their LINE picture (or a tier emoji as
+// fallback). Tapping opens the account hub. Hidden entirely when membership is off / non-LINE.
 async function loadMemberStrip(){
-  const el=$('memberStrip'); if(!el) return; el.style.display='none';
+  const chip=$('acctChip'); if(!chip) return; chip.style.display='none';
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
-  const hl=$('historyLink'); if(hl) hl.style.display='block';   // order history is for any LINE customer (independent of loyalty)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
-    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no strip/card
+    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no chip
     let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
-    let t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
-    const T = visits>=t.essenceMin ? {n:'ESSENCE',i:'👑'} : visits>=t.bloomMin ? {n:'BLOOM',i:'🌷'} : {n:'PURE',i:'🌱'};
-    $('memberStripIcon').textContent = T.i;
-    $('memberStripName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
-    $('memberStripSub').textContent = T.n + ' · ' + (visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉');
-    el.style.display='flex';
+    const t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
+    const tierEmoji = visits>=t.essenceMin ? '👑' : visits>=t.bloomMin ? '🌷' : '🌱';
+    const img=$('acctChipImg'), fb=$('acctChipFb');
+    if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
+    else { fb.textContent=tierEmoji; fb.style.display=''; img.style.display='none'; }
+    chip.style.display='flex';
   }catch(e){}
 }
 // Non-LINE phone capture: format while typing (full digits, not masked — easier to verify), mask only when saved.
@@ -660,46 +878,47 @@ function updateNudges(){
     else nudge.style.display='none';
   }
 }
+// Fetches balance/config to power the order-screen chip + cart nudge (updateNudges()). The visible
+// stamp-progress card lives in the member popup now (openMember's stamp tab), not here.
 async function loadLoyalty(){
-  show('loyaltyCard', false);
   if(!lineUserId) return;
   try{
     const conf = await api('/api/loyalty/config');
-    if(!conf.enabled) return;                                      // feature off → never show
+    if(!conf.enabled) return;                                      // feature off → nothing to power
     _loyOn=true; _loyPer=conf.stampsPerReward||10;
     const bal  = await api('/api/loyalty/'+encodeURIComponent(lineUserId));
     LOY = { ...conf, ...bal };
-    _loyPts = bal.points||0; updateNudges();                       // power the order-screen chip + cart nudge
-    if(!((bal.points||0) > 0 || (bal.lifetime||0) > 0)) return;    // only show once they've earned
-    const per = conf.stampsPerReward||10, have = bal.points||0;
-    $('loyPoints').textContent = have;
-    $('loyRate').textContent = 'ครบ '+per+' '+unit()+' = ฟรี 1 '+unit();
-    const badge=$('loyBadge'); if(bal.tier){ badge.textContent=bal.tier.emoji+' '+bal.tier.label; badge.style.display=''; } else if(badge){ badge.style.display='none'; }
-    const inCycle = have % per, toGo = (per - inCycle) % per, free = Math.floor(have/per);
-    if(free>=1){ $('loyNext').textContent='🎉 แลกฟรีได้ '+free+' '+unit()+'! แจ้งพนักงานตอนสั่ง'+(toGo?' · อีก '+toGo+' '+unit()+'ได้เพิ่ม':''); $('loyBar').style.width = toGo? Math.round(inCycle/per*100)+'%' : '100%'; }
-    else { $('loyNext').textContent='อีก '+toGo+' '+unit()+' รับของรางวัลฟรี (ไม่เกิน 49฿)'; $('loyBar').style.width=Math.round(inCycle/per*100)+'%'; }
-    $('loyRewards').innerHTML = (conf.rewards||[]).map(r=>{
-      const tile=`<div style="position:relative;width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#00b5d8,#2fc2a6);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none">🥤${r.image?`<img src="${esc(r.image)}" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px">`:''}</div>`;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.15)">${tile}<span style="flex:1">${esc(r.name)}</span><span style="font-weight:800;white-space:nowrap">${r.cost_points} ${unit()}</span></div>`;
-    }).join('') || '<div style="opacity:.7;font-size:12px;padding:6px 0">—</div>';
-    renderBday(bal);
-    show('loyaltyCard', true);
+    _loyPts = bal.points||0; updateNudges();
   }catch(e){ /* never block the normal flow */ }
 }
-window.toggleRewards=()=>{ const r=$('loyRewards'); if(r) r.style.display = (r.style.display==='none'?'':'none'); };
-// Birthday capture (optional) + greeting in the loyalty card.
-function renderBday(bal){
-  const box=$('loyBday'); if(!box) return; box.style.display='';
-  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! วันนี้สั่งผ่านไลน์ รับของรางวัลฟรี 1 '+unit()+'</div>'; return; }
+// Birthday capture (optional) + greeting. boxId lets this render into either the (now-hidden)
+// home loyalty card or the member popup's stamp tab — same markup, different mount point.
+function renderBday(bal, boxId){
+  const box=$(boxId||'loyBday'); if(!box) return; box.style.display='';
+  if(bal.isBirthday){ box.innerHTML='<div style="background:rgba(255,255,255,.18);border-radius:12px;padding:10px;text-align:center;font-weight:800">🎂 สุขสันต์วันเกิด! มีคูปองของขวัญรออยู่ในเมนูคูปอง 🎁</div>'; return; }
   if(bal.birthday){ box.style.display='none'; box.innerHTML=''; return; }
+  // A birthday the customer enters for THEMSELVES can't be in the future, and can't be less than a
+  // year ago either (no self-ordering infants) — the date picker enforces this up front, and the
+  // server re-checks the same rule since this max attribute is just UI, not a security boundary.
+  const maxD=new Date(); maxD.setFullYear(maxD.getFullYear()-1);
+  const max=maxD.toISOString().slice(0,10);
   box.innerHTML=`<div style="background:rgba(255,255,255,.1);border-radius:12px;padding:10px">
     <div style="font-size:12px;opacity:.9;margin-bottom:6px">🎂 เพิ่มวันเกิด รับเครื่องดื่มฟรีในวันเกิด <span style="opacity:.7">(ไม่บังคับ)</span></div>
-    <div class="row" style="gap:6px"><input id="bdayInp" type="date" style="flex:1;padding:8px;border-radius:8px;border:none;font-size:13px;color:var(--ink)">
-      <button class="ok" style="padding:8px 14px" onclick="saveBirthday()">บันทึก</button></div>
+    <div class="row" style="gap:6px"><input id="bdayInp_${boxId||'loyBday'}" class="bdayInp" type="date" max="${max}" style="flex:1;padding:8px;border-radius:8px;border:none;font-size:13px;color:var(--ink)">
+      <button class="ok" style="padding:8px 14px" onclick="saveBirthday('${boxId||'loyBday'}')">บันทึก</button></div>
   </div>`;
 }
-window.saveBirthday=async()=>{ const el=$('bdayInp'), v=el&&el.value; if(!v){ if(window.toast) toast('เลือกวันเกิดก่อน'); return; }
-  try{ await api('/api/loyalty/'+encodeURIComponent(lineUserId)+'/birthday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({birthday:v})}); if(window.toast) toast('🎂 บันทึกวันเกิดแล้ว!'); loadLoyalty(); }catch(e){ if(window.toast) toast('บันทึกไม่สำเร็จ'); } };
+const BDAY_ERRORS={
+  future_birthday:'วันเกิดต้องไม่เป็นวันที่ในอนาคตค่ะ กรุณาตรวจสอบวันที่อีกครั้ง',
+  birthday_too_recent:'วันเกิดที่ระบุใหม่เกินไปค่ะ กรุณาตรวจสอบปีเกิดอีกครั้ง',
+  bad_birthday:'รูปแบบวันเกิดไม่ถูกต้องค่ะ',
+  customer_required:'ไม่พบข้อมูลสมาชิก กรุณาลองใหม่อีกครั้ง',
+};
+window.saveBirthday=async(boxId)=>{ const el=$('bdayInp_'+(boxId||'loyBday')), v=el&&el.value; if(!v){ if(window.toast) toast('เลือกวันเกิดก่อน'); return; }
+  try{ await api('/api/loyalty/'+encodeURIComponent(lineUserId)+'/birthday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({birthday:v})});
+    if(window.toast) toast('🎂 บันทึกวันเกิดแล้ว!');
+    try{ const bal2=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); renderBday(bal2,'loyBday'); renderBday(bal2,'loyBdayMember'); }catch(e){}
+  }catch(e){ if(window.toast) toast(BDAY_ERRORS[e && e.message] || 'บันทึกไม่สำเร็จ'); } };
 // Referral: show the customer's own invite code (+ share) and, for new customers, an enter-a-code box.
 async function loadReferral(){
   show('referralCard', false);
@@ -752,23 +971,69 @@ function itemImg(m){
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; } }
 window.showOrderUI=async()=>{
   if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+  closeAllPopups();
   await loadMenu(); cart=[]; cartCoupon=null; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+  paintMenu();
+  renderBasketCount(); show('getCard',false); show('orderCard',true); };
+// Re-callable so cart-count badges on the cards update when the cart changes. (declaration = hoisted,
+// callable bare from showOrderUI/dsAdd/basket ops inside this module).
+function paintMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  // Out of stock = manual soldout OR no ingredients left to make it (BOM). Gray it out + "หมด".
   const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
   const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;background:${b.bg};color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
   window._BADGE=badge;   // reuse for the topping picker
-  const btn=(m)=>{ const out=m.soldout||m.stockSoldout;
-    const sold = (m.sold>0) ? `<div class="dsold">🔥 ขายแล้ว ${m.sold} ${unit()}</div>` : '';
-    return `<button class="dish-card" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
+  const btn=(m)=>{ const out=m.soldout||m.stockSoldout; const n=cart.filter(e=>e.name===m.name).length;
+    const sold = (m.likes>0) ? `<div class="dsold"><svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;fill:#e55b6b;stroke:#e55b6b;stroke-width:1.5"><path d="M12 20.5s-6.5-4.3-9-7.8C1 9.9 2.3 6.5 5.6 6.5c1.9 0 3.1 1 4.4 2.4 1.3-1.4 2.5-2.4 4.4-2.4 3.3 0 4.6 3.4 2.6 6.2-2.5 3.5-9 7.8-9 7.8z"/></svg> ${m.likes} ถูกใจ</div>` : '';
+    const cnr = out ? '' : (n>0
+      ? `<span aria-hidden="true" style="min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--accent2);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;font-weight:800;font-size:14px;box-sizing:border-box">${n}</span>`
+      : '<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>');
+    return `<button class="dish-card${n>0?' ordered':''}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
-    <div class="dpr">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div></div></button>`; };
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${cnr}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
-  renderBasketCount(); show('getCard',false); show('orderCard',true); };
-window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
-window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
+};
+window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
+  // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
+  // otherwise home. Prevents getCard and ticketCard ever stacking on screen together.
+  const tk=$('ticketCard'); if(tk && tk.style.display!=='none') return; show('getCard',true); };
+// LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
+let dsSweet=100, dsQty=1, dsEditSig=null;
+const SWEET_LABEL={0:'0% · ไม่หวานเลย',25:'25% · หวานน้อย',50:'50% · ปานกลาง',100:'100% · ปกติ',125:'125% · เพิ่มหวาน'};
+const BULKY_TOP=['เฉาก๋วย','บุก','บัวลอย'];   // heavy/bulky toppings — limit total toppings to 2 if one is chosen
+window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return; pendingTops={}; dsSweet=100; dsQty=1; dsEditSig=null; closeAllPopups(); renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
+// Edit an existing cart line: open the same sheet pre-filled; "อัปเดต" replaces that whole group.
+window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=MENU.find(x=>x.name===g.e.name); if(!d){ toast('เมนูนี้ไม่มีแล้ว'); return; }
+  pendingDrink=d; pendingTops={}; (g.e.toppings||[]).forEach(t=>{ const tm=MENU.find(x=>x.name===t.name && x.category==='topping'); if(tm) pendingTops[tm.id]={name:t.name,price:t.price,qty:t.qty||1}; });
+  dsSweet=(g.e.sweet==null?100:g.e.sweet); dsQty=g.qty; dsEditSig=g.sig; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
+window.closeDrinkSheet=()=>{ $('drinkSheet').style.display='none'; };
+function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
+function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
+  $('dsImg').innerHTML=itemImg(d); $('dsName').textContent=d.name;
+  $('dsSweet').innerHTML='<div class="sweetseg">'+SWEETS.map(s=>{ const on=dsSweet===s;
+    return '<button type="button" class="sweetseg-b'+(on?' on':'')+'" onclick="dsSetSweet('+s+')">'+s+'%</button>'; }).join('')+
+    '</div><div class="muted" style="font-size:11.5px;margin-top:6px;text-align:center">'+((SWEET_LABEL[dsSweet]||'').split('· ')[1]||'')+'</div>';
+  const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('dsTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
+  $('dsTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout||m.stockSoldout;
+    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
+  dsUpdateBar();
+}
+window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
+window.dsTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return;
+  if(pendingTops[id]){ delete pendingTops[id]; renderDrinkSheet(); return; }
+  // adding: max 3 toppings, but only 2 if a bulky one (เฉาก๋วย/บุก/บัวลอย) is in the mix (fits the cup)
+  const names=[...Object.values(pendingTops).map(t=>t.name), m.name];
+  const bulky=names.some(n=>BULKY_TOP.some(b=>n.includes(b))); const lim=bulky?2:3;
+  if(names.length>lim){ toast(bulky?'ท็อปปิ้งชิ้นใหญ่ (เฉาก๋วย/บุก/บัวลอย) เลือกได้รวม 2 อย่าง':'เลือกท็อปปิ้งได้สูงสุด 3 อย่าง'); return; }
+  pendingTops[id]={name:m.name,price:m.price,qty:1}; renderDrinkSheet(); };
+window.dsIncQty=()=>{ dsQty=Math.min(20,dsQty+1); dsUpdateBar(); };
+window.dsDecQty=()=>{ dsQty=Math.max(1,dsQty-1); dsUpdateBar(); };
+function dsUnit(){ let p=pendingDrink?pendingDrink.price:0; Object.values(pendingTops).forEach(t=>p+=t.price*t.qty); return p; }
+function dsUpdateBar(){ const q=$('dsQtyN'); if(q) q.textContent=dsQty; const a=$('dsAddAmt'); if(a) a.textContent=dsUnit()*dsQty; const l=$('dsAddLbl'); if(l) l.textContent=dsEditSig?'อัปเดต':'เพิ่มลงตะกร้า'; }
+window.dsAdd=()=>{ if(!pendingDrink) return;
+  if(dsEditSig){ cart=cart.filter(e=>entrySig(e)!==dsEditSig); }   // editing: drop the old group, then re-add
+  for(let i=0;i<dsQty;i++) cart.push({name:pendingDrink.name,price:pendingDrink.price,toppings:Object.values(pendingTops).map(t=>({...t})),sweet:dsSweet});
+  const wasEdit=!!dsEditSig; dsEditSig=null; closeDrinkSheet(); renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } toast(wasEdit?'อัปเดตรายการแล้ว':'เพิ่มลงตะกร้าแล้ว'); };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
@@ -781,7 +1046,7 @@ function renderTopPop(){
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
 // Step 3: sweetness (default 100%).
-const SWEETS=[0,25,50,100];
+const SWEETS=[0,25,50,100,125];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
@@ -798,7 +1063,7 @@ window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink
 // item's badge as social proof, and keeps escape hatches obvious — สุ่มใหม่ / เลือกเอง — so it never
 // traps the customer. Picking "เลือกเมนูนี้" hands off to the normal sweetness step so the customer
 // chooses their own sweetness (not randomised).
-let _randomPick=null, _randomSpinning=false;
+let _randomPick=null, _randomSpinning=false, _randomGen=0;   // gen counter aborts orphan spin loops on close
 const RANDOM_BADGE={ rec:{t:'⭐ แนะนำ',bg:'#16a34a'}, hot:{t:'🔥 ขายดี',bg:'#f3961a'}, new:{t:'✨ ใหม่',bg:'#1ab3ce'}, promo:{t:'🏷️ โปรโมชั่น',bg:'#e55b6b'}, free:{t:'🎁 ฟรี',bg:'#7c3aed'} };
 function randomPool(){ return (MENU||[]).filter(m=>m.active && m.category!=='topping' && !(m.soldout||m.stockSoldout)); }
 function randomCard(m, spinning){
@@ -812,16 +1077,21 @@ function randomCard(m, spinning){
   </div>`;
 }
 window.openRandom=()=>{ if(!randomPool().length){ toast('ขณะนี้ยังไม่มีเครื่องดื่มให้สุ่ม'); return; }
-  $('randomPop').style.display='flex'; spinRandom(); };
-window.closeRandom=()=>{ $('randomPop').style.display='none'; };
+  closeAllPopups(); $('randomPop').style.display='flex'; spinRandom(); };
+// Closing mid-spin aborts the shuffle loop (gen bump) and releases the spin lock — otherwise the
+// orphan loop kept ticking on the hidden popup and a re-open was silently blocked by _randomSpinning
+// with the "เลือกเมนูนี้" button stuck disabled until the old loop landed.
+window.closeRandom=()=>{ $('randomPop').style.display='none'; _randomGen++; _randomSpinning=false; };
 window.spinRandom=()=>{
   const pool=randomPool(); if(!pool.length){ closeRandom(); return; }
   if(_randomSpinning) return; _randomSpinning=true; _randomPick=null;
+  const gen=++_randomGen;   // this spin's generation — closeRandom bumps it to abort us
   const reveal=$('randomReveal'), add=$('randomAddBtn'), again=$('randomAgainBtn');
   add.disabled=true; add.style.opacity=.45; again.disabled=true; again.style.opacity=.5;
   const total=15+Math.floor(Math.random()*6);   // 15–20 shuffles
   let i=0;
   const tick=()=>{
+    if(gen!==_randomGen) return;   // popup was closed mid-spin — stop, closeRandom already reset the lock
     if(i>=total){   // land on the final pick
       const pick=pool[Math.floor(Math.random()*pool.length)];
       _randomPick={ drink:pick };
@@ -853,7 +1123,7 @@ function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.t
     else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
   updateNudges(); }
 // Step 4: review basket -> confirm or cancel.
-window.openBasket=()=>{ renderBasket(); $('basketPop').style.display='flex'; };
+window.openBasket=()=>{ closeAllPopups(); renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount(); };
 // Identical drinks (same name + sweetness + toppings) collapse to one line "N× …"; any
@@ -870,19 +1140,22 @@ function renderBasket(){
   $('basketList').innerHTML = groups.length ? groups.map((g,gi)=>{ const e=g.e; const line=entryTotal(e)*g.qty;
     const sweet = (e.sweet!=null&&e.sweet!==100)?`<div class="muted" style="font-size:12px;margin-top:2px">หวาน ${e.sweet}%</div>`:'';
     const tops = (e.toppings||[]).map(t=>`<div class="muted" style="font-size:12px;margin-top:2px">+ ${esc(t.name)}${FREE.has(t.name)?FREE_TAG:''}</div>`).join('');
-    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)">
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:800;color:var(--navy);font-size:15px;line-height:1.3">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
+        <div style="font-weight:700;color:#5c7187;font-size:14px;line-height:1.2">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
-        <div style="display:inline-flex;align-items:center;gap:14px;margin-top:11px;border:1px solid var(--line);border-radius:999px;padding:3px 5px">
-          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
-          <b style="min-width:16px;text-align:center;font-size:15px;color:var(--navy)">${g.qty}</b>
-          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;font-size:19px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
+        <div style="display:inline-flex;align-items:center;gap:10px;margin-top:6px">
+          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
+          <b style="min-width:14px;text-align:center;font-size:14px;color:var(--navy)">${g.qty}</b>
+          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
         </div>
       </div>
-      <div style="text-align:right;flex:none">
+      <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
-        <button class="ghost danger" style="padding:5px 9px;margin-top:12px;font-size:12px" onclick="removeOne(${gi})">ลบ</button>
+        <div style="display:flex;gap:6px">
+          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;color:var(--accent)" onclick="editDrinkItem(${gi})" aria-label="แก้ไข"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button class="ghost danger" style="width:30px;height:30px;padding:0;border-radius:50%" onclick="removeOne(${gi})" aria-label="ลบ"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        </div>
       </div>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
@@ -892,57 +1165,125 @@ function renderBasket(){
   $('basketSub').textContent = sub;
   const dr=$('basketDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; $('basketDisc').textContent='-฿'+disc; } else dr.style.display='none'; }
   const cr=$('basketCouponRow'); if(cr){ if(cDisc>0){ cr.style.display='flex'; $('basketCouponLbl').textContent='คูปอง '+(cartCoupon.label||cartCoupon.code); $('basketCouponDisc').textContent='-฿'+cDisc; } else cr.style.display='none'; }
-  $('basketTotal').textContent = net; const ba=$('basketBtnAmt'); if(ba) ba.textContent=net;
+  $('basketTotal').textContent = net; $('basketConfirm').innerHTML='<span>สั่งเลย</span><span>฿'+net+'</span>';   // rebuild so submit's temp text never sticks
   $('basketConfirm').disabled = !cart.length;
   updateCartPayLabel(); updateCartCouponLabel();
   updateNudges();
 }
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
-window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); };
-window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
+window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 // ---------- ประวัติการสั่ง (customer order history) ----------
 window.openOrderHistory=async()=>{ if(!lineUserId) return;
-  show('getCard',false); show('historyLiffCard',true);
+  closeAllPopups();
+  $('historyLiffCard').style.display='flex';   // overlay ON TOP of getCard (not a replacement) — same pattern as memberPop/basketPop
   const box=$('historyLiffList'); box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">กำลังโหลด…</p>';
   try{ const r=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/orders'); renderOrderHistory(r.orders||[]); }
   catch(e){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0;color:var(--danger)">โหลดไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; } };
-window.closeOrderHistory=()=>{ show('historyLiffCard',false); show('getCard',true); };
+window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; setNavTab('home'); };
+// บัญชี hub: profile summary + a menu list (ประวัติการสั่งซื้อ / บัตรสมาชิก are sub-items reached
+// from here, not the direct destination of the บัญชี nav tab itself).
+window.openAccount=()=>{
+  closeAllPopups();
+  setNavTab('account');
+  $('accountPop').style.display='flex';
+  $('acctName').textContent = displayName ? ('คุณ '+displayName) : 'สมาชิก YO-DEE';
+  const img=$('acctAvatarImg'), fb=$('acctAvatarFallback');
+  if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
+  else { img.style.display='none'; fb.style.display='block'; }
+};
+window.closeAccount=()=>{ $('accountPop').style.display='none'; setNavTab('home'); };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
 const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
-function renderOrderHistory(orders){ const box=$('historyLiffList');
+let _histOrders=[];
+function renderOrderHistory(orders){ const box=$('historyLiffList'); _histOrders=orders;
   if(!orders.length){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">ยังไม่มีประวัติการสั่ง 🙂</p>'; return; }
   box.innerHTML=orders.map((o,i)=>{
     const summary=o.items.map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
     const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0"><span>${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
-    return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px">
-      <div class="row between" style="align-items:flex-start;cursor:pointer" onclick="toggleHistDetail(${i})">
+    return `<div style="border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:10px">
+      <div class="row" style="align-items:flex-start;gap:11px;cursor:pointer" onclick="toggleHistDetail(${i})">
+        <div style="width:40px;height:40px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/></svg></div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:800;color:var(--navy);font-size:15px">${o.code?('คิว '+o.code):('ออเดอร์ #'+o.ticketId)}</div>
+          <div class="row between" style="align-items:flex-start">
+            <div style="font-weight:800;color:var(--navy);font-size:15px">${o.code?('คิว '+o.code):('ออเดอร์ #'+o.ticketId)}</div>
+            <div style="font-weight:800;color:var(--navy);font-size:15px;flex:none;margin-left:8px">฿${o.total}</div>
+          </div>
           <div class="muted" style="font-size:12px;margin-top:2px">${fmtHistDate(o.at)}</div>
           <div class="muted" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summary}</div>
-        </div>
-        <div style="text-align:right;flex:none;margin-left:10px">
-          <div style="font-weight:800;color:var(--navy);font-size:15px">฿${o.total}</div>
-          <span style="display:inline-block;font-size:11px;margin-top:5px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
+          <span style="display:inline-block;font-size:10.5px;margin-top:6px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
         </div>
       </div>
-      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--accent2);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
+      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:11px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--accent2);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
+      <button class="ghost" style="width:100%;margin-top:11px;color:var(--accent);border-color:var(--accent)" onclick="event.stopPropagation();reorderOrder(${i})"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v4h-4"/></svg>สั่งอีกครั้ง</button>
     </div>`;}).join('');
 }
 window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=(d.style.display==='none')?'':'none'; };
+// Reorder: reconstruct cart entries from a past order. Orders are always serialized as
+// drink-item, then its toppings immediately after (same order confirmBasket() writes them in),
+// so we can regroup toppings under the drink that precedes them. Items no longer on the live
+// MENU are skipped (with a warning) rather than added blind.
+window.reorderOrder=async(i)=>{
+  const o=_histOrders[i]; if(!o) return;
+  try{
+    await showOrderUI();   // resets cart + loads the live MENU — must run first
+    let pending=null, pendingQty=1, skipped=false;
+    const commit=()=>{ if(!pending) return; for(let k=0;k<pendingQty;k++) cart.push({name:pending.name,price:pending.price,sweet:100,toppings:pending.toppings.map(t=>({...t}))}); };
+    o.items.forEach(it=>{
+      const m=MENU.find(x=>x.name===it.name);
+      if(!m){ skipped=true; return; }
+      if(m.category==='topping' && pending){ pending.toppings.push({name:it.name,price:it.price,qty:Math.max(1,Math.round((it.qty||1)/pendingQty))}); }
+      else { commit(); pending={name:it.name,price:it.price,toppings:[]}; pendingQty=it.qty||1; }
+    });
+    commit();
+    renderBasketCount(); openBasket();
+    toast(skipped?'เพิ่มลงตะกร้าแล้ว — บางเมนูอาจไม่มีแล้วจึงข้ามไป':'เพิ่มออเดอร์เดิมลงตะกร้าแล้ว — ปรับแก้ได้ก่อนสั่ง');
+  }catch(e){ toast('สั่งซ้ำไม่สำเร็จ'); }
+};
 // Remove a single cup from a (possibly consolidated) line.
 window.removeOne=async(gi)=>{ const g=cartGroups()[gi]; if(!g) return;
   if(!(await appConfirm({title:'ลบรายการ',message:'นำ “'+g.e.name+'” ออกจากตะกร้า?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
-  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); };
+  const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 window.cancelBasket=async()=>{ if(!cart.length){ closeOrderUI(); return; }
   if(!(await appConfirm({title:'ล้างตะกร้า',message:'ยกเลิกออเดอร์ทั้งหมด?',okText:'ล้างตะกร้า',danger:true}))) return; cart=[]; renderBasketCount(); closeOrderUI(); };
 // `submitting` (declared up top) is a hard lock: blocks double/triple-submit even if a tap repeats during a slow (cold-start) request.
+// Phase 6: brief "sending order" screen (LINE-MAN style) with a grace-period countdown —
+// the order is only actually POSTed after the countdown completes; cancelling during it
+// aborts the send entirely (nothing was created server-side, so there's nothing to void).
+let _sendTimer=null, _sendCancelled=false, _sendResolve=null;
+function showSending(seconds){
+  return new Promise(resolve=>{
+    _sendCancelled=false;
+    _sendResolve=resolve;
+    let left=seconds;
+    const tick=()=>{ const el=$('sendCountdown'); if(el) el.textContent='00:0'+left; };
+    tick();
+    $('sendingScreen').style.display='flex';
+    _sendTimer=setInterval(()=>{
+      left--; tick();
+      if(left<=0){ clearInterval(_sendTimer); _sendTimer=null; $('sendingScreen').style.display='none'; _sendResolve=null; resolve(!_sendCancelled); }
+    },1000);
+  });
+}
+window.cancelSending=()=>{
+  _sendCancelled=true;
+  if(_sendTimer){ clearInterval(_sendTimer); _sendTimer=null; }
+  $('sendingScreen').style.display='none';
+  if(_sendResolve){ const r=_sendResolve; _sendResolve=null; r(false); }
+};
 window.confirmBasket=async()=>{
   if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
   if(cfg.promptPay && !cartPayMethod){ toast('เลือกช่องทางชำระเงินก่อนค่ะ'); openPayPicker(); return; }   // must pick a channel first
   if(!cfg.promptPay) cartPayMethod='counter';   // counter-only shop → no choice needed
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
+  ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none');
+  const proceedOk = await showSending(3);
+  if(!proceedOk){   // customer cancelled during the grace period — nothing was sent, just reopen the basket
+    submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
+    show('orderCard',true); openBasket(); renderBasketCount();
+    return;
+  }
   const items=[];
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
@@ -950,18 +1291,18 @@ window.confirmBasket=async()=>{
       body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
-    cart=[]; cartCoupon=null; ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling();
+    cart=[]; cartCoupon=null; show('ticketCard',true); startPolling();
   }catch(e){
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none'); show('ticketCard',true); startPolling(); submitting=false; return;
+      show('ticketCard',true); startPolling(); submitting=false; return;
     }
     const _err=(e.data&&e.data.error)||e.message;
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
     if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
-      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ closeBasket(); }catch(_){}; try{ await loadZone(); }catch(_){}
-    } else { toast('สั่งไม่สำเร็จ: '+_err); }
+      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
+    } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
 
@@ -987,9 +1328,32 @@ function showWow(loy){
   p.style.display='flex';
   try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
 }
+// Reward-earned "wow": fires once per ticket when a paid order completes a stamp card (server flags
+// rewardJustReady). Reuses the same celebratory overlay + confetti as the welcome wow.
+function maybeReward(v){ const k='rw_'+v.id; try{ if(localStorage.getItem(k)) return; localStorage.setItem(k,'1'); }catch(e){} showReward(v.loyalty); }
+function showReward(loy){
+  let p=$('wowPop'); if(!p){ p=document.createElement('div'); p.id='wowPop'; p.onclick=()=>closeWow(); document.body.appendChild(p); }
+  const per=loy.per||10;
+  const colors=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f'];
+  let conf=''; for(let i=0;i<28;i++){ const l=Math.round(Math.random()*100), d=(2.6+Math.random()*1.8).toFixed(2), dl=(Math.random()*0.6).toFixed(2); conf+=`<span class="confetti" style="left:${l}%;background:${colors[i%colors.length]};animation-duration:${d}s;animation-delay:${dl}s"></span>`; }
+  p.innerHTML=conf+`<div class="wowcard" onclick="event.stopPropagation()">
+    <div class="wowemoji">🎉</div>
+    <h1 style="margin:10px 0 2px;color:var(--navy)">สะสมครบ ${per} ดวงแล้ว!</h1>
+    <p class="muted" style="margin:0 0 12px">คุณได้รางวัลฟรีแล้ว 🥤</p>
+    <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:#fff;border-radius:14px;padding:16px">
+      <div style="font-size:13px;opacity:.95">รางวัลของคุณ</div>
+      <div style="font-size:26px;font-weight:900;line-height:1.15">คูปองฟรี 1 ${unit()}</div>
+      <div style="font-size:12px;margin-top:4px;opacity:.95">อยู่ในเมนูคูปองแล้ว · ใช้ได้ภายใน 30 วัน</div>
+    </div>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openCoupon('browse')">ดูคูปองของฉัน</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
+  </div>`;
+  p.style.display='flex';
+  try{ if(navigator.vibrate) navigator.vibrate([40,50,40]); }catch(e){}
+}
 function renderOrderBlock(v){
-  if(!v.order){ show('tOrder',false); return; }
-  show('tOrder',true);
+  if(!v.order){ show('tOrder',false); show('tOrderCompact',false); return; }
+  show('tOrderCompact',true);   // #tOrder itself only wraps payChoice now — its own visibility is set per-branch below so it's never an empty box
   const lines = v.order.lines || (v.order.items||[]).map(i=>({...i,toppings:[]}));
   $('tOrderItems').innerHTML = lines.map(l=>
     `<div class="row between"><span>${l.qty}× ${esc(l.name)}</span><span class="muted">฿${l.price*l.qty}</span></div>`+
@@ -1000,6 +1364,8 @@ function renderOrderBlock(v){
     $('tOrderItems').innerHTML += `<div class="row between" style="color:#7c3aed;font-weight:800;margin-top:4px"><span>${dlabel}</span><span>-฿${disc}</span></div>`; }
   const net=Math.max(0, v.order.total - disc);
   $('tOrderTotal').textContent = '฿'+net;
+  const nQty = lines.reduce((s,l)=>s+(l.qty||1),0);
+  $('tOrderSummaryTxt').textContent = nQty+' รายการ · ฿'+net;
   const pill=$('tPayPill'), st=v.order.status, total=net;
   const refundReq = !!(v.order && v.order.refund_requested);
   show('refundReqBtn', false); show('refundReqDone', false);   // refund-request channel disabled — refunds are in-person at the shop only
@@ -1007,8 +1373,9 @@ function renderOrderBlock(v){
   // RED panel so the screen never shows a green "saved!" box that contradicts the cancelled
   // status. The full-width "กลับหน้าหลัก · สั่งใหม่" button below is the way out (goHome).
   if(v.status==='cancelled' || v.status==='skipped'){
+    stopQrCountdown();
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
-    show('payChoice',true);
+    show('tOrder',true); show('payChoice',true);
     ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
     const byReq=!!v.cancelRequested;
     const box=$('counterConfirmedMsg');
@@ -1021,13 +1388,14 @@ function renderOrderBlock(v){
     show('counterConfirmedMsg',true);
     return;
   }
-  if(st==='paid'){ pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
-    if(v.loyalty && v.loyalty.firstOrder) maybeWow(v); }
-  else if(st==='claimed'){ pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
+  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+    if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
+    else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
+  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
-    show('payChoice',true);
+    show('tOrder',true); show('payChoice',true);
     if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
       // Hide the top reassurance — the green confirmed box is now the single source of truth.
       ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
@@ -1037,7 +1405,7 @@ function renderOrderBlock(v){
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
-      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', cfg.payCounter!==false);   // counter option only if a counter tender is active
+      show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', false);   // ไทยช่วยไทย poster moved into the payment picker
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
@@ -1048,7 +1416,7 @@ function renderOrderBlock(v){
       applyPayChoice();
     }
   }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('payChoice',false); show('counterInfo',true); }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
@@ -1071,15 +1439,19 @@ window.openPayPicker=(mode)=>{
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
-    </div>`;}).join('');
+    </div>`;}).join('')
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
+window.openOrderDetail=()=>{ $('orderDetailSheet').style.display='flex'; };
+window.closeOrderDetail=()=>{ $('orderDetailSheet').style.display='none'; };
 window.selectPayMethod=(m)=>{
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
     payMethod=m; counterConfirmed=false;
-    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); }
+    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
+      if((m==='promptpay'||m==='kbank') && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },400); } }
   } else { cartPayMethod=m; updateCartPayLabel(); }
 };
 function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
@@ -1090,35 +1462,87 @@ let cartCoupon=null, _availCoupons=[];
 function cartPreCouponNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+entryTotal(e),0);
   let d=0; cart.forEach(e=>{ if(FREE.has(e.name)) d+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) d+=t.price*t.qty; }); });
   return sub-Math.min(d,sub); }
-function couponDiscountFor(net){ if(!cartCoupon) return 0; if(net < (cartCoupon.min_spend||0)) return 0;
+function couponDiscountFor(net){ if(!cartCoupon) return 0;
+  if(cartCoupon.isReward){   // issued coupon: free 1 cup, capped at the coupon's value (฿49 reward / ฿100 birthday) or the cheapest item — server re-checks at order time
+    const cap=cartCoupon.freeCap||49;
+    const prices=cart.filter(e=>e.price>0).map(e=>e.price); const cheapest=prices.length?Math.min(...prices):0;
+    return Math.min(cap, cheapest||net, net); }
+  if(net < (cartCoupon.min_spend||0)) return 0;
   let d = cartCoupon.disc_type==='percent' ? net*cartCoupon.disc_value/100 : cartCoupon.disc_value;
   if(cartCoupon.disc_type==='percent' && cartCoupon.max_disc>0) d=Math.min(d,cartCoupon.max_disc);
   return Math.min(Math.round(d*100)/100, net); }
 function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
   el.innerHTML = cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev); }
-window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; };
+window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; if(_couponMode!=='cart') setNavTab('home'); };
 window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
-window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return; cartCoupon=c; closeCoupon(); renderBasket(); };
-window.openCoupon=async()=>{
-  const net=cartPreCouponNet(); const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
+let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar "my coupons" list (no active order yet)
+window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
+  if(_couponMode==='browse'){ closeCoupon(); toast('มีคูปองนี้พร้อมใช้ · เลือกใช้ได้ตอนสั่งซื้อในตะกร้า'); return; }
+  cartCoupon=c; closeCoupon(); renderBasket(); };
+window.openCoupon=async(mode)=>{
+  _couponMode = mode==='browse' ? 'browse' : 'cart';
+  if(_couponMode==='browse') closeAllPopups();   // top-level (nav bar) — 'cart' mode is nested INSIDE basketPop, must not close it
+  $('couponPickerTitle').textContent = _couponMode==='browse' ? 'คูปองของฉัน' : 'เลือกคูปองส่วนลด';
+  const net = _couponMode==='browse' ? 999999 : cartPreCouponNet();   // browse mode: don't gate on min-spend, there's no order yet
+  const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
   const box=$('couponPickerList'); box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:16px 0">กำลังโหลด…</p>';
   $('couponPickerPop').style.display='flex';
   try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total='+net); _availCoupons=r.coupons||[]; }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;color:var(--danger);padding:16px 0">โหลดคูปองไม่สำเร็จ</p>'; return; }
   if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
-  const clr = cartCoupon ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
+  const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   box.innerHTML = clr + _availCoupons.map(c=>{
-    const disc = c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value);
+    const isReward = c.disc_type==='reward';
     const sel = cartCoupon && cartCoupon.code===c.code;
-    const meta = (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):'');
-    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':'#fff'};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
-      <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${esc(c.label)} <span style="color:var(--accent2)">ลด ${disc}</span></div>
-        <div class="muted" style="font-size:12px">${esc(c.code)}${meta?(' · '+meta):''}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div></span>
+    let discLine;
+    const cap = c.freeCap||49;
+    if(isReward){
+      // In cart mode, show the REAL amount this coupon will discount THIS order (capped at the
+      // coupon's value or the cheapest item, same math as the server) instead of a generic
+      // "up to ฿X" that can read as a broken promise when the cheapest item costs less.
+      if(_couponMode==='cart' && cart.length){
+        const prices=cart.filter(e=>e.price>0).map(e=>e.price);
+        const cheapest=prices.length?Math.min(...prices):0;
+        const net=cartPreCouponNet();
+        const est=Math.min(cap, cheapest||net, net);
+        discLine = 'ลดออเดอร์นี้ ฿'+est+(est<cap?(' · แก้วนี้ราคาต่ำกว่า ฿'+cap):'');
+      } else {
+        discLine = 'ฟรี 1 แก้ว · ไม่เกิน ฿'+cap+' หรือราคาแก้วนั้น';
+      }
+    } else {
+      discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
+    }
+    const meta = isReward
+      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
+      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
+    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
+      <span style="min-width:0;display:block">
+        <div style="font-weight:800;color:var(--navy);font-size:14.5px;line-height:1.3">${isReward?'🎁 ':''}${esc(c.label)}</div>
+        <div style="color:var(--accent2);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3">${discLine}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:3px">${isReward?meta:(esc(c.code)+(meta?(' · '+meta):''))}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div>
+      </span>
       <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('');
 };
-window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice(); };
+// Phase 7: once the customer picks a QR method, auto-trigger the save-to-album flow
+// (same share-sheet/download path as the manual button) so they don't need a second tap.
+// Guarded per-ticket — never re-fires on background poll re-renders.
+const _qrAutoSaved=new Set();
+window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice();
+  if((m==='promptpay'||m==='kbank') && ticketId && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },300); } };
+// Phase 7: soft countdown nudge (visual only — no auto-cancel) shown while the QR is up.
+// Starts once per ticket when the QR first appears; stops once payChoice is no longer relevant.
+let _qrTimer=null; const _qrStarted=new Set();
+function startQrCountdown(){
+  if(!ticketId || _qrStarted.has(ticketId)) return; _qrStarted.add(ticketId);
+  let left=15*60;
+  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return; const m=Math.floor(left/60), s=left%60; el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); };
+  tick();
+  if(_qrTimer) clearInterval(_qrTimer);
+  _qrTimer=setInterval(()=>{ left=Math.max(0,left-1); tick(); if(left<=0){ clearInterval(_qrTimer); _qrTimer=null; } },1000);
+}
+function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } }
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
 // then the attached slip is checked by SlipOK against the order total.
@@ -1130,7 +1554,77 @@ function setQrFor(isKbank){
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal;
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
   }
+  // The static KBank QR only works scanned from K PLUS — hide the other bank icons in that case.
+  const strip=$('bankIconStrip');
+  if(strip){
+    strip.querySelectorAll('[data-bank]').forEach(el=>{ el.style.display = (isKbank && el.dataset.bank!=='kplus') ? 'none' : ''; });
+    const hint=$('bankIconHint'); if(hint) hint.textContent = isKbank ? 'แตะไอคอนเพื่อเปิดแอป K PLUS' : 'แตะไอคอนเพื่อเปิดแอปธนาคาร';
+  }
+  startQrCountdown();
 }
+// Best-effort bank-app deep links — these custom URL schemes are NOT officially documented by the
+// banks, so they drift/break across app updates (confirmed: scbeasy:// works, the other 4 guesses
+// didn't for the owner). Each bank now tries a SHORT LIST of candidate schemes in sequence instead
+// of a single guess — if the OS actually switches apps, the page fires 'visibilitychange' (hidden),
+// which stops the loop early; if none fire it, we fall through to the "open it yourself" toast.
+// Always confirm + remind about the slip first regardless of which (if any) scheme actually works.
+const BANK_SCHEMES={
+  kplus:['kplus://'],
+  scbeasy:['scbeasy://'],
+  ktbnext:['krungthainext://','ktbnext://','krungthai://'],
+  bualuang:['bualuang://','bblm://','bblmbanking://'],
+  ttbtouch:['ttbtouch://','ttb://'],
+};
+const BANK_NAMES={ kplus:'K PLUS', scbeasy:'SCB EASY', ktbnext:'Krungthai NEXT', bualuang:'Bualuang mBanking', ttbtouch:'ttb touch' };
+// Official store pages (verified) — offered as a fallback when the deep link doesn't take,
+// e.g. the customer doesn't have that bank's app installed.
+const BANK_STORE={
+  kplus:    { ios:'https://apps.apple.com/th/app/id361170631', android:'https://play.google.com/store/apps/details?id=com.kasikorn.retail.mbanking.wap' },
+  scbeasy:  { ios:'https://apps.apple.com/th/app/id568388474', android:'https://play.google.com/store/apps/details?id=com.scb.phone' },
+  ktbnext:  { ios:'https://apps.apple.com/th/app/id436753378', android:'https://play.google.com/store/apps/details?id=ktbcs.netbank' },
+  bualuang: { ios:'https://apps.apple.com/th/app/id660238716', android:'https://play.google.com/store/apps/details?id=com.bbl.mobilebanking' },
+  ttbtouch: { ios:'https://apps.apple.com/th/app/id884079963', android:'https://play.google.com/store/apps/details?id=com.TMBTOUCH.PRODUCTION' },
+};
+// Attempt a custom scheme via a hidden iframe instead of location.href — navigating the TOP-LEVEL
+// page to an unrecognized scheme makes Safari show a blocking native "Cannot Open Page" alert
+// (confirmed on a real device), which is jarring and interrupts the rest of the fallback chain.
+// A hidden iframe's failed navigation is silent — no dialog — while a successful one still hands
+// off to the OS the same way.
+function tryScheme(scheme){
+  return new Promise(resolve=>{
+    const f=document.createElement('iframe');
+    f.style.display='none';
+    f.src=scheme;
+    document.body.appendChild(f);
+    setTimeout(()=>{ try{ f.remove(); }catch(e){} resolve(); },50);
+  });
+}
+window.openBankApp=async(bank)=>{
+  const name=BANK_NAMES[bank]||bank;
+  const ok=await appConfirm({title:'เปิดแอป '+name, message:'ระบบจะพาไปเปิดแอป '+name+' ให้ค่ะ\nจ่ายเงินเสร็จแล้ว อย่าลืมกลับมาหน้านี้เพื่อแนบสลิปด้วยนะคะ', okText:'ไปเปิดแอป', cancelText:'ยกเลิก'});
+  if(!ok) return;
+  const schemes=BANK_SCHEMES[bank]||[];
+  let opened=false;
+  const onHide=()=>{ if(document.hidden) opened=true; };
+  document.addEventListener('visibilitychange',onHide);
+  for(const scheme of schemes){
+    if(opened) break;
+    await tryScheme(scheme);
+    await new Promise(r=>setTimeout(r,900));
+  }
+  document.removeEventListener('visibilitychange',onHide);
+  if(opened) return;
+  // Deep link didn't take — most likely the app isn't installed (customers who have it usually
+  // hand off fine). Offer the official store page for THIS bank; declining falls back to the
+  // "open the app yourself + scan the saved QR" guidance.
+  const store=BANK_STORE[bank];
+  const url=store ? (/(iPhone|iPad|iPod)/i.test(navigator.userAgent)?store.ios:store.android) : null;
+  if(url){
+    const dl=await appConfirm({title:'เปิดแอป '+name+' ไม่สำเร็จ', message:'ถ้ายังไม่มีแอป '+name+' ดาวน์โหลดได้เลยค่ะ\nหรือเปิดแอปเองแล้วสแกนจากรูป QR ที่บันทึกไว้ก็ได้', okText:'ดาวน์โหลดแอป', cancelText:'เปิดเอง'});
+    if(dl){ try{ window.open(url,'_blank'); }catch(e){ location.href=url; } return; }
+  }
+  toast('เปิดแอปธนาคารเอง แล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ');
+};
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
 window.confirmCounter=()=>{
@@ -1227,7 +1721,7 @@ window.saveQR=async()=>{
     // Best on mobile/LINE: native share sheet → "บันทึกรูปภาพ" / Save to Photos.
     if(navigator.canShare && navigator.canShare({files:[file]})){
       await navigator.share({files:[file], title:'YO-DEE YOGURT — QR ชำระเงิน'});
-      toast('เลือก "บันทึกรูปภาพ" → เปิดแอปธนาคาร → สแกนจากอัลบั้ม');
+      toast('✓ บันทึกรูป QR ลงอัลบั้มแล้ว · เปิดแอปธนาคาร แล้วสแกนจากอัลบั้มได้เลย');
       return;
     }
     // Fallback: download link (works in some browsers).
@@ -1295,6 +1789,10 @@ function render(v){
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
     $('tAhead').textContent = v.ahead;
+    // Ring fills as the queue ahead of them shrinks (stateless scale so it's stable across reloads);
+    // turns mint-green when they're basically next.
+    { const C=326.726, SCALE=8, a=Math.max(0,v.ahead|0), prog=Math.min(1,Math.max(0,(SCALE-Math.min(a,SCALE))/SCALE)), f=$('qringFill');
+      if(f){ f.style.strokeDashoffset=String(C*(1-prog)); f.style.stroke=a<=1?'var(--accent2)':'var(--accent)'; } }
     const mpg = cfg.minutesPerGroup || 4;
     $('tEta').textContent = v.ahead>0 ? `รอประมาณ ~${v.ahead*mpg} นาที` : "คุณเป็นคิวถัดไป!";
     $('tNotifyNote').textContent = cfg.lineEnabled
@@ -1308,7 +1806,8 @@ function render(v){
     show('tAheadWrap',false); show('tCalled',false);
     $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
     $('cancelBtn').style.display='none'; $('tRate').style.display='';
-    if(v.rating){ renderStars(v.rating); $('tRateThanks').style.display=''; } else renderStars(0);
+    if(v.rating){ renderStars(v.rating); show('tRateAsk',false); $('tRateThanks').style.display='flex'; }
+    else { renderStars(0); show('tRateAsk',true); $('tRateThanks').style.display='none'; }
   } else {   // cancelled / skipped / unknown
     show('tAheadWrap',false); show('tCalled',false);
     if(v.status==='cancelled'){ $('tCodeLabel').textContent='ออเดอร์นี้ถูกยกเลิกแล้ว';
@@ -1318,15 +1817,17 @@ function render(v){
   }
 }
 
+const RATE_LABELS=['แย่ไปหน่อย','พอใช้','ดี','ดีมาก','เยี่ยมมาก!'];
 function renderStars(sel){
-  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<span onclick="rate(${n})" style="cursor:pointer;color:${n<=sel?'#f3cb55':'#dce2e7'}">★</span>`).join('');
+  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<button type="button" onclick="rate(${n})" aria-label="${n} ดาว" style="background:none;border:none;padding:3px;cursor:pointer;line-height:1"><svg viewBox="0 0 24 24" style="width:32px;height:32px;fill:${n<=sel?'#f3cb55':'#e9edf0'};stroke:${n<=sel?'#d9a520':'#dce2e7'};stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg></button>`).join('');
+  $('tRateLabel').textContent = sel>0 ? RATE_LABELS[sel-1] : '';
 }
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
 window.changePay=()=>{ openPayPicker('ticket'); };   // re-choose via the SAME clean picker the cart uses (not the old inline chooser)
 window.rate=async(n)=>{
   renderStars(n);
   try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
-    $('tRateThanks').style.display=''; if(poll) clearInterval(poll);
+    show('tRateAsk',false); $('tRateThanks').style.display='flex'; if(poll) clearInterval(poll);
     setTimeout(()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} location.reload(); }, 2000);   // order done → back to home after 2s
   }catch(e){ toast('บันทึกคะแนนไม่สำเร็จ'); }
 };
@@ -1341,7 +1842,10 @@ function startPolling(){ tick(); poll=setInterval(tick,3000); }
 window.cancelTicket = async ()=>{
   if(!(await appConfirm({title:'ขอยกเลิกออเดอร์',message:'ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ',okText:'ขอยกเลิก',danger:true}))) return;
   try{ await api('/api/tickets/'+ticketId+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
-    toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');   // poll will refresh the button to "ส่งคำขอแล้ว"
+    toast('✅ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยันค่ะ');
+    // Lock the button NOW — waiting for the next poll leaves it tappable for a few seconds, letting
+    // the customer re-open the confirm dialog for a request that's already been sent.
+    { const cb=$('cancelBtn'); if(cb){ cb.disabled=true; cb.style.opacity=.6; cb.textContent='⏳ ส่งคำขอยกเลิกแล้ว — รอร้านยืนยัน'; } }
   }catch(e){ const m=String(e.message||'');
     toast(m==='already_making'?'🍳 กำลังทำแล้ว ยกเลิกไม่ได้ — ติดต่อหน้าร้านค่ะ':m==='already_paid'?'ชำระแล้ว ยกเลิกไม่ได้ — ติดต่อหน้าร้านค่ะ':m==='too_late'?'เลยเวลายกเลิกแล้ว — ติดต่อหน้าร้านค่ะ':m); }
 };
@@ -1354,16 +1858,48 @@ async function proceed(){
     if(r.ticket) resumeId=r.ticket.id; }catch(e){} }
   if(!resumeId) resumeId = localStorage.getItem('ticket_'+zoneId);
   if(resumeId){ try{ const v=await api('/api/tickets/'+resumeId);
-    if(['waiting','called'].includes(v.status)){ ticketId=resumeId; localStorage.setItem('ticket_'+zoneId,resumeId);
+    // 'pending' included: a pay-first customer who app-switched to their bank and had the LINE
+    // webview killed must come back to their unpaid order (pay prompt + QR), not to a blank home
+    // that discards the pointer — rebuilding a cart there would just collide with already_in_queue.
+    if(['waiting','called','pending'].includes(v.status)){ ticketId=resumeId; localStorage.setItem('ticket_'+zoneId,resumeId);
       show('getCard',false); show('ticketCard',true); startPolling(); }
     else localStorage.removeItem('ticket_'+zoneId); }catch(e){ localStorage.removeItem('ticket_'+zoneId); } }
 }
 
+// Lock the background from scrolling while ANY popup/sheet is open (watch their display style).
+(function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
+  const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
+  const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
+// Bottom nav is gone (avatar chip → account hub replaced it). setNavTab stays as a harmless no-op
+// so the close/open handlers that still call it don't need touching; there are no .navtab elements.
+function setNavTab(tab){ document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); }
+function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
+let _promoTimer=null;
+window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; if(_promoTimer){ clearTimeout(_promoTimer); _promoTimer=null; } };
+// Owner ask: the ad shows on EVERY open of the link (no seen-gate) — it auto-dismisses to the
+// main page after 3s and a tap skips it immediately, so repeat visits only cost a glance.
+async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex';
+  _promoTimer=setTimeout(()=>{ closePromoOvl(); },3000); } }catch(e){} }
 (async ()=>{
-  await initLiff();
-  if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
-  if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
-  await proceed();
-})().catch(e=>err(e.message));
+  const _t0=Date.now();
+  // On slow cellular, initLiff (LINE init + config + profile) can take several seconds — swap the loading
+  // caption so the indeterminate bar never reads as "frozen" while it's genuinely still working.
+  const _slow=setTimeout(()=>{ const m=$('loadMsg'); if(m) m.textContent='เชื่อมต่ออินเทอร์เน็ตช้า กำลังโหลด…'; },6000);
+  let normal=false;
+  try{
+    await initLiff();
+    if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
+    if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
+    await proceed();
+    normal=true;
+  } finally {
+    clearTimeout(_slow);
+    const shown=Date.now()-_t0; if(shown<600) await new Promise(r=>setTimeout(r,600-shown));   // brief min so the splash doesn't flash on a fast connection
+    hideSplash();
+  }
+  // Owner-uploaded promo (admin on/off + image): shown AFTER the splash clears so it gets its full few
+  // seconds over the main page (before, up to ~1s of it was wasted hidden behind the splash), then it's gone.
+  if(normal) await maybePromo();
+})().catch(e=>{ hideSplash(); err(e.message); });
 </script>
 </body></html>

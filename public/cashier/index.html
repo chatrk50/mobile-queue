@@ -104,6 +104,7 @@
         <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
         <button id="tenderBtn" class="ghost adm" style="display:none" onclick="showTenders()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</button>
         <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
+        <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
         <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
@@ -309,6 +310,17 @@
   </div>
 
   <!-- COUPONS management (owner only) -->
+  <div id="promoCard" class="card" style="display:none;max-width:520px;margin:14px auto">
+    <div class="row between"><div><h1>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()">ปิด</button></div>
+    <div id="promoPreview" style="margin:14px 0;text-align:center"></div>
+    <input id="promoFile" type="file" accept="image/*" style="display:none" onchange="promoPick(this)">
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <button class="ghost" style="flex:1" onclick="document.getElementById('promoFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 20V9"/><path d="M7 14l5-5 5 5"/><path d="M5 4h14"/></svg>อัปโหลดรูป</button>
+      <button class="ghost danger" style="flex:1" onclick="promoRemove()">ลบรูป</button>
+    </div>
+    <label class="row between" style="align-items:center;padding:10px 2px;font-weight:700;font-size:15px"><span>แสดงให้ลูกค้าเห็น</span><button id="promoTgl" class="tgl off" aria-label="เปิด/ปิดโปรโมชั่น" onclick="promoToggle()"></button></label>
+    <button class="ok" style="width:100%;margin-top:8px;min-height:48px" onclick="promoSave()">บันทึก</button>
+  </div>
   <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>🎟️ คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
@@ -782,7 +794,7 @@ const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
 // Kiosk self-update: kiosks load the page once and have no refresh button, so a redeploy never reaches them.
 // This button force-reloads with a cache-buster (+ clears any SW/Cache API) so staff can pull the latest build.
-const APP_VER='2026-07-02.7';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
+const APP_VER='2026-07-02.9';   // bump every deploy → staff can confirm the อัปเดต worked by reading this number
 window.forceUpdate=async()=>{
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
@@ -814,7 +826,11 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
   }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 // --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
 //     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
-const SHOP_RECV=['ธรรมนูญ','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
+// Real slips from GSB MyMo / Make by KBank / Krungthai NEXT all print the receiver as "YO-DEE
+// YOGURT" — WITH the hyphen. The plain 'YODEE' string never matched that (regex demanded the
+// letters adjacent, no hyphen), so the receiver check silently failed on every real slip
+// regardless of bank. Matching now tolerates a hyphen/space between YO and DEE.
+const SHOP_RECV=['ธรรมนูญ','YO-DEE','YODEE','YOGURT'];   // shop receiving accounts (personal + merchant)
 const TH_MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 let _tess=null,_tessLoading=null;
 function loadTesseract(){ if(_tess) return Promise.resolve(_tess); if(_tessLoading) return _tessLoading;
@@ -849,7 +865,7 @@ async function runSlipOcr(imgData, prelim){
       dOk = dayOk && (monOk || yrOk);
       dDetail=dd+' '+mo+' '+be; }
     // ผู้รับ: ต้องเป็นบัญชีร้าน
-    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/\s+/g,'\\s*'),'i').test(raw)); const rcvOk=!!rcvHit;
+    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/[\s-]+/g,'[\\s-]*'),'i').test(raw)); const rcvOk=!!rcvHit;
     box.innerHTML='<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
       +'<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">อ่านสลิปอัตโนมัติ (OCR) · เทียบผล</div>'
       +_row('ยอด ฿'+(prelim.expectedAmount!=null?prelim.expectedAmount:'-'), amtOk, '')
@@ -986,7 +1002,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
@@ -1015,7 +1031,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
+const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -1075,6 +1091,9 @@ window.archivePastDay=async()=>{
   }catch(e){ toast(err(e)); } };
 function baht(n){ return '฿'+Math.round(Number(n)||0).toLocaleString('en-US'); }
 function pctf2(n,d){ return (d?Math.round((n/d)*1000)/10:0)+'%'; }
+// Report times: DB timestamps are stored UTC ("YYYY-MM-DD HH:MM:SS"); show them in Thai time (BKK).
+function tHM(at){ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } }
+function tDHM(at){ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } }
 function shortPeriod(s){ s=String(s||'');
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(5);                 // daily: MM-DD
   if(/^\d{4}-W\d{2}$/.test(s)) return 'W'+s.slice(6);                  // weekly: Www
@@ -1224,7 +1243,7 @@ function renderDetail(){
     const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
     const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
     box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=(r.paid_at||r.created_at||'').slice(11,16);
+      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=tHM(r.paid_at||r.created_at);
         return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
@@ -1247,7 +1266,7 @@ function renderDetail(){
     const vt=DET.voidTotals||{}; const rows=(DET.voids||[]);
     const vlabel=(k)=> k==='refund'?'คืนเงิน':k==='waste'?'ของเสีย':'ยกเลิก';
     box.innerHTML=`<div style="margin-bottom:10px">ยกเลิก ${vt.void?.count||0} (${baht2(vt.void?.amount||0)}) · คืนเงิน ${vt.refund?.count||0} (${baht2(vt.refund?.amount||0)}) · 🗑️ ของเสีย ${vt.waste?.count||0} (${baht2(vt.waste?.amount||0)})</div>`+
-      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${(v.voided_at||'').slice(11,16)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
+      (rows.length?detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'ประเภท'},{t:'ยอด',r:1},{t:'เหตุผล'},{t:'โดย'}], rows.map((v,i)=>`<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${tHM(v.voided_at)}</td><td><b>${v.code}</b></td><td><span class="pill ${v.void_kind==='refund'?'closed':v.void_kind==='waste'?'soon':'soon'}" style="font-size:11px">${vlabel(v.void_kind)}</span></td><td style="text-align:right">${baht2(v.total)}</td><td style="color:var(--muted);font-size:12px">${esc(v.void_reason||'')}</td><td style="color:var(--muted);font-size:12px">${esc(v.by_name||'')}</td></tr>`).join('')):'<p class="muted">ไม่มีการยกเลิก/คืนเงิน</p>');
   } else if(t==='chan'){
     // Order-source mix first (how orders came in: LINE vs walk-in vs delivery), then channel revenue.
     const srcs=(DET.sources||[]); const stot=DET.sourceTotalOrders||0; const sMax=Math.max(...srcs.map(s=>s.orders),1);
@@ -1466,6 +1485,15 @@ window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabe
     ['cpCode','cpLabel','cpValue','cpMin','cpExp'].forEach(id=>{const el=$(id); if(el) el.value='';}); toast('สร้างคูปองแล้ว ✓'); loadCoupons(); }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };
+// ---------- Promo banner (owner uploads the ad shown in the LIFF after loading) ----------
+let _promo={image:'',enabled:false};
+window.hidePromo=()=>{ $('promoCard').style.display='none'; $('dash').style.display=''; };
+window.showPromo=async()=>{ hideAllPanels(); $('promoCard').style.display=''; try{ _promo=await api('/api/promo'); }catch(e){ _promo={image:'',enabled:false}; } renderPromo(); };
+function renderPromo(){ const pv=$('promoPreview'); if(pv) pv.innerHTML=_promo.image?('<img src="'+_promo.image+'" alt="โปรโมชั่น" style="max-width:100%;max-height:340px;border-radius:14px;border:1px solid var(--line)">'):'<div class="muted" style="padding:26px;border:1px dashed var(--line);border-radius:14px;font-size:13px">ยังไม่มีรูป — อัปโหลดรูปโปรฯ (แนะนำแนวตั้ง)</div>'; const t=$('promoTgl'); if(t) t.className='tgl '+(_promo.enabled?'on':'off'); }
+window.promoPick=async(inp)=>{ const f=inp&&inp.files&&inp.files[0]; if(!f) return; try{ _promo.image=await resizeImage(f,1600); renderPromo(); toast('เลือกรูปแล้ว · กดบันทึก'); }catch(e){ toast('อ่านรูปไม่สำเร็จ'); } inp.value=''; };   // 1600px: the banner is shown FULL-SCREEN on the customer's phone — 900px looked soft when cover-scaled
+window.promoRemove=()=>{ _promo.image=''; renderPromo(); };
+window.promoToggle=()=>{ _promo.enabled=!_promo.enabled; renderPromo(); };
+window.promoSave=async()=>{ try{ await api('/api/promo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:_promo.image,enabled:_promo.enabled?1:0})}); toast('บันทึกโปรโมชั่นแล้ว'); }catch(e){ toast(err(e)); } };
 window.showControl=async()=>{ hideAllPanels(); ['cashCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('controlCard').style.display=''; CTLDATE=null; loadControl(); };
 window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
 window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };
@@ -1492,7 +1520,7 @@ function renderCashMoves(d){
   const rows=(d.moves||[]).map(m=>{ const out=m.kind==='pay_out';
     return `<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:center">
       <div style="flex:1;min-width:0"><b>${esc(m.remark||(out?'จ่ายออก':'รับเข้า'))}</b>
-        <div class="muted" style="font-size:11px">${(m.at||'').slice(11,16)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
+        <div class="muted" style="font-size:11px">${tHM(m.at)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
       <b style="color:${out?'var(--danger)':'#16a34a'};white-space:nowrap">${out?'−':'+'}${baht2(m.amount)}</b>
       <button class="ghost" style="padding:2px 8px;margin-left:8px;font-size:13px;color:var(--danger)" title="ลบ" onclick="delCashMove(${m.id})">✕</button></div>`; }).join('');
   $('cashMovesList').innerHTML=`
@@ -1519,7 +1547,7 @@ function renderCash(){
   }
   const s=CASH;
   box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px">
-    <div class="row between"><span class="muted">เปิดรอบเมื่อ</span><b>${(s.session.opened_at||'').slice(0,16).replace('T',' ')}</b></div>
+    <div class="row between"><span class="muted">เปิดรอบเมื่อ</span><b>${fmtDT(s.session.opened_at)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินทอนเริ่มต้น</span><b>${baht2(s.session.open_float)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินสดที่รับ (กะนี้)</span><b style="color:var(--ok,#16a34a)">+${baht2(s.cashIn)}</b></div>
     ${s.cashRefund?`<div class="row between" style="margin-top:6px"><span>คืนเงินสด</span><b style="color:var(--danger)">−${baht2(s.cashRefund)}</b></div>`:''}
@@ -2056,7 +2084,7 @@ function renderCustProfile(p){
   if(!p||!p.found) return `<div style="text-align:center;padding:16px 8px"><div style="font-size:32px">🙋</div><b style="color:var(--navy)">ลูกค้าใหม่</b><p class="muted" style="font-size:13px;margin:4px 0 0">ยังไม่มีประวัติของเบอร์นี้ — สั่งให้เลยเพื่อเริ่มเก็บประวัติ</p></div>${_crmCta(p)}`;
   const tier=p.loyalty&&p.loyalty.tier?p.loyalty.tier.emoji+' ':'';
   const favs=(p.favourites||[]).map(f=>`${esc(f.name)} ×${f.qty}`).join(' · ')||'—';
-  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${(r.paid_at||'').slice(5,16).replace('T',' ')}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
+  const recent=(p.recent||[]).map(r=>`<div class="row between" style="font-size:13px;padding:3px 0"><span class="muted">${tDHM(r.paid_at)}</span><span><b>${esc(r.code||'')}</b> · ฿${r.net}</span></div>`).join('')||'<p class="muted" style="font-size:12px">—</p>';
   const bday=p.loyalty&&p.loyalty.isBirthday?'<span class="pill" style="background:#fde2e7;color:#c43a4b;margin-left:6px;font-size:11px">🎂 วันเกิดวันนี้</span>':'';
   const pts=p.loyalty?`<div class="row between" style="font-size:13px;margin-top:4px"><span class="muted">แต้มสะสม</span><b style="color:#7c3aed">${tier}${p.loyalty.points} ดวง</b></div>`:'';
   return `
@@ -2071,7 +2099,17 @@ function renderCustProfile(p){
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">มาล่าสุด</span><b>${_agoTH(p.lastVisit)}</b></div>
    <div class="row between" style="font-size:13px;margin-bottom:4px"><span class="muted">เมนูโปรด</span><b style="text-align:right;max-width:62%">${favs}</b></div>
    ${pts}
+   ${_crmCoupons(p)}
    <div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:4px">ออเดอร์ล่าสุด</div>${recent}</div>${_bdayRedeem(p)}${_crmCta(p)}`;
+}
+// Live coupons the customer holds (stamp-card conversions + birthday gifts) — read-only info so the
+// cashier sees exactly what the customer sees in the LIFF's coupon list.
+function _crmCoupons(p){
+  const cs=(p&&p.coupons)||[]; if(!cs.length) return '';
+  return '<div style="margin-top:10px"><div class="muted" style="font-size:12px;margin-bottom:4px">คูปองที่ลูกค้าถืออยู่</div>'+
+    cs.map(c=>`<div class="row between" style="font-size:12.5px;background:${c.kind==='birthday'?'#fde2e7':'#fffbea'};border:1px solid ${c.kind==='birthday'?'#f9a8b4':'#f3cb55'};border-radius:10px;padding:7px 10px;margin-bottom:5px">
+      <span style="font-weight:700;color:var(--navy)">${c.kind==='birthday'?'🎂':'🎁'} ${esc(c.label)}</span>
+      <span class="muted" style="white-space:nowrap">฿${c.freeCap} · ถึง ${esc(c.expiresAt)}</span></div>`).join('')+'</div>';
 }
 // Birthday free-drink redeem button — cashier-initiated; server is the source of truth (the customer card only prompts).
 function _bdayRedeem(p){
@@ -2726,6 +2764,8 @@ window.showFeatures=async()=>{
     row('queueFirst', f.queueFirst, IC.ticket, 'เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
     row('printEnabled', f.printEnabled, IC.print, 'พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
     row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
+    row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
+    row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div></div></div>

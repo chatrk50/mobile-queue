@@ -835,6 +835,20 @@ export function listMenu(channelId = null, branchId = null) {
     ).all()) soldMap.set(s.base, s.q);
     rows.forEach((r) => { r.sold = soldMap.get(r.name) || 0; });
   } catch (e) { rows.forEach((r) => { r.sold = 0; }); }
+  // "Likes" = how many DISTINCT identifiable customers (LINE / phone) have bought this item on a
+  // paid order → shown on the customer card as a heart count (social proof, not raw cups sold).
+  try {
+    const likeMap = new Map();
+    for (const s of db.prepare(
+      `SELECT base, COUNT(DISTINCT cust) AS n FROM (
+         SELECT CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END AS base,
+                COALESCE(t.line_user_id, t.customer_key) AS cust
+           FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+          WHERE o.payment_status='paid'
+       ) WHERE cust IS NOT NULL GROUP BY base`
+    ).all()) likeMap.set(s.base, s.n);
+    rows.forEach((r) => { r.likes = likeMap.get(r.name) || 0; });
+  } catch (e) { rows.forEach((r) => { r.likes = 0; }); }
   return rows;
 }
 
@@ -1179,10 +1193,59 @@ export function validateCoupon(code, customerKey, orderNet) {
   return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
 }
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
+/** Owner policy: a completed stamp card (10 ดวง) is CONVERTED into 1 coupon on the spot — the
+ *  stamps are spent at conversion, and the coupon is good for 30 days. Expiry kills the coupon
+ *  only (never claws back other stamps). Runs lazily and idempotently: loops while the balance
+ *  still covers a card, so multi-card balances convert fully and pre-existing balances convert
+ *  the first time the customer's coupons are looked at. */
+const REWARD_COUPON_DAYS = 30;
+export function convertReadyRewards(customerKey) {
+  if (!customerKey || !loyaltyEnabled()) return [];
+  const issued = [];
+  for (;;) {
+    const bal = loyaltyBalance(customerKey).points;
+    const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
+    if (!reward) break;
+    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
+    let ccId = null;
+    db.transaction(() => {
+      db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
+      db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
+        .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
+      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'reward', ?, 49, ?)`)
+        .run(customerKey, reward.name, expiresAt).lastInsertRowid;
+    })();
+    issued.push({ id: Number(ccId), label: reward.name, expiresAt });
+  }
+  return issued;
+}
+/** A customer's live (unused, unexpired) coupons — stamp-card conversions + birthday gifts. */
+export function customerCoupons(customerKey) {
+  if (!customerKey) return [];
+  return db.prepare(
+    `SELECT * FROM customer_coupons
+      WHERE customer_key=? AND used_at IS NULL AND expires_at >= date('now','+7 hours')
+      ORDER BY expires_at, id`
+  ).all(customerKey);
+}
 export function availableCoupons(customerKey, orderNet) {
-  return listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+  // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
+  // can pick it like any other discount — one tap in the cart applies it as a free-drink discount
+  // (redeemRewardOnOrder re-checks their balance server-side at order time, so this is advisory only).
+  if (customerKey) {
+    // Convert any full stamp cards first (lazy, covers balances earned before this feature), then
+    // surface every live coupon the customer holds — reward conversions and birthday gifts alike.
+    try { convertReadyRewards(customerKey); } catch { /* never block the coupon list */ }
+    for (const cc of customerCoupons(customerKey).reverse()) {
+      list.unshift({ id: 'cc-' + cc.id, code: 'CCOUP:' + cc.id, label: cc.label, disc_type: 'reward',
+        disc_value: 0, max_disc: 0, min_spend: 0, expires_at: cc.expires_at, usable: true, discount: 0, reason: null,
+        isReward: true, ccId: cc.id, freeCap: cc.free_cap, couponKind: cc.kind });
+    }
+  }
+  return list;
 }
 /** Apply a coupon to an order at creation: re-validate SERVER-SIDE, add its discount (respecting any
  *  existing free-giveaway discount + the coupon's stackable flag), record the use, bump used_count. */
@@ -1228,11 +1291,15 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
     return { code: t.code, label: t.label, kind: t.kind, fee_pct: t.fee_pct || 0,
              orders: hit.orders || 0, amount, fee, net: r2(amount - fee) };
   });
+  // Orders paid via a code that isn't a registered tender (legacy promptpay/slip/other, or a
+  // fully stamp-redeemed free order) still show up here, not lost — just labeled generically
+  // by their raw code unless we give it a friendlier name (e.g. 'reward').
+  const OTHER_LABELS = { reward: 'แลกด้วยแต้มสะสม (ฟรี)' };
   const known = new Set(tenders.map((t) => t.code));
   for (const r of rows) {
     if (!known.has(r.code)) {
       const amount = r2(r.amount);
-      lines.push({ code: r.code, label: r.code, kind: 'other', fee_pct: 0, orders: r.orders, amount, fee: 0, net: amount });
+      lines.push({ code: r.code, label: OTHER_LABELS[r.code] || r.code, kind: 'other', fee_pct: 0, orders: r.orders, amount, fee: 0, net: amount });
     }
   }
   const total = lines.reduce((a, l) => ({ orders: a.orders + l.orders, amount: r2(a.amount + l.amount), net: r2(a.net + l.net) }), { orders: 0, amount: 0, net: 0 });
@@ -1251,10 +1318,34 @@ export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
 export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
+// Owner-uploadable promo/ad splash shown in the LIFF after loading (a data-URL image the owner
+// can change anytime in ⚙ จัดการ). enabled gates whether the customer actually sees it.
+export function getPromo() { return { image: getSetting('promo:image', '') || '', enabled: getSetting('promo:enabled', '0') === '1' }; }
+export function setPromo({ image, enabled } = {}) {
+  if (image !== undefined) setSetting('promo:image', (image || '').toString().slice(0, 1500000));
+  if (enabled !== undefined) setSetting('promo:enabled', enabled ? '1' : '0');
+  return getPromo();
+}
 export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); return { slipAuto: !!on }; }
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
+// Social proof (owner-toggleable, default OFF): the LIFF shows "วันนี้ขายไปแล้ว N แก้ว" on the home.
+export function socialProofEnabled() { return getSetting('social:enabled', '0') === '1'; }
+export function setSocialProof(on) { setSetting('social:enabled', on ? '1' : '0'); return { social: !!on }; }
+// Count of drinks (base items) sold today across paid, non-void orders (Bangkok day).
+export function soldTodayCount() {
+  const r = db.prepare(
+    `SELECT COALESCE(SUM(oi.qty),0) c
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.payment_status = 'paid' AND oi.kind = 'base'
+       AND date(o.paid_at, '+7 hours') = date('now','+7 hours')`
+  ).get();
+  return r ? (r.c || 0) : 0;
+}
+// Mascot greeting (owner-toggleable, default OFF): a friendly bouncing logo + greeting on the home.
+export function mascotEnabled() { return getSetting('mascot:enabled', '0') === '1'; }
+export function setMascot(on) { setSetting('mascot:enabled', on ? '1' : '0'); return { mascot: !!on }; }
 // Auto-void abandoned (unpaid) pending orders after N minutes so they don't pile up on the
 // till. Default 30 min; 0 disables. Owner-configurable in ⚙ จัดการ.
 export function getPendingVoidMinutes() { return Math.max(0, Math.floor(Number(getSetting('pending:void_min', '30')) || 0)); }
@@ -1407,6 +1498,12 @@ export function setCustomerBirthday(key, birthday) {
   if (!key) throw new Error('customer_required');
   if (!birthdayMD(birthday)) throw new Error('bad_birthday');
   const val = String(birthday).slice(0, 10);
+  // A date of birth can't be in the future, and — since the customer is entering their OWN
+  // birthday to order by themselves — it can't be less than a year ago either; that's almost
+  // always a mistyped year rather than a real self-ordering infant.
+  const { today, cutoff } = db.prepare("SELECT date(datetime('now','+7 hours')) today, date(datetime('now','+7 hours'),'-1 year') cutoff").get();
+  if (val > today) throw new Error('future_birthday');
+  if (val > cutoff) throw new Error('birthday_too_recent');
   db.prepare(`INSERT INTO customers (line_user_id, birthday) VALUES (?,?) ON CONFLICT(line_user_id) DO UPDATE SET birthday=excluded.birthday`).run(key, val);
   return { ok: true, birthday: val, isBirthday: isBirthdayToday(val) };
 }
@@ -1502,6 +1599,9 @@ export function customerProfile(key) {
     birthday: cust?.birthday || null,
     birthdayRedeem: birthdayRedeemStatus(key),
     loyalty: bal ? { points: bal.points, lifetime: bal.lifetime, tier: bal.tier, isBirthday: bal.isBirthday } : null,
+    // Live coupons the customer holds (stamp-card conversions + birthday gifts) — shown to the
+    // cashier so they can see/verify what the customer sees in the app.
+    coupons: customerCoupons(key).map((c) => ({ id: c.id, kind: c.kind, label: c.label, freeCap: c.free_cap, expiresAt: c.expires_at })),
   };
 }
 /** Birthday free-drink redeem — once per calendar year, ledgered idempotently in loyalty_moves.
@@ -1668,6 +1768,9 @@ export function loyaltyHistory(key, limit = 30) {
  * cashier/walk-in (no line_user_id) and no-ops when loyalty is disabled. Idempotent per order.
  * Returns {key,name,awarded,balance} for a LINE "+N ดวง" push, or null.
  */
+// The welcome bonus's loyalty_moves note — ticketView keys "first order" off this EXACT string, so
+// birthday/referral bonus rows (also noted earns on the same order) never masquerade as a welcome.
+const WELCOME_NOTE = 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์';
 export function awardPoints(orderId) {
   if (!loyaltyEnabled()) return null;
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
@@ -1690,17 +1793,16 @@ export function awardPoints(orderId) {
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
   // First-ever LINE order for this customer? Grant a one-time welcome head-start.
   const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
-  const bonus = isFirst ? getWelcomeBonus() : 0;
-  // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
-  // customer orders on their birthday (and has saved one).
+  const bonus = isFirst ? getWelcomeBonus() : 0;   // logged with WELCOME_NOTE — ticketView keys "first order" off that note
+  // Birthday: the old auto "+10 stamps when ordering on your birthday" is retired — the birthday
+  // gift is now a ฿100 free-drink COUPON issued on the birthday morning (see issueBirthdayCoupons),
+  // so awarding stamps here too would double-gift.
   const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=?').get(key);
-  const yr = bkkYear();
-  const bdayBonus = (cust && isBirthdayToday(cust.birthday) && !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND note=?").get(key, 'birthday ' + yr))
-    ? getStampsPerReward() : 0;
+  const bdayBonus = 0;
   // Referral: on the invited friend's FIRST order, both the friend and the referrer get a bonus.
   const referrerKey = (isFirst && cust && cust.referred_by) ? cust.referred_by : null;
   const refBonus = referrerKey ? getReferralBonus() : 0;
-  const total = pts + bonus + bdayBonus + refBonus;
+  const total = pts + bonus + refBonus;
   db.transaction(() => {
     db.prepare(
       `INSERT INTO customers (line_user_id, name, points, lifetime_points)
@@ -1711,8 +1813,7 @@ export function awardPoints(orderId) {
          name = COALESCE(customers.name, excluded.name)`
     ).run(key, name, total, total);
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
-    if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
-    if (bdayBonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bdayBonus, orderId, 'birthday ' + yr);
+    if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, WELCOME_NOTE);
     if (refBonus > 0 && referrerKey) {
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, refBonus, orderId, 'referral (เพื่อนชวน)');
       db.prepare('UPDATE customers SET points=points+?, lifetime_points=lifetime_points+? WHERE line_user_id=?').run(refBonus, refBonus, referrerKey);
@@ -1720,7 +1821,33 @@ export function awardPoints(orderId) {
     }
   })();
   if (refBonus > 0 && referrerKey) pushQueue(referrerKey, `👫 เพื่อนที่คุณชวนสั่งครั้งแรกแล้ว! รับ +${refBonus} ดวง 🎉`, null);
-  return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points };
+  // Convert any freshly-completed stamp card into its 30-day coupon right away, so the customer's
+  // "you earned a free drink" moment carries a real coupon (and an expiry date) with it.
+  let coupons = [];
+  try { coupons = convertReadyRewards(key); } catch { /* never block a payment on conversion */ }
+  return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points, coupons };
+}
+
+/** Issue this year's birthday coupon (free drink, capped ฿100, good 30 days) to every customer
+ *  whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic sweep;
+ *  idempotent per customer per calendar year. */
+export function issueBirthdayCoupons() {
+  if (!loyaltyEnabled()) return { issued: 0 };
+  const md = bkkMonthDay(), yr = bkkYear();
+  const rows = db.prepare(
+    `SELECT c.line_user_id AS key FROM customers c
+      WHERE c.birthday IS NOT NULL AND substr(c.birthday, -5) = ?
+        AND NOT EXISTS (SELECT 1 FROM customer_coupons cc
+                         WHERE cc.customer_key = c.line_user_id AND cc.kind='birthday'
+                           AND strftime('%Y', datetime(cc.issued_at, '+7 hours')) = ?)`
+  ).all(md, yr);
+  const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
+  for (const r of rows) {
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'birthday', ?, 100, ?)`)
+      .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
+    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null); } catch { /* push is best-effort */ }
+  }
+  return { issued: rows.length };
 }
 /** Active rewards (cheapest first) for the customer to browse. */
 export function listRewards(all = false) {
@@ -2102,8 +2229,14 @@ export function createOrder(zoneId, items, opts = {}) {
 
   // Apply a customer-selected coupon — the server re-validates (source of truth) + records the use.
   // A now-invalid coupon (expired between pick and confirm) is ignored so the order still stands.
+  // "CCOUP:<id>" = an issued customer coupon (stamp-card conversion / birthday gift); the legacy
+  // "REWARD:<id>" pseudo-code still routes to the balance-based redemption for old clients.
   if (couponCode && r.ticket && !r.idempotent) {
-    try { applyCouponToOrder(r.ticket.id, couponCode, lineUserId); } catch { /* order stands without the discount */ }
+    try {
+      if (couponCode.startsWith('CCOUP:')) redeemCustomerCoupon(r.ticket.id, Number(couponCode.slice(6)), null);
+      else if (couponCode.startsWith('REWARD:')) redeemRewardOnOrder(r.ticket.id, Number(couponCode.slice(7)), null);
+      else applyCouponToOrder(r.ticket.id, couponCode, lineUserId);
+    } catch { /* order stands without the discount */ }
   }
 
   // Remember this LINE customer for next-visit reorder suggestions (best-effort, deferred so the
@@ -2196,9 +2329,11 @@ export function setOrderPaid(ticketId, opts = {}) {
       const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
-      msg += free >= 1
-        ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
-        : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`;
+      msg += (loyalty.coupons && loyalty.coupons.length)
+        ? `\n🎉 สะสมครบ ${per} ดวง! รับคูปองฟรี 1 ${UNIT} — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
+        : (free >= 1
+          ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
+          : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`);
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
@@ -2336,7 +2471,13 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
     : db.prepare('SELECT * FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get();
   if (!reward) throw new Error('reward_not_found');
   const bal = loyaltyBalance(key).points;
-  if (bal < reward.cost_points) throw new Error('insufficient_points');
+  if (bal < reward.cost_points) {
+    // Under the conversion model a completed card is already a coupon (points spent) — so when the
+    // cashier taps แลกฟรี on an order, fall through to the customer's live coupon if they hold one.
+    const cc = customerCoupons(key)[0];
+    if (cc) return redeemCustomerCoupon(ticketId, cc.id, actorId);
+    throw new Error('insufficient_points');
+  }
   const cheapest = db.prepare(
     `SELECT MIN(oi.price) p FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
@@ -2359,6 +2500,41 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
     catch { /* leave it unpaid if completion fails */ }
   }
   return { ok: true, redeemed: reward.name, cost: reward.cost_points, freeAmount: free, balance: bal - reward.cost_points, net: autoPaid ? 0 : res.net, autoPaid };
+}
+
+/** Apply one of the customer's issued coupons (stamp-card conversion or birthday gift) to an
+ *  UNPAID order: free-drink discount = min(coupon cap, cheapest drink, remaining bill). Marks the
+ *  coupon used (re-opened automatically if the order is later voided). Points are NOT touched —
+ *  they were already spent when the card converted. */
+export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
+  const t = db.prepare('SELECT line_user_id, customer_key FROM tickets WHERE id=?').get(ticketId);
+  const key = t && (t.line_user_id || t.customer_key);
+  if (!key) throw new Error('no_customer');
+  const cc = db.prepare('SELECT * FROM customer_coupons WHERE id=?').get(ccId);
+  if (!cc || cc.customer_key !== key) throw new Error('coupon_not_found');
+  if (cc.used_at) throw new Error('coupon_used');
+  if (db.prepare("SELECT date('now','+7 hours') > ? x").get(cc.expires_at).x === 1) throw new Error('coupon_expired');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') throw new Error('order_already_paid');
+  if (order.payment_status === 'void') throw new Error('order_void');
+  const cheapest = db.prepare(
+    `SELECT MIN(oi.price) p FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name
+      WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
+  ).get(order.id)?.p;
+  const room = Math.max(0, order.total - (order.discount || 0));
+  const free = Math.round(Math.min(cc.free_cap, cheapest || room, room) * 100) / 100;
+  if (free <= 0) throw new Error('nothing_to_discount');
+  const reason = (cc.kind === 'birthday' ? '🎂 คูปองวันเกิด: ' : '🎁 คูปองสะสมครบ: ') + cc.label;
+  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=? WHERE id=?`).run(order.id, cc.id);
+  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
+  if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  let autoPaid = false;
+  if (res.net <= 0) {
+    try { setOrderPaid(ticketId, { actorId, method: 'reward', skipLoyalty: true }); autoPaid = true; }
+    catch { /* leave it unpaid if completion fails */ }
+  }
+  return { ok: true, redeemed: cc.label, couponId: cc.id, freeAmount: free, net: autoPaid ? 0 : res.net, autoPaid };
 }
 
 /** Cashier cancels/voids a ticket and its order (customer changed their mind, etc.).
@@ -2387,6 +2563,8 @@ function returnStockForOrder(order) {
  *  and removes any stamps it earned, keeping the ledger consistent. Returns net points returned
  *  to the ticket's own customer (positive = points given back). */
 function reverseLoyaltyForOrder(orderId, ownerKey) {
+  // A coupon spent on this order comes back to the customer when the order is voided.
+  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
   const moves = db.prepare("SELECT customer_key, kind, points FROM loyalty_moves WHERE order_id=? AND kind IN ('earn','redeem')").all(orderId);
   if (!moves.length) return 0;
   const byKey = {};
@@ -2424,10 +2602,12 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled
+    const safeReason = !byRequest ? safeCancelReason(reason || '') : null;   // same whitelist the web ticket screen uses
     pushQueue(t.line_user_id,
       (byRequest
         ? `✅ ยกเลิกออเดอร์ ${t.code} ให้เรียบร้อยแล้วค่ะ ตามที่คุณขอ\n`
         : `❌ ออเดอร์ ${t.code} ถูกยกเลิกโดยร้านค่ะ\n`) +
+      (safeReason ? `${safeReason}\n` : '') +
       (pointsReturned > 0 ? `🔄 คืน ${pointsReturned} ดวงเข้าบัญชีของคุณแล้ว\n` : '') +
       `สั่งใหม่ได้ตลอดเลยนะคะ ขอบคุณค่ะ 🙂`, null);
   }
@@ -2604,6 +2784,18 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   return { zone, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
 
+// Customer-safe cancellation reason: whitelist-maps an internal void_reason to wording that's
+// safe to show/send to the customer. Internal notes like "ทำพลาด"/"ลูกค้าไม่พอใจ" never leave
+// the building. Shared by ticketView() (web) and cancelOrderTicket()'s LINE push, so both
+// channels always say the same thing.
+function safeCancelReason(raw) {
+  const MAP = {
+    'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
+    'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
+  };
+  return MAP[raw] || (raw && raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+}
+
 export function ticketView(ticketId) {
   const t = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
   if (!t) return null;
@@ -2613,11 +2805,32 @@ export function ticketView(ticketId) {
   let loyalty = null;
   if (t.line_user_id && o && o.payment_status === 'paid' && loyaltyEnabled()) {
     const ord = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
-    const earns = db.prepare("SELECT points, note FROM loyalty_moves WHERE order_id=? AND kind='earn'").all(ord.id);
+    // customer_key filter matters: on a referred friend's first order, awardPoints also logs the
+    // REFERRER's bonus row under the same order_id — without the filter that row inflated `bonus`
+    // (wrong "+N ดวงต้อนรับ") and corrupted the rewardJustReady boundary math below.
+    const earns = db.prepare("SELECT id, points, note FROM loyalty_moves WHERE order_id=? AND kind='earn' AND customer_key=?").all(ord.id, t.line_user_id);
     if (earns.length) {
       const awarded = earns.filter((e) => !e.note).reduce((s, e) => s + e.points, 0);
-      const bonus = earns.filter((e) => e.note).reduce((s, e) => s + e.points, 0);
-      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: loyaltyBalance(t.line_user_id).points, per: getStampsPerReward() };
+      // "Welcome" means the first-order note specifically — birthday/referral bonuses are ALSO noted
+      // earns, and treating any note as "first order" showed ยินดีต้อนรับสมาชิกใหม่ to long-time
+      // customers ordering on their birthday (and suppressed the reward celebration via the else-if).
+      const bonus = earns.filter((e) => e.note === WELCOME_NOTE).reduce((s, e) => s + e.points, 0);
+      const earnedThis = earns.reduce((s, e) => s + e.points, 0);
+      const bal = loyaltyBalance(t.line_user_id).points;
+      const per = getStampsPerReward();
+      // Boundary math on the balance AS OF this order's earns (current balance minus every move
+      // logged after them) — the live balance made the flag unstable: a counter redeem between
+      // paying and the LIFF's next poll silently swallowed the celebration.
+      const maxEarnId = Math.max(...earns.map((e) => e.id));
+      const later = db.prepare('SELECT COALESCE(SUM(points),0) s FROM loyalty_moves WHERE customer_key=? AND id>?').get(t.line_user_id, maxEarnId).s;
+      const balAtEarn = bal - later;
+      // Did THIS order complete a fresh stamp card (cross a multiple of `per`)? If so — and a real reward
+      // is actually redeemable — flag it so the LIFF fires the reward-celebration moment. The client shows
+      // it once per ticket; the first-order welcome "wow" takes precedence when both would apply.
+      const rewardJustReady = earnedThis > 0 && per > 0
+        && Math.floor(balAtEarn / per) > Math.floor((balAtEarn - earnedThis) / per)
+        && listRewards(false).length > 0;
+      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady };
     }
   }
   // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones
@@ -2627,11 +2840,7 @@ export function ticketView(ticketId) {
   if (t.status === 'cancelled' && !t.cancel_requested) {
     const vr = db.prepare('SELECT void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
     const raw = (vr && vr.void_reason) || '';
-    const MAP = {
-      'ของหมด/ทำไม่ได้': 'ขออภัยค่ะ เมนูนี้ของหมดพอดี 🙏',
-      'ลูกค้าไม่มารับ': 'ออเดอร์ถูกยกเลิกเนื่องจากไม่มีผู้มารับค่ะ',
-    };
-    cancelReason = MAP[raw] || (raw.startsWith('auto:') ? 'ออเดอร์หมดเวลาชำระและถูกยกเลิกอัตโนมัติค่ะ' : null);
+    cancelReason = safeCancelReason(raw);
   }
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,

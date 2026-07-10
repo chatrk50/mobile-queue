@@ -451,6 +451,18 @@ CREATE TABLE IF NOT EXISTS rewards (
   active      INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS customer_coupons (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_key  TEXT NOT NULL,                  -- = customers.line_user_id
+  kind          TEXT NOT NULL DEFAULT 'reward', -- reward (stamp-card conversion) | birthday
+  label         TEXT NOT NULL,
+  free_cap      REAL NOT NULL DEFAULT 49,       -- max discount value (฿) of the free drink
+  issued_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at    TEXT NOT NULL,                  -- last usable Bangkok DATE (inclusive)
+  used_at       TEXT,
+  used_order_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_customer_coupons_key ON customer_coupons(customer_key, used_at);
 `);
 
 // ---- Lightweight migrations for DBs created before these columns existed ----

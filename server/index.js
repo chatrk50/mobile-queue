@@ -79,7 +79,7 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   res.sendStatus(200);
 });
 
-app.use(express.json({ limit: '1mb' })); // room for uploaded menu photos (base64 data URLs)
+app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + promo banner (base64 data URLs)
 
 // ---- Staff session: a valid signed 'sess' cookie attaches req.staff (Phase 1). This
 // runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
@@ -156,10 +156,16 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
+// Owner-uploadable promo/ad splash shown in the LIFF after loading.
+app.get('/api/promo', (req, res) => res.json(Q.getPromo()));
+app.post('/api/promo', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setPromo(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
 app.post('/api/auth', (req, res) => {
@@ -322,7 +328,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -333,6 +339,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.ownerLineId != null) Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId));
     if (req.body?.pendingVoidMinutes != null) Object.assign(out, Q.setPendingVoidMinutes(req.body.pendingVoidMinutes));
     if (req.body?.queueFirst != null) Object.assign(out, Q.setQueueFirst(!!req.body.queueFirst));
+    if (req.body?.social != null) Object.assign(out, Q.setSocialProof(!!req.body.social));
+    if (req.body?.mascot != null) Object.assign(out, Q.setMascot(!!req.body.mascot));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -1162,6 +1170,12 @@ setInterval(() => {
     if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
   } catch { /* never let the sweep crash the server */ }
 }, 60 * 1000);
+
+// Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose
+// saved birthday is today. Hourly + once at boot; idempotent per customer per calendar year.
+const birthdaySweep = () => { try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ } };
+birthdaySweep();
+setInterval(birthdaySweep, 60 * 60 * 1000);
 
 // White-label onboarding: SEED=blank makes a brand-new instance create just one store + zone
 // (named from BRAND) with NO YO-DEE menu/ingredients — the owner fills in their own. Additive:

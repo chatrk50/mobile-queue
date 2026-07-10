@@ -47,6 +47,15 @@ h1,h2,h3,.brand{font-family:"Poppins","LINE Seed Sans TH","Nunito Sans",sans-ser
 /* Every modal card must stay within the screen (phone-safe) and scroll its overflow internally —
    so no popup (login keypad, topping picker, etc.) ever runs past the device frame. */
 .glass-ovl>.card{max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* True full-page overlay (member/history/coupon/account) — edge-to-edge, no floating dialog look:
+   no border/shadow/rounded corners, a slim sticky header bar instead of a separately-floating
+   circular close button. The body is a plain flex column that scrolls on its own axis, which also
+   sidesteps the flex align-items:center + max-height:90vh clipping that broke scrolling before. */
+.full-page{position:fixed;inset:0;background:#fff;display:flex;flex-direction:column}
+.full-page-head{flex:none;position:sticky;top:0;z-index:2;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.full-page-head h1{font-size:18px;margin:0}
+.full-page-head button{flex:none;width:34px;height:34px;border-radius:50%;padding:0;font-size:15px;line-height:1}
+.full-page-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
 h1{font-size:22px;margin:.2em 0;color:var(--navy)}
 h2{font-size:16px;margin:.2em 0;color:var(--muted);font-weight:600}
 .big-number{font-size:64px;font-weight:800;letter-spacing:2px;line-height:1;
