@@ -1294,6 +1294,22 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 // Receipt printing prepared but DORMANT (default OFF) — owner flips on after wiring a printer.
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
+// Social proof (owner-toggleable, default OFF): the LIFF shows "วันนี้ขายไปแล้ว N แก้ว" on the home.
+export function socialProofEnabled() { return getSetting('social:enabled', '0') === '1'; }
+export function setSocialProof(on) { setSetting('social:enabled', on ? '1' : '0'); return { social: !!on }; }
+// Count of drinks (base items) sold today across paid, non-void orders (Bangkok day).
+export function soldTodayCount() {
+  const r = db.prepare(
+    `SELECT COALESCE(SUM(oi.qty),0) c
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.payment_status = 'paid' AND oi.kind = 'base'
+       AND date(o.paid_at, '+7 hours') = date('now','+7 hours')`
+  ).get();
+  return r ? (r.c || 0) : 0;
+}
+// Mascot greeting (owner-toggleable, default OFF): a friendly bouncing logo + greeting on the home.
+export function mascotEnabled() { return getSetting('mascot:enabled', '0') === '1'; }
+export function setMascot(on) { setSetting('mascot:enabled', on ? '1' : '0'); return { mascot: !!on }; }
 // Auto-void abandoned (unpaid) pending orders after N minutes so they don't pile up on the
 // till. Default 30 min; 0 disables. Owner-configurable in ⚙ จัดการ.
 export function getPendingVoidMinutes() { return Math.max(0, Math.floor(Number(getSetting('pending:void_min', '30')) || 0)); }

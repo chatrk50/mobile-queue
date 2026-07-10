@@ -32,6 +32,9 @@
   .qring-num{font-size:38px;font-weight:900;color:var(--navy);line-height:1}
   .qring-lbl{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
   @keyframes sendspin{ to{transform:rotate(360deg)} }
+  @keyframes mascotBounce{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  .mascot-bounce{ animation:mascotBounce 1.8s ease-in-out infinite }
+  @media (prefers-reduced-motion:reduce){ .mascot-bounce{ animation:none } }
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
   .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
   .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
@@ -109,6 +112,8 @@
      that opens the account hub. One door, no persistent tab bar to overlap the full-page views. -->
 <div class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
+  <!-- Mascot greeting (owner toggle mascotOn, default off) -->
+  <div id="mascotGreet" style="display:none;text-align:center;font-size:13px;color:var(--navy);font-weight:700;margin:-6px 0 12px">สวัสดีค่ะ! วันนี้อยากดื่มอะไรดี? 🥤</div>
 
   <!-- STEP: add friend (required before getting a number) -->
   <div id="addCard" class="card" style="display:none;text-align:center">
@@ -150,6 +155,8 @@
       <div id="aheadNow" style="font-size:48px;font-weight:900;color:var(--navy);line-height:1">–</div>
       <div id="etaNow" class="pill soon" style="display:inline-block;margin-top:8px">~– นาที</div>
     </div>
+    <!-- Social proof (owner toggle socialProof, default off): today's sold count -->
+    <div id="socialProof" style="display:none;font-size:12.5px;color:#c2410c;font-weight:800;margin:-6px 0 12px">🔥 วันนี้ขายไปแล้ว <span id="soldTodayN">0</span> แก้ว</div>
     <!-- Returning-customer one-tap reorder of their usual favourite (filled in by loadReorder) -->
     <div id="reorderCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;margin:0 0 14px;text-align:left">
       <div id="reorderHi" style="font-weight:800;color:var(--navy);margin-bottom:10px;text-align:center"></div>
@@ -774,6 +781,7 @@ async function loadZone(){
   show('queueStatus', open);
   show('closedMsg', !open);
   show('getCard',true);
+  applySocialMascot();      // owner-toggleable social-proof line + mascot greeting (both default off)
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
   show('guestPhoneCard', !lineUserId && !!cfg.selfOrder);   // non-LINE: offer phone to collect stamps
@@ -783,6 +791,13 @@ async function loadZone(){
 
 // Returning-customer reorder: fetch favourites and offer a one-tap repeat of the usual.
 let FAV=null;
+// Owner-toggleable home extras (both default OFF, gated by /api/config): the social-proof "sold
+// today" line and the mascot greeting + logo bounce. Purely cosmetic; never blocks ordering.
+function applySocialMascot(){
+  const sp=$('socialProof'); if(sp){ const on=!!cfg.socialProof && (cfg.soldToday||0)>0; if(on){ const n=$('soldTodayN'); if(n) n.textContent=cfg.soldToday; } sp.style.display=on?'':'none'; }
+  const mg=$('mascotGreet'); if(mg) mg.style.display=cfg.mascotOn?'':'none';
+  const logo=document.querySelector('.brand.hero .logo'); if(logo) logo.classList.toggle('mascot-bounce', !!cfg.mascotOn);
+}
 // Account chip on the home header: for LINE members, show their LINE picture (or a tier emoji as
 // fallback). Tapping opens the account hub. Hidden entirely when membership is off / non-LINE.
 async function loadMemberStrip(){

@@ -487,6 +487,21 @@ const rjV2 = Q.ticketView(rj2.ticket.id);
 ok(rjV2.loyalty && rjV2.loyalty.rewardJustReady === true, `INVARIANT completing a stamp card fires the reward celebration (balance ${rjV2.loyalty && rjV2.loyalty.balance})`);
 ok(rjV2.loyalty && rjV2.loyalty.firstOrder === false, 'INVARIANT the completion celebration is separate from the first-order welcome (bonus=0)');
 
+// ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
+//      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
+console.log('\n== Owner toggles (social proof + mascot) ==');
+ok(Q.socialProofEnabled() === false && Q.mascotEnabled() === false, 'INVARIANT social-proof + mascot both default OFF');
+Q.setSocialProof(true); Q.setMascot(true);
+ok(Q.socialProofEnabled() === true && Q.mascotEnabled() === true, 'INVARIANT both toggles flip on');
+Q.setSocialProof(false);
+ok(Q.socialProofEnabled() === false && Q.mascotEnabled() === true, 'INVARIANT toggles are independent');
+const soldBefore = Q.soldTodayCount();
+const spOrder = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 2 }], { source: 'customer', lineUserId: 'Usoldtoday00000000000000000001' });
+Q.setOrderPaid(spOrder.ticket.id, { method: 'cash' });
+const soldAfter = Q.soldTodayCount();
+ok(soldAfter === soldBefore + 2, `INVARIANT soldTodayCount counts paid drinks sold today (${soldBefore} -> ${soldAfter})`);
+Q.setMascot(false);   // leave settings off so later tests / the shipped default are clean
+
 // ---- Birthday capture: date-of-birth can't be in the future, and can't be within the last year
 //      either (a customer entering their OWN birthday to order themselves can't be that young —
 //      almost certainly a mistyped year). Both give a specific, distinguishable error reason. ----

@@ -2754,6 +2754,8 @@ window.showFeatures=async()=>{
     row('queueFirst', f.queueFirst, IC.ticket, 'เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
     row('printEnabled', f.printEnabled, IC.print, 'พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
     row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
+    row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
+    row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div></div></div>
