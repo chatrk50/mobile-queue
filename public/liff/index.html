@@ -991,7 +991,10 @@ function paintMenu(){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${cnr}</div></div></button>`; };
   $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
 };
-window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';}); show('getCard',true); };
+window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
+  // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
+  // otherwise home. Prevents getCard and ticketCard ever stacking on screen together.
+  const tk=$('ticketCard'); if(tk && tk.style.display!=='none') return; show('getCard',true); };
 // LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
 let dsSweet=100, dsQty=1, dsEditSig=null;
 const SWEET_LABEL={0:'0% · ไม่หวานเลย',25:'25% · หวานน้อย',50:'50% · ปานกลาง',100:'100% · ปกติ',125:'125% · เพิ่มหวาน'};
@@ -1002,7 +1005,6 @@ window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=ME
   pendingDrink=d; pendingTops={}; (g.e.toppings||[]).forEach(t=>{ const tm=MENU.find(x=>x.name===t.name && x.category==='topping'); if(tm) pendingTops[tm.id]={name:t.name,price:t.price,qty:t.qty||1}; });
   dsSweet=(g.e.sweet==null?100:g.e.sweet); dsQty=g.qty; dsEditSig=g.sig; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
 window.closeDrinkSheet=()=>{ $('drinkSheet').style.display='none'; };
-function dsRadio(on){ return '<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:'+(on?'var(--accent)':'var(--line)')+';stroke-width:2">'+(on?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>')+'</svg>'; }
 function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
 function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
   $('dsImg').innerHTML=itemImg(d); $('dsName').textContent=d.name;
@@ -1059,7 +1061,7 @@ window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink
 // item's badge as social proof, and keeps escape hatches obvious — สุ่มใหม่ / เลือกเอง — so it never
 // traps the customer. Picking "เลือกเมนูนี้" hands off to the normal sweetness step so the customer
 // chooses their own sweetness (not randomised).
-let _randomPick=null, _randomSpinning=false;
+let _randomPick=null, _randomSpinning=false, _randomGen=0;   // gen counter aborts orphan spin loops on close
 const RANDOM_BADGE={ rec:{t:'⭐ แนะนำ',bg:'#16a34a'}, hot:{t:'🔥 ขายดี',bg:'#f3961a'}, new:{t:'✨ ใหม่',bg:'#1ab3ce'}, promo:{t:'🏷️ โปรโมชั่น',bg:'#e55b6b'}, free:{t:'🎁 ฟรี',bg:'#7c3aed'} };
 function randomPool(){ return (MENU||[]).filter(m=>m.active && m.category!=='topping' && !(m.soldout||m.stockSoldout)); }
 function randomCard(m, spinning){
@@ -1074,15 +1076,20 @@ function randomCard(m, spinning){
 }
 window.openRandom=()=>{ if(!randomPool().length){ toast('ขณะนี้ยังไม่มีเครื่องดื่มให้สุ่ม'); return; }
   closeAllPopups(); $('randomPop').style.display='flex'; spinRandom(); };
-window.closeRandom=()=>{ $('randomPop').style.display='none'; };
+// Closing mid-spin aborts the shuffle loop (gen bump) and releases the spin lock — otherwise the
+// orphan loop kept ticking on the hidden popup and a re-open was silently blocked by _randomSpinning
+// with the "เลือกเมนูนี้" button stuck disabled until the old loop landed.
+window.closeRandom=()=>{ $('randomPop').style.display='none'; _randomGen++; _randomSpinning=false; };
 window.spinRandom=()=>{
   const pool=randomPool(); if(!pool.length){ closeRandom(); return; }
   if(_randomSpinning) return; _randomSpinning=true; _randomPick=null;
+  const gen=++_randomGen;   // this spin's generation — closeRandom bumps it to abort us
   const reveal=$('randomReveal'), add=$('randomAddBtn'), again=$('randomAgainBtn');
   add.disabled=true; add.style.opacity=.45; again.disabled=true; again.style.opacity=.5;
   const total=15+Math.floor(Math.random()*6);   // 15–20 shuffles
   let i=0;
   const tick=()=>{
+    if(gen!==_randomGen) return;   // popup was closed mid-spin — stop, closeRandom already reset the lock
     if(i>=total){   // land on the final pick
       const pick=pool[Math.floor(Math.random()*pool.length)];
       _randomPick={ drink:pick };
@@ -1827,7 +1834,10 @@ async function proceed(){
     if(r.ticket) resumeId=r.ticket.id; }catch(e){} }
   if(!resumeId) resumeId = localStorage.getItem('ticket_'+zoneId);
   if(resumeId){ try{ const v=await api('/api/tickets/'+resumeId);
-    if(['waiting','called'].includes(v.status)){ ticketId=resumeId; localStorage.setItem('ticket_'+zoneId,resumeId);
+    // 'pending' included: a pay-first customer who app-switched to their bank and had the LINE
+    // webview killed must come back to their unpaid order (pay prompt + QR), not to a blank home
+    // that discards the pointer — rebuilding a cart there would just collide with already_in_queue.
+    if(['waiting','called','pending'].includes(v.status)){ ticketId=resumeId; localStorage.setItem('ticket_'+zoneId,resumeId);
       show('getCard',false); show('ticketCard',true); startPolling(); }
     else localStorage.removeItem('ticket_'+zoneId); }catch(e){ localStorage.removeItem('ticket_'+zoneId); } }
 }
@@ -1836,32 +1846,9 @@ async function proceed(){
 (function(){ const ids=['topPop','sweetPop','drinkSheet','basketPop','payPickerPop','couponPickerPop','memberPop','promoOvl','randomPop','historyLiffCard','orderDetailSheet','accountPop'];
   const sync=()=>{ const open=ids.some(id=>{const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none';}); document.body.classList.toggle('noscroll',open); };
   const mo=new MutationObserver(sync); ids.forEach(id=>{const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true,attributeFilter:['style']});}); })();
-// #5: bottom nav bar — only visible on the home screen (getCard), AND hidden again whenever one of
-// the full-page views (member/history/account/coupon-browse) is open on top of it. Those pages are
-// truly edge-to-edge now (no bottom gap reserved for the nav), so leaving the nav floating over them
-// at a higher z-index would cover/steal taps from whatever content lands at the very bottom.
-(function(){ const gc=document.getElementById('getCard'), nav=document.getElementById('bottomNav');
-  if(!gc || !nav) return;
-  const coverIds=['memberPop','historyLiffCard','accountPop','couponPickerPop'];
-  const sync=()=>{
-    const gcOn = gc.style.display!=='none';
-    const covered = coverIds.some(id=>{ const e=document.getElementById(id); return e && e.style.display && e.style.display!=='none'; });
-    const on = gcOn && !covered;
-    nav.style.display = on?'block':'none'; document.body.classList.toggle('has-bottomnav',on);
-    if(on) setNavTab('home'); };
-  sync();
-  new MutationObserver(sync).observe(gc,{attributes:true,attributeFilter:['style']});
-  coverIds.forEach(id=>{ const e=document.getElementById(id); if(e) new MutationObserver(sync).observe(e,{attributes:true,attributeFilter:['style']}); }); })();
-// Marks the tapped tab active. Only called once the destination is actually confirmed to open —
-// a toggled-off feature (e.g. member/loyalty disabled) shows its toast and leaves the CURRENT tab
-// (home) highlighted instead of falsely lighting up a page that never opened.
+// Bottom nav is gone (avatar chip → account hub replaced it). setNavTab stays as a harmless no-op
+// so the close/open handlers that still call it don't need touching; there are no .navtab elements.
 function setNavTab(tab){ document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); }
-window.navGo=(tab)=>{
-  if(tab==='home'){ setNavTab('home'); return; }   // already home — the bar only shows here anyway
-  if(tab==='coupon'){ setNavTab('coupon'); openCoupon('browse'); return; }
-  if(tab==='member'){ if(lineUserId) openMember(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัตรสมาชิกนะคะ'); return; }   // setNavTab happens inside openMember, only on success
-  if(tab==='account'){ if(lineUserId) openAccount(); else toast('เข้าสู่ระบบ LINE เพื่อดูบัญชีของคุณนะคะ'); return; }   // setNavTab happens inside openAccount
-};
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 let _promoTimer=null;
 window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; if(_promoTimer){ clearTimeout(_promoTimer); _promoTimer=null; } };

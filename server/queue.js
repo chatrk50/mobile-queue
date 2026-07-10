@@ -1729,6 +1729,9 @@ export function loyaltyHistory(key, limit = 30) {
  * cashier/walk-in (no line_user_id) and no-ops when loyalty is disabled. Idempotent per order.
  * Returns {key,name,awarded,balance} for a LINE "+N ดวง" push, or null.
  */
+// The welcome bonus's loyalty_moves note — ticketView keys "first order" off this EXACT string, so
+// birthday/referral bonus rows (also noted earns on the same order) never masquerade as a welcome.
+const WELCOME_NOTE = 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์';
 export function awardPoints(orderId) {
   if (!loyaltyEnabled()) return null;
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
@@ -1751,7 +1754,7 @@ export function awardPoints(orderId) {
   const name = t.customer_name && !['LINE order', 'Order', 'Walk-in'].includes(t.customer_name) ? t.customer_name : null;
   // First-ever LINE order for this customer? Grant a one-time welcome head-start.
   const isFirst = !db.prepare("SELECT 1 FROM loyalty_moves WHERE customer_key=? AND kind='earn' LIMIT 1").get(key);
-  const bonus = isFirst ? getWelcomeBonus() : 0;
+  const bonus = isFirst ? getWelcomeBonus() : 0;   // logged with WELCOME_NOTE — ticketView keys "first order" off that note
   // Birthday free drink: once per calendar year, a full reward's worth of stamps when the
   // customer orders on their birthday (and has saved one).
   const cust = db.prepare('SELECT birthday, referred_by FROM customers WHERE line_user_id=?').get(key);
@@ -1772,7 +1775,7 @@ export function awardPoints(orderId) {
          name = COALESCE(customers.name, excluded.name)`
     ).run(key, name, total, total);
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id) VALUES (?, 'earn', ?, ?)`).run(key, pts, orderId);
-    if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, 'โบนัสต้อนรับออเดอร์แรกผ่านไลน์');
+    if (bonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bonus, orderId, WELCOME_NOTE);
     if (bdayBonus > 0) db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, bdayBonus, orderId, 'birthday ' + yr);
     if (refBonus > 0 && referrerKey) {
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'earn', ?, ?, ?)`).run(key, refBonus, orderId, 'referral (เพื่อนชวน)');
@@ -2693,18 +2696,30 @@ export function ticketView(ticketId) {
   let loyalty = null;
   if (t.line_user_id && o && o.payment_status === 'paid' && loyaltyEnabled()) {
     const ord = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
-    const earns = db.prepare("SELECT points, note FROM loyalty_moves WHERE order_id=? AND kind='earn'").all(ord.id);
+    // customer_key filter matters: on a referred friend's first order, awardPoints also logs the
+    // REFERRER's bonus row under the same order_id — without the filter that row inflated `bonus`
+    // (wrong "+N ดวงต้อนรับ") and corrupted the rewardJustReady boundary math below.
+    const earns = db.prepare("SELECT id, points, note FROM loyalty_moves WHERE order_id=? AND kind='earn' AND customer_key=?").all(ord.id, t.line_user_id);
     if (earns.length) {
       const awarded = earns.filter((e) => !e.note).reduce((s, e) => s + e.points, 0);
-      const bonus = earns.filter((e) => e.note).reduce((s, e) => s + e.points, 0);
+      // "Welcome" means the first-order note specifically — birthday/referral bonuses are ALSO noted
+      // earns, and treating any note as "first order" showed ยินดีต้อนรับสมาชิกใหม่ to long-time
+      // customers ordering on their birthday (and suppressed the reward celebration via the else-if).
+      const bonus = earns.filter((e) => e.note === WELCOME_NOTE).reduce((s, e) => s + e.points, 0);
+      const earnedThis = earns.reduce((s, e) => s + e.points, 0);
       const bal = loyaltyBalance(t.line_user_id).points;
       const per = getStampsPerReward();
-      const earnedThis = awarded + bonus;
+      // Boundary math on the balance AS OF this order's earns (current balance minus every move
+      // logged after them) — the live balance made the flag unstable: a counter redeem between
+      // paying and the LIFF's next poll silently swallowed the celebration.
+      const maxEarnId = Math.max(...earns.map((e) => e.id));
+      const later = db.prepare('SELECT COALESCE(SUM(points),0) s FROM loyalty_moves WHERE customer_key=? AND id>?').get(t.line_user_id, maxEarnId).s;
+      const balAtEarn = bal - later;
       // Did THIS order complete a fresh stamp card (cross a multiple of `per`)? If so — and a real reward
       // is actually redeemable — flag it so the LIFF fires the reward-celebration moment. The client shows
       // it once per ticket; the first-order welcome "wow" takes precedence when both would apply.
       const rewardJustReady = earnedThis > 0 && per > 0
-        && Math.floor(bal / per) > Math.floor((bal - earnedThis) / per)
+        && Math.floor(balAtEarn / per) > Math.floor((balAtEarn - earnedThis) / per)
         && listRewards(false).length > 0;
       loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady };
     }

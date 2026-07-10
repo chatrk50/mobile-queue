@@ -486,6 +486,38 @@ Q.setOrderPaid(rj2.ticket.id, { method: 'cash' });   // 7 -> 12 crosses the 10 b
 const rjV2 = Q.ticketView(rj2.ticket.id);
 ok(rjV2.loyalty && rjV2.loyalty.rewardJustReady === true, `INVARIANT completing a stamp card fires the reward celebration (balance ${rjV2.loyalty && rjV2.loyalty.balance})`);
 ok(rjV2.loyalty && rjV2.loyalty.firstOrder === false, 'INVARIANT the completion celebration is separate from the first-order welcome (bonus=0)');
+// Stability: a counter redeem BETWEEN paying and the customer's next poll must not swallow the
+// celebration — the boundary math runs on the balance as of this order's earns, not the live one.
+Q.redeemReward(rjCust, 1, null);   // cashier redeems the freshly-completed card (−10)
+const rjV2b = Q.ticketView(rj2.ticket.id);
+ok(rjV2b.loyalty && rjV2b.loyalty.rewardJustReady === true, `INVARIANT a redeem before the poll doesn't cancel the celebration (bal now ${rjV2b.loyalty && rjV2b.loyalty.balance})`);
+
+// Referral: on the invited friend's first order, awardPoints also logs the REFERRER's bonus under
+// the SAME order_id — ticketView must not count that row into the friend's ticket.
+const refOwner = 'Urefowner0000000000000000000001', refFriend = 'Ureffriend000000000000000000001';
+const roSetup = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: refOwner });
+Q.setOrderPaid(roSetup.ticket.id, { method: 'cash' }); Q.setStatus(roSetup.ticket.id, 'served');   // owner now has a referral identity
+const refCode = Q.referralStatus(refOwner).code;
+Q.applyReferralCode(refFriend, refCode);
+const rfOrder = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: refFriend });
+Q.setOrderPaid(rfOrder.ticket.id, { method: 'cash' });
+const rfV = Q.ticketView(rfOrder.ticket.id);
+ok(rfV.loyalty && rfV.loyalty.bonus === Q.getWelcomeBonus(),
+  `INVARIANT the friend's ticket shows only THEIR welcome bonus, not the referrer's row (got ${rfV.loyalty && rfV.loyalty.bonus}, want ${Q.getWelcomeBonus()})`);
+ok(rfV.loyalty && rfV.loyalty.firstOrder === true, 'INVARIANT a referred first order still counts as a first order');
+
+// Birthday: a LONG-TIME customer ordering on their birthday gets a noted bonus — that must NOT
+// masquerade as a first order (the old any-note check showed ยินดีต้อนรับสมาชิกใหม่ to regulars).
+const bdOld = 'Ubdayregular00000000000000000001';
+const bo1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 5 }], { source: 'customer', lineUserId: bdOld });
+Q.setOrderPaid(bo1.ticket.id, { method: 'cash' }); Q.setStatus(bo1.ticket.id, 'served');   // history: 5 cups + 2 welcome = 7
+const bkkMD = new Date(Date.now() + 7 * 3600e3).toISOString().slice(5, 10);
+Q.setCustomerBirthday(bdOld, `${new Date().getUTCFullYear() - 20}-${bkkMD}`);   // birthday = today (20 years back)
+const bo2 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: bdOld });
+Q.setOrderPaid(bo2.ticket.id, { method: 'cash' });   // 1 cup + 10 birthday stamps → crosses 10
+const boV = Q.ticketView(bo2.ticket.id);
+ok(boV.loyalty && boV.loyalty.firstOrder === false, `INVARIANT a birthday bonus is NOT a first-order welcome (firstOrder=${boV.loyalty && boV.loyalty.firstOrder})`);
+ok(boV.loyalty && boV.loyalty.rewardJustReady === true, 'INVARIANT a birthday bonus that completes the card fires the reward celebration (not the welcome)');
 
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
