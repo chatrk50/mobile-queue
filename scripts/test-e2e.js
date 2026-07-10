@@ -519,6 +519,23 @@ const boV = Q.ticketView(bo2.ticket.id);
 ok(boV.loyalty && boV.loyalty.firstOrder === false, `INVARIANT a birthday bonus is NOT a first-order welcome (firstOrder=${boV.loyalty && boV.loyalty.firstOrder})`);
 ok(boV.loyalty && boV.loyalty.rewardJustReady === true, 'INVARIANT a birthday bonus that completes the card fires the reward celebration (not the welcome)');
 
+// ---- Reward coupon 30-day window: the self-serve coupon expires 30 days after the stamp card
+//      completed; stamps are NOT forfeited — the cashier path stays open as the counter escape hatch. ----
+console.log('\n== Reward coupon 30-day window ==');
+const exCust = 'Uexpiry000000000000000000000001';
+const exO1 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 10 }], { source: 'customer', lineUserId: exCust });
+Q.setOrderPaid(exO1.ticket.id, { method: 'cash' }); Q.setStatus(exO1.ticket.id, 'served');   // 10 cups + 2 welcome → card complete
+const exC1 = Q.availableCoupons(exCust, 100).find((c) => c.isReward);
+const expWant = db.prepare("SELECT date(datetime('now'),'+30 days') d").get().d;
+ok(!!exC1 && exC1.expires_at === expWant, `INVARIANT the reward coupon carries a 30-day expiry from card completion (got ${exC1 && exC1.expires_at}, want ${expWant})`);
+db.prepare("UPDATE loyalty_moves SET at=datetime('now','-31 days') WHERE customer_key=?").run(exCust);   // fast-forward 31 days
+ok(!Q.availableCoupons(exCust, 100).find((c) => c.isReward), 'INVARIANT an expired reward coupon drops off the self-serve list');
+const exO2 = Q.createOrder(1, [{ name: 'Drink', price: 40, qty: 1 }], { source: 'customer', lineUserId: exCust });
+let exErr = null; try { Q.redeemRewardOnOrder(exO2.ticket.id, null, null); } catch (e) { exErr = e.message; }
+ok(exErr === 'reward_expired', `INVARIANT self-serve redemption of an expired reward is blocked (got ${exErr})`);
+const exCashier = Q.redeemRewardOnOrder(exO2.ticket.id, null, 1);
+ok(exCashier && exCashier.ok === true, 'INVARIANT the cashier can still redeem after expiry — expired stamps are never dead value');
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

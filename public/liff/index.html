@@ -1509,7 +1509,7 @@ window.openCoupon=async(mode)=>{
     } else {
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
-    const meta = isReward ? ('ใช้แต้มสะสม ' + c.costPoints + ' ดวง') : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
+    const meta = isReward ? ('ใช้แต้มสะสม ' + c.costPoints + ' ดวง' + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):'')) : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
       <span style="min-width:0;display:block">
         <div style="font-weight:800;color:var(--navy);font-size:14.5px;line-height:1.3">${isReward?'🎁 ':''}${esc(c.label)}</div>
@@ -1570,6 +1570,15 @@ const BANK_SCHEMES={
   ttbtouch:['ttbtouch://','ttb://'],
 };
 const BANK_NAMES={ kplus:'K PLUS', scbeasy:'SCB EASY', ktbnext:'Krungthai NEXT', bualuang:'Bualuang mBanking', ttbtouch:'ttb touch' };
+// Official store pages (verified) — offered as a fallback when the deep link doesn't take,
+// e.g. the customer doesn't have that bank's app installed.
+const BANK_STORE={
+  kplus:    { ios:'https://apps.apple.com/th/app/id361170631', android:'https://play.google.com/store/apps/details?id=com.kasikorn.retail.mbanking.wap' },
+  scbeasy:  { ios:'https://apps.apple.com/th/app/id568388474', android:'https://play.google.com/store/apps/details?id=com.scb.phone' },
+  ktbnext:  { ios:'https://apps.apple.com/th/app/id436753378', android:'https://play.google.com/store/apps/details?id=ktbcs.netbank' },
+  bualuang: { ios:'https://apps.apple.com/th/app/id660238716', android:'https://play.google.com/store/apps/details?id=com.bbl.mobilebanking' },
+  ttbtouch: { ios:'https://apps.apple.com/th/app/id884079963', android:'https://play.google.com/store/apps/details?id=com.TMBTOUCH.PRODUCTION' },
+};
 // Attempt a custom scheme via a hidden iframe instead of location.href — navigating the TOP-LEVEL
 // page to an unrecognized scheme makes Safari show a blocking native "Cannot Open Page" alert
 // (confirmed on a real device), which is jarring and interrupts the rest of the fallback chain.
@@ -1599,7 +1608,16 @@ window.openBankApp=async(bank)=>{
   }
   document.removeEventListener('visibilitychange',onHide);
   if(opened) return;
-  setTimeout(()=>{ toast('ถ้าแอปไม่เปิดเอง ลองเปิดเองแล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ'); },300);
+  // Deep link didn't take — most likely the app isn't installed (customers who have it usually
+  // hand off fine). Offer the official store page for THIS bank; declining falls back to the
+  // "open the app yourself + scan the saved QR" guidance.
+  const store=BANK_STORE[bank];
+  const url=store ? (/(iPhone|iPad|iPod)/i.test(navigator.userAgent)?store.ios:store.android) : null;
+  if(url){
+    const dl=await appConfirm({title:'เปิดแอป '+name+' ไม่สำเร็จ', message:'ถ้ายังไม่มีแอป '+name+' ดาวน์โหลดได้เลยค่ะ\nหรือเปิดแอปเองแล้วสแกนจากรูป QR ที่บันทึกไว้ก็ได้', okText:'ดาวน์โหลดแอป', cancelText:'เปิดเอง'});
+    if(dl){ try{ window.open(url,'_blank'); }catch(e){ location.href=url; } return; }
+  }
+  toast('เปิดแอปธนาคารเอง แล้วสแกนจากรูป QR ที่บันทึกไว้ได้เลยค่ะ');
 };
 // Pay-at-counter: explicit confirm so the customer is sure the queue is locked in (and can't
 // keep toggling payment methods). Survives polling via the render branch above.
@@ -1852,12 +1870,9 @@ function setNavTab(tab){ document.querySelectorAll('.navtab').forEach(b=>b.class
 function hideSplash(){ const s=$('loadSplash'); if(!s) return; s.style.transition='opacity .35s'; s.style.opacity='0'; setTimeout(()=>{ s.style.display='none'; },360); }
 let _promoTimer=null;
 window.closePromoOvl=()=>{ const p=$('promoOvl'); if(p) p.style.display='none'; if(_promoTimer){ clearTimeout(_promoTimer); _promoTimer=null; } };
-// Once per CALENDAR DAY, not once per browser session — sessionStorage survives as long as LINE's
-// in-app webview stays alive (which can be the customer's whole day, or a whole UAT testing
-// session), so a session-based gate looked like the banner had silently stopped showing at all.
-function promoSeenToday(){ try{ return localStorage.getItem('promoSeenDate')===new Date().toISOString().slice(0,10); }catch(e){ return false; } }
-function markPromoSeenToday(){ try{ localStorage.setItem('promoSeenDate', new Date().toISOString().slice(0,10)); }catch(e){} }
-async function maybePromo(){ try{ if(promoSeenToday()) return; const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex'; markPromoSeenToday();
+// Owner ask: the ad shows on EVERY open of the link (no seen-gate) — it auto-dismisses to the
+// main page after 3s and a tap skips it immediately, so repeat visits only cost a glance.
+async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabled&&p.image){ $('promoOvlImg').src=p.image; $('promoOvl').style.display='flex';
   _promoTimer=setTimeout(()=>{ closePromoOvl(); },3000); } }catch(e){} }
 (async ()=>{
   const _t0=Date.now();

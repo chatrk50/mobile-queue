@@ -1193,6 +1193,27 @@ export function validateCoupon(code, customerKey, orderNet) {
   return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
 }
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
+/** The self-serve reward coupon is good for 30 days from the moment the stamp card completed.
+ *  "Completed" = the earn move that pushed the balance from below the reward's cost to at-or-above
+ *  it (and it has stayed there since) — found by walking the customer's moves backwards from the
+ *  live balance. Stamps are NOT forfeited on expiry; the cashier can still redeem at the counter. */
+const REWARD_COUPON_DAYS = 30;
+function rewardWindow(customerKey, costPoints) {
+  const bal = loyaltyBalance(customerKey).points;
+  if (bal < costPoints) return null;
+  const moves = db.prepare('SELECT points, at FROM loyalty_moves WHERE customer_key=? ORDER BY id DESC').all(customerKey);
+  let run = bal, bornAt = null;
+  for (const m of moves) {
+    const before = run - m.points;
+    if (run >= costPoints && before < costPoints) { bornAt = m.at; break; }
+    run = before;
+  }
+  if (!bornAt) bornAt = moves.length ? moves[moves.length - 1].at : null;   // safety: history starts already over the line
+  if (!bornAt) return null;
+  const expiresAt = db.prepare(`SELECT date(?, '+${REWARD_COUPON_DAYS} days') d`).get(bornAt).d;
+  const expired = db.prepare("SELECT date('now','+7 hours') > ? x").get(expiresAt).x === 1;
+  return { bornAt, expiresAt, expired };
+}
 export function availableCoupons(customerKey, orderNet) {
   const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
@@ -1204,9 +1225,14 @@ export function availableCoupons(customerKey, orderNet) {
     const bal = loyaltyBalance(customerKey).points;
     const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
     if (reward) {
-      list.unshift({ id: 'reward-' + reward.id, code: 'REWARD:' + reward.id, label: reward.name, disc_type: 'reward',
-        disc_value: 0, max_disc: 0, min_spend: 0, expires_at: null, usable: true, discount: 0, reason: null,
-        isReward: true, rewardId: reward.id, costPoints: reward.cost_points });
+      // 30-day self-serve window from when the card completed; after that the coupon drops off the
+      // list (stamps stay — the counter can still redeem, so nothing is silently lost).
+      const win = rewardWindow(customerKey, reward.cost_points);
+      if (!win || !win.expired) {
+        list.unshift({ id: 'reward-' + reward.id, code: 'REWARD:' + reward.id, label: reward.name, disc_type: 'reward',
+          disc_value: 0, max_disc: 0, min_spend: 0, expires_at: win ? win.expiresAt : null, usable: true, discount: 0, reason: null,
+          isReward: true, rewardId: reward.id, costPoints: reward.cost_points });
+      }
     }
   }
   return list;
@@ -2406,6 +2432,9 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
   if (!reward) throw new Error('reward_not_found');
   const bal = loyaltyBalance(key).points;
   if (bal < reward.cost_points) throw new Error('insufficient_points');
+  // Self-serve (customer coupon, no actor) respects the 30-day coupon window; the cashier path
+  // (actorId set) stays open as the counter escape hatch, so expired stamps are never dead value.
+  if (!actorId) { const win = rewardWindow(key, reward.cost_points); if (win && win.expired) throw new Error('reward_expired'); }
   const cheapest = db.prepare(
     `SELECT MIN(oi.price) p FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`

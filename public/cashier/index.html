@@ -1490,7 +1490,7 @@ let _promo={image:'',enabled:false};
 window.hidePromo=()=>{ $('promoCard').style.display='none'; $('dash').style.display=''; };
 window.showPromo=async()=>{ hideAllPanels(); $('promoCard').style.display=''; try{ _promo=await api('/api/promo'); }catch(e){ _promo={image:'',enabled:false}; } renderPromo(); };
 function renderPromo(){ const pv=$('promoPreview'); if(pv) pv.innerHTML=_promo.image?('<img src="'+_promo.image+'" alt="โปรโมชั่น" style="max-width:100%;max-height:340px;border-radius:14px;border:1px solid var(--line)">'):'<div class="muted" style="padding:26px;border:1px dashed var(--line);border-radius:14px;font-size:13px">ยังไม่มีรูป — อัปโหลดรูปโปรฯ (แนะนำแนวตั้ง)</div>'; const t=$('promoTgl'); if(t) t.className='tgl '+(_promo.enabled?'on':'off'); }
-window.promoPick=async(inp)=>{ const f=inp&&inp.files&&inp.files[0]; if(!f) return; try{ _promo.image=await resizeImage(f,900); renderPromo(); toast('เลือกรูปแล้ว · กดบันทึก'); }catch(e){ toast('อ่านรูปไม่สำเร็จ'); } inp.value=''; };
+window.promoPick=async(inp)=>{ const f=inp&&inp.files&&inp.files[0]; if(!f) return; try{ _promo.image=await resizeImage(f,1600); renderPromo(); toast('เลือกรูปแล้ว · กดบันทึก'); }catch(e){ toast('อ่านรูปไม่สำเร็จ'); } inp.value=''; };   // 1600px: the banner is shown FULL-SCREEN on the customer's phone — 900px looked soft when cover-scaled
 window.promoRemove=()=>{ _promo.image=''; renderPromo(); };
 window.promoToggle=()=>{ _promo.enabled=!_promo.enabled; renderPromo(); };
 window.promoSave=async()=>{ try{ await api('/api/promo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:_promo.image,enabled:_promo.enabled?1:0})}); toast('บันทึกโปรโมชั่นแล้ว'); }catch(e){ toast(err(e)); } };
