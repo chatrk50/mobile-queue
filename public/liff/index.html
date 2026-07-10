@@ -11,7 +11,21 @@
 <style>
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
-  @keyframes loadfill{ from{width:8%} to{width:100%} }
+  @keyframes loadslide{ 0%{left:-45%} 100%{left:105%} }
+  @keyframes loadpulse{ 0%,100%{opacity:.4} 50%{opacity:1} }
+  @media (prefers-reduced-motion:reduce){ #loadBar{ left:0!important;width:100%!important;animation:loadpulse 1.2s ease-in-out infinite!important } }
+  /* Sweetness = segmented pills (was a radio list); toppings = toggle chips (was a checkbox list). */
+  .sweetseg{display:flex;gap:6px;margin-top:9px}
+  .sweetseg-b{flex:1;padding:9px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);
+    font-size:13px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;
+    transition:background .12s,border-color .12s,color .12s}
+  .sweetseg-b.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 12px -4px var(--accent)}
+  .dsChips{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+  .topchip{border:1.5px solid var(--line);background:#fff;color:var(--navy);border-radius:999px;
+    padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;
+    transition:background .12s,border-color .12s,color .12s}
+  .topchip.on{border-color:var(--accent);background:var(--accent);color:#fff}
+  .topchip.out{opacity:.45;cursor:default;text-decoration:line-through}
   @keyframes sendspin{ to{transform:rotate(360deg)} }
   body.has-bottomnav .wrap{ padding-bottom:78px; }
   .navtab.active{ color:var(--accent) !important; }
@@ -64,7 +78,12 @@
 <!-- Loading splash (capture 1): logo + fill-bar, shown until the app is ready -->
 <div id="loadSplash" style="position:fixed;inset:0;z-index:90;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px">
   <img src="/assets/logo.png" alt="" style="width:98px;height:98px;object-fit:contain;border-radius:24px;background:#fff;padding:12px;box-shadow:0 8px 26px rgba(0,0,0,.2)" onerror="this.style.display='none'">
-  <div style="width:180px;height:7px;border-radius:999px;background:rgba(255,255,255,.35);overflow:hidden"><div id="loadBar" style="height:100%;width:8%;background:#fff;border-radius:999px;animation:loadfill 1.05s ease-out forwards"></div></div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+    <div style="width:180px;height:7px;border-radius:999px;background:rgba(255,255,255,.3);overflow:hidden;position:relative">
+      <div id="loadBar" style="position:absolute;top:0;bottom:0;left:-45%;width:42%;background:#fff;border-radius:999px;animation:loadslide 1.15s ease-in-out infinite"></div>
+    </div>
+    <div id="loadMsg" style="color:rgba(255,255,255,.92);font-size:12.5px;font-weight:600;letter-spacing:.02em">กำลังโหลด…</div>
+  </div>
 </div>
 <!-- Promo/ad splash (capture 2): owner-uploaded banner, shown once per session after loading -->
 <div id="promoOvl" onclick="closePromoOvl()" style="display:none;position:fixed;inset:0;z-index:88;background:#000">
@@ -370,7 +389,7 @@
       <div id="dsName" style="font-weight:800;font-size:18px;color:var(--navy);line-height:1.25"></div>
       <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
       <div id="dsSweet"></div>
-      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
+      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops" class="dsChips"></div></div>
     </div>
     <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
       <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
@@ -988,11 +1007,12 @@ function dsRadio(on){ return '<svg viewBox="0 0 24 24" style="width:23px;height:
 function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
 function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
   $('dsImg').innerHTML=itemImg(d); $('dsName').textContent=d.name;
-  $('dsSweet').innerHTML=SWEETS.map(s=>{ const on=dsSweet===s;
-    return '<div onclick="dsSetSweet('+s+')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);cursor:pointer"><span style="font-size:14px;color:var(--navy)">'+(SWEET_LABEL[s]||(s+'%'))+'</span>'+dsRadio(on)+'</div>'; }).join('');
+  $('dsSweet').innerHTML='<div class="sweetseg">'+SWEETS.map(s=>{ const on=dsSweet===s;
+    return '<button type="button" class="sweetseg-b'+(on?' on':'')+'" onclick="dsSetSweet('+s+')">'+s+'%</button>'; }).join('')+
+    '</div><div class="muted" style="font-size:11.5px;margin-top:6px;text-align:center">'+((SWEET_LABEL[dsSweet]||'').split('· ')[1]||'')+'</div>';
   const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('dsTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
   $('dsTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout||m.stockSoldout;
-    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
+    return '<button type="button" class="topchip'+(on?' on':'')+(out?' out':'')+'" '+(out?'disabled':'onclick="dsTogTop('+m.id+')"')+'>'+esc(m.name)+(out?' · หมด':' +฿'+m.price)+'</button>'; }).join('');
   dsUpdateBar();
 }
 window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
@@ -1824,16 +1844,24 @@ async function maybePromo(){ try{ if(promoSeenToday()) return; const p=await api
   _promoTimer=setTimeout(()=>{ closePromoOvl(); },3000); } }catch(e){} }
 (async ()=>{
   const _t0=Date.now();
+  // On slow cellular, initLiff (LINE init + config + profile) can take several seconds — swap the loading
+  // caption so the indeterminate bar never reads as "frozen" while it's genuinely still working.
+  const _slow=setTimeout(()=>{ const m=$('loadMsg'); if(m) m.textContent='เชื่อมต่ออินเทอร์เน็ตช้า กำลังโหลด…'; },6000);
+  let normal=false;
   try{
     await initLiff();
     if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
     if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
     await proceed();
-    await maybePromo();   // owner-uploaded promo, once per session (normal flow only)
+    normal=true;
   } finally {
-    const wait=1050-(Date.now()-_t0); if(wait>0) await new Promise(r=>setTimeout(r,wait));   // let the fill bar finish
+    clearTimeout(_slow);
+    const shown=Date.now()-_t0; if(shown<600) await new Promise(r=>setTimeout(r,600-shown));   // brief min so the splash doesn't flash on a fast connection
     hideSplash();
   }
+  // Owner-uploaded promo (admin on/off + image): shown AFTER the splash clears so it gets its full few
+  // seconds over the main page (before, up to ~1s of it was wasted hidden behind the splash), then it's gone.
+  if(normal) await maybePromo();
 })().catch(e=>{ hideSplash(); err(e.message); });
 </script>
 </body></html>
