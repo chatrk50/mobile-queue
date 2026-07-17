@@ -122,7 +122,7 @@ export function callNext(zoneId, threshold) {
     `🔔 ถึงคิวของคุณแล้ว!\n` +
     `หมายเลข: ${next.code}\n` +
     `กรุณามาที่เคาน์เตอร์ค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน');
+    queueLink(zoneId), 'ดูคิวของฉัน', 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -294,6 +294,22 @@ export function customerInsights() {
 /** LINE customers (real userId, not a 'tel:' phone key) whose most recent PAID order is at least
  *  `days` days ago — i.e. they've gone quiet. Newest-lapsed first. Phone-only customers can't be
  *  LINE-messaged, so they're excluded here. */
+/** LINE push volume — the OA bills by message count, so the owner needs to SEE the monthly volume.
+ *  Counts real sends only (the UAT stub never logs). */
+export function pushStats() {
+  const monthly = db.prepare(
+    `SELECT substr(datetime(at,'+7 hours'),1,7) ym, COUNT(*) n, SUM(ok) sent
+       FROM push_log GROUP BY ym ORDER BY ym DESC LIMIT 12`
+  ).all();
+  const KIND_TH = { paid: 'ยืนยันชำระ/คิว', queue: 'แจ้งเตือนคิว', winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', other: 'อื่น ๆ (ระบบ)' };
+  const byKind = db.prepare(
+    `SELECT kind, COUNT(*) n FROM push_log
+      WHERE substr(datetime(at,'+7 hours'),1,7) = substr(datetime('now','+7 hours'),1,7)
+      GROUP BY kind ORDER BY n DESC`
+  ).all().map((r) => ({ ...r, label: KIND_TH[r.kind] || r.kind }));
+  const today = db.prepare(`SELECT COUNT(*) n FROM push_log WHERE date(at,'+7 hours')=date('now','+7 hours')`).get().n;
+  return { monthly, byKind, today };
+}
 export function lapsedLineCustomers(days = 30) {
   const d = Math.max(1, Math.floor(Number(days) || 30));
   return db.prepare(
@@ -318,7 +334,7 @@ export async function winBackBlast(message, { days = 30, max = 300 } = {}) {
   const list = all.slice(0, Math.max(1, Math.min(max, 1000)));
   let sent = 0;
   for (const c of list) {
-    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย')) !== false) sent++; } catch { /* skip one */ }
+    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย', 'winback')) !== false) sent++; } catch { /* skip one */ }
   }
   return { targeted: all.length, attempted: list.length, sent, capped: all.length > list.length };
 }
@@ -1845,7 +1861,7 @@ export function issueBirthdayCoupons() {
   for (const r of rows) {
     db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'birthday', ?, 100, ?)`)
       .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
-    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null); } catch { /* push is best-effort */ }
+    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };
 }
@@ -2248,7 +2264,7 @@ export function createOrder(zoneId, items, opts = {}) {
     const msg = (r.ticket && r.ticket.number > 0)
       ? `🎫 รับออเดอร์ + รับคิวแล้ว!\nหมายเลขคิวของคุณ: ${r.ticket.code}\nยอด ฿${r.total} — กรุณาชำระเงินก่อนรับเครื่องดื่มนะคะ 🙏`
       : `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\nกรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`;
-    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
+    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
   }
   return r;
 }
@@ -2337,7 +2353,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
-    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน');
+    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน', 'paid');
   }
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }

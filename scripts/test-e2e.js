@@ -551,6 +551,19 @@ let exErr = null; try { Q.redeemCustomerCoupon(exO2.ticket.id, exCCID, null); } 
 ok(exErr === 'coupon_expired', `INVARIANT redeeming an expired coupon is blocked (got ${exErr})`);
 ok(Q.loyaltyBalance(exCust).points === exBalBefore, `INVARIANT expiry never claws back remaining stamps (still ${exBalBefore})`);
 
+// ---- LINE push accounting: OA bills per message, so pushes are logged and countable. The UAT
+//      stub (LINE disabled) must NOT log — it costs nothing. ----
+console.log('\n== LINE push log / monthly stats ==');
+const psBefore = Q.pushStats();
+ok(Array.isArray(psBefore.monthly) && Array.isArray(psBefore.byKind) && typeof psBefore.today === 'number', 'INVARIANT pushStats returns monthly/byKind/today');
+ok(db.prepare('SELECT COUNT(*) n FROM push_log').get().n === 0, 'INVARIANT the LINE stub logs nothing (no cost = no rows)');
+db.prepare(`INSERT INTO push_log (user_id, kind, ok) VALUES ('Utest','winback',1), ('Utest','paid',1), ('Utest','winback',0)`).run();
+const psAfter = Q.pushStats();
+ok(psAfter.today === 3, `INVARIANT today's count reflects logged pushes (got ${psAfter.today})`);
+ok(psAfter.monthly[0] && psAfter.monthly[0].n === 3 && psAfter.monthly[0].sent === 2, `INVARIANT monthly rollup counts attempts + successes (n=${psAfter.monthly[0] && psAfter.monthly[0].n}, sent=${psAfter.monthly[0] && psAfter.monthly[0].sent})`);
+ok(psAfter.byKind.find((k) => k.kind === 'winback')?.n === 2, 'INVARIANT this-month breakdown by purpose works (winback=2)');
+db.prepare('DELETE FROM push_log').run();
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

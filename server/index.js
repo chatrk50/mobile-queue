@@ -722,6 +722,11 @@ app.get('/api/customers/by-line/:lineUserId', (req, res) => {
   try { res.json(Q.customerProfile(req.params.lineUserId)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// LINE push volume (OA bills per message) — monthly counts + this month's breakdown by purpose.
+app.get('/api/push-stats', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.pushStats());
+});
 // CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
 app.get('/api/crm/lapsed', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

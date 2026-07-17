@@ -451,6 +451,14 @@ CREATE TABLE IF NOT EXISTS rewards (
   active      INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS push_log (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  kind    TEXT NOT NULL DEFAULT 'other',  -- paid | queue | ready | cancel | loyalty | winback | birthday | other
+  ok      INTEGER NOT NULL DEFAULT 0,     -- 1 = LINE accepted the push
+  at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_push_log_at ON push_log(at);
 CREATE TABLE IF NOT EXISTS customer_coupons (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_key  TEXT NOT NULL,                  -- = customers.line_user_id
