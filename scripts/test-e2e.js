@@ -581,6 +581,17 @@ ok(campRow && campRow.targeted === 1 && campRow.coupon_label === 'คูปอ�
 let campErr = null; try { await Q.sendCampaign({ keys: ['tel:0800000000'], message: 'x' }); } catch (e) { campErr = e.message; }
 ok(campErr === 'no_targets', `INVARIANT a campaign with no LINE-pushable targets is rejected (got ${campErr})`);
 
+// ---- Cash-round history: closed Z-reports stay browsable daily + roll up monthly ----
+console.log('\n== Cash round history ==');
+Q.openCashSession(1, { openFloat: 500 });
+const chClose = Q.closeCashSession(1, { countedCash: 700, note: 'ทดสอบ' });
+const ch = Q.cashSessionHistory(1);
+ok(ch.sessions.length >= 1 && ch.sessions[0].open_float === 500, `INVARIANT a closed round appears in the daily history (float ${ch.sessions[0] && ch.sessions[0].open_float})`);
+ok(ch.sessions[0].expected_cash === chClose.expectedCash && ch.sessions[0].counted_cash === 700, 'INVARIANT the stored Z-report matches what the close returned');
+ok(ch.lastFloat === 500, `INVARIANT lastFloat powers the "เท่ารอบก่อน" prefill (got ${ch.lastFloat})`);
+const chM = ch.monthly[0];
+ok(chM && chM.rounds >= 1 && chM.counted >= 700, `INVARIANT the monthly rollup aggregates rounds (rounds=${chM && chM.rounds}, counted=${chM && chM.counted})`);
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

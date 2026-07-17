@@ -802,6 +802,31 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   return { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
 }
 
+/** Closed cash rounds (Z-report history), newest first, + a 12-month rollup — the owner asked for
+ *  day-by-day rounds that stay browsable daily OR aggregated monthly. lastFloat powers the
+ *  "same float as last round" one-tap when opening the next round. */
+export function cashSessionHistory(branchId = 1, limit = 60) {
+  const rows = db.prepare(
+    `SELECT cs.id, cs.open_float, cs.expected_cash, cs.counted_cash, cs.over_short, cs.note,
+            cs.opened_at, cs.closed_at,
+            date(cs.closed_at,'+7 hours') AS day,
+            so.name AS opened_by_name, sc.name AS closed_by_name
+       FROM cash_sessions cs
+       LEFT JOIN staff so ON so.id=cs.opened_by
+       LEFT JOIN staff sc ON sc.id=cs.closed_by
+      WHERE cs.branch_id=? AND cs.closed_at IS NOT NULL
+      ORDER BY cs.id DESC LIMIT ?`
+  ).all(branchId, Math.max(1, Math.min(365, limit)));
+  const monthly = db.prepare(
+    `SELECT substr(datetime(closed_at,'+7 hours'),1,7) ym, COUNT(*) rounds,
+            COALESCE(SUM(expected_cash),0) expected, COALESCE(SUM(counted_cash),0) counted,
+            COALESCE(SUM(over_short),0) overShort
+       FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL
+      GROUP BY ym ORDER BY ym DESC LIMIT 12`
+  ).all(branchId).map((m) => ({ ...m, expected: r2(m.expected), counted: r2(m.counted), overShort: r2(m.overShort) }));
+  return { sessions: rows, monthly, lastFloat: rows.length ? rows[0].open_float : null };
+}
+
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {
   // Fires at 00:00 Bangkok, so the day that just ended is "yesterday". Archive its totals, then

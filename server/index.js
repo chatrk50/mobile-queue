@@ -928,6 +928,11 @@ app.get('/api/reports/insights', (req, res) => {
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+// Past closed rounds (Z-reports) — daily list + monthly rollup + last round's float.
+app.get('/api/cash/history', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.cashSessionHistory(cashBranch(req)));
+});
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));

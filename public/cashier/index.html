@@ -384,6 +384,16 @@
       </div>
       <div id="cashMovesList" style="margin-top:12px"><p class="muted" style="font-size:12px">กำลังโหลด…</p></div>
     </div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="row between" style="align-items:center">
+        <h2 style="margin:0;font-size:15px">📜 รอบเงินสดย้อนหลัง</h2>
+        <div class="row" style="gap:6px">
+          <button id="chTabDay" class="ok" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('day')">รายวัน</button>
+          <button id="chTabMonth" class="ghost" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('month')">รายเดือน</button>
+        </div>
+      </div>
+      <div id="cashHistList" style="margin-top:10px"><p class="muted" style="font-size:12px">กำลังโหลด…</p></div>
+    </div>
   </div>
 
   <!-- OVERVIEW / CHARTS (owner/manager) -->
@@ -1522,7 +1532,28 @@ function renderControl(d){ $('ctlDate').textContent=d.date||'—'; const tt=_ctl
   const ev=(d.events&&d.events.length)?d.events.map(e=>{const m=tt[e.type]||{t:e.type,c:'var(--muted)'}; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);min-width:42px">${_ctlHM(e.at)}</span><span class="pill" style="font-size:10px;background:${m.c};color:#fff;flex:none">${m.t}</span><div style="flex:1;min-width:0"><div style="font-size:13px"><b>฿${e.amount}</b>${e.ticketNo?(' · คิว '+e.ticketNo):''}${e.customer?(' · '+esc(e.customer)):''}</div>${e.reason?('<div class="muted" style="font-size:11px">'+esc(e.reason)+'</div>'):''}</div><span style="font-size:11px;color:var(--muted);flex:none">${esc(e.staff)}</span></div>`;}).join(''):'<p class="muted" style="font-size:13px;padding:10px">ไม่มีการลดยอดในวันนี้ ✓</p>';
   const redeem=(d.redeems&&d.redeems.length)?`<div style="margin-top:14px"><h2 style="margin:0 0 6px;font-size:14px">🎁 แลกของรางวัล/วันเกิด (เคาน์เตอร์)</h2>${d.redeems.map(r=>`<div class="row between" style="padding:6px 10px;border-bottom:1px solid var(--line)"><div style="font-size:12.5px">${esc(r.customer||'—')}<div class="muted" style="font-size:11px">${esc(r.note||'')}</div></div><span style="font-size:11px;color:var(--muted)">${_ctlHM(r.at)}</span></div>`).join('')}</div>`:'';
   $('controlBody').innerHTML=tiles+staff+`<h2 style="margin:0 0 4px;font-size:14px">📋 รายการ</h2><div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${ev}</div>`+redeem; }
-window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); renderCash(); }catch(e){ toast(err(e)); } };
+window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); }catch(e){ toast(err(e)); return; }
+  try{ CASHHIST=await api('/api/cash/history'); }catch(e){ CASHHIST=null; }
+  renderCash(); renderCashHist(); };
+// ---------- Cash-round history: daily Z-report list + monthly rollup ----------
+let CASHHIST=null, _chTab='day';
+window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ok':'ghost'; $('chTabMonth').className=t==='month'?'ok':'ghost';
+  $('chTabDay').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; $('chTabMonth').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; renderCashHist(); };
+const osFmt=(os)=> os===0?'<b style="color:#16a34a">พอดี ✓</b>':(os>0?`<b style="color:#16a34a">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
+function renderCashHist(){ const box=$('cashHistList'); if(!box) return;
+  if(!CASHHIST){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดไม่สำเร็จ</p>'; return; }
+  if(_chTab==='month'){
+    const ms=CASHHIST.monthly||[];
+    box.innerHTML = ms.length ? `<div class="row between muted" style="font-size:11px;padding:0 2px 4px"><span>เดือน</span><span>รอบ · ควรมี · นับได้ · ส่วนต่าง</span></div>`+
+      ms.map(m=>`<div class="row between" style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;align-items:center">
+        <b>${m.ym}</b><span style="text-align:right;font-size:12.5px">${m.rounds} รอบ · ${baht2(m.expected)} · ${baht2(m.counted)} · ${osFmt(m.overShort)}</span></div>`).join('')
+      : '<p class="muted" style="font-size:12px">ยังไม่มีรอบที่ปิดแล้ว</p>';
+    return; }
+  const ss=CASHHIST.sessions||[];
+  box.innerHTML = ss.length ? ss.slice(0,31).map(s=>`<div style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px">
+      <div class="row between" style="align-items:center"><b>${s.day}</b>${osFmt(s.over_short)}</div>
+      <div class="muted" style="font-size:11.5px">ทอนตั้งต้น ${baht2(s.open_float)} · ควรมี ${baht2(s.expected_cash)} · นับได้ ${baht2(s.counted_cash)}${s.closed_by_name?(' · ปิดโดย '+esc(s.closed_by_name)):''}${s.note?(' · '+esc(s.note)):''}</div>
+    </div>`).join('') : '<p class="muted" style="font-size:12px">ยังไม่มีรอบที่ปิดแล้ว — ปิดรอบแรกแล้วจะเห็นที่นี่</p>'; }
 // Pay In/Out ledger (per Bangkok day, navigable). pay_out shown as a deduction; pay_in as added cash.
 let CMDATE=null;
 window.loadCashMoves=async()=>{ try{ const q=CMDATE?('?date='+encodeURIComponent(CMDATE)):''; const d=await api('/api/cash/moves'+q); CMDATE=d.date; renderCashMoves(d); }catch(e){ const l=$('cashMovesList'); if(l) l.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
@@ -1550,10 +1581,12 @@ window.delCashMove=async(id)=>{ if(!(await appConfirm({title:'ลบรายก
 function renderCash(){
   const box=$('cashBody');
   if(!CASH || !CASH.open){
+    const lastF=(CASHHIST&&CASHHIST.lastFloat!=null)?CASHHIST.lastFloat:null;
     box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px">
       <p class="muted" style="margin:0 0 10px">ยังไม่ได้เปิดรอบ — ใส่จำนวนเงินทอนเริ่มต้นในลิ้นชัก</p>
-      <div class="row" style="gap:8px;align-items:center"><span>เงินทอนเริ่มต้น ฿</span>
-        <input id="openFloatInp" type="number" inputmode="decimal" value="0" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><span>เงินทอนเริ่มต้น ฿</span>
+        <input id="openFloatInp" type="number" inputmode="decimal" value="${lastF!=null?lastF:0}" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        ${lastF!=null?`<button class="ghost" style="padding:8px 10px;font-size:12px" onclick="document.getElementById('openFloatInp').value=${lastF}">เท่ารอบก่อน (${baht2(lastF)})</button>`:''}
         <button class="ok" style="padding:8px 16px" onclick="openDrawer()">เปิดรอบ</button></div></div>`;
     return;
   }
@@ -1575,7 +1608,8 @@ function renderCash(){
 window.openDrawer=async()=>{ const f=Number($('openFloatInp').value)||0; try{ await api('/api/cash/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({openFloat:f})}); toast('เปิดรอบแล้ว'); loadCash(); }catch(e){ toast(err(e)==='session_already_open'?'มีรอบที่เปิดอยู่แล้ว':err(e)); } };
 window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(counted>=0)){ toast('ใส่จำนวนเงินที่นับได้'); return; }
   if(!(await appConfirm({title:'ปิดรอบเงินสด',message:'ปิดรอบและบันทึกการนับเงิน?',okText:'ปิดรอบ'}))) return;
-  try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note:$('cashNote').value.trim()})}); renderCashResult(r); }catch(e){ toast(err(e)); } };
+  try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note:$('cashNote').value.trim()})}); renderCashResult(r);
+    try{ CASHHIST=await api('/api/cash/history'); renderCashHist(); }catch(e){ /* history refresh is best-effort */ } }catch(e){ toast(err(e)); } };
 function renderCashResult(r){
   const z=r.zreport||{}; const os=r.overShort;
   const osTxt= os===0?'<b style="color:var(--ok,#16a34a)">พอดี ✓</b>':(os>0?`<b style="color:var(--ok,#16a34a)">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
