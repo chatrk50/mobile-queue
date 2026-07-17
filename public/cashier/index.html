@@ -933,7 +933,7 @@ document.addEventListener('click',(e)=>{ const m=$('adminMenu'); if(!m||m.style.
 async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
   const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่'}; return m[e.message]||e.message; }
+function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -1001,7 +1001,7 @@ window.login=async()=>{
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; }
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
@@ -1709,6 +1709,9 @@ window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').st
 // to the daily report so the owner can find the satisfaction view in one place.
 async function loadInsights(){
   const box=$('insightsBox'); if(!box) return;
+  // Insights are live/aggregate — under a PAST day's report they'd silently show today's numbers,
+  // so hide the block instead of misleading the owner.
+  if(_reportDate){ box.style.display='none'; return; } box.style.display='';
   let d; try{ d=await api('/api/reports/insights'); }catch(e){ return; }
   const sat=d.satisfaction||{}, cu=d.customers||{}, stars=sat.stars||{};
   const maxN=Math.max(1,...[1,2,3,4,5].map(s=>stars[s]||0));
@@ -1726,7 +1729,7 @@ async function loadInsights(){
       <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
 }
-window.exportReport=()=>{ window.open('/api/report.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
+window.exportReport=()=>{ const q=[]; if(_reportDate) q.push('date='+encodeURIComponent(_reportDate)); if(PIN) q.push('pin='+encodeURIComponent(PIN)); window.open('/api/report.xlsx'+(q.length?('?'+q.join('&')):''),'_blank'); };
 window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?date='+encodeURIComponent($('detailDate').value||'')+(PIN?('&pin='+encodeURIComponent(PIN)):''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
@@ -1926,7 +1929,7 @@ window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderC
 window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; _orderCust=null; const _ocb=$('orderCustBanner'); if(_ocb) _ocb.style.display='none'; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
-  renderBasketCount(); $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
+  renderBasketCount(); hideAllPanels(); $('dash').style.display='none'; $('orderCard').style.display=''; };   // hideAllPanels closes EVERY admin card (the old hand-written list missed tender/coupon/promo/control)
 window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; _orderCust=null; setEditMode(false); $('dash').style.display=''; };
 // "สั่งให้ลูกค้าคนนี้": open a new order tied to a looked-up customer (phone or LINE); optional fav pre-add.
 window.orderForCustomer=async(key,name,favName)=>{

@@ -874,15 +874,16 @@ app.post('/api/zones/:zoneId/open', (req, res) => {
   res.json(z);
 });
 // Store master open/closed (PIN) — flips every zone so the store is open/closed as a whole.
+// Manager+ (was pinOK — a plain cashier session could flip the whole store or reset the queue).
 app.post('/api/store/:storeId/open', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const zoneIds = Q.setStoreOpen(req.params.storeId, req.body?.isOpen ? 1 : 0);
   for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
   res.json({ ok: true, isOpen: req.body?.isOpen ? 1 : 0, zones: zoneIds.length });
 });
-// Reset the whole queue to start from 0 (PIN-protected; also run by the daily scheduler).
+// Reset the whole queue to start from 0 (manager+; also run by the daily scheduler).
 app.post('/api/reset', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   doDailyReset();
   res.json({ ok: true });
 });
@@ -1030,11 +1031,14 @@ app.post('/api/menu/:id/recipe', (req, res) => {
 app.get('/api/report.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
+    // ?date=YYYY-MM-DD exports THAT Bangkok day (matches the on-screen date picker) — without it the
+    // owner could view a past day and silently download today's numbers instead.
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
     const { buildReportWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
-    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || BRAND.name });
+    const buf = await buildReportWorkbook(Q.dailyReport(null, date), { store: stores?.name || BRAND.name });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
@@ -1054,9 +1058,11 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
 
-// ---------- Menu management + quick-service ordering (PIN) ----------
+// ---------- Menu management (manager+) ----------
+// Was pinOK: any logged-in CASHIER session passed, though the UI hides menu management below
+// manager — the API now matches the UI (legacy admin-PIN callers still pass managerOK).
 app.post('/api/menu', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { const item = Q.addMenuItem(req.body || {});
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(item.id, req.body.priceDelivery);
     res.json(item); }
@@ -1064,12 +1070,12 @@ app.post('/api/menu', (req, res) => {
 });
 // Drag-and-drop reorder — MUST be declared before '/api/menu/:id' so "order" isn't captured as an :id.
 app.post('/api/menu/order', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setMenuOrder(req.body?.ids)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/menu/:id', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { const item = Q.updateMenuItem(req.params.id, req.body || {});
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(Number(req.params.id), req.body.priceDelivery);
     res.json(item); }
@@ -1077,12 +1083,12 @@ app.post('/api/menu/:id', (req, res) => {
 });
 // Reorder a menu item within its category (changes what customer/cashier see in the order grid).
 app.post('/api/menu/:id/move', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.moveMenuItem(req.params.id, req.body?.dir === 'up' ? 'up' : 'down')); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.delete('/api/menu/:id', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.deleteMenuItem(req.params.id));
 });
 app.post('/api/zones/:zoneId/orders', (req, res) => {
