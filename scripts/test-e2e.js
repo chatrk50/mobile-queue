@@ -564,6 +564,23 @@ ok(psAfter.monthly[0] && psAfter.monthly[0].n === 3 && psAfter.monthly[0].sent =
 ok(psAfter.byKind.find((k) => k.kind === 'winback')?.n === 2, 'INVARIANT this-month breakdown by purpose works (winback=2)');
 db.prepare('DELETE FROM push_log').run();
 
+// ---- CRM: customer list segments + targeted campaign with attached coupon + campaign history ----
+console.log('\n== CRM customers + targeted campaign ==');
+const clAll = Q.customersList();
+ok(Array.isArray(clAll) && clAll.length > 0, `customersList returns customers (got ${clAll.length})`);
+ok(clAll.every((c) => ['new', 'regular', 'at_risk', 'lost'].includes(c.segment)), 'INVARIANT every customer gets a lifecycle segment');
+const clTarget = clAll.find((c) => c.canPush && c.visits >= 1);
+ok(!!clTarget, 'a pushable LINE customer exists for the campaign test');
+const clCoupBefore = Q.customerCoupons(clTarget.key).length;
+const camp = await Q.sendCampaign({ keys: [clTarget.key, 'tel:0812345678'], message: 'คิดถึงนะคะ', coupon: { label: 'คูปองคิดถึง', cap: 49, days: 14 }, actorId: null });
+ok(camp.targeted === 1, `INVARIANT tel: keys are filtered out — only LINE customers targeted (got ${camp.targeted})`);
+const clCoupAfter = Q.customerCoupons(clTarget.key);
+ok(clCoupAfter.length === clCoupBefore + 1 && clCoupAfter.some((c) => c.kind === 'winback' && c.label === 'คูปองคิดถึง'), 'INVARIANT the attached coupon lands in the customer\'s coupon list (kind=winback)');
+const campRow = Q.listCampaigns()[0];
+ok(campRow && campRow.targeted === 1 && campRow.coupon_label === 'คูปองคิดถึง' && typeof campRow.sent === 'number', `INVARIANT campaign history persists targeted/sent/failed + coupon (targeted=${campRow && campRow.targeted}, sent=${campRow && campRow.sent})`);
+let campErr = null; try { await Q.sendCampaign({ keys: ['tel:0800000000'], message: 'x' }); } catch (e) { campErr = e.message; }
+ok(campErr === 'no_targets', `INVARIANT a campaign with no LINE-pushable targets is rejected (got ${campErr})`);
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

@@ -107,7 +107,7 @@
         <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
       <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
-        <button id="winbackBtn" class="ghost adm" style="display:none" onclick="openWinback()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</button>
+        <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
         <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
         <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
         <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
@@ -540,25 +540,37 @@
   </div>
 </div>
 
-<!-- CRM: win-back lapsed LINE customers (manager) -->
-<div id="winbackPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:center;justify-content:center;padding:16px">
-  <div class="card" style="max-width:400px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
-    <div class="row between" style="margin-bottom:6px">
-      <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>ดึงลูกค้าเก่ากลับ</h1>
-      <button class="ghost" style="padding:6px 12px" onclick="closeWinback()">✕</button>
+<!-- CRM: customers page — list + lifecycle segments + targeted win-back (+ coupon) + campaign history -->
+<div id="custListCard" class="card" style="display:none;max-width:760px;margin:14px auto">
+  <div class="row between" style="align-items:center">
+    <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
+    <button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
+  </div>
+  <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0;flex-wrap:wrap"></div>
+  <div id="clList" style="max-height:44vh;overflow-y:auto;border:1px solid var(--line);border-radius:12px"></div>
+  <div id="clSelBar" class="row between" style="align-items:center;margin-top:8px;font-size:13px">
+    <span class="muted">เลือกแล้ว <b id="clSelN" style="color:var(--navy)">0</b> คน (เฉพาะลูกค้า LINE ส่งได้)</span>
+    <button class="ghost" style="padding:6px 12px;font-size:12.5px" onclick="clSelectSegment()">เลือกทั้งกลุ่มนี้</button>
+  </div>
+  <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+    <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
+    <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
+    <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
+      <input type="checkbox" id="clCoupOn" onchange="document.getElementById('clCoupBox').style.display=this.checked?'':'none'" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
+    </label>
+    <div id="clCoupBox" style="display:none;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:10px;margin-top:6px">
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <span style="font-size:12.5px">ไม่เกิน ฿<input id="clCoupCap" type="number" value="49" min="1" max="500" style="width:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"></span>
+        <span style="font-size:12.5px">อายุ <input id="clCoupDays" type="number" value="14" min="1" max="90" style="width:52px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"> วัน</span>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:5px">คูปองจะเข้า "คูปองของฉัน" ของลูกค้าทันที และข้อความจะบอกวันหมดอายุให้เอง</div>
     </div>
-    <p class="muted" style="font-size:13px;margin:0 0 12px">ส่งข้อความผ่าน LINE หาลูกค้าที่ไม่ได้แวะมาสักพัก</p>
-    <div class="row between" style="align-items:center;margin-bottom:10px">
-      <span style="font-weight:700;font-size:14px">ไม่ได้มาเกิน</span>
-      <select id="wbDays" onchange="wbPreview()" style="padding:8px 12px;font-size:15px;border:1.5px solid var(--line);border-radius:10px">
-        <option value="30">30 วัน</option><option value="60">60 วัน</option><option value="90">90 วัน</option>
-      </select>
-    </div>
-    <div id="wbCount" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:12px">—</div>
-    <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ</div>
-    <textarea id="wbMsg" rows="3" maxlength="380" style="width:100%;box-sizing:border-box;padding:11px 14px;font-size:15px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit"></textarea>
-    <button class="ok" id="wbSend" style="width:100%;min-height:52px;font-size:16px;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="sendWinback()"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งข้อความ</button>
-    <p class="muted" style="font-size:11px;text-align:center;margin:8px 0 0">เฉพาะลูกค้าที่สั่งผ่าน LINE · ส่งผ่าน LINE Official Account ของร้าน</p>
+    <button class="ok" id="clSend" style="width:100%;min-height:48px;font-size:15px;margin-top:10px" onclick="clSendCampaign()"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งถึงลูกค้าที่เลือก</button>
+  </div>
+  <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
+    <div class="muted" style="font-size:12px;margin-bottom:6px">ประวัติการส่ง (แคมเปญ)</div>
+    <div id="clCampaigns" style="font-size:12.5px"></div>
   </div>
 </div>
 
@@ -1031,7 +1043,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard'];
+const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -2961,22 +2973,54 @@ async function onScan(text){
 }
 
 // ---------- CRM: win-back lapsed LINE customers (manager) ----------
-window.openWinback=()=>{ closeAdmin(); $('wbMsg').value='คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ วันนี้มีเมนูอร่อย ๆ รออยู่!'; $('winbackPop').style.display='flex'; wbPreview(); };
-window.closeWinback=()=>{ $('winbackPop').style.display='none'; };
-window.wbPreview=async()=>{ const days=$('wbDays').value, box=$('wbCount'), send=$('wbSend'); box.textContent='⏳ กำลังนับ…'; if(send) send.disabled=true;
-  try{ const r=await api('/api/crm/lapsed?days='+days);
-    box.innerHTML = r.count ? ('ลูกค้าเก่า <b style="color:var(--navy);font-size:16px">'+r.count+' คน</b>'+(r.sample&&r.sample.length?' <span class="muted">· เช่น '+r.sample.map(esc).join(', ')+'</span>':'')) : '<span class="muted">ยังไม่มีลูกค้าเก่าในช่วงนี้</span>';
-    if(send) send.disabled=!r.count; }
-  catch(e){ box.textContent='ดึงข้อมูลไม่สำเร็จ: '+err(e); } };
-window.sendWinback=async()=>{ const days=Number($('wbDays').value), msg=($('wbMsg').value||'').trim();
-  if(!msg){ toast('ใส่ข้อความก่อนนะ'); return; }
-  let pre; try{ pre=await api('/api/crm/lapsed?days='+days); }catch(e){ toast('ดึงข้อมูลไม่สำเร็จ'); return; }
-  if(!pre.count){ toast('ยังไม่มีลูกค้าเก่าให้ส่ง'); return; }
-  if(!(await appConfirm({title:'ส่งข้อความ',message:'ส่งข้อความนี้หาลูกค้าเก่า '+pre.count+' คน?',okText:'ส่งเลย'}))) return;
-  try{ const r=await api('/api/crm/winback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days,message:msg})});
-    toast(r.sent ? ('ส่งแล้ว '+r.sent+'/'+r.targeted+' คน 🎉') : ('กลุ่มเป้าหมาย '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
-    closeWinback(); }
-  catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ':('ส่งไม่สำเร็จ: '+m)); } };
+// ---------- CRM customers page: list + segments + targeted send (+coupon) + campaign history ----------
+let CL=[], _clSeg='all'; const _clSel=new Set();
+const CL_SEGS=[['all','ทั้งหมด'],['new','ลูกค้าใหม่'],['regular','ขาประจำ'],['at_risk','เสี่ยงหาย'],['lost','หายไปแล้ว']];
+window.openWinback=()=>{ showCustomers(); };   // legacy entry point → the new page
+window.showCustomers=async()=>{ closeAdmin(); hideAllPanels(); $('custListCard').style.display='';
+  try{ const r=await api('/api/crm/customers'); CL=r.customers||[]; }catch(e){ toast(err(e)); CL=[]; }
+  _clSel.clear(); renderCustSegs(); renderCustList(); loadCampaigns(); };
+window.hideCustomers=()=>{ $('custListCard').style.display='none'; $('dash').style.display=''; };
+function clCount(seg){ return seg==='all' ? CL.length : CL.filter(c=>c.segment===seg).length; }
+function renderCustSegs(){ $('clSegTabs').innerHTML=CL_SEGS.map(([k,label])=>
+  `<button class="${_clSeg===k?'ok':'ghost'}" style="padding:7px 12px;font-size:12.5px;border-radius:999px" onclick="clSetSeg('${k}')">${label} <b>${clCount(k)}</b></button>`).join(''); }
+window.clSetSeg=(k)=>{ _clSeg=k; renderCustSegs(); renderCustList(); };
+function clRows(){ return _clSeg==='all' ? CL : CL.filter(c=>c.segment===_clSeg); }
+const SEG_TH={new:['ใหม่','#e6f1fb','#185fa5'],regular:['ประจำ','#e1f5ee','#0f6e56'],at_risk:['เสี่ยงหาย','#faeeda','#854f0b'],lost:['หายไป','#fcebeb','#a32d2d']};
+function renderCustList(){ const rows=clRows();
+  $('clList').innerHTML = rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
+    const last=c.daysSince==null?'ยังไม่เคยซื้อ':(c.daysSince===0?'วันนี้':(c.daysSince+' วันก่อน'));
+    return `<div class="row between" style="align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);gap:8px">
+      <label class="row" style="gap:9px;align-items:center;flex:1;min-width:0;cursor:${c.canPush?'pointer':'default'}">
+        <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
+        <span style="min-width:0">
+          <div style="font-weight:700;color:var(--navy);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))} <span style="background:${sg[1]};color:${sg[2]};font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px">${sg[0]}</span></div>
+          <div class="muted" style="font-size:11px">มา ${c.visits} ครั้ง · ฿${c.spend} · ล่าสุด ${last}${c.points?(' · ⭐'+c.points):''}${c.canPush?'':' · 📵 ส่ง LINE ไม่ได้'}</div>
+        </span>
+      </label>
+    </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">ไม่มีลูกค้าในกลุ่มนี้</p>'; }
+window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
+window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all=rows.every(c=>_clSel.has(c.key));
+  rows.forEach(c=>{ if(all) _clSel.delete(c.key); else _clSel.add(c.key); }); $('clSelN').textContent=_clSel.size; renderCustList(); };
+window.clSendCampaign=async()=>{
+  const msg=($('clMsg').value||'').trim(); if(!msg){ toast('ใส่ข้อความก่อนนะ'); return; }
+  if(!_clSel.size){ toast('ติ๊กเลือกลูกค้าก่อนค่ะ'); return; }
+  const coupon = $('clCoupOn').checked ? { label:($('clCoupLabel').value||'').trim()||'คูปองของขวัญ', cap:Number($('clCoupCap').value)||49, days:Number($('clCoupDays').value)||14 } : null;
+  if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:(coupon?('พร้อมแนบคูปอง "'+coupon.label+'" (฿'+coupon.cap+' · '+coupon.days+' วัน)\n'):'')+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
+  const btn=$('clSend'); btn.disabled=true;
+  try{ const r=await api('/api/crm/campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[..._clSel],message:msg,coupon})});
+    toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉') : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
+    _clSel.clear(); $('clSelN').textContent='0'; renderCustList(); loadCampaigns(); }
+  catch(e){ const m=err(e); toast(m==='no_targets'?'เลือกได้เฉพาะลูกค้า LINE':(m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ':('ส่งไม่สำเร็จ: '+m))); }
+  finally{ btn.disabled=false; } };
+async function loadCampaigns(){ const box=$('clCampaigns'); if(!box) return;
+  let r; try{ r=await api('/api/crm/campaigns'); }catch(e){ box.innerHTML='<span class="muted">—</span>'; return; }
+  const cs=r.campaigns||[];
+  box.innerHTML = cs.length ? cs.map(c=>`<div class="row between" style="padding:6px 2px;border-bottom:1px solid var(--line);gap:8px;align-items:flex-start">
+      <span style="min-width:0;flex:1"><div style="color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.message)}</div>
+      <div class="muted" style="font-size:11px">${fmtDT(c.at)}${c.coupon_label?(' · 🎁 '+esc(c.coupon_label)):''}${c.actor_name?(' · โดย '+esc(c.actor_name)):''}</div></span>
+      <span style="flex:none;text-align:right;font-size:11.5px"><b style="color:${c.sent?'#0f6e56':'var(--muted)'}">ส่งได้ ${c.sent}</b>/${c.targeted}${c.failed?(' · <span style="color:#a32d2d">พลาด '+c.failed+'</span>'):''}</span>
+    </div>`).join('') : '<span class="muted">ยังไม่เคยส่งแคมเปญ</span>'; }
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

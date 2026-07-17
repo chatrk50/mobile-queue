@@ -310,6 +310,65 @@ export function pushStats() {
   const today = db.prepare(`SELECT COUNT(*) n FROM push_log WHERE date(at,'+7 hours')=date('now','+7 hours')`).get().n;
   return { monthly, byKind, today };
 }
+/** Full customer list + lifecycle segment for the CRM page. Segments (Bangkok days since last
+ *  paid visit): new = ≤1 visit · regular = ≤30d · at_risk = 31–60d · lost = >60d (or never paid).
+ *  canPush = real LINE user (tel:-only customers can't receive LINE messages). */
+export function customersList() {
+  const rows = db.prepare(
+    `SELECT c.line_user_id AS key, c.name, c.points, c.lifetime_points AS lifetime, c.birthday,
+            COUNT(DISTINCT CASE WHEN o.payment_status='paid' THEN t.id END) AS visits,
+            COALESCE(SUM(CASE WHEN o.payment_status='paid' THEN o.total - COALESCE(o.discount,0) END),0) AS spend,
+            MAX(CASE WHEN o.payment_status='paid' THEN o.paid_at END) AS lastVisit
+       FROM customers c
+       LEFT JOIN tickets t ON t.line_user_id = c.line_user_id
+       LEFT JOIN orders o  ON o.ticket_id = t.id
+      GROUP BY c.line_user_id`
+  ).all();
+  const now = Date.now();
+  return rows.map((r) => {
+    const days = r.lastVisit ? Math.floor((now - new Date(r.lastVisit.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null;
+    const segment = (r.visits <= 1) ? 'new' : (days == null || days > 60) ? 'lost' : (days > 30) ? 'at_risk' : 'regular';
+    return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U') };
+  }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
+}
+/** Targeted CRM send: message (+ optional attached coupon) to EXPLICITLY chosen customers.
+ *  A coupon is issued into customer_coupons first so "รับคูปอง" in the message is already true when
+ *  the customer opens the app. Results are persisted per campaign (sent/failed) — the owner asked
+ *  to see whether a blast actually went out. */
+export async function sendCampaign({ keys = [], message, coupon = null, actorId = null } = {}) {
+  const msg = String(message || '').trim().slice(0, 400);
+  if (!msg) throw new Error('empty_message');
+  const targets = [...new Set(keys)].filter((k) => String(k || '').startsWith('U')).slice(0, 500);
+  if (!targets.length) throw new Error('no_targets');
+  const cp = coupon && coupon.label ? {
+    label: String(coupon.label).slice(0, 80),
+    cap: Math.max(1, Math.min(500, Number(coupon.cap) || 49)),
+    days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || 30))),
+  } : null;
+  let sent = 0, failed = 0;
+  for (const key of targets) {
+    let text = msg;
+    if (cp) {
+      const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d;
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'winback', ?, ?, ?)`)
+        .run(key, cp.label, cp.cap, expiresAt);
+      text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
+    }
+    try { if ((await pushQueue(key, text, null, 'สั่งเลย', 'winback')) !== false) sent++; else failed++; }
+    catch { failed++; }
+  }
+  const info = db.prepare(
+    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id)
+     VALUES (?,?,?,?,?,?,?,?)`
+  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
+  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp };
+}
+export function listCampaigns(limit = 20) {
+  return db.prepare(
+    `SELECT cc.*, s.name AS actor_name FROM crm_campaigns cc LEFT JOIN staff s ON s.id = cc.actor_id
+      ORDER BY cc.id DESC LIMIT ?`
+  ).all(Math.max(1, Math.min(100, limit)));
+}
 export function lapsedLineCustomers(days = 30) {
   const d = Math.max(1, Math.floor(Number(days) || 30));
   return db.prepare(

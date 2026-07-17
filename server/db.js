@@ -451,6 +451,18 @@ CREATE TABLE IF NOT EXISTS rewards (
   active      INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS crm_campaigns (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  message      TEXT NOT NULL,
+  coupon_label TEXT,                            -- null = no coupon attached
+  coupon_cap   REAL,
+  coupon_days  INTEGER,
+  targeted     INTEGER NOT NULL DEFAULT 0,
+  sent         INTEGER NOT NULL DEFAULT 0,
+  failed       INTEGER NOT NULL DEFAULT 0,
+  actor_id     INTEGER,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS push_log (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT,

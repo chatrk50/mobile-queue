@@ -727,6 +727,20 @@ app.get('/api/push-stats', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.pushStats());
 });
+// CRM: full customer list + segments · targeted campaign send · campaign history (manager+).
+app.get('/api/crm/customers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ customers: Q.customersList() });
+});
+app.post('/api/crm/campaign', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.sendCampaign({ keys: req.body?.keys, message: req.body?.message, coupon: req.body?.coupon || null, actorId: req.staff?.id || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/crm/campaigns', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ campaigns: Q.listCampaigns() });
+});
 // CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
 app.get('/api/crm/lapsed', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
