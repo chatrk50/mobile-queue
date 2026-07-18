@@ -829,6 +829,7 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   // Closing the drawer = end of day → optionally LINE the owner a full closing summary (once/day).
   try { const s = maybeAutoSummary(branchId); out.summarySent = !!s.sent; } catch { /* never block a close */ }
   try { const rr = maybeAutoReorder(branchId); out.reorderDrafted = !!rr.drafted; } catch { /* never block a close */ }
+  try { Promise.resolve(maybeAutoWinback(branchId)).catch(() => {}); } catch { /* fire-and-forget; never block a close */ }
   return out;
 }
 
@@ -1984,6 +1985,48 @@ export function maybeAutoReorder(branchId = null) {
   const est = (po.lines || []).reduce((s, l) => s + l.lineTotal, 0);
   notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
   return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
+}
+// C: automatic win-back — customers who slipped into "at_risk" get a coupon + LINE nudge without
+// the owner lifting a finger. Guard-railed: OFF by default, a MONTHLY message cap (LINE cost
+// control), and a per-customer cooldown so nobody is spammed.
+const WINBACK_COOLDOWN_DAYS = 45;
+export function autoWinbackEnabled() { return getSetting('winback:auto', '0') === '1'; }
+export function setAutoWinback(on) { setSetting('winback:auto', on ? '1' : '0'); return { autoWinback: !!on }; }
+export function getAutoWinbackCap() { return Math.max(0, Math.round(Number(getSetting('winback:cap', '100')) || 0)); }
+export function setAutoWinbackCap(n) { const v = Math.max(0, Math.min(5000, Math.round(Number(n) || 0))); setSetting('winback:cap', String(v)); return { autoWinbackCap: v }; }
+/** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
+ *  so it's exact even on UAT where LINE pushes are stubbed). */
+function winbackIssuedThisMonth() {
+  return db.prepare(
+    `SELECT COUNT(*) c FROM customer_coupons WHERE kind='winback'
+      AND strftime('%Y-%m', datetime(issued_at,'+7 hours')) = strftime('%Y-%m', datetime('now','+7 hours'))`
+  ).get().c || 0;
+}
+export async function maybeAutoWinback(branchId = null) {
+  if (!autoWinbackEnabled()) return { sent: 0, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('winback:last_run', '') === day) return { sent: 0, reason: 'already' };
+  const cap = getAutoWinbackCap();
+  const remaining = cap - winbackIssuedThisMonth();
+  if (remaining <= 0) { setSetting('winback:last_run', day); return { sent: 0, reason: 'cap' }; }
+  // at-risk, LINE-pushable, and not already win-backed within the cooldown window
+  const cutoff = db.prepare(`SELECT datetime('now', ?) t`).get(`-${WINBACK_COOLDOWN_DAYS} days`).t;
+  const targets = customersList()
+    .filter((c) => c.segment === 'at_risk' && c.canPush)
+    .filter((c) => !db.prepare(
+      `SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='winback' AND issued_at >= ? LIMIT 1`
+    ).get(c.key, cutoff))
+    .slice(0, remaining)
+    .map((c) => c.key);
+  setSetting('winback:last_run', day);
+  if (!targets.length) return { sent: 0, reason: 'none' };
+  const r = await sendCampaign({
+    keys: targets,
+    message: 'คิดถึงลูกค้าจังเลยค่ะ 💛 ไม่ได้เจอกันนาน แวะมาทานอีกนะคะ — ทางร้านมีคูปองเล็ก ๆ ฝากไว้ให้',
+    coupon: { label: 'คูปองคิดถึง — ส่วนลดต้อนรับกลับ', cap: 49, days: 30 },
+    actorId: null,
+  });
+  return { sent: r.sent, targeted: r.targeted, reason: 'ok' };
 }
 export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */

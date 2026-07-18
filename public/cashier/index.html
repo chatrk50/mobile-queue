@@ -3185,6 +3185,10 @@ window.showFeatures=async()=>{
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
+    row('autoWinback', f.autoWinback, '<svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>', 'ดึงลูกค้ากลับอัตโนมัติ', f.autoWinback?'เปิดอยู่ — ลูกค้าที่เริ่มห่างหาย (กลุ่มเสี่ยงหาย) จะได้คูปอง + ข้อความทาง LINE เองวันละครั้ง (ไม่ส่งซ้ำคนเดิมภายใน 45 วัน)':'ปิดอยู่ — เปิดเพื่อส่งคูปองดึงลูกค้ากลับให้อัตโนมัติ', false)+
+    `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+      <div style="flex:1"><b>เพดานข้อความดึงลูกค้ากลับ/เดือน</b><div class="muted" style="font-size:12px;margin-top:2px">คุมต้นทุน LINE — ส่งได้ไม่เกินนี้ต่อเดือน (นับคูปองที่ออกให้)</div></div>
+      <input id="winbackCapInp" type="number" min="0" value="${f.autoWinbackCap!=null?f.autoWinbackCap:100}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center" onchange="saveWinbackCap()"></div>`+
     (ps?`<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:6px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.chart}</span><div><b>ข้อความ LINE ที่ส่ง (ต้นทุน OA)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">LINE OA คิดเงินตามจำนวนข้อความ — เดือนนี้ส่งแล้ว <b style="color:var(--navy)">${(ps.monthly[0]&&ps.monthly[0].ym===new Date(Date.now()+7*3600e3).toISOString().slice(0,7))?ps.monthly[0].n:0}</b> ข้อความ · วันนี้ ${ps.today}</div></div></div>
@@ -3216,6 +3220,8 @@ window.resetTransactions=async()=>{
     toast('🧹 ล้างข้อมูลทดสอบแล้ว ('+n+' รายการ) · เริ่มนับยอดจริงได้เลย!');
     document.getElementById('featuresPop').style.display='none';
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
+window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));

@@ -637,6 +637,30 @@ ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (o
 ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
 Q.setAutoReorder(false);
 
+// ---- C: auto win-back for at-risk customers (capped + cooldown) ----
+console.log('\n== Auto win-back ==');
+Q.setAutoWinback(false);
+ok((await Q.maybeAutoWinback()).reason === 'off', 'INVARIANT auto-winback stays silent when disabled');
+// craft an at-risk LINE customer: 2 paid visits, the latest ~45 days ago (needs >1 visit to leave 'new')
+const awKey = 'Uautowinback000000000000000001';
+db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าห่างหาย')`).run(awKey);
+for (const [num, code, ago] of [[776, 'AW776', '-70 days'], [777, 'AW777', '-45 days']]) {
+  const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name) VALUES (1,1,?,?,?, 'served','ลูกค้าห่างหาย')`).run(num, code, awKey);
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 100, 'paid', datetime('now',?), 1)`).run(tk.lastInsertRowid, ago);
+}
+const awSeg = Q.customersList().find((c) => c.key === awKey);
+ok(awSeg && awSeg.segment === 'at_risk', `INVARIANT the 45-day-lapsed customer is segmented at_risk (got ${awSeg && awSeg.segment})`);
+Q.setAutoWinback(true); Q.setAutoWinbackCap(100);
+const aw1 = await Q.maybeAutoWinback();
+ok(aw1.reason === 'ok' && aw1.targeted >= 1, `INVARIANT auto-winback targets at-risk LINE customers (targeted ${aw1.targeted})`);
+ok(db.prepare(`SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='winback'`).get(awKey), 'INVARIANT the at-risk customer received a win-back coupon');
+ok((await Q.maybeAutoWinback()).reason === 'already', 'INVARIANT auto-winback runs at most once per day');
+// cap of 0 blocks sends
+db.prepare("UPDATE settings SET value='' WHERE key='winback:last_run'").run();   // clear day-dedup to test the cap path
+Q.setAutoWinbackCap(0);
+ok((await Q.maybeAutoWinback()).reason === 'cap', 'INVARIANT the monthly cap blocks further sends when reached');
+Q.setAutoWinback(false);
+
 // ---- Waste is recorded distinctly from use (so COGS vs waste cost are separable) ----
 const wIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบของเสีย','กก.', 20, 10)`).run().lastInsertRowid;
 const cogsW0 = Q.cogsForDay();
