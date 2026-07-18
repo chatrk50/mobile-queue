@@ -333,7 +333,10 @@ export function customersList() {
     `SELECT c.line_user_id AS key, c.name, c.points, c.lifetime_points AS lifetime, c.birthday,
             COUNT(DISTINCT CASE WHEN o.payment_status='paid' THEN t.id END) AS visits,
             COALESCE(SUM(CASE WHEN o.payment_status='paid' THEN o.total - COALESCE(o.discount,0) END),0) AS spend,
-            MAX(CASE WHEN o.payment_status='paid' THEN o.paid_at END) AS lastVisit
+            MAX(CASE WHEN o.payment_status='paid' THEN o.paid_at END) AS lastVisit,
+            AVG(CASE WHEN t.rating IS NOT NULL THEN t.rating END) AS ratingAvg,
+            COUNT(DISTINCT CASE WHEN t.rating IS NOT NULL THEN t.id END) AS ratingCount,
+            MAX(CASE WHEN t.rating IS NOT NULL THEN t.rating END) AS ratingLast
        FROM customers c
        LEFT JOIN tickets t ON t.line_user_id = c.line_user_id
        LEFT JOIN orders o  ON o.ticket_id = t.id
@@ -343,7 +346,8 @@ export function customersList() {
   return rows.map((r) => {
     const days = r.lastVisit ? Math.floor((now - new Date(r.lastVisit.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null;
     const segment = (r.visits <= 1) ? 'new' : (days == null || days > 60) ? 'lost' : (days > 30) ? 'at_risk' : 'regular';
-    return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U') };
+    return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U'),
+      ratingAvg: r.ratingAvg != null ? Math.round(r.ratingAvg * 10) / 10 : null, ratingCount: r.ratingCount || 0 };
   }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
 }
 /** Targeted CRM send: message (+ optional attached coupon) to EXPLICITLY chosen customers.

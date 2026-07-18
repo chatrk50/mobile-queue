@@ -148,6 +148,28 @@ function sheet(wb, name, title, headers, rows) {
   return ws;
 }
 
+// Customer list export (CRM) — one row per customer with lifecycle segment + the star rating
+// they've given the shop, ready for the owner to slice in Excel.
+export async function buildCustomersWorkbook(customers = [], { store = 'YO-DEE Yogurt' } = {}) {
+  const wb = new ExcelJS.Workbook(); wb.creator = store;
+  const SEG = { new: 'ลูกค้าใหม่', regular: 'ขาประจำ', at_risk: 'เสี่ยงหาย', lost: 'หายไปแล้ว' };
+  sheet(wb, 'Customers', store + ' — รายชื่อลูกค้า',
+    [{ t: 'ชื่อ', w: 24 }, { t: 'ช่องทาง', w: 10 }, { t: 'กลุ่ม', w: 12 }, { t: 'มา (ครั้ง)', w: 10, fmt: NUM, align: 'right', sum: true },
+     { t: 'ใช้จ่ายรวม', w: 14, fmt: BAHT, align: 'right', sum: true }, { t: 'ล่าสุด (วันก่อน)', w: 14, align: 'right' },
+     { t: 'แต้ม', w: 8, fmt: NUM, align: 'right' }, { t: 'ดาวเฉลี่ย', w: 10, align: 'right' }, { t: 'จำนวนรีวิว', w: 11, fmt: NUM, align: 'right', sum: true }],
+    customers.map((c) => [
+      c.name || (c.canPush ? 'ลูกค้า LINE' : 'ลูกค้าเบอร์โทร'),
+      c.canPush ? 'LINE' : 'เบอร์โทร',
+      SEG[c.segment] || c.segment || '',
+      c.visits || 0, c.spend || 0,
+      c.daysSince == null ? '' : c.daysSince,
+      c.points || 0,
+      c.ratingAvg != null ? c.ratingAvg : '',
+      c.ratingCount || 0,
+    ]));
+  return wb.xlsx.writeBuffer();
+}
+
 export async function buildDetailedWorkbook(d, { store = 'YO-DEE Yogurt', date } = {}) {
   const wb = new ExcelJS.Workbook(); wb.creator = store;
   const day = date || (d && d.date) || 'today';
