@@ -238,11 +238,13 @@
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
       <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleCount()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>นับสต๊อก</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="togglePlan()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleSuppliers()"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
       </div>
     </div>
+    <div id="countBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="planBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="supBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div class="ms-split" style="margin-top:12px">
@@ -1395,7 +1397,7 @@ window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{me
 
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
-window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; ['planBox','supBox'].forEach(b=>{const el=$(b); if(el) el.style.display='none';}); $('dash').style.display=''; };
+window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; ['planBox','supBox','countBox'].forEach(b=>{const el=$(b); if(el) el.style.display='none';}); $('dash').style.display=''; };
 window.showStock=async()=>{ hideAllPanels(); $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
   await loadStock(); };
 // ---------- Loyalty admin (owner/manager): earn-rate, rewards, lookup/redeem ----------
@@ -1435,9 +1437,41 @@ window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!(await appConfi
 let SUPPLIERS=[];
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock();
   try{ SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; }catch(e){ /* suppliers are optional */ } }catch(e){ toast(err(e)); } };
+// ---------- Stock count (นับสต๊อกเทียบของจริงก่อนสั่งซื้อ) ----------
+window.toggleCount=async()=>{ const box=$('countBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  $('planBox').style.display='none'; $('supBox').style.display='none'; box.style.display=''; renderCountSheet(); };
+function renderCountSheet(){ const box=$('countBox'); const rows=STOCK||[];
+  if(!rows.length){ box.innerHTML='<p class="muted" style="font-size:12.5px">ยังไม่มีวัตถุดิบ</p>'; return; }
+  box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>นับสต๊อกเทียบของจริง</h2>
+    <div class="muted" style="font-size:11.5px;margin-bottom:10px">เดินนับของจริงแล้วกรอกช่อง "นับได้" — เว้นว่าง = ไม่ปรับรายการนั้น · ระบบจะบันทึกเป็น "นับใหม่" พร้อมผลต่าง</div>
+    ${rows.map(r=>`<div class="row" style="gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:120px"><b style="font-size:13.5px;color:var(--navy)">${esc(r.name)}</b>
+        <div class="muted" style="font-size:11.5px">ระบบ: <b>${r.stock_qty}</b> ${esc(r.unit)}</div></div>
+      <input id="cnt_${r.id}" type="number" inputmode="decimal" placeholder="นับได้" oninput="cntDiff(${r.id},${r.stock_qty})"
+        style="width:86px;padding:8px;border:1.5px solid var(--line);border-radius:9px;text-align:center;font-weight:700">
+      <span id="cntd_${r.id}" style="min-width:74px;text-align:right;font-size:12px" class="muted">—</span></div>`).join('')}
+    <div class="row between" style="margin-top:12px;align-items:center;flex-wrap:wrap;gap:8px">
+      <span id="cntSum" class="muted" style="font-size:12.5px">ยังไม่ได้กรอก</span>
+      <button class="ok" style="padding:9px 18px" onclick="applyCount()">บันทึกปรับสต๊อกตามที่นับ</button></div>`; }
+window.cntDiff=(id,sys)=>{ const v=$('cnt_'+id).value, el=$('cntd_'+id);
+  if(v===''){ el.textContent='—'; el.style.color=''; el.className='muted'; }
+  else { const d=Math.round((Number(v)-sys)*100)/100;
+    el.className=''; el.innerHTML=d===0?'<b style="color:#16a34a">ตรง ✓</b>':(d>0?`<b style="color:#b45309">เกิน +${d}</b>`:`<b style="color:var(--danger)">ขาด ${d}</b>`); }
+  const rows=(STOCK||[]).map(r=>{const x=$('cnt_'+r.id); return x&&x.value!==''?{r,v:Number(x.value)}:null;}).filter(Boolean);
+  const diffs=rows.filter(x=>Math.abs(x.v-x.r.stock_qty)>1e-9);
+  $('cntSum').textContent=rows.length?`กรอกแล้ว ${rows.length} รายการ · ต่างจากระบบ ${diffs.length} รายการ`:'ยังไม่ได้กรอก'; };
+window.applyCount=async()=>{ const rows=(STOCK||[]).map(r=>{const x=$('cnt_'+r.id); return x&&x.value!==''?{r,v:Math.max(0,Number(x.value)||0)}:null;}).filter(Boolean);
+  if(!rows.length){ toast('ยังไม่ได้กรอกจำนวนที่นับ'); return; }
+  const diffs=rows.filter(x=>Math.abs(x.v-x.r.stock_qty)>1e-9);
+  if(!diffs.length){ toast('ทุกรายการตรงกับระบบ ✓ ไม่ต้องปรับ'); return; }
+  if(!(await appConfirm({title:'ปรับสต๊อกตามที่นับ',message:`ปรับ ${diffs.length} รายการให้ตรงกับที่นับได้จริง?`,okText:'ปรับเลย'}))) return;
+  let ok=0,fail=0;
+  for(const x of diffs){ try{ await api('/api/ingredients/'+x.r.id+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'adjust',qty:x.v,note:'นับสต๊อก (ระบบ '+x.r.stock_qty+' → นับได้ '+x.v+')'})}); ok++; }catch(e){ fail++; } }
+  toast(fail?`ปรับแล้ว ${ok} · ล้มเหลว ${fail}`:`ปรับสต๊อกแล้ว ${ok} รายการ ✓`);
+  await refreshStock(); renderCountSheet(); };
 // ---------- Suppliers (ผู้ขาย) ----------
 window.toggleSuppliers=async()=>{ const box=$('supBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  $('planBox').style.display='none'; box.style.display=''; renderSuppliers(); };
+  $('planBox').style.display='none'; $('countBox').style.display='none'; box.style.display=''; renderSuppliers(); };
 function renderSuppliers(){ const box=$('supBox');
   const rows=SUPPLIERS.map(s=>`<div class="row" style="gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px">
       <span style="flex:1"><b>${esc(s.name)}</b>${s.phone?` <a href="tel:${esc(s.phone)}" style="color:var(--accent);text-decoration:none">📞 ${esc(s.phone)}</a>`:''}${s.note?`<div class="muted" style="font-size:11.5px">${esc(s.note)}</div>`:''}</span>
@@ -1464,7 +1498,7 @@ window.delSupplier=async(id)=>{ const s=SUPPLIERS.find(x=>x.id===id); if(!s) ret
     SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; renderSuppliers(); }catch(e){ toast(err(e)); } };
 // ---------- Purchase planning (วางแผนสั่งซื้อ) ----------
 window.togglePlan=async()=>{ const box=$('planBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  $('supBox').style.display='none'; box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณจากการใช้จริง 14 วัน…</p>';
+  $('supBox').style.display='none'; $('countBox').style.display='none'; box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณจากการใช้จริง 14 วัน…</p>';
   let d; try{ d=await api('/api/stock/plan'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
   const plan=d.plan||[]; const need=plan.filter(p=>p.suggestQty>0), okRows=plan.filter(p=>!(p.suggestQty>0));
   const dl=(p)=>p.daysLeft==null?'<span class="muted">ยังไม่มีข้อมูลใช้</span>':(p.daysLeft<=3?`<b style="color:var(--danger)">เหลือ ~${p.daysLeft} วัน</b>`:(p.daysLeft<=7?`<b style="color:#b45309">เหลือ ~${p.daysLeft} วัน</b>`:`เหลือ ~${p.daysLeft} วัน`));
