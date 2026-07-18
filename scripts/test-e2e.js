@@ -611,6 +611,16 @@ Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'return', qty: 2, note: 'คื
 ok(rr(Q.cogsForDay().cogsActual - cogs0) === 0, 'INVARIANT returns (cancelled orders) net out of real COGS');
 db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowid);
 
+// ---- Waste is recorded distinctly from use (so COGS vs waste cost are separable) ----
+const wIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบของเสีย','กก.', 20, 10)`).run().lastInsertRowid;
+const cogsW0 = Q.cogsForDay();
+Q.recordStockMove(wIng, { kind: 'use', qty: 2, note: 'เบิกใช้' });     // 2×10 = ฿20 COGS
+Q.recordStockMove(wIng, { kind: 'waste', qty: 1, note: 'ของเสีย' });   // 1×10 = ฿10 waste
+const cogsW1 = Q.cogsForDay();
+ok(Math.round((cogsW1.cogsActual - cogsW0.cogsActual) * 100) / 100 === 20, `INVARIANT a 'use' move feeds COGS, not waste (Δcogs ${Math.round((cogsW1.cogsActual - cogsW0.cogsActual) * 100) / 100})`);
+ok(Math.round((cogsW1.wasteCost - cogsW0.wasteCost) * 100) / 100 === 10, `INVARIANT a 'waste' move feeds wasteCost separately (Δwaste ${Math.round((cogsW1.wasteCost - cogsW0.wasteCost) * 100) / 100})`);
+ok(db.prepare("SELECT stock_qty FROM ingredients WHERE id=?").get(wIng).stock_qty === 17, 'INVARIANT both use and waste deduct on-hand stock');
+
 // ---- Suppliers + price history + purchase planning ----
 console.log('\n== Suppliers + purchase planning ==');
 const sup = Q.upsertSupplier(null, { name: 'แม็คโครทดสอบ', phone: '021112222', note: 'ส่งวันอังคาร' });

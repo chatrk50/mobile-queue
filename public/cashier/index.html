@@ -1744,10 +1744,11 @@ window.editIngForm=(id)=>{ _selIngId=id;
     </div>
     <label class="ff">ซื้อจาก <span class="muted" style="font-weight:400">(เฉพาะรับเข้า — เพื่อดูประวัติราคา)</span>
       <select id="if_supplier" style="padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="">— ไม่ระบุ —</option>${(SUPPLIERS||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
-    <div class="row" style="gap:8px;margin:2px 0 10px">
-      <button class="ok" style="flex:1" onclick="stockMoveForm('purchase')">รับเข้า</button>
-      <button class="ghost" style="flex:1" onclick="stockMoveForm('adjust')">นับใหม่</button>
-      <button class="ghost danger" style="flex:1" onclick="stockMoveForm('use')">เบิก/ของเสีย</button>
+    <div class="row" style="gap:8px;margin:2px 0 10px;flex-wrap:wrap">
+      <button class="ok" style="flex:1;min-width:80px" onclick="stockMoveForm('purchase')">รับเข้า</button>
+      <button class="ghost" style="flex:1;min-width:80px" onclick="stockMoveForm('adjust')">นับใหม่</button>
+      <button class="ghost" style="flex:1;min-width:80px" onclick="stockMoveForm('use')">เบิกใช้</button>
+      <button class="ghost danger" style="flex:1;min-width:80px" onclick="stockMoveForm('waste')" title="ของเสีย/ทิ้ง — แยกจากการเบิกใช้ เพื่อคิดต้นทุนของเสียได้ถูก">ของเสีย</button>
     </div>
     <div id="priceHistBox" style="margin:0 0 14px"><button class="ghost" style="width:100%;padding:7px;font-size:12.5px" onclick="showPriceHist(${r.id})"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ประวัติราคาซื้อ</button></div>
     <div style="border-top:1px solid var(--line);padding-top:12px">
@@ -1773,7 +1774,8 @@ window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
   if(kind==='adjust'){ if(!(qty>=0)){ toast('ใส่จำนวนคงเหลือ'); return; } }
   else if(!(qty>0)){ toast('ใส่จำนวน'); return; }
   const body={kind,qty}; if(kind==='purchase'){ body.cost=Number($('if_buycost').value)||0; body.supplierId=Number($('if_supplier')&&$('if_supplier').value)||null; }
-  const msg=kind==='purchase'?'รับเข้าสต๊อกแล้ว':(kind==='adjust'?'ปรับสต๊อกแล้ว':'บันทึกการเบิกแล้ว');
+  if(kind==='waste') body.note='ของเสีย';
+  const msg={purchase:'รับเข้าสต๊อกแล้ว',adjust:'ปรับสต๊อกแล้ว',use:'บันทึกการเบิกใช้แล้ว',waste:'บันทึกของเสียแล้ว'}[kind]||'บันทึกแล้ว';
   try{ await api('/api/ingredients/'+_selIngId+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast(msg); await refreshStock(_selIngId); }catch(e){ toast(err(e)); } };
 
 // ---------- Cash drawer / Z-report (owner/manager) ----------
