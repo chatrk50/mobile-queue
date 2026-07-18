@@ -387,6 +387,31 @@ CREATE TABLE IF NOT EXISTS suppliers (
   active     INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Purchase orders (ใบสั่งซื้อ): a header + many lines. A draft is editable; on "รับของ"
+-- every line posts a purchase stock_move (updating on-hand + avg cost) and the PO is received.
+-- This is the SCM record: ซื้อกับใคร เมื่อไหร่ เลขที่ใบ กี่รายการ ราคาเท่าไหร่ หมดอายุเมื่อไหร่.
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   INTEGER NOT NULL DEFAULT 1,
+  branch_id   INTEGER,
+  po_no       TEXT,                              -- human ref, e.g. PO-2026-0001 (auto if blank)
+  supplier_id INTEGER REFERENCES suppliers(id),
+  status      TEXT NOT NULL DEFAULT 'draft',     -- draft | received | cancelled
+  note        TEXT,
+  ordered_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  received_at TEXT,
+  actor       INTEGER
+);
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_id         INTEGER NOT NULL REFERENCES purchase_orders(id),
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  qty           REAL NOT NULL DEFAULT 0,
+  unit_price    REAL NOT NULL DEFAULT 0,          -- price per unit (total = qty × unit_price)
+  expiry        TEXT,                             -- 'YYYY-MM-DD' of this lot (optional)
+  note          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_po_lines_po ON purchase_order_lines(po_id);
 -- Recipe / bill-of-materials: how much of each ingredient one unit of a menu item uses.
 -- Drives AUTO stock deduction when a sale is paid. Empty by default → no deduction
 -- (dormant) until the owner defines recipes, so existing behaviour is unchanged.
@@ -533,6 +558,8 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
+  `ALTER TABLE stock_moves ADD COLUMN expiry TEXT`,         // purchases only: lot expiry 'YYYY-MM-DD' (→ near-expiry alerts)
+  `ALTER TABLE stock_moves ADD COLUMN po_id INTEGER`,       // purchases posted from a purchase order
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

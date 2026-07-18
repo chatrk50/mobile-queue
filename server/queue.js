@@ -1060,7 +1060,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
 }
 /** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;
  *  use/waste=qty out; adjust=set on-hand to qty (stock count). */
-export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null, supplierId = null } = {}) {
+export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null, supplierId = null, expiry = null, poId = null } = {}) {
   const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
   if (!ing) throw new Error('ingredient_not_found');
   let q = Number(qty) || 0;
@@ -1076,11 +1076,12 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
   } else { // use | waste
     q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
   }
+  const exp = (kind === 'purchase' && /^\d{4}-\d{2}-\d{2}$/.test(String(expiry || ''))) ? expiry : null;
   const tx = db.transaction(() => {
     db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
-    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id) VALUES (?,?,?,?,?,?,?,?)')
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId,
-        kind === 'purchase' ? (Number(supplierId) || null) : null);
+        kind === 'purchase' ? (Number(supplierId) || null) : null, exp, kind === 'purchase' ? (Number(poId) || null) : null);
   });
   tx();
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
@@ -1148,6 +1149,156 @@ export function purchasePlan(horizonDays = 14) {
       lastBuyAt: lastBuy?.at || null,
     };
   }).sort((a, b) => (a.daysLeft ?? 9e9) - (b.daysLeft ?? 9e9));
+}
+
+// ========== SCM: purchase orders, two-way sourcing views, expiry lots ==========
+/** By-ingredient sourcing: which suppliers we've bought this from + each one's latest/avg
+ *  unit price + times bought. Answers "รายการนี้เคยซื้อจากใครบ้าง ราคาเท่าไหร่" (multi-source). */
+export function ingredientSources(ingredientId) {
+  const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
+  if (!ing) throw new Error('ingredient_not_found');
+  const rows = db.prepare(
+    `SELECT COALESCE(s.name,'ไม่ระบุผู้ขาย') supplier, sm.supplier_id,
+            COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent, MAX(sm.at) lastAt
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      GROUP BY sm.supplier_id ORDER BY lastAt DESC`
+  ).all(ingredientId);
+  const sources = rows.map((r) => ({
+    supplierId: r.supplier_id || null, supplier: r.supplier, times: r.times,
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0, lastAt: r.lastAt,
+  }));
+  const cheapest = sources.filter((s) => s.avgUnit > 0).sort((a, b) => a.avgUnit - b.avgUnit)[0] || null;
+  return { ingredient: { id: ing.id, name: ing.name, unit: ing.unit, stock: ing.stock_qty, avgCost: ing.avg_cost },
+    sources, cheapest, history: ingredientPriceHistory(ingredientId, 30) };
+}
+/** By-supplier catalog: what this supplier has sold us, each item's latest unit price +
+ *  total spent, plus their purchase-order history. Answers "เจ้านี้ขายอะไร ราคาเท่าไหร่". */
+export function supplierCatalog(supplierId) {
+  const sup = db.prepare('SELECT * FROM suppliers WHERE id=?').get(supplierId);
+  if (!sup) throw new Error('supplier_not_found');
+  const items = db.prepare(
+    `SELECT i.id, i.name, i.unit, COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent,
+            MAX(sm.at) lastAt
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE sm.supplier_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      GROUP BY i.id ORDER BY lastAt DESC`
+  ).all(supplierId).map((r) => ({ id: r.id, name: r.name, unit: r.unit, times: r.times,
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0, spent: r2(r.spent), lastAt: r.lastAt }));
+  const orders = db.prepare(
+    `SELECT po.id, po.po_no, po.status, po.ordered_at, po.received_at,
+            COUNT(l.id) lines, COALESCE(SUM(l.qty*l.unit_price),0) total
+       FROM purchase_orders po LEFT JOIN purchase_order_lines l ON l.po_id=po.id
+      WHERE po.supplier_id=? GROUP BY po.id ORDER BY po.id DESC LIMIT 30`
+  ).all(supplierId).map((r) => ({ ...r, total: r2(r.total) }));
+  return { supplier: sup, items, orders, totalSpent: r2(items.reduce((s, i) => s + i.spent, 0)) };
+}
+/** Lots (purchase moves that carry an expiry) expiring within `days` — FEFO heads-up.
+ *  NOTE: this is a received-lot expiry alert, not remaining-qty-per-lot depletion tracking. */
+export function expiringLots(days = 14) {
+  const rows = db.prepare(
+    `SELECT sm.id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+       LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.kind='purchase' AND sm.expiry IS NOT NULL
+        AND date(sm.expiry) <= date('now','+7 hours',? )
+      ORDER BY sm.expiry ASC`
+  ).all(`+${Math.max(0, Number(days) || 14)} days`);
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  return rows.map((r) => ({ id: r.id, name: r.name, unit: r.unit, qty: r.qty, expiry: r.expiry,
+    supplier: r.supplier || null, boughtAt: r.at,
+    daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
+    expired: r.expiry < today }));
+}
+// ---- Purchase orders (ใบสั่งซื้อ) ----
+function poView(id) {
+  const po = db.prepare(
+    `SELECT po.*, s.name AS supplier_name, st.name AS actor_name FROM purchase_orders po
+       LEFT JOIN suppliers s ON s.id=po.supplier_id LEFT JOIN staff st ON st.id=po.actor WHERE po.id=?`
+  ).get(id);
+  if (!po) return null;
+  const lines = db.prepare(
+    `SELECT l.*, i.name AS ingredient_name, i.unit FROM purchase_order_lines l
+       JOIN ingredients i ON i.id=l.ingredient_id WHERE l.po_id=? ORDER BY l.id`
+  ).all(id).map((l) => ({ ...l, lineTotal: r2((Number(l.qty) || 0) * (Number(l.unit_price) || 0)) }));
+  return { ...po, lines, total: r2(lines.reduce((s, l) => s + l.lineTotal, 0)) };
+}
+export function getPurchaseOrder(id) { return poView(id); }
+export function listPurchaseOrders({ supplierId = null, status = null, limit = 40 } = {}) {
+  const where = [], args = [];
+  if (supplierId) { where.push('po.supplier_id=?'); args.push(Number(supplierId)); }
+  if (status) { where.push('po.status=?'); args.push(String(status)); }
+  const rows = db.prepare(
+    `SELECT po.id, po.po_no, po.status, po.ordered_at, po.received_at, s.name AS supplier_name,
+            COUNT(l.id) lines, COALESCE(SUM(l.qty*l.unit_price),0) total
+       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
+       LEFT JOIN purchase_order_lines l ON l.po_id=po.id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      GROUP BY po.id ORDER BY po.id DESC LIMIT ?`
+  ).all(...args, limit);
+  return rows.map((r) => ({ ...r, total: r2(r.total) }));
+}
+function nextPoNo() {
+  const y = db.prepare("SELECT strftime('%Y', datetime('now','+7 hours')) y").get().y;
+  const n = (db.prepare("SELECT COUNT(*) c FROM purchase_orders WHERE po_no LIKE ?").get(`PO-${y}-%`).c || 0) + 1;
+  return `PO-${y}-${String(n).padStart(4, '0')}`;
+}
+/** Create/replace a DRAFT purchase order (header + lines). Received POs are immutable. */
+export function savePurchaseOrder({ id = null, supplierId = null, poNo = null, note = null, lines = [], actorId = null } = {}) {
+  const clean = (Array.isArray(lines) ? lines : []).map((l) => ({
+    ingredientId: Number(l.ingredientId) || 0, qty: Math.max(0, Number(l.qty) || 0),
+    unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+    expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(l.expiry || '')) ? l.expiry : null,
+    note: l.note ? String(l.note).slice(0, 120) : null,
+  })).filter((l) => l.ingredientId && l.qty > 0);
+  const tx = db.transaction(() => {
+    let poId = id;
+    if (poId) {
+      const cur = db.prepare('SELECT status FROM purchase_orders WHERE id=?').get(poId);
+      if (!cur) throw new Error('po_not_found');
+      if (cur.status !== 'draft') throw new Error('po_not_editable');
+      db.prepare('UPDATE purchase_orders SET supplier_id=?, po_no=?, note=? WHERE id=?')
+        .run(supplierId ? Number(supplierId) : null, (poNo || '').toString().slice(0, 30) || null, note ? String(note).slice(0, 200) : null, poId);
+      db.prepare('DELETE FROM purchase_order_lines WHERE po_id=?').run(poId);
+    } else {
+      const info = db.prepare('INSERT INTO purchase_orders (po_no, supplier_id, note, actor) VALUES (?,?,?,?)')
+        .run((poNo || nextPoNo()).toString().slice(0, 30), supplierId ? Number(supplierId) : null, note ? String(note).slice(0, 200) : null, actorId);
+      poId = info.lastInsertRowid;
+    }
+    const ins = db.prepare('INSERT INTO purchase_order_lines (po_id, ingredient_id, qty, unit_price, expiry, note) VALUES (?,?,?,?,?,?)');
+    for (const l of clean) ins.run(poId, l.ingredientId, l.qty, l.unitPrice, l.expiry, l.note);
+    return poId;
+  });
+  return poView(tx());
+}
+/** Receive a draft PO: post every line as a purchase stock_move (on-hand + avg cost + expiry
+ *  lot + supplier + po_id), then mark received. Idempotent-guarded: a received PO can't re-post. */
+export function receivePurchaseOrder(id, { actorId = null } = {}) {
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(id);
+  if (!po) throw new Error('po_not_found');
+  if (po.status !== 'draft') throw new Error('po_not_draft');
+  const lines = db.prepare('SELECT * FROM purchase_order_lines WHERE po_id=?').all(id);
+  if (!lines.length) throw new Error('po_empty');
+  for (const l of lines) {
+    recordStockMove(l.ingredient_id, { kind: 'purchase', qty: l.qty, cost: r2(l.qty * l.unit_price),
+      note: `รับเข้าจากใบสั่งซื้อ ${po.po_no || ('#' + po.id)}`, actorId, supplierId: po.supplier_id, expiry: l.expiry, poId: po.id });
+  }
+  db.prepare("UPDATE purchase_orders SET status='received', received_at=datetime('now'), actor=COALESCE(?,actor) WHERE id=?").run(actorId, id);
+  return poView(id);
+}
+export function cancelPurchaseOrder(id) {
+  const po = db.prepare('SELECT status FROM purchase_orders WHERE id=?').get(id);
+  if (!po) throw new Error('po_not_found');
+  if (po.status === 'received') throw new Error('po_already_received');
+  db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);
+  return { ok: true };
+}
+/** Turn the purchase plan into a DRAFT PO of everything that needs reordering (one-tap). */
+export function draftPoFromPlan({ actorId = null } = {}) {
+  const need = purchasePlan().filter((p) => p.suggestQty > 0);
+  if (!need.length) return null;
+  return savePurchaseOrder({ actorId, note: 'สร้างจากคำแนะนำการสั่งซื้อ',
+    lines: need.map((p) => ({ ingredientId: p.id, qty: p.suggestQty, unitPrice: p.lastUnitPrice || 0 })) });
 }
 
 // ---------- Recipes (bill-of-materials) → auto stock deduction on sale ----------

@@ -659,6 +659,43 @@ const psAll = Q.pushStats();
 ok(psr.from === psToday && psr.to === psToday && psr.total === psAll.today, `INVARIANT range report for today matches pushStats.today (${psr.total} vs ${psAll.today})`);
 ok(Q.pushStatsRange('bad-date', null).from !== 'bad-date', 'INVARIANT malformed range dates fall back to defaults');
 
+// ---- SCM: purchase orders, expiry lots, two-way sourcing ----
+console.log('\n== SCM: purchase orders + sourcing ==');
+const scmIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบ SCM','กก.', 0, 0)`).run().lastInsertRowid;
+const scmSupA = Q.upsertSupplier(null, { name: 'ผู้ขาย A' });
+const scmSupB = Q.upsertSupplier(null, { name: 'ผู้ขาย B' });
+// Draft a PO, then receive it → posts stock + expiry lot
+const draft = Q.savePurchaseOrder({ supplierId: scmSupA.id, note: 'ทดสอบ', lines: [
+  { ingredientId: scmIng, qty: 10, unitPrice: 25, expiry: '2026-08-31' },
+  { ingredientId: scmIng, qty: 0, unitPrice: 5 },   // qty 0 → dropped
+] });
+ok(draft.po_no && /^PO-\d{4}-\d{4}$/.test(draft.po_no) && draft.lines.length === 1 && draft.total === 250, `INVARIANT a draft PO auto-numbers + totals valid lines (no ${draft.po_no}, total ${draft.total})`);
+const stockBeforePO = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(scmIng).stock_qty;
+const recv = Q.receivePurchaseOrder(draft.id);
+ok(recv.status === 'received', 'INVARIANT receiving a PO marks it received');
+const stockAfterPO = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(scmIng).stock_qty;
+ok(rr(stockAfterPO - stockBeforePO) === 10, `INVARIANT receiving posts stock (Δ ${rr(stockAfterPO - stockBeforePO)})`);
+let reRecv = null; try { Q.receivePurchaseOrder(draft.id); } catch (e) { reRecv = e.message; }
+ok(reRecv === 'po_not_draft', 'INVARIANT a received PO cannot be received again (no double-posting)');
+let editRecv = null; try { Q.savePurchaseOrder({ id: draft.id, lines: [] }); } catch (e) { editRecv = e.message; }
+ok(editRecv === 'po_not_editable', 'INVARIANT a received PO is immutable');
+// Expiry lot surfaces in the alert window
+const exp = Q.expiringLots(400);   // 2026-08-31 is within a wide window relative to test clock
+ok(exp.some((l) => l.expiry === '2026-08-31' && l.name === 'วัตถุดิบ SCM'), 'INVARIANT a received lot with an expiry appears in expiringLots');
+// Two-way sourcing: buy the same item from supplier B too, then check both views
+Q.recordStockMove(scmIng, { kind: 'purchase', qty: 10, cost: 300, supplierId: scmSupB.id });   // ฿30/unit
+const srcs = Q.ingredientSources(scmIng);
+ok(srcs.sources.length === 2, `INVARIANT ingredientSources lists every supplier the item was bought from (got ${srcs.sources.length})`);
+ok(srcs.cheapest && srcs.cheapest.supplier === 'ผู้ขาย A' && srcs.cheapest.avgUnit === 25, `INVARIANT cheapest source is identified (got ${srcs.cheapest && srcs.cheapest.supplier} @${srcs.cheapest && srcs.cheapest.avgUnit})`);
+const cat = Q.supplierCatalog(scmSupA.id);
+ok(cat.items.some((i) => i.id === scmIng && i.avgUnit === 25) && cat.orders.some((o) => o.id === draft.id), 'INVARIANT supplierCatalog shows what they sold + their PO history');
+// Cancel guard
+const draft2 = Q.savePurchaseOrder({ supplierId: scmSupA.id, lines: [{ ingredientId: scmIng, qty: 1, unitPrice: 1 }] });
+ok(Q.cancelPurchaseOrder(draft2.id).ok === true, 'INVARIANT a draft PO can be cancelled');
+let cancelRecv = null; try { Q.cancelPurchaseOrder(draft.id); } catch (e) { cancelRecv = e.message; }
+ok(cancelRecv === 'po_already_received', 'INVARIANT a received PO cannot be cancelled');
+db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(scmIng);
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

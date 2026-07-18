@@ -1073,6 +1073,51 @@ app.get('/api/stock/plan', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ plan: Q.purchasePlan() });
 });
+// SCM: two-way sourcing views, expiry lots, purchase orders (manager+)
+app.get('/api/ingredients/:id/sources', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.ingredientSources(Number(req.params.id))); } catch (e) { res.status(404).json({ error: e.message }); }
+});
+app.get('/api/suppliers/:id/catalog', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.supplierCatalog(Number(req.params.id))); } catch (e) { res.status(404).json({ error: e.message }); }
+});
+app.get('/api/stock/expiring', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ lots: Q.expiringLots(Number(req.query.days) || 14) });
+});
+app.get('/api/purchase-orders', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ orders: Q.listPurchaseOrders({ supplierId: req.query.supplierId, status: req.query.status }) });
+});
+app.get('/api/purchase-orders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const po = Q.getPurchaseOrder(Number(req.params.id));
+  if (!po) return res.status(404).json({ error: 'po_not_found' });
+  res.json(po);
+});
+app.post('/api/purchase-orders', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.savePurchaseOrder({ ...req.body, actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.savePurchaseOrder({ ...req.body, id: Number(req.params.id), actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id/receive', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.receivePurchaseOrder(Number(req.params.id), { actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id/cancel', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cancelPurchaseOrder(Number(req.params.id))); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/from-plan', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const po = Q.draftPoFromPlan({ actorId: req.staff?.id || null });
+  if (!po) return res.status(400).json({ error: 'nothing_to_order' });
+  res.json(po);
+});
 // Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
 app.get('/api/menu/:id/recipe', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
