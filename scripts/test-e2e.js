@@ -694,6 +694,23 @@ const draft2 = Q.savePurchaseOrder({ supplierId: scmSupA.id, lines: [{ ingredien
 ok(Q.cancelPurchaseOrder(draft2.id).ok === true, 'INVARIANT a draft PO can be cancelled');
 let cancelRecv = null; try { Q.cancelPurchaseOrder(draft.id); } catch (e) { cancelRecv = e.message; }
 ok(cancelRecv === 'po_already_received', 'INVARIANT a received PO cannot be cancelled');
+// ---- OCR receipt → PO line matching (pure mapper, vision call stays dormant) ----
+console.log('\n== Receipt OCR line matching ==');
+const ocrIngs = [{ id: 1, name: 'โยเกิร์ตรสธรรมชาติ', unit: 'กก.' }, { id: 2, name: 'สตรอเบอร์รี่แช่แข็ง', unit: 'กก.' }];
+const ocrParsed = [
+  { name: 'โยเกิร์ตรสธรรมชาติ', qty: 5, unitPrice: 53, expiry: '2026-09-01' }, // exact
+  { name: 'สตรอเบอร์รี่', qty: 2, unitPrice: 80 },                              // substring
+  { name: 'ของแปลกไม่รู้จัก', qty: 1, unitPrice: 10 },                          // no match
+];
+const matched = Q.matchReceiptLines(ocrParsed, ocrIngs);
+ok(matched[0].ingredientId === 1 && matched[0].expiry === '2026-09-01', 'INVARIANT OCR exact name maps to the ingredient + keeps expiry');
+ok(matched[1].ingredientId === 2 && matched[1].matched === true, 'INVARIANT OCR partial name still matches by substring');
+ok(matched[2].ingredientId === null && matched[2].matched === false, 'INVARIANT an unrecognized line is flagged for manual pick, not dropped');
+ok(Q.matchReceiptLines([{ name: 'x', qty: -5, unitPrice: -1, expiry: 'bad' }], ocrIngs)[0].qty === 0, 'INVARIANT OCR line qty/price are clamped, bad expiry nulled');
+ok(Q.ocrConfigured() === false, 'INVARIANT OCR vision call is dormant without OCR_API_URL/KEY (safe default)');
+let ocrOff = null; try { await Q.parseReceiptImage('data:image/png;base64,abc'); } catch (e) { ocrOff = e.message; }
+ok(ocrOff === 'ocr_off', 'INVARIANT parseReceiptImage refuses when unconfigured (no accidental external call)');
+
 db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(scmIng);
 
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount

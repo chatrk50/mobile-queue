@@ -1626,7 +1626,20 @@ window.poSave=async(id,receive)=>{ const supplierId=$('po_sup').value||null, not
 window.poReceive=async(id,skipConfirm)=>{ if(!skipConfirm && !(await appConfirm({title:'รับของเข้าสต๊อก',message:'ยืนยันรับของตามใบสั่งซื้อนี้? ระบบจะเพิ่มสต๊อก + อัปเดตต้นทุนเฉลี่ย + บันทึกวันหมดอายุ',okText:'รับของ'}))) return;
   try{ await api('/api/purchase-orders/'+id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); toast('รับของเข้าสต๊อกแล้ว ✓'); $('poEditor').innerHTML=''; await refreshStock(); loadExpiryBanner(); renderPoTab(); }
   catch(e){ toast(err(e)==='po_empty'?'ใบสั่งซื้อยังไม่มีรายการ':err(e)); } };
-window.poScan=()=>{ toast('กำลังเตรียมฟังก์ชันสแกน…'); };   // replaced by OCR in the next stage
+// OCR: snap/upload a purchase receipt → server reads it → proposed lines merged into the PO.
+// The owner reviews + fixes every line (matched ones prefilled; unmatched need a manual วัตถุดิบ pick).
+window.poScan=()=>{ const f=$('imgFile'); f.value=''; _uploadKind='ocr'; f.click(); };
+async function poScanUpload(dataUrl){ toast('กำลังอ่านใบรายการ…');
+  let d; try{ d=await api('/api/purchase-orders/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}); }
+  catch(e){ const m=err(e); toast(m==='ocr_off'?'ยังไม่ได้เปิดใช้สแกน OCR (ต้องตั้งค่า API key ในระบบก่อน)':(m==='ocr_unparsed'||m==='ocr_failed'?'อ่านใบรายการไม่สำเร็จ ลองถ่ายใหม่ให้ชัดขึ้น':m)); return; }
+  const lines=d.lines||[]; if(!lines.length){ toast('อ่านไม่พบรายการในรูป'); return; }
+  // Prefill supplier if OCR guessed one that matches an existing supplier by name
+  if(d.supplier){ const sup=(SUPPLIERS||[]).find(s=>s.name && d.supplier.includes(s.name)); if(sup && $('po_sup')) $('po_sup').value=sup.id; }
+  lines.forEach(l=>_poLines.push({ingredientId:l.ingredientId||0,qty:l.qty,unitPrice:l.unitPrice,expiry:l.expiry||''}));
+  renderPoLines(true);
+  const unmatched=lines.filter(l=>!l.matched).length;
+  toast(unmatched?('เพิ่ม '+lines.length+' รายการ · '+unmatched+' รายการยังไม่จับคู่วัตถุดิบ กรุณาเลือกเอง'):('เพิ่ม '+lines.length+' รายการจากใบ ✓'));
+}
 // ---------- Purchase price history (ประวัติราคาซื้อ) ----------
 window.showPriceHist=async(id)=>{ const box=$('priceHistBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   let d; try{ d=await api('/api/ingredients/'+id+'/prices'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
@@ -2163,7 +2176,9 @@ window.toggleSoldout=async(id,soldout)=>{ try{ await api('/api/menu/'+id,{method
 window.toggleItem=async(id,active)=>{ try{ await api('/api/menu/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); await loadMenu(); _refreshMenu(); }catch(e){ toast(err(e)); } };
 let uploadTargetId=null, _uploadKind='menu';
 window.uploadImg=(id)=>{ uploadTargetId=id; _uploadKind='menu'; const f=$('imgFile'); f.value=''; f.click(); };
-async function onImgFile(e){ const f=e.target.files&&e.target.files[0]; if(!f||uploadTargetId==null) return;
+async function onImgFile(e){ const f=e.target.files&&e.target.files[0]; if(!f) return;
+  if(_uploadKind==='ocr'){ _uploadKind=null; try{ const big=await resizeImage(f,1400); await poScanUpload(big); }catch(err2){ toast('อ่านรูปไม่สำเร็จ: '+(err2.message||err2)); } return; }
+  if(uploadTargetId==null) return;
   try{ const dataUrl=await resizeImage(f,320);
     if(_uploadKind==='reward'){ await api('/api/rewards/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}); toast('อัปเดตรูปรางวัลแล้ว'); loadLoyaltyAdmin(); }
     else { await api('/api/menu/'+uploadTargetId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}); toast('อัปเดตรูปแล้ว'); await loadMenu(); _refreshMenu(); }

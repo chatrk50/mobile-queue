@@ -1293,6 +1293,64 @@ export function cancelPurchaseOrder(id) {
   db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);
   return { ok: true };
 }
+/** Fuzzy-match OCR'd receipt line names to existing ingredients. PURE + testable — no I/O.
+ *  parsedLines: [{name, qty, unitPrice, expiry}] · ingredients: [{id,name,unit}].
+ *  Returns each line with the best ingredient match (or ingredientId:null = needs manual pick). */
+export function matchReceiptLines(parsedLines = [], ingredients = []) {
+  const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[.,()]/g, '');
+  const idx = ingredients.map((i) => ({ i, n: norm(i.name) }));
+  return (Array.isArray(parsedLines) ? parsedLines : []).map((l) => {
+    const n = norm(l.name);
+    let hit = null;
+    if (n) {
+      hit = idx.find((x) => x.n === n)                                   // exact
+        || idx.find((x) => x.n.includes(n) || n.includes(x.n))          // substring either way
+        || idx.find((x) => { const a = new Set(String(l.name).toLowerCase().split(/\s+/).filter(Boolean));
+            return [...a].some((w) => w.length >= 3 && x.n.includes(norm(w))); }); // token overlap
+    }
+    return {
+      name: String(l.name || '').slice(0, 60),
+      ingredientId: hit ? hit.i.id : null,
+      matchedName: hit ? hit.i.name : null,
+      qty: Math.max(0, Number(l.qty) || 0),
+      unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+      expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(l.expiry || '')) ? l.expiry : null,
+      matched: !!hit,
+    };
+  });
+}
+export function ocrConfigured() { return !!(process.env.OCR_API_URL && process.env.OCR_API_KEY); }
+/** Call the configured vision endpoint to read a purchase receipt/invoice image into structured
+ *  lines. DORMANT until OCR_API_URL + OCR_API_KEY are set (owner adds them in Render, like SlipOK).
+ *  Returns { supplier, lines:[{name,qty,unitPrice,expiry}] }. Never trusted blindly — the UI makes
+ *  the owner review + match every line before the PO is saved. */
+export async function parseReceiptImage(dataUrl) {
+  if (!ocrConfigured()) throw new Error('ocr_off');
+  const m = /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(String(dataUrl || ''));
+  if (!m) throw new Error('bad_image');
+  const prompt = 'อ่านใบรายการซื้อ/ใบเสร็จวัตถุดิบนี้ ตอบเป็น JSON เท่านั้น: '
+    + '{"supplier":"ชื่อร้าน","lines":[{"name":"ชื่อสินค้า","qty":จำนวน,"unitPrice":ราคาต่อหน่วย,"expiry":"YYYY-MM-DD หรือ null"}]}. '
+    + 'ห้ามมีข้อความอื่นนอก JSON.';
+  const r = await fetch(process.env.OCR_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OCR_API_KEY}` },
+    body: JSON.stringify({
+      model: process.env.OCR_MODEL || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: dataUrl } },
+      ] }],
+      max_tokens: 1500,
+    }),
+  });
+  if (!r.ok) throw new Error('ocr_failed');
+  const j = await r.json();
+  const text = j.choices?.[0]?.message?.content || '';
+  const jm = text.match(/\{[\s\S]*\}/);
+  if (!jm) throw new Error('ocr_unparsed');
+  const parsed = JSON.parse(jm[0]);
+  return { supplier: parsed.supplier || null, lines: Array.isArray(parsed.lines) ? parsed.lines : [] };
+}
 /** Turn the purchase plan into a DRAFT PO of everything that needs reordering (one-tap). */
 export function draftPoFromPlan({ actorId = null } = {}) {
   const need = purchasePlan().filter((p) => p.suggestQty > 0);

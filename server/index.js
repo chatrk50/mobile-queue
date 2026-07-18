@@ -1118,6 +1118,17 @@ app.post('/api/purchase-orders/from-plan', (req, res) => {
   if (!po) return res.status(400).json({ error: 'nothing_to_order' });
   res.json(po);
 });
+// OCR a purchase receipt/invoice image → proposed PO lines matched to existing ingredients.
+// Dormant (404 ocr_off) until OCR_API_URL + OCR_API_KEY are set — the owner adds them, like SlipOK.
+app.post('/api/purchase-orders/ocr', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!Q.ocrConfigured()) return res.status(404).json({ error: 'ocr_off' });
+  try {
+    const parsed = await Q.parseReceiptImage(req.body?.image);
+    const lines = Q.matchReceiptLines(parsed.lines, Q.listIngredients());
+    res.json({ supplier: parsed.supplier, lines });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
 app.get('/api/menu/:id/recipe', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
