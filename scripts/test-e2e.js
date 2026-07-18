@@ -717,6 +717,17 @@ ok(relearned[0].ingredientId === ocrIngs[0].id && relearned[0].viaAlias === true
 Q.learnAlias('นมสดยี่ห้อพิเศษ', ocrIngs[1].id);   // correction overwrites
 ok(Q.aliasMap()[('นมสดยี่ห้อพิเศษ')] === ocrIngs[1].id, 'INVARIANT correcting an alias overwrites the old mapping');
 
+// ---- Slip-OCR learning: cashier teaches per-bank receiver wordings ----
+console.log('\n== Slip receiver aliases ==');
+Q.addSlipAlias('ธรรมนูญ ก. (KBANK)');
+ok(Q.listSlipAliases().includes('ธรรมนูญ ก. (KBANK)'), 'INVARIANT a taught receiver alias persists');
+Q.addSlipAlias('ธรรมนูญ  ก. (kbank)');   // same after normalization → no duplicate
+ok(Q.listSlipAliases().length === 1, `INVARIANT near-duplicate aliases are deduped (got ${Q.listSlipAliases().length})`);
+let aShort = null; try { Q.addSlipAlias('ab'); } catch (e) { aShort = e.message; }
+ok(aShort === 'alias_too_short', 'INVARIANT too-short alias rejected');
+for (let i = 0; i < 35; i++) Q.addSlipAlias('ผู้รับทดสอบหมายเลข ' + i);
+ok(Q.listSlipAliases().length <= 30, `INVARIANT alias list is capped at 30 (got ${Q.listSlipAliases().length})`);
+
 // ---- Purchasing report: monthly / per-item / per-supplier spend ----
 console.log('\n== Purchase report ==');
 const prIng = db.prepare(`INSERT INTO ingredients (name, unit) VALUES ('วัตถุดิบรายงาน','กก.')`).run().lastInsertRowid;

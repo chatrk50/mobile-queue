@@ -599,12 +599,18 @@
   <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap"></div>
   <input id="clSearch" type="search" placeholder="🔍 ค้นหาชื่อ / เบอร์โทร" oninput="clSearchInput()"
     style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13.5px;border:1.5px solid var(--line);border-radius:11px;margin-bottom:8px">
-  <div id="clList" style="max-height:44vh;overflow-y:auto;border:1px solid var(--line);border-radius:12px"></div>
-  <div id="clSelBar" class="row between" style="align-items:center;margin-top:8px;font-size:13px">
+  <div id="clList" style="max-height:48vh;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px"></div>
+  <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px;padding-bottom:8px">
+    <div class="muted" style="font-size:12px;margin-bottom:6px">ประวัติการส่ง (แคมเปญ)</div>
+    <div id="clCampaigns" style="font-size:12.5px"></div>
+  </div>
+  <!-- Composer pinned to the bottom of the screen while the customers page is open (owner UX) -->
+  <div id="clComposer" style="position:sticky;bottom:-21px;z-index:5;background:#fff;border-top:1px solid var(--line);margin:8px -20px -20px;padding:10px 20px 14px;border-radius:0 0 var(--radius) var(--radius);box-shadow:0 -6px 16px -12px rgba(16,24,40,.25)">
+  <div id="clSelBar" class="row between" style="align-items:center;font-size:13px">
     <span class="muted">เลือกแล้ว <b id="clSelN" style="color:var(--navy)">0</b> คน (เฉพาะลูกค้า LINE ส่งได้)</span>
     <button class="ghost" style="padding:6px 12px;font-size:12.5px" onclick="clSelectSegment()">เลือกทั้งกลุ่มนี้</button>
   </div>
-  <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+  <div style="margin-top:6px">
     <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
     <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
     <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
@@ -620,10 +626,7 @@
     </div>
     <button class="ok" id="clSend" style="width:100%;min-height:48px;font-size:15px;margin-top:10px" onclick="clSendCampaign()"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งถึงลูกค้าที่เลือก</button>
   </div>
-  <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
-    <div class="muted" style="font-size:12px;margin-bottom:6px">ประวัติการส่ง (แคมเปญ)</div>
-    <div id="clCampaigns" style="font-size:12.5px"></div>
-  </div>
+  </div><!-- /clComposer -->
 </div>
 
 <!-- QR check-in: customer scans to link their LINE identity to this order -->
@@ -878,7 +881,9 @@ window.closePromptPay=()=>{ $('ppPop').style.display='none'; };
 window.closeSlip=()=>{ $('slipPop').style.display='none'; };
 window.zoomSlip=()=>{ const z=$('slipZoom'), i=$('slipZoomImg'), s=$('slipPopImg'); if(z&&i&&s&&s.src){ i.src=s.src; z.style.display='block'; } };   // full-size slip viewer (pinch-zoom / scroll)
 window.closeZoom=()=>{ const z=$('slipZoom'); if(z) z.style.display='none'; };
+let SLIP_ALIASES=[];   // learned receiver texts (per-bank wording the cashier confirmed)
 window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'); $('slipPopImg').src=s.image;
+    SLIP_ALIASES=s.recvAliases||[];
     const p=s.prelim||{}, pb=$('slipPrelim'); if(pb){
       const dupBox = p.duplicate
         ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
@@ -928,16 +933,25 @@ async function runSlipOcr(imgData, prelim){
       const yrOk  = flat.includes(String(be)) || flat.includes(String(y));              // 2569 หรือ 2026 (เลี่ยงเลข 2 หลักที่ชนง่าย)
       dOk = dayOk && (monOk || yrOk);
       dDetail=dd+' '+mo+' '+be; }
-    // ผู้รับ: ต้องเป็นบัญชีร้าน
-    const rcvHit=SHOP_RECV.find(n=>new RegExp(n.replace(/[\s-]+/g,'[\\s-]*'),'i').test(raw)); const rcvOk=!!rcvHit;
+    // ผู้รับ: บัญชีร้าน (built-in) + ชื่อที่ระบบ "จำ" จากที่แคชเชียร์เคยสอน (ธนาคารต่างกันพิมพ์ต่างกัน)
+    const rcvList=SHOP_RECV.concat(SLIP_ALIASES||[]);
+    const rcvHit=rcvList.find(n=>{ try{ return new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/[\s-]+/g,'[\\s-]*'),'i').test(raw); }catch(e){ return false; } }); const rcvOk=!!rcvHit;
     box.innerHTML='<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
       +'<div style="font-weight:800;font-size:12.5px;margin-bottom:4px">อ่านสลิปอัตโนมัติ (OCR) · เทียบผล</div>'
       +_row('ยอด ฿'+(prelim.expectedAmount!=null?prelim.expectedAmount:'-'), amtOk, '')
       +_row('วันที่วันนี้', dOk, dDetail)
       +_row('ผู้รับ = บัญชีร้าน', rcvOk, rcvHit?('พบ '+rcvHit):'')
+      +(!rcvOk?'<button class="ghost" style="width:100%;padding:7px;font-size:12px;margin-top:6px" onclick="teachSlipRecv()">✓ สลิปถูกต้อง — สอนระบบให้จำชื่อผู้รับแบบนี้</button>':'')
       +'<div class="muted" style="font-size:11px;margin-top:6px;line-height:1.5">อ่านจากรูปด้วย OCR อาจคลาดเคลื่อน — เป็นตัวช่วย ไม่ใช่การยืนยันกับธนาคาร ถ้าไม่ชัดให้ดูสลิปจริง (เวลาในสลิปตรวจด้วยตา)</div></div>';
   }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">อ่านสลิปไม่สำเร็จ — โปรดตรวจด้วยตา</div>'; }
 }
+// Teach the slip reader: cashier eyeballed the slip, it IS ours — type the receiver name exactly
+// as this bank prints it (e.g. "ธรรมนูญ ก.", "YO–DEE YOGURT SHOP"). Remembered for every future scan.
+window.teachSlipRecv=async()=>{ const t=await appPrompt({title:'สอนระบบอ่านสลิป',message:'พิมพ์ชื่อผู้รับตามที่ปรากฏบนสลิปธนาคารนี้ (ระบบจะจำและจับคู่อัตโนมัติครั้งหน้า)',placeholder:'เช่น ธรรมนูญ ก.',okText:'จำไว้'});
+  if(!t||!String(t).trim()) return;
+  try{ const r=await api('/api/slip-aliases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:String(t).trim()})});
+    SLIP_ALIASES=r.aliases||[]; toast('จำแล้ว ✓ ครั้งหน้าจับคู่อัตโนมัติ'); }
+  catch(e){ toast(err(e)==='alias_too_short'?'ชื่อสั้นเกินไป (อย่างน้อย 3 ตัวอักษร)':err(e)); } };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 // White-label: pull the brand (name/short/theme/logo) and apply it — title, primary colour, logo.
 // Defaults to YO-DEE server-side, so this is a no-op for the existing shop.
@@ -1970,9 +1984,10 @@ window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none
   $('dash').style.display='none'; $('chartsCard').style.display='';
   $('chartsBody').innerHTML='<p class="muted">กำลังโหลด…</p>'; renderCharts(); };
 async function renderCharts(){
-  let hist={}, det={};
+  let hist={}, det={}, ins=null;
   try{ [hist,det]=await Promise.all([api('/api/sales-history'), api('/api/reports/detailed')]); }
   catch(e){ $('chartsBody').innerHTML='<p class="muted">โหลดข้อมูลไม่สำเร็จ — '+err(e)+'</p>'; return; }
+  try{ ins=await api('/api/reports/insights'); }catch(e){ /* rating tile is optional */ }
   const baht=(n)=>'฿'+Math.round(Number(n)||0).toLocaleString('en-US');
   const days=(hist.daily||[]).slice(0,7).reverse().map(d=>({ label:(d.date||'').slice(5), value:Math.round(d.net||d.revenue||0), sub:(d.date||'').slice(5) }));
   const trend=(arr,span)=>(arr||[]).slice(0,span).reverse().map(r=>({ label:r.period||r.date, sub:shortPeriod(r.period||r.date), value:Math.round(r.net||r.revenue||0) }));
@@ -1982,7 +1997,14 @@ async function renderCharts(){
   const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
   const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
-  $('chartsBody').innerHTML =
+  // Overall store rating tile (สะสมทุกรีวิว) — the owner asked where to see it; star bars stay in รายงานประจำวัน
+  const sat=(ins&&ins.satisfaction)||null;
+  const ratingCard=sat&&sat.total>0?`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="font-size:34px;font-weight:900;color:var(--navy)">★ ${sat.avg!=null?sat.avg:'—'}</div>
+      <div style="flex:1;min-width:140px"><b style="font-size:14px;color:var(--navy)">เรทติ้งร้านโดยรวม</b>
+        <div class="muted" style="font-size:12px">จาก ${sat.total} รีวิวสะสมทั้งหมด · ดูแยกดาว/ลูกค้าซื้อซ้ำที่ "รายงานประจำวัน" ล่างสุด</div></div>
+    </div>`:'';
+  $('chartsBody').innerHTML = ratingCard +
     card('<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
       card('<svg class="ic" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg>เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
@@ -3367,20 +3389,28 @@ function clRows(){ let rows=_clSeg==='all' ? CL : CL.filter(c=>c.segment===_clSe
   return rows; }
 const SEG_TH={new:['ใหม่','#e6f1fb','#185fa5'],regular:['ประจำ','#e1f5ee','#0f6e56'],at_risk:['เสี่ยงหาย','#faeeda','#854f0b'],lost:['หายไป','#fcebeb','#a32d2d']};
 window.clMore=()=>{ _clShown+=CL_PAGE; renderCustList(); };
+// Column layout (owner UX): scannable data columns per customer, header row pinned on top.
+const CL_GRID='display:grid;grid-template-columns:minmax(150px,2fr) 52px 76px 84px 46px;gap:6px;align-items:center;padding:8px 12px';
 function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   const more=all.length-rows.length;
   const tail=more>0?`<div style="padding:10px;text-align:center"><button class="ghost" style="padding:8px 18px;font-size:13px" onclick="clMore()">แสดงเพิ่มอีก ${Math.min(CL_PAGE,more)} (เหลือ ${more})</button></div>`:'';
-  $('clList').innerHTML = (rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
-    const last=c.daysSince==null?'ยังไม่เคยซื้อ':(c.daysSince===0?'วันนี้':(c.daysSince+' วันก่อน'));
-    return `<div class="row between" style="align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);gap:8px">
-      <label class="row" style="gap:9px;align-items:center;flex:1;min-width:0;cursor:${c.canPush?'pointer':'default'}">
+  const head=`<div style="${CL_GRID};position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--line);font-size:11px;font-weight:800;color:var(--muted)">
+      <span>ลูกค้า</span><span style="text-align:right">มา</span><span style="text-align:right">ใช้จ่าย</span><span style="text-align:right">ล่าสุด</span><span style="text-align:right">แต้ม</span></div>`;
+  $('clList').innerHTML = '<div style="min-width:460px">'+head+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
+    const last=c.daysSince==null?'—':(c.daysSince===0?'วันนี้':(c.daysSince+' วัน'));
+    return `<div style="${CL_GRID};border-bottom:1px solid var(--line)">
+      <label class="row" style="gap:8px;align-items:center;min-width:0;cursor:${c.canPush?'pointer':'default'};flex-wrap:nowrap">
         <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
-        <span style="min-width:0">
-          <div style="font-weight:700;color:var(--navy);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))} <span style="background:${sg[1]};color:${sg[2]};font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px">${sg[0]}</span></div>
-          <div class="muted" style="font-size:11px">มา ${c.visits} ครั้ง · ฿${c.spend} · ล่าสุด ${last}${c.points?(' · ⭐'+c.points):''}${c.canPush?'':' · 📵 ส่ง LINE ไม่ได้'}</div>
+        <span style="min-width:0;overflow:hidden">
+          <div style="font-weight:700;color:var(--navy);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))}</div>
+          <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}
         </span>
       </label>
-    </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+(_clQ?'ไม่พบลูกค้าที่ค้นหา':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail; }
+      <span style="text-align:right;font-size:12.5px">${c.visits}</span>
+      <span style="text-align:right;font-size:12.5px;font-weight:700">฿${c.spend}</span>
+      <span style="text-align:right;font-size:11.5px" class="muted">${last}</span>
+      <span style="text-align:right;font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
+    </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+(_clQ?'ไม่พบลูกค้าที่ค้นหา':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>'; }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
 window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all=rows.every(c=>_clSel.has(c.key));
   rows.forEach(c=>{ if(all) _clSel.delete(c.key); else _clSel.add(c.key); }); $('clSelN').textContent=_clSel.size; renderCustList(); };

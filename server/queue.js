@@ -1799,6 +1799,25 @@ export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '
 // SlipOK auto-verify is an OWNER TOGGLE (default OFF) on top of the env creds, so the shop
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
+// Slip OCR learn-as-you-correct: banks print the shop's receiver name differently (garbled by
+// OCR too). When the cashier eyeballs a slip and confirms it's genuine, they can teach the
+// reader the receiver text THAT bank prints; future scans match against these learned aliases
+// on top of the built-in list. Stored as a JSON list in settings, deduped, capped.
+export function listSlipAliases() {
+  try { const a = JSON.parse(getSetting('slip:recv_aliases', '[]')); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+export function addSlipAlias(text) {
+  const t = String(text || '').trim().slice(0, 60);
+  if (t.length < 3) throw new Error('alias_too_short');
+  const cur = listSlipAliases();
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, '');
+  if (!cur.some((x) => norm(x) === norm(t))) {
+    cur.push(t);
+    setSetting('slip:recv_aliases', JSON.stringify(cur.slice(-30)));   // keep the latest 30
+  }
+  return { aliases: listSlipAliases() };
+}
 export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
 // Owner-uploadable promo/ad splash shown in the LIFF after loading (a data-URL image the owner
 // can change anytime in ⚙ จัดการ). enabled gates whether the customer actually sees it.

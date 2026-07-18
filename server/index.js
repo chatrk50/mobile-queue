@@ -632,7 +632,13 @@ app.get('/api/tickets/:ticketId/slip', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   const s = Q.getSlip(req.params.ticketId);
   if (!s) return res.status(404).json({ error: 'no_slip' });
-  res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId) });
+  res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId), recvAliases: Q.listSlipAliases() });
+});
+// Slip-OCR learning: cashier verified a slip by eye → teach the reader the receiver text
+// this bank prints, so the same wording matches automatically next time.
+app.post('/api/slip-aliases', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.addSlipAlias(req.body?.text)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // LINE Pay (scaffold): reserve a payment → customer is redirected to LINE Pay's page.
 app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
