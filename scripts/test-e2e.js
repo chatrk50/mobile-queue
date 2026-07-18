@@ -611,6 +611,17 @@ Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'return', qty: 2, note: 'คื
 ok(rr(Q.cogsForDay().cogsActual - cogs0) === 0, 'INVARIANT returns (cancelled orders) net out of real COGS');
 db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowid);
 
+// ---- A: auto closing summary (dedup once/day, only when enabled) ----
+console.log('\n== Auto closing summary ==');
+Q.setAutoSummary(false);
+ok(Q.maybeAutoSummary().reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
+Q.setAutoSummary(true);
+const sum1 = Q.maybeAutoSummary();   // no owner LINE id on UAT → sent:false but NOT 'off'/'already'
+ok(sum1.reason !== 'off' && sum1.reason !== 'already', 'INVARIANT enabling auto-summary attempts a send');
+ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT auto-summary fires at most once per day');
+ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
+Q.setAutoSummary(false);
+
 // ---- Waste is recorded distinctly from use (so COGS vs waste cost are separable) ----
 const wIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบของเสีย','กก.', 20, 10)`).run().lastInsertRowid;
 const cogsW0 = Q.cogsForDay();

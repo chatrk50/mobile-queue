@@ -825,7 +825,10 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   const over = r2(counted - expected);
   db.prepare(`UPDATE cash_sessions SET closed_by=?, closed_at=datetime('now'), counted_cash=?, expected_cash=?, over_short=?, note=? WHERE id=?`)
     .run(actorId, counted, expected, over, note ? note.toString().slice(0, 200) : null, cur.id);
-  return { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
+  const out = { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
+  // Closing the drawer = end of day → optionally LINE the owner a full closing summary (once/day).
+  try { const s = maybeAutoSummary(branchId); out.summarySent = !!s.sent; } catch { /* never block a close */ }
+  return out;
 }
 
 /** Closed cash rounds (Z-report history), newest first, + a 12-month rollup — the owner asked for
@@ -1938,7 +1941,33 @@ export function composeDailySummary(branchId = null) {
       if (red.redeems && red.redeems.length) lines.push(`🎁 แลกของรางวัล/วันเกิด ${red.redeems.length} รายการ`);
     }
   } catch { /* additive — never break the summary */ }
+  // Cash drawer over/short of the day's last closed round.
+  try {
+    const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=date('now','+7 hours') ORDER BY id DESC LIMIT 1").get(branchId || 1);
+    if (last) lines.push(last.over_short === 0 ? '💵 เงินสด: พอดี ✓' : `💵 เงินสด${last.over_short > 0 ? 'เกิน' : 'ขาด'} ฿${Math.abs(last.over_short)}`);
+  } catch { /* additive */ }
+  // Stock heads-up: low + near-expiry + what to reorder (uses the SCM engine).
+  try {
+    const low = listIngredients().filter((i) => i.low);
+    if (low.length) lines.push(`⚠️ ใกล้หมด ${low.length} รายการ: ${low.slice(0, 4).map((i) => i.name).join(', ')}${low.length > 4 ? ' …' : ''}`);
+    const exp = expiringLots(7);
+    if (exp.length) lines.push(`⏳ ใกล้/หมดอายุ ${exp.length} ล็อต${exp.some((l) => l.expired) ? ' (มีเลยกำหนดแล้ว!)' : ''}`);
+    const need = purchasePlan().filter((p) => p.suggestQty > 0);
+    if (need.length) { const est = need.reduce((s, p) => s + (p.estCost || 0), 0);
+      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`); }
+  } catch { /* additive */ }
   return lines.join('\n');
+}
+export function autoSummaryEnabled() { return getSetting('summary:auto', '0') === '1'; }
+export function setAutoSummary(on) { setSetting('summary:auto', on ? '1' : '0'); return { autoSummary: !!on }; }
+/** Fire the owner summary at most once per Bangkok day (dedup key), when auto-summary is on.
+ *  Called when the cash drawer is closed (the natural end-of-day moment). */
+export function maybeAutoSummary(branchId = null) {
+  if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
+  setSetting('summary:last_sent', day);
+  return pushOwnerSummary(branchId);
 }
 export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */
