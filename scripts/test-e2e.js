@@ -637,6 +637,22 @@ ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (o
 ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
 Q.setAutoReorder(false);
 
+// ---- Customer list carries the star rating each customer gave + exports to Excel ----
+console.log('\n== Customer ratings + Excel export ==');
+{
+  const rkey = 'Urating0000000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าให้ดาว')`).run(rkey);
+  const t1 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,801,'RT801',?, 'served','ลูกค้าให้ดาว', 5)`).run(rkey);
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t1.lastInsertRowid);
+  const t2 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,802,'RT802',?, 'served','ลูกค้าให้ดาว', 3)`).run(rkey);
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t2.lastInsertRowid);
+  const rc = Q.customersList().find((c) => c.key === rkey);
+  ok(rc && rc.ratingAvg === 4 && rc.ratingCount === 2, `INVARIANT a customer's given-rating avg + count are in the list (avg ${rc && rc.ratingAvg}, n ${rc && rc.ratingCount})`);
+  const { buildCustomersWorkbook } = await import('../server/report-excel.js');
+  const buf = await buildCustomersWorkbook(Q.customersList(), { store: 'TEST' });
+  ok(buf && buf.byteLength > 500, `INVARIANT the customers workbook builds a non-trivial xlsx (${buf && buf.byteLength} bytes)`);
+}
+
 // ---- C: auto win-back for at-risk customers (capped + cooldown) ----
 console.log('\n== Auto win-back ==');
 Q.setAutoWinback(false);

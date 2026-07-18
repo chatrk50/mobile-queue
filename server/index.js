@@ -747,6 +747,18 @@ app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ customers: Q.customersList() });
 });
+// Customer list → Excel (all customers + segment + rating they gave).
+app.get('/api/crm/customers.xlsx', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const { buildCustomersWorkbook } = await import('./report-excel.js');
+    const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+    const buf = await buildCustomersWorkbook(Q.customersList(), { store: stores?.name || BRAND.name });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="YO-DEE_Customers_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.send(Buffer.from(buf));
+  } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
+});
 app.post('/api/crm/campaign', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(await Q.sendCampaign({ keys: req.body?.keys, message: req.body?.message, coupon: req.body?.coupon || null, actorId: req.staff?.id || null })); }

@@ -594,7 +594,10 @@
 <div id="custListCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
-    <button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
+    <div class="row" style="gap:6px">
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportCustomers()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+      <button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
+    </div>
   </div>
   <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap"></div>
   <input id="clSearch" type="search" placeholder="🔍 ค้นหาชื่อ / เบอร์โทร" oninput="clSearchInput()"
@@ -2118,6 +2121,7 @@ function renderInsightsBody(d, box){
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
 }
 window.exportReport=()=>{ const q=[]; if(_reportDate) q.push('date='+encodeURIComponent(_reportDate)); if(PIN) q.push('pin='+encodeURIComponent(PIN)); window.open('/api/report.xlsx'+(q.length?('?'+q.join('&')):''),'_blank'); };
+window.exportCustomers=()=>{ window.open('/api/crm/customers.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
 window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?date='+encodeURIComponent($('detailDate').value||'')+(PIN?('&pin='+encodeURIComponent(PIN)):''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
@@ -3400,14 +3404,15 @@ function clRows(){ let rows=_clSeg==='all' ? CL : CL.filter(c=>c.segment===_clSe
 const SEG_TH={new:['ใหม่','#e6f1fb','#185fa5'],regular:['ประจำ','#e1f5ee','#0f6e56'],at_risk:['เสี่ยงหาย','#faeeda','#854f0b'],lost:['หายไป','#fcebeb','#a32d2d']};
 window.clMore=()=>{ _clShown+=CL_PAGE; renderCustList(); };
 // Column layout (owner UX): scannable data columns per customer, header row pinned on top.
-const CL_GRID='display:grid;grid-template-columns:minmax(150px,2fr) 52px 76px 84px 46px;gap:6px;align-items:center;padding:8px 12px';
+const CL_GRID='display:grid;grid-template-columns:minmax(150px,2fr) 52px 76px 76px 46px 70px;gap:6px;align-items:center;padding:8px 12px';
 function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   const more=all.length-rows.length;
   const tail=more>0?`<div style="padding:10px;text-align:center"><button class="ghost" style="padding:8px 18px;font-size:13px" onclick="clMore()">แสดงเพิ่มอีก ${Math.min(CL_PAGE,more)} (เหลือ ${more})</button></div>`:'';
   const head=`<div style="${CL_GRID};position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--line);font-size:11px;font-weight:800;color:var(--muted)">
-      <span>ลูกค้า</span><span style="text-align:right">มา</span><span style="text-align:right">ใช้จ่าย</span><span style="text-align:right">ล่าสุด</span><span style="text-align:right">แต้ม</span></div>`;
-  $('clList').innerHTML = '<div style="min-width:460px">'+head+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
+      <span>ลูกค้า</span><span style="text-align:right">มา</span><span style="text-align:right">ใช้จ่าย</span><span style="text-align:right">ล่าสุด</span><span style="text-align:right">แต้ม</span><span style="text-align:right">ให้ดาว</span></div>`;
+  $('clList').innerHTML = '<div style="min-width:520px">'+head+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
     const last=c.daysSince==null?'—':(c.daysSince===0?'วันนี้':(c.daysSince+' วัน'));
+    const rating=c.ratingAvg!=null?`<b style="color:#b8860b">★${c.ratingAvg}</b><span class="muted" style="font-size:9.5px"> (${c.ratingCount})</span>`:'<span class="muted">—</span>';
     return `<div style="${CL_GRID};border-bottom:1px solid var(--line)">
       <label class="row" style="gap:8px;align-items:center;min-width:0;cursor:${c.canPush?'pointer':'default'};flex-wrap:nowrap">
         <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
@@ -3420,6 +3425,7 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
       <span style="text-align:right;font-size:12.5px;font-weight:700">฿${c.spend}</span>
       <span style="text-align:right;font-size:11.5px" class="muted">${last}</span>
       <span style="text-align:right;font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
+      <span style="text-align:right;font-size:12px">${rating}</span>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+(_clQ?'ไม่พบลูกค้าที่ค้นหา':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>'; }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
 window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all=rows.every(c=>_clSel.has(c.key));
