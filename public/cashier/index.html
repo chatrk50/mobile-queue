@@ -147,10 +147,12 @@
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ต้นทุน</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleMargins()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไร/เมนู</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">ปิด</button>
       </div>
     </div>
     <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
+    <div id="marginsBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="reportBody" style="margin-top:14px"></div>
   </div>
 
@@ -1699,7 +1701,7 @@ async function renderCharts(){
 let _reportDate='';   // '' = today (live); 'YYYY-MM-DD' = a past Bangkok day (from the durable orders table)
 const bkkToday=()=> new Date(Date.now()+7*3600*1000).toISOString().slice(0,10);
 window.setReportDate=(d)=>{ _reportDate=(d&&d!==bkkToday())?d:''; showReport(); };
-window.showReport=async()=>{ hideAllPanels();
+window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb) mb.style.display='none'; }   // margins are per-date; re-open after switching
   try{ const r=await api('/api/report'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); const p=r.pnl||{};
     const di=$('reportDateInp'); if(di) di.value=_reportDate||bkkToday();
     const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
@@ -1750,7 +1752,7 @@ window.showReport=async()=>{ hideAllPanels();
     $('reportCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
-window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; const mb=$('marginsBox'); if(mb) mb.style.display='none'; $('dash').style.display=''; };
 // Customer satisfaction (star breakdown) + repeat-buyer (returning LINE customers) — appended
 // to the daily report so the owner can find the satisfaction view in one place.
 async function loadInsights(){
@@ -1759,6 +1761,27 @@ async function loadInsights(){
   // so hide the block instead of misleading the owner.
   if(_reportDate){ box.style.display='none'; return; } box.style.display='';
   let d; try{ d=await api('/api/reports/insights'); }catch(e){ return; }
+  renderInsightsBody(d, box); }
+// กำไรต่อเมนู: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ย) + the day's REAL ingredient spend.
+window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณ…</p>';
+  let d; try{ d=await api('/api/reports/margins'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดไม่สำเร็จ: '+err(e)+'</p>'; return; }
+  const items=d.items||[]; const withR=items.filter(i=>i.hasRecipe), noR=items.filter(i=>!i.hasRecipe);
+  const maxM=Math.max(1,...withR.map(i=>i.margin));
+  const row=(i)=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line)">
+      <div class="row between" style="font-size:13px;align-items:center"><b style="color:var(--navy)">${esc(i.name)}</b>
+        <span style="white-space:nowrap"><b style="color:${i.margin>=0?'#0f6e56':'var(--danger)'}">฿${i.margin}</b> <span class="muted" style="font-size:11px">(${i.marginPct}%)</span></span></div>
+      <div class="row between" style="align-items:center;gap:8px">
+        <div style="flex:1;height:6px;background:#fff;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(2,(i.margin/maxM*100)).toFixed(0)}%;background:${i.margin>=0?'linear-gradient(90deg,var(--accent),var(--accent2))':'var(--danger)'}"></div></div>
+        <span class="muted" style="font-size:11px;white-space:nowrap">ขาย ฿${i.price} · ทุน ฿${i.cost}</span></div></div>`;
+  box.innerHTML=`<h2 style="margin:0 0 4px">📈 กำไรต่อเมนู (ราคาขาย − ต้นทุนสูตร)</h2>
+    <div class="muted" style="font-size:11.5px;margin-bottom:8px">ต้นทุนจากสูตร (BOM) × ต้นทุนถัวเฉลี่ยวัตถุดิบปัจจุบัน · เรียงกำไรมาก → น้อย</div>
+    ${(d.cogsActual>0||d.wasteCost>0)?`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12.5px">
+      <div class="row between"><span>ต้นทุนวัตถุดิบที่ใช้จริง${_reportDate?(' ('+_reportDate+')'):'วันนี้'} <span class="muted" style="font-size:10.5px">จากการตัดสต๊อกอัตโนมัติ</span></span><b>฿${d.cogsActual}</b></div>
+      ${d.wasteCost>0?`<div class="row between" style="color:var(--danger)"><span>ของเสีย (waste)</span><b>฿${d.wasteCost}</b></div>`:''}</div>`:''}
+    ${withR.length?withR.map(row).join(''):'<p class="muted" style="font-size:12.5px">ยังไม่มีเมนูที่ใส่สูตร (BOM) — ไปที่ จัดการเมนู → สูตร เพื่อผูกวัตถุดิบก่อน แล้วกำไรต่อเมนูจะคำนวณให้อัตโนมัติ</p>'}
+    ${noR.length?`<div class="muted" style="font-size:11px;margin-top:8px">ยังไม่ใส่สูตร ${noR.length} เมนู: ${noR.slice(0,6).map(i=>esc(i.name)).join(', ')}${noR.length>6?' …':''}</div>`:''}`; };
+function renderInsightsBody(d, box){
   const sat=d.satisfaction||{}, cu=d.customers||{}, stars=sat.stars||{};
   const maxN=Math.max(1,...[1,2,3,4,5].map(s=>stars[s]||0));
   const starBars=[5,4,3,2,1].map(s=>`<div class="row" style="align-items:center;gap:8px;font-size:12px;margin:3px 0">

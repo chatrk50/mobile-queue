@@ -926,6 +926,12 @@ app.get('/api/reports/insights', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.customerInsights());
 });
+// Per-menu margin (sell price vs BOM cost) + the day's REAL ingredient cost from the stock ledger.
+app.get('/api/reports/margins', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
+  res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
+});
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
 // Past closed rounds (Z-reports) — daily list + monthly rollup + last round's float.

@@ -1097,6 +1097,40 @@ export function menuMakeable() {
   }
   return byMenu;
 }
+/** Per-menu margin: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ยของวัตถุดิบ), ranked by margin.
+ *  Items without a recipe show cost 0 + hasRecipe:false so the owner can see what's un-costed. */
+export function menuMargins() {
+  const items = db.prepare(`SELECT id, name, price, category FROM menu_items WHERE active=1 ORDER BY price DESC`).all();
+  return items.map((it) => {
+    const parts = db.prepare(
+      `SELECT r.qty, i.name AS ing, i.unit, i.avg_cost FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.menu_item_id=?`
+    ).all(it.id);
+    const cost = r2(parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.avg_cost) || 0), 0));
+    const margin = r2(it.price - cost);
+    return { id: it.id, name: it.name, category: it.category, price: it.price, cost, margin,
+      marginPct: it.price > 0 ? r2((margin / it.price) * 100) : 0, hasRecipe: parts.length > 0,
+      parts: parts.map((p) => ({ ing: p.ing, qty: p.qty, unit: p.unit, cost: r2((p.qty || 0) * (p.avg_cost || 0)) })) };
+  }).sort((a, b) => b.margin - a.margin);
+}
+/** REAL ingredient cost for a Bangkok day from the stock ledger: use moves (auto-deducted on every
+ *  paid sale) net of returns (cancelled/not-made), valued at each ingredient's CURRENT weighted-avg
+ *  cost — an approximation (moves don't snapshot unit cost), stated as such in the UI. */
+export function cogsForDay(date = null) {
+  const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const rows = db.prepare(
+    `SELECT sm.kind, SUM(sm.qty) q, i.avg_cost
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')
+      GROUP BY sm.ingredient_id, sm.kind`
+  ).all(day);
+  // use rows carry negative qty (deduction); return rows positive — netting both gives real consumption.
+  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.avg_cost) || 0), 0);
+  const wasteRows = db.prepare(
+    `SELECT SUM(-sm.qty * i.avg_cost) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind='waste'`
+  ).get(day);
+  return { date: day, cogsActual: r2(Math.max(0, cogs)), wasteCost: r2(Math.max(0, wasteRows?.v || 0)) };
+}
 /** Auto-deduct ingredient stock for every line of a paid order, per its menu item's recipe.
  *  No-op for any line whose menu item has no recipe → safe/dormant until recipes are set. */
 function deductStockForOrder(order) {
