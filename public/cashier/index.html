@@ -3184,6 +3184,7 @@ window.showFeatures=async()=>{
       <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
+    row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
     (ps?`<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:6px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.chart}</span><div><b>ข้อความ LINE ที่ส่ง (ต้นทุน OA)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">LINE OA คิดเงินตามจำนวนข้อความ — เดือนนี้ส่งแล้ว <b style="color:var(--navy)">${(ps.monthly[0]&&ps.monthly[0].ym===new Date(Date.now()+7*3600e3).toISOString().slice(0,7))?ps.monthly[0].n:0}</b> ข้อความ · วันนี้ ${ps.today}</div></div></div>

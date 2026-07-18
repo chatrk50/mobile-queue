@@ -622,6 +622,21 @@ ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT auto-summary fires at m
 ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
 Q.setAutoSummary(false);
 
+// ---- D: auto-draft PO from the plan (once/day, drafts only — never auto-receives) ----
+console.log('\n== Auto reorder ==');
+Q.setAutoReorder(false);
+ok(Q.maybeAutoReorder().reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
+// make something clearly need reordering
+const arIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES ('วัตถุดิบสั่งซื้ออัตโนมัติ','กก.', 1, 20, 5)`).run().lastInsertRowid;
+Q.recordStockMove(arIng, { kind: 'use', qty: 40, note: 'ใช้หนักจำลอง' });   // heavy usage → plan flags it
+Q.setAutoReorder(true);
+const ar = Q.maybeAutoReorder();
+ok(ar.drafted === true && /^PO-/.test(ar.poNo), `INVARIANT auto-reorder drafts a PO when stock is low (po ${ar.poNo})`);
+const arPo = Q.getPurchaseOrder(ar.poId);
+ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (owner still confirms — no silent stock change)');
+ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
+Q.setAutoReorder(false);
+
 // ---- Waste is recorded distinctly from use (so COGS vs waste cost are separable) ----
 const wIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบของเสีย','กก.', 20, 10)`).run().lastInsertRowid;
 const cogsW0 = Q.cogsForDay();

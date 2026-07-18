@@ -828,6 +828,7 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   const out = { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
   // Closing the drawer = end of day → optionally LINE the owner a full closing summary (once/day).
   try { const s = maybeAutoSummary(branchId); out.summarySent = !!s.sent; } catch { /* never block a close */ }
+  try { const rr = maybeAutoReorder(branchId); out.reorderDrafted = !!rr.drafted; } catch { /* never block a close */ }
   return out;
 }
 
@@ -1968,6 +1969,21 @@ export function maybeAutoSummary(branchId = null) {
   if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
   setSetting('summary:last_sent', day);
   return pushOwnerSummary(branchId);
+}
+export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
+export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
+/** If anything needs reordering, draft ONE PO from the plan (once/day) and LINE the owner to
+ *  review + confirm it. Never auto-RECEIVES — the owner still approves before stock/cost change. */
+export function maybeAutoReorder(branchId = null) {
+  if (!autoReorderEnabled()) return { drafted: false, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('reorder:last_run', '') === day) return { drafted: false, reason: 'already' };
+  setSetting('reorder:last_run', day);
+  const po = draftPoFromPlan({ actorId: null });
+  if (!po) return { drafted: false, reason: 'nothing' };
+  const est = (po.lines || []).reduce((s, l) => s + l.lineTotal, 0);
+  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
+  return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
 }
 export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */
