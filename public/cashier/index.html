@@ -17,6 +17,12 @@
   #adminMenu button.adm:hover{ background:var(--surface,#f1f5f9); }
   #adminMenu .admhdr{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#64748b); padding:8px 14px 3px; }
   #adminMenu .admhdr svg{ width:13px; height:13px; margin:0; vertical-align:0; stroke-width:1.9; }
+  /* Per-category accent so the ⚙ groups don't blur together (owner feedback) */
+  #adminMenu .admhdr.c1{ color:#2563eb; } #adminMenu .admhdr.c2{ color:#0f9d6e; }
+  #adminMenu .admhdr.c3{ color:#d6336c; } #adminMenu .admhdr.c4{ color:#64748b; }
+  /* Section headers: one thin accent line-icon per h1/h2 (emoji live in content, not headers) */
+  h1 .ic{ width:20px; height:20px; vertical-align:-3.5px; stroke:var(--accent); }
+  h2 .ic{ width:16px; height:16px; vertical-align:-3px; stroke:var(--accent); }
   #adminMenu .admgrp{ display:flex; flex-direction:column; gap:2px; }
   #adminMenu .admgrp + .admgrp{ border-top:1px solid var(--line,#e2e8f0); margin-top:4px; padding-top:2px; }
   /* Split-screen order taking (Mobi-POS style): bill on the left, menu on the right */
@@ -100,25 +106,25 @@
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:230px;max-height:min(72vh,560px);overflow-y:auto;flex-direction:column;gap:2px">
-        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
+        <div class="admgrp"><div class="admhdr c1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
           <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</button>
           <button id="reportBtn" class="ghost adm" style="display:none" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</button>
           <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
           <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         </div>
-        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>การเงิน / ต้นทุน</div>
+        <div class="admgrp"><div class="admhdr c2"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>การเงิน / ต้นทุน</div>
           <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
           <button id="tenderBtn" class="ghost adm" style="display:none" onclick="showTenders()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</button>
           <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
           <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
         </div>
-        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
+        <div class="admgrp"><div class="admhdr c3"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
           <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
           <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
           <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         </div>
-        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
+        <div class="admgrp"><div class="admhdr c4"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
           <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
           <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
           <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
@@ -151,7 +157,7 @@
   <!-- DAILY REPORT -->
   <div id="reportCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>รายงานประจำวัน</h1>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</h1>
         <div class="row" style="gap:6px;align-items:center;margin-top:4px">
           <input id="reportDateInp" type="date" onchange="setReportDate(this.value)" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink)">
           <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setReportDate('')">วันนี้</button>
@@ -171,7 +177,7 @@
   <!-- ORDER HISTORY -->
   <div id="historyCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
     </div>
     <input id="histSearch" oninput="filterHistory()" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู" autocomplete="off" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);background:#fff;box-sizing:border-box">
@@ -181,7 +187,7 @@
   <!-- SELL HISTORY (daily / monthly) -->
   <div id="salesCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>ยอดขาย & กำไร (P&L) ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขาย & กำไร (P&L) ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="archivePastDay()" title="บันทึกยอดของวันที่ผ่านมา (กู้คืนวันที่ระบบบันทึกอัตโนมัติพลาด)"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>บันทึกย้อนหลัง</button>
@@ -200,7 +206,7 @@
   <!-- STAFF MANAGEMENT (owner) -->
   <div id="staffCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
     </div>
     <div class="ms-split" style="margin-top:12px">
@@ -215,7 +221,7 @@
   <!-- BRANCH MANAGEMENT (owner) -->
   <div id="branchCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()">ปิด</button>
     </div>
     <div class="ms-split" style="margin-top:12px">
@@ -230,7 +236,7 @@
   <!-- INVENTORY / STOCK (owner/manager) -->
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
       <div class="row" style="gap:6px">
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="togglePlan()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleSuppliers()"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
@@ -251,7 +257,7 @@
   <!-- LOYALTY POINTS & REWARDS (owner/manager) -->
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:grid;gap:12px">
@@ -315,12 +321,12 @@
   <!-- PAYMENT TENDERS management (owner only) -->
   <div id="tenderCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>💳 ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()">ปิด</button>
     </div>
     <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
-      <div style="font-weight:800;color:var(--navy);margin-bottom:8px">➕ เพิ่มช่องทางใหม่</div>
+      <div style="font-weight:800;color:var(--navy);margin-bottom:8px"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มช่องทางใหม่</div>
       <div class="row" style="gap:6px;flex-wrap:wrap">
         <input id="tenderNewLabel" placeholder="ชื่อ เช่น ทรูมันนี่ วอลเล็ท" style="flex:1;min-width:150px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
         <select id="tenderNewKind" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option value="counter">จ่ายที่เคาน์เตอร์</option><option value="online">ลูกค้าจ่ายในแอป</option></select>
@@ -331,7 +337,7 @@
 
   <!-- COUPONS management (owner only) -->
   <div id="promoCard" class="card" style="display:none;max-width:520px;margin:14px auto">
-    <div class="row between"><div><h1>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()">ปิด</button></div>
+    <div class="row between"><div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()">ปิด</button></div>
     <div id="promoPreview" style="margin:14px 0;text-align:center"></div>
     <input id="promoFile" type="file" accept="image/*" style="display:none" onchange="promoPick(this)">
     <div class="row" style="gap:8px;margin-bottom:12px">
@@ -343,12 +349,12 @@
   </div>
   <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>🎟️ คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
     </div>
     <div id="couponList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
-      <div style="font-weight:800;color:var(--navy);margin-bottom:8px">➕ สร้างคูปองใหม่</div>
+      <div style="font-weight:800;color:var(--navy);margin-bottom:8px"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>สร้างคูปองใหม่</div>
       <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">
         <input id="cpCode" placeholder="โค้ด เช่น SAVE20" style="flex:1;min-width:120px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-transform:uppercase">
         <input id="cpLabel" placeholder="ชื่อคูปอง" style="flex:1.4;min-width:130px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
@@ -366,11 +372,11 @@
   <!-- ANTI-FRAUD: revenue-reduction control (owner only) -->
   <div id="controlCard" class="card" style="display:none;max-width:620px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>🛡️ ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · ลบรายการเงินสด · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · ลบรายการเงินสด · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideControl()">ปิด</button>
     </div>
     <div class="row between" style="align-items:center;margin-top:12px">
-      <h2 style="margin:0;font-size:15px">📅 รายวัน</h2>
+      <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>รายวัน</h2>
       <div class="row" style="gap:4px;align-items:center">
         <button class="ghost" style="padding:4px 10px" onclick="ctlDay(-1)">‹</button>
         <span id="ctlDate" style="font-size:13px;font-weight:700;min-width:104px;text-align:center">—</span>
@@ -383,13 +389,13 @@
   <!-- CASH DRAWER / Z-REPORT (owner/manager) -->
   <div id="cashCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>รอบเงินสด</h1><p class="muted" style="margin:2px 0 0">เปิดรอบด้วยเงินทอน → ปิดรอบนับเงิน → ส่วนต่าง</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</h1><p class="muted" style="margin:2px 0 0">เปิดรอบด้วยเงินทอน → ปิดรอบนับเงิน → ส่วนต่าง</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCash()">ปิด</button>
     </div>
     <div id="cashBody" style="margin-top:14px"></div>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <div class="row between" style="align-items:center">
-        <h2 style="margin:0;font-size:15px">💵 รับ/จ่ายเงินสด</h2>
+        <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รับ/จ่ายเงินสด</h2>
         <div class="row" style="gap:4px;align-items:center">
           <button class="ghost" style="padding:4px 10px" onclick="cashMovesDay(-1)">‹</button>
           <span id="cashMovesDate" style="font-size:13px;font-weight:700;min-width:104px;text-align:center">—</span>
@@ -406,7 +412,7 @@
     </div>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <div class="row between" style="align-items:center">
-        <h2 style="margin:0;font-size:15px">📜 รอบเงินสดย้อนหลัง</h2>
+        <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>รอบเงินสดย้อนหลัง</h2>
         <div class="row" style="gap:6px">
           <button id="chTabDay" class="ok" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('day')">รายวัน</button>
           <button id="chTabMonth" class="ghost" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('month')">รายเดือน</button>
@@ -419,7 +425,7 @@
   <!-- OVERVIEW / CHARTS (owner/manager) -->
   <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>ภาพรวม / กราฟ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">ปิด</button>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
@@ -428,7 +434,7 @@
   <!-- DETAILED REPORTS (owner/manager) -->
   <div id="detailCard" class="card" style="display:none;max-width:760px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
         <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
@@ -489,7 +495,7 @@
 
   <!-- MENU MANAGEMENT -->
   <div id="menuCard" class="card" style="display:none;max-width:980px;margin:14px auto">
-    <div class="row between"><h1>จัดการเมนู</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
+    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="priceMgr" style="margin:4px 0 12px"></div>
     <div class="ms-split">
@@ -767,7 +773,7 @@
 <!-- แยกจ่ายตามรายการ: pick menu items → their subtotal is taken as a partial payment -->
 <div id="itemSplitPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:92vh;overflow:auto">
-    <div class="row between"><h1 style="margin:0">🧾 แยกจ่ายตามรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemSplit()">✕</button></div>
+    <div class="row between"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M16 8H8M16 12H8M12 16H8"/></svg>แยกจ่ายตามรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeItemSplit()">✕</button></div>
     <p class="muted" style="font-size:13px;margin:8px 0 10px">เลือกเมนูที่จะจ่ายงวดนี้ — ที่เหลือเก็บภายหลังได้</p>
     <div id="splitItemList" style="display:grid;gap:6px"></div>
     <div class="row between" style="background:var(--surface,#f1f5f9);border-radius:10px;padding:11px 16px;margin:12px 0">
@@ -799,7 +805,7 @@
 
 <div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0">ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -1032,13 +1038,14 @@ window.login=async()=>{
     // attributed to the real staff member.
     const LOCK_MSG='ใส่ PIN ผิดหลายครั้ง — ระบบล็อกชั่วคราว กรุณารอสักครู่แล้วลองใหม่';
     const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
-    if(sr.status===429){ $('loginErr').textContent=LOCK_MSG; return; }   // locked: DON'T keep trying (each try extends nothing but stays stuck)
+    if(sr.status===429){ $('loginErr').textContent=LOCK_MSG; $('pin').value=''; return; }   // locked: DON'T keep trying (each try extends nothing but stays stuck)
     if(sr.ok){ ME=(await sr.json().catch(()=>null))?.staff||null; PIN=null; }
     else {
       // Legacy fallback: the shared admin CASHIER_PIN (sends x-cashier-pin per request).
       const lr=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
-      if(lr.status===429){ $('loginErr').textContent=LOCK_MSG; return; }
-      if(!((await lr.json().catch(()=>({}))).ok)){ $('loginErr').textContent='PIN ไม่ถูกต้อง'; return; }
+      if(lr.status===429){ $('loginErr').textContent=LOCK_MSG; $('pin').value=''; return; }
+      // Wrong PIN: clear the field so the next attempt starts fresh (owner UX request).
+      if(!((await lr.json().catch(()=>({}))).ok)){ $('loginErr').textContent='PIN ไม่ถูกต้อง — กรอกใหม่อีกครั้ง'; $('pin').value=''; return; }
       PIN=pin; ME=null;
     }
     $('loginErr').textContent='';
@@ -1436,7 +1443,7 @@ function renderSuppliers(){ const box=$('supBox');
       <span style="flex:1"><b>${esc(s.name)}</b>${s.phone?` <a href="tel:${esc(s.phone)}" style="color:var(--accent);text-decoration:none">📞 ${esc(s.phone)}</a>`:''}${s.note?`<div class="muted" style="font-size:11.5px">${esc(s.note)}</div>`:''}</span>
       <button class="ghost" style="padding:4px 9px;font-size:12px" onclick="editSupplier(${s.id})">แก้ไข</button>
       <button class="ghost danger" style="padding:4px 9px;font-size:12px" onclick="delSupplier(${s.id})">ลบ</button></div>`).join('');
-  box.innerHTML=`<h2 style="margin:0 0 8px">🚚 ผู้ขาย / ร้านค้าที่ซื้อวัตถุดิบ</h2>
+  box.innerHTML=`<h2 style="margin:0 0 8px"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย / ร้านค้าที่ซื้อวัตถุดิบ</h2>
     ${rows||'<p class="muted" style="font-size:12.5px">ยังไม่มีผู้ขาย — เพิ่มด้านล่าง แล้วเวลารับเข้าสต๊อกเลือกได้ว่าซื้อจากใคร</p>'}
     <div id="supForm" class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
       <input id="sup_name" placeholder="ชื่อร้าน/ผู้ขาย เช่น แม็คโคร" style="flex:2;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
@@ -1466,7 +1473,7 @@ window.togglePlan=async()=>{ const box=$('planBox'); if(box.style.display!=='non
       <div class="muted" style="font-size:11.5px">คงเหลือ ${p.stock} ${esc(p.unit)} · ใช้ ~${p.perDay}/วัน${p.lastSupplier?` · ล่าสุดซื้อ ${esc(p.lastSupplier)}${p.lastUnitPrice?` ฿${p.lastUnitPrice}/${esc(p.unit)}`:''}`:''}</div>
       ${p.suggestQty>0?`<div style="margin-top:4px;font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px">🛒 แนะนำสั่ง <b>${p.suggestQty} ${esc(p.unit)}</b> (พอ 14 วัน)${p.estCost?` · ~฿${p.estCost}`:''}</div>`:''}</div>`;
   const totalEst=need.reduce((s,p)=>s+(p.estCost||0),0);
-  box.innerHTML=`<h2 style="margin:0 0 4px">🛒 วางแผนสั่งซื้อ</h2>
+  box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</h2>
     <div class="muted" style="font-size:11.5px;margin-bottom:8px">คำนวณจากการใช้จริง 14 วันหลัง (ตัดสต๊อกอัตโนมัติ + เบิก) — แนะนำจำนวนให้พอขาย 14 วันข้างหน้า</div>
     ${need.length?`<div style="margin-bottom:6px;font-size:12.5px"><b>ควรสั่ง ${need.length} รายการ</b>${totalEst?` · งบประมาณ ~฿${Math.round(totalEst)}`:''}</div>`+need.map(row).join(''):'<p class="muted" style="font-size:12.5px">👍 สต๊อกทุกตัวพอสำหรับ 14 วันข้างหน้า (หรือยังไม่มีข้อมูลการใช้)</p>'}
     ${okRows.length?`<details style="margin-top:8px"><summary class="muted" style="font-size:12px;cursor:pointer">รายการที่ยังพอ (${okRows.length})</summary>${okRows.map(row).join('')}</details>`:''}`; };
@@ -1475,7 +1482,7 @@ window.showPriceHist=async(id)=>{ const box=$('priceHistBox'); box.innerHTML='<p
   let d; try{ d=await api('/api/ingredients/'+id+'/prices'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
   const ps=d.prices||[];
   box.innerHTML=ps.length?`<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:5px">📈 ประวัติราคาซื้อ</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:5px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ประวัติราคาซื้อ</div>
       ${ps.map(p=>`<div class="row between" style="font-size:12px;padding:2.5px 0"><span class="muted">${esc((p.at||'').slice(0,10))}${p.supplier?' · '+esc(p.supplier):''}</span><span>${p.qty} × <b>฿${p.unitPrice}</b>/หน่วย</span></div>`).join('')}</div>`
     :'<p class="muted" style="font-size:12px">ยังไม่เคยบันทึกการรับเข้าพร้อมราคา</p>'; };
 let _selIngId=null;
@@ -1517,7 +1524,7 @@ window.editIngForm=(id)=>{ _selIngId=id;
       <button class="ghost" style="flex:1" onclick="stockMoveForm('adjust')">นับใหม่</button>
       <button class="ghost danger" style="flex:1" onclick="stockMoveForm('use')">เบิก/ของเสีย</button>
     </div>
-    <div id="priceHistBox" style="margin:0 0 14px"><button class="ghost" style="width:100%;padding:7px;font-size:12.5px" onclick="showPriceHist(${r.id})">📈 ประวัติราคาซื้อ</button></div>
+    <div id="priceHistBox" style="margin:0 0 14px"><button class="ghost" style="width:100%;padding:7px;font-size:12.5px" onclick="showPriceHist(${r.id})"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ประวัติราคาซื้อ</button></div>
     <div style="border-top:1px solid var(--line);padding-top:12px">
       <h3 style="margin:0 0 8px;font-size:14px;color:var(--muted)">แก้ไขข้อมูล</h3>
       <label class="ff">ชื่อวัตถุดิบ<input id="if_name" value="${esc(r.name)}"></label>
@@ -1607,10 +1614,10 @@ function renderControl(d){ $('ctlDate').textContent=d.date||'—'; const tt=_ctl
     <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.discount.c}">ลดราคา</div><div style="font-weight:800">฿${d.byType.discount||0}</div></div>
     <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.cash_delete.c}">ลบเงินสด</div><div style="font-weight:800">฿${d.byType.cash_delete||0}</div></div>
   </div>`;
-  const staff=(d.byStaff&&d.byStaff.length)?`<div style="margin-bottom:14px"><h2 style="margin:0 0 6px;font-size:14px">👤 แยกตามพนักงาน</h2>${d.byStaff.map(s=>`<div class="row between" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>${esc(s.staff)}</b><span style="font-weight:800">฿${s.amount}</span></div>`).join('')}</div>`:'';
+  const staff=(d.byStaff&&d.byStaff.length)?`<div style="margin-bottom:14px"><h2 style="margin:0 0 6px;font-size:14px"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>แยกตามพนักงาน</h2>${d.byStaff.map(s=>`<div class="row between" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>${esc(s.staff)}</b><span style="font-weight:800">฿${s.amount}</span></div>`).join('')}</div>`:'';
   const ev=(d.events&&d.events.length)?d.events.map(e=>{const m=tt[e.type]||{t:e.type,c:'var(--muted)'}; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);min-width:42px">${_ctlHM(e.at)}</span><span class="pill" style="font-size:10px;background:${m.c};color:#fff;flex:none">${m.t}</span><div style="flex:1;min-width:0"><div style="font-size:13px"><b>฿${e.amount}</b>${e.ticketNo?(' · คิว '+e.ticketNo):''}${e.customer?(' · '+esc(e.customer)):''}</div>${e.reason?('<div class="muted" style="font-size:11px">'+esc(e.reason)+'</div>'):''}</div><span style="font-size:11px;color:var(--muted);flex:none">${esc(e.staff)}</span></div>`;}).join(''):'<p class="muted" style="font-size:13px;padding:10px">ไม่มีการลดยอดในวันนี้ ✓</p>';
-  const redeem=(d.redeems&&d.redeems.length)?`<div style="margin-top:14px"><h2 style="margin:0 0 6px;font-size:14px">🎁 แลกของรางวัล/วันเกิด (เคาน์เตอร์)</h2>${d.redeems.map(r=>`<div class="row between" style="padding:6px 10px;border-bottom:1px solid var(--line)"><div style="font-size:12.5px">${esc(r.customer||'—')}<div class="muted" style="font-size:11px">${esc(r.note||'')}</div></div><span style="font-size:11px;color:var(--muted)">${_ctlHM(r.at)}</span></div>`).join('')}</div>`:'';
-  $('controlBody').innerHTML=tiles+staff+`<h2 style="margin:0 0 4px;font-size:14px">📋 รายการ</h2><div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${ev}</div>`+redeem; }
+  const redeem=(d.redeems&&d.redeems.length)?`<div style="margin-top:14px"><h2 style="margin:0 0 6px;font-size:14px"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13M5 12v9h14v-9"/><path d="M12 8s-1.5-4-4-4a2 2 0 0 0 0 4M12 8s1.5-4 4-4a2 2 0 0 1 0 4"/></svg>แลกของรางวัล/วันเกิด (เคาน์เตอร์)</h2>${d.redeems.map(r=>`<div class="row between" style="padding:6px 10px;border-bottom:1px solid var(--line)"><div style="font-size:12.5px">${esc(r.customer||'—')}<div class="muted" style="font-size:11px">${esc(r.note||'')}</div></div><span style="font-size:11px;color:var(--muted)">${_ctlHM(r.at)}</span></div>`).join('')}</div>`:'';
+  $('controlBody').innerHTML=tiles+staff+`<h2 style="margin:0 0 4px;font-size:14px"><svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>รายการ</h2><div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${ev}</div>`+redeem; }
 window.loadCash=async()=>{ try{ CASH=await api('/api/cash/session'); }catch(e){ toast(err(e)); return; }
   try{ CASHHIST=await api('/api/cash/history'); }catch(e){ CASHHIST=null; }
   renderCash(); renderCashHist(); };
@@ -1765,12 +1772,12 @@ async function renderCharts(){
   const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
   $('chartsBody').innerHTML =
-    card('📈 ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
+    card('<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
-      card('🥤 เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
-      card('💳 ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
+      card('<svg class="ic" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg>เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
+      card('<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระ (วันนี้)', chartBars(pay, baht))+
     `</div>`+
-    card('🕐 ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v)) +
+    card('<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>ช่วงเวลาพีค (วันนี้ · จำนวนออเดอร์)', chartCols(hrs, v=>v)) +
     (wk.length?card('📅 แนวโน้มรายสัปดาห์ (กำไรสุทธิ · 12 สัปดาห์)', chartCols(wk, baht)):'') +
     (mo.length?card('🗓️ แนวโน้มรายเดือน (กำไรสุทธิ · 12 เดือน)', chartCols(mo, baht)):'') +
     (yr.length?card('📆 แนวโน้มรายปี (กำไรสุทธิ)', chartCols(yr, baht)):'');
@@ -1851,7 +1858,7 @@ window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!
       <div class="row between" style="align-items:center;gap:8px">
         <div style="flex:1;height:6px;background:#fff;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(2,(i.margin/maxM*100)).toFixed(0)}%;background:${i.margin>=0?'linear-gradient(90deg,var(--accent),var(--accent2))':'var(--danger)'}"></div></div>
         <span class="muted" style="font-size:11px;white-space:nowrap">ขาย ฿${i.price} · ทุน ฿${i.cost}</span></div></div>`;
-  box.innerHTML=`<h2 style="margin:0 0 4px">📈 กำไรต่อเมนู (ราคาขาย − ต้นทุนสูตร)</h2>
+  box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไรต่อเมนู (ราคาขาย − ต้นทุนสูตร)</h2>
     <div class="muted" style="font-size:11.5px;margin-bottom:8px">ต้นทุนจากสูตร (BOM) × ต้นทุนถัวเฉลี่ยวัตถุดิบปัจจุบัน · เรียงกำไรมาก → น้อย</div>
     ${(d.cogsActual>0||d.wasteCost>0)?`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12.5px">
       <div class="row between"><span>ต้นทุนวัตถุดิบที่ใช้จริง${_reportDate?(' ('+_reportDate+')'):'วันนี้'} <span class="muted" style="font-size:10.5px">จากการตัดสต๊อกอัตโนมัติ</span></span><b>฿${d.cogsActual}</b></div>
@@ -1866,11 +1873,11 @@ function renderInsightsBody(d, box){
     <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${((stars[s]||0)/maxN*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
     <span class="muted" style="width:28px;text-align:right">${stars[s]||0}</span></div>`).join('');
   const topRows=(cu.top||[]).slice(0,5).map(t=>`<div class="row between" style="font-size:12px;padding:3px 0"><span>${esc(t.name||'ลูกค้า')}${t.isPhone?' <span class="muted" style="font-size:10px">📱</span>':' <span class="muted" style="font-size:10px">LINE</span>'}</span><span class="muted">${t.order_count} ครั้ง${t.spend?' · ฿'+t.spend:''}</span></div>`).join('')||'<p class="muted" style="font-size:12px">ยังไม่มีลูกค้าซื้อซ้ำ</p>';
-  box.innerHTML=`<h2>⭐ ความพึงพอใจลูกค้า</h2>
+  box.innerHTML=`<h2><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>ความพึงพอใจลูกค้า</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
       ${sat.total?starBars:'<p class="muted" style="font-size:12px">ยังไม่มีรีวิว</p>'}</div>
-    <h2>🔁 ลูกค้าซื้อซ้ำ (LINE)</h2>
+    <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>ลูกค้าซื้อซ้ำ (LINE)</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
