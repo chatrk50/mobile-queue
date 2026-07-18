@@ -420,8 +420,9 @@ console.log('\n== Closed-store order gate (server is the real door) ==');
 const bkkDay = new Date(Date.now() + 7 * 3600 * 1000).getUTCDay();
 Q.updateStore(1, { hoursDays: String((bkkDay + 1) % 7), hoursOpen: '08:00', hoursClose: '20:00' });   // open only on another day
 let closedThrew = false;
-try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); } catch (e) { closedThrew = e.message === 'store_closed'; }
-ok(closedThrew, `INVARIANT off-hours order rejected server-side (store_closed) — threw=${closedThrew}`);
+// (source:'customer' — since the ขายนอกเวลา owner decision, only the customer path is gated)
+try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: 'Uclosedgate0000000000000000001' }); } catch (e) { closedThrew = e.message === 'store_closed'; }
+ok(closedThrew, `INVARIANT off-hours CUSTOMER order rejected server-side (store_closed) — threw=${closedThrew}`);
 Q.updateStore(1, { hoursDays: '', hoursOpen: '', hoursClose: '' });   // clear hours → open again
 let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
@@ -628,6 +629,28 @@ ok(pRow.lastSupplier === 'แม็คโครทดสอบ' && pRow.lastUnit
 ok(plan[0].id === pRow.id || (plan[0].daysLeft ?? 9e9) <= (pRow.daysLeft ?? 9e9), 'INVARIANT plan is sorted most-urgent first');
 Q.upsertSupplier(sup.id, { active: 0 });
 ok(!Q.listSuppliers().some((s) => s.id === sup.id), 'INVARIANT a deactivated supplier leaves the list (history kept)');
+
+// ---- Owner decisions: sell outside hours (cashier only) + audited cash-move deletion ----
+console.log('\n== Off-hours selling + cash-delete audit ==');
+// Close the store manually, then try both order sources.
+db.prepare('UPDATE stores SET is_open=0 WHERE id=1').run();
+const zoneRow = db.prepare('SELECT id FROM zones WHERE store_id=1 LIMIT 1').get();
+let custErr = null;
+try { Q.createOrder(zoneRow.id, [{ name: 'ทดสอบนอกเวลา', price: 10, qty: 1 }], { source: 'customer', lineUserId: 'Uoffhours0000000000000000000001' }); }
+catch (e) { custErr = e.message; }
+ok(custErr === 'store_closed', `INVARIANT a LINE customer still cannot order while closed (got ${custErr})`);
+const posOrder = Q.createOrder(zoneRow.id, [{ name: 'ทดสอบนอกเวลา', price: 10, qty: 1 }], { source: 'cashier' });
+ok(!!posOrder && posOrder.total === 10, 'INVARIANT the cashier POS can sell while the store is closed (ขายนอกเวลา)');
+db.prepare('UPDATE stores SET is_open=1 WHERE id=1').run();
+// Deleting a pay-in/out row must land in the ควบคุมการลดยอด audit trail.
+const cmRow = Q.addCashMove(1, 'pay_out', 250, 'ค่าน้ำแข็งทดสอบ', null);
+Q.deleteCashMove(cmRow.id, 1, null);
+await new Promise((r) => setImmediate(r));   // sale_events flush is batched on setImmediate
+const redu = Q.listReductions(1);
+const delEv = redu.events.find((e) => e.type === 'cash_delete' && e.amount === 250);
+ok(!!delEv, 'INVARIANT deleting a cash move is recorded as a cash_delete reduction event');
+ok(delEv && /จ่ายออก/.test(delEv.reason || '') && /ค่าน้ำแข็งทดสอบ/.test(delEv.reason || ''), `INVARIANT the audit row describes the deleted entry (got "${delEv && delEv.reason}")`);
+ok(redu.byType.cash_delete >= 250, 'INVARIANT cash_delete gets its own byType total for the tile');
 
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----

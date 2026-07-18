@@ -733,7 +733,12 @@ export function listCashMoves(branchId = 1, date = null) {
   const payOut = r2(rows.filter((r) => r.kind === 'pay_out').reduce((s, r) => s + r.amount, 0));
   return { date: day, moves: rows, payIn, payOut, net: r2(payIn - payOut) };
 }
-export function deleteCashMove(id, branchId = 1) {
+export function deleteCashMove(id, branchId = 1, actorId = null) {
+  // Owner decision 2026-07: deletions must show in ควบคุมการลดยอด — snapshot the row into the
+  // immutable sale_events audit trail BEFORE it disappears from the ledger.
+  const row = db.prepare('SELECT * FROM cash_moves WHERE id=? AND branch_id=?').get(Number(id), branchId);
+  if (row) logSaleEvent({ branchId, type: 'cash_delete', amount: row.amount, actor: actorId,
+    meta: { kind: row.kind, remark: row.remark || null, movedAt: row.at } });
   db.prepare('DELETE FROM cash_moves WHERE id=? AND branch_id=?').run(Number(id), branchId);
   return { ok: true };
 }
@@ -753,16 +758,22 @@ export function listReductions(branchId = 1, date = null) {
        FROM sale_events se
        LEFT JOIN staff s ON s.id=se.actor
        LEFT JOIN tickets t ON t.id=se.ticket_id
-      WHERE se.branch_id=? AND se.type IN ('void','waste','discount')
+      WHERE se.branch_id=? AND se.type IN ('void','waste','discount','cash_delete')
         AND date(se.at,'+7 hours')=? ORDER BY se.at DESC`
   ).all(branchId, day);
   const events = rows.map((r) => {
-    let reason = null; try { reason = r.meta ? (JSON.parse(r.meta).reason || null) : null; } catch { /* keep null */ }
+    let reason = null;
+    try {
+      const m = r.meta ? JSON.parse(r.meta) : null;
+      // cash_delete: describe the removed ledger row (รับเข้า/จ่ายออก + its remark)
+      reason = m ? (m.reason || (r.type === 'cash_delete'
+        ? `ลบรายการ${m.kind === 'pay_in' ? 'รับเข้า' : 'จ่ายออก'}${m.remark ? ' — ' + m.remark : ''}` : null)) : null;
+    } catch { /* keep null */ }
     return { id: r.id, type: r.type, amount: r2(r.amount || 0), at: r.at, staff: r.staff,
       ticketNo: r.ticket_no || null, customer: r.customer_name || null, reason };
   });
   const sumType = (t) => r2(events.filter((e) => e.type === t).reduce((s, e) => s + e.amount, 0));
-  const byType = { void: sumType('void'), waste: sumType('waste'), discount: sumType('discount') };
+  const byType = { void: sumType('void'), waste: sumType('waste'), discount: sumType('discount'), cash_delete: sumType('cash_delete') };
   const byStaffMap = {};
   for (const e of events) byStaffMap[e.staff] = r2((byStaffMap[e.staff] || 0) + e.amount);
   const byStaff = Object.entries(byStaffMap).map(([staff, amount]) => ({ staff, amount })).sort((a, b) => b.amount - a.amount);
@@ -2320,10 +2331,11 @@ export function createOrder(zoneId, items, opts = {}) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
-  // Off-hours / manually-closed branch: reject here too — this is the customer LINE order path,
-  // reachable from the member card / deep link even when the LIFF order button is hidden.
+  // Off-hours / manually-closed branch: reject CUSTOMER (LINE) orders only — reachable from the
+  // member card / deep link even when the LIFF order button is hidden. The cashier POS keeps
+  // selling to walk-ins outside opening hours (owner decision 2026-07: ขายนอกเวลาได้).
   const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
-  if (_store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
+  if (source === 'customer' && _store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.

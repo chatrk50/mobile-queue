@@ -365,7 +365,7 @@
   <!-- ANTI-FRAUD: revenue-reduction control (owner only) -->
   <div id="controlCard" class="card" style="display:none;max-width:620px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1>🛡️ ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
+      <div><h1>🛡️ ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · ลบรายการเงินสด · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideControl()">ปิด</button>
     </div>
     <div class="row between" style="align-items:center;margin-top:12px">
@@ -1597,13 +1597,14 @@ window.showControl=async()=>{ hideAllPanels(); ['cashCard','chartsCard','reportC
 window.loadControl=async()=>{ const body=$('controlBody'); try{ const q=CTLDATE?('?date='+encodeURIComponent(CTLDATE)):''; const d=await api('/api/control/reductions'+q); CTLDATE=d.date; renderControl(d); }catch(e){ body.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ — ต้องเป็นเจ้าของร้าน</p>'; } };
 window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):(()=>{const n=new Date();return new Date(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()));})(); b.setUTCDate(b.getUTCDate()+delta); CTLDATE=b.toISOString().slice(0,10); loadControl(); };
 const _ctlHM=(at)=>{ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } };
-const _ctlType={ void:{t:'ยกเลิก',c:'var(--danger)'}, waste:{t:'ของเสีย',c:'#b45309'}, discount:{t:'ลดราคา',c:'#7c3aed'} };
+const _ctlType={ void:{t:'ยกเลิก',c:'var(--danger)'}, waste:{t:'ของเสีย',c:'#b45309'}, discount:{t:'ลดราคา',c:'#7c3aed'}, cash_delete:{t:'ลบเงินสด',c:'#0e7490'} };
 function renderControl(d){ $('ctlDate').textContent=d.date||'—'; const tt=_ctlType;
   const tiles=`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <div style="flex:1;min-width:120px;background:var(--surface,#f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div class="muted" style="font-size:11px">ลดยอดรวมวันนี้</div><div style="font-size:20px;font-weight:800;color:var(--danger)">฿${d.total||0}</div><div class="muted" style="font-size:11px">${d.count||0} รายการ</div></div>
     <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.void.c}">ยกเลิก</div><div style="font-weight:800">฿${d.byType.void||0}</div></div>
     <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.waste.c}">ของเสีย</div><div style="font-weight:800">฿${d.byType.waste||0}</div></div>
     <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.discount.c}">ลดราคา</div><div style="font-weight:800">฿${d.byType.discount||0}</div></div>
+    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.cash_delete.c}">ลบเงินสด</div><div style="font-weight:800">฿${d.byType.cash_delete||0}</div></div>
   </div>`;
   const staff=(d.byStaff&&d.byStaff.length)?`<div style="margin-bottom:14px"><h2 style="margin:0 0 6px;font-size:14px">👤 แยกตามพนักงาน</h2>${d.byStaff.map(s=>`<div class="row between" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>${esc(s.staff)}</b><span style="font-weight:800">฿${s.amount}</span></div>`).join('')}</div>`:'';
   const ev=(d.events&&d.events.length)?d.events.map(e=>{const m=tt[e.type]||{t:e.type,c:'var(--muted)'}; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);min-width:42px">${_ctlHM(e.at)}</span><span class="pill" style="font-size:10px;background:${m.c};color:#fff;flex:none">${m.t}</span><div style="flex:1;min-width:0"><div style="font-size:13px"><b>฿${e.amount}</b>${e.ticketNo?(' · คิว '+e.ticketNo):''}${e.customer?(' · '+esc(e.customer)):''}</div>${e.reason?('<div class="muted" style="font-size:11px">'+esc(e.reason)+'</div>'):''}</div><span style="font-size:11px;color:var(--muted);flex:none">${esc(e.staff)}</span></div>`;}).join(''):'<p class="muted" style="font-size:13px;padding:10px">ไม่มีการลดยอดในวันนี้ ✓</p>';

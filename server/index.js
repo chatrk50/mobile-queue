@@ -970,7 +970,7 @@ app.post('/api/cash/move', (req, res) => {
 });
 app.post('/api/cash/move/:id/delete', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.deleteCashMove(req.params.id, cashBranch(req))); }
+  try { res.json(Q.deleteCashMove(req.params.id, cashBranch(req), req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Order history (PIN): completed/cancelled orders today, to re-check after the fact.
