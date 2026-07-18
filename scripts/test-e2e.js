@@ -420,8 +420,9 @@ console.log('\n== Closed-store order gate (server is the real door) ==');
 const bkkDay = new Date(Date.now() + 7 * 3600 * 1000).getUTCDay();
 Q.updateStore(1, { hoursDays: String((bkkDay + 1) % 7), hoursOpen: '08:00', hoursClose: '20:00' });   // open only on another day
 let closedThrew = false;
-try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); } catch (e) { closedThrew = e.message === 'store_closed'; }
-ok(closedThrew, `INVARIANT off-hours order rejected server-side (store_closed) — threw=${closedThrew}`);
+// (source:'customer' — since the ขายนอกเวลา owner decision, only the customer path is gated)
+try { Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: 'Uclosedgate0000000000000000001' }); } catch (e) { closedThrew = e.message === 'store_closed'; }
+ok(closedThrew, `INVARIANT off-hours CUSTOMER order rejected server-side (store_closed) — threw=${closedThrew}`);
 Q.updateStore(1, { hoursDays: '', hoursOpen: '', hoursClose: '' });   // clear hours → open again
 let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
@@ -550,6 +551,255 @@ const exCCID = db.prepare('SELECT id FROM customer_coupons WHERE customer_key=?'
 let exErr = null; try { Q.redeemCustomerCoupon(exO2.ticket.id, exCCID, null); } catch (e) { exErr = e.message; }
 ok(exErr === 'coupon_expired', `INVARIANT redeeming an expired coupon is blocked (got ${exErr})`);
 ok(Q.loyaltyBalance(exCust).points === exBalBefore, `INVARIANT expiry never claws back remaining stamps (still ${exBalBefore})`);
+
+// ---- LINE push accounting: OA bills per message, so pushes are logged and countable. The UAT
+//      stub (LINE disabled) must NOT log — it costs nothing. ----
+console.log('\n== LINE push log / monthly stats ==');
+const psBefore = Q.pushStats();
+ok(Array.isArray(psBefore.monthly) && Array.isArray(psBefore.byKind) && typeof psBefore.today === 'number', 'INVARIANT pushStats returns monthly/byKind/today');
+ok(db.prepare('SELECT COUNT(*) n FROM push_log').get().n === 0, 'INVARIANT the LINE stub logs nothing (no cost = no rows)');
+db.prepare(`INSERT INTO push_log (user_id, kind, ok) VALUES ('Utest','winback',1), ('Utest','paid',1), ('Utest','winback',0)`).run();
+const psAfter = Q.pushStats();
+ok(psAfter.today === 3, `INVARIANT today's count reflects logged pushes (got ${psAfter.today})`);
+ok(psAfter.monthly[0] && psAfter.monthly[0].n === 3 && psAfter.monthly[0].sent === 2, `INVARIANT monthly rollup counts attempts + successes (n=${psAfter.monthly[0] && psAfter.monthly[0].n}, sent=${psAfter.monthly[0] && psAfter.monthly[0].sent})`);
+ok(psAfter.byKind.find((k) => k.kind === 'winback')?.n === 2, 'INVARIANT this-month breakdown by purpose works (winback=2)');
+db.prepare('DELETE FROM push_log').run();
+
+// ---- CRM: customer list segments + targeted campaign with attached coupon + campaign history ----
+console.log('\n== CRM customers + targeted campaign ==');
+const clAll = Q.customersList();
+ok(Array.isArray(clAll) && clAll.length > 0, `customersList returns customers (got ${clAll.length})`);
+ok(clAll.every((c) => ['new', 'regular', 'at_risk', 'lost'].includes(c.segment)), 'INVARIANT every customer gets a lifecycle segment');
+const clTarget = clAll.find((c) => c.canPush && c.visits >= 1);
+ok(!!clTarget, 'a pushable LINE customer exists for the campaign test');
+const clCoupBefore = Q.customerCoupons(clTarget.key).length;
+const camp = await Q.sendCampaign({ keys: [clTarget.key, 'tel:0812345678'], message: 'คิดถึงนะคะ', coupon: { label: 'คูปองคิดถึง', cap: 49, days: 14 }, actorId: null });
+ok(camp.targeted === 1, `INVARIANT tel: keys are filtered out — only LINE customers targeted (got ${camp.targeted})`);
+const clCoupAfter = Q.customerCoupons(clTarget.key);
+ok(clCoupAfter.length === clCoupBefore + 1 && clCoupAfter.some((c) => c.kind === 'winback' && c.label === 'คูปองคิดถึง'), 'INVARIANT the attached coupon lands in the customer\'s coupon list (kind=winback)');
+const campRow = Q.listCampaigns()[0];
+ok(campRow && campRow.targeted === 1 && campRow.coupon_label === 'คูปองคิดถึง' && typeof campRow.sent === 'number', `INVARIANT campaign history persists targeted/sent/failed + coupon (targeted=${campRow && campRow.targeted}, sent=${campRow && campRow.sent})`);
+let campErr = null; try { await Q.sendCampaign({ keys: ['tel:0800000000'], message: 'x' }); } catch (e) { campErr = e.message; }
+ok(campErr === 'no_targets', `INVARIANT a campaign with no LINE-pushable targets is rejected (got ${campErr})`);
+
+// ---- Cash-round history: closed Z-reports stay browsable daily + roll up monthly ----
+console.log('\n== Cash round history ==');
+Q.openCashSession(1, { openFloat: 500 });
+const chClose = Q.closeCashSession(1, { countedCash: 700, note: 'ทดสอบ' });
+const ch = Q.cashSessionHistory(1);
+ok(ch.sessions.length >= 1 && ch.sessions[0].open_float === 500, `INVARIANT a closed round appears in the daily history (float ${ch.sessions[0] && ch.sessions[0].open_float})`);
+ok(ch.sessions[0].expected_cash === chClose.expectedCash && ch.sessions[0].counted_cash === 700, 'INVARIANT the stored Z-report matches what the close returned');
+ok(ch.lastFloat === 500, `INVARIANT lastFloat powers the "เท่ารอบก่อน" prefill (got ${ch.lastFloat})`);
+const chM = ch.monthly[0];
+ok(chM && chM.rounds >= 1 && chM.counted >= 700, `INVARIANT the monthly rollup aggregates rounds (rounds=${chM && chM.rounds}, counted=${chM && chM.counted})`);
+
+// ---- Per-menu margin (BOM cost) + real COGS from the stock ledger ----
+console.log('\n== Menu margins + real COGS ==');
+const mmIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('นมทดสอบ','ลิตร', 100, 20)`).run();
+const mmItem = db.prepare(`SELECT id, price FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1`).get();
+db.prepare(`INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,0.5)`).run(mmItem.id, mmIng.lastInsertRowid);
+const mm = Q.menuMargins();
+const mmRow = mm.find((i) => i.id === mmItem.id);
+const rr = (x) => Math.round(x * 100) / 100;
+ok(!!mmRow && mmRow.cost === 10 && mmRow.margin === rr(mmItem.price - 10), `INVARIANT margin = price − BOM cost (price ${mmItem.price}, cost ${mmRow && mmRow.cost}, margin ${mmRow && mmRow.margin})`);
+ok(mm.some((i) => !i.hasRecipe), 'INVARIANT un-costed items are flagged hasRecipe:false');
+const cogs0 = Q.cogsForDay().cogsActual;
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'use', qty: 2, note: 'ทดสอบ' });   // 2 × ฿20 = ฿40
+const cogs1 = Q.cogsForDay().cogsActual;
+ok(rr(cogs1 - cogs0) === 40, `INVARIANT real COGS reflects stock 'use' moves at avg cost (Δ ${rr(cogs1 - cogs0)})`);
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'return', qty: 2, note: 'คืนทดสอบ' });
+ok(rr(Q.cogsForDay().cogsActual - cogs0) === 0, 'INVARIANT returns (cancelled orders) net out of real COGS');
+db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowid);
+
+// ---- A: auto closing summary (dedup once/day, only when enabled) ----
+console.log('\n== Auto closing summary ==');
+Q.setAutoSummary(false);
+ok(Q.maybeAutoSummary().reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
+Q.setAutoSummary(true);
+const sum1 = Q.maybeAutoSummary();   // no owner LINE id on UAT → sent:false but NOT 'off'/'already'
+ok(sum1.reason !== 'off' && sum1.reason !== 'already', 'INVARIANT enabling auto-summary attempts a send');
+ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT auto-summary fires at most once per day');
+ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
+Q.setAutoSummary(false);
+
+// ---- D: auto-draft PO from the plan (once/day, drafts only — never auto-receives) ----
+console.log('\n== Auto reorder ==');
+Q.setAutoReorder(false);
+ok(Q.maybeAutoReorder().reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
+// make something clearly need reordering
+const arIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES ('วัตถุดิบสั่งซื้ออัตโนมัติ','กก.', 1, 20, 5)`).run().lastInsertRowid;
+Q.recordStockMove(arIng, { kind: 'use', qty: 40, note: 'ใช้หนักจำลอง' });   // heavy usage → plan flags it
+Q.setAutoReorder(true);
+const ar = Q.maybeAutoReorder();
+ok(ar.drafted === true && /^PO-/.test(ar.poNo), `INVARIANT auto-reorder drafts a PO when stock is low (po ${ar.poNo})`);
+const arPo = Q.getPurchaseOrder(ar.poId);
+ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (owner still confirms — no silent stock change)');
+ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
+Q.setAutoReorder(false);
+
+// ---- C: auto win-back for at-risk customers (capped + cooldown) ----
+console.log('\n== Auto win-back ==');
+Q.setAutoWinback(false);
+ok((await Q.maybeAutoWinback()).reason === 'off', 'INVARIANT auto-winback stays silent when disabled');
+// craft an at-risk LINE customer: 2 paid visits, the latest ~45 days ago (needs >1 visit to leave 'new')
+const awKey = 'Uautowinback000000000000000001';
+db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าห่างหาย')`).run(awKey);
+for (const [num, code, ago] of [[776, 'AW776', '-70 days'], [777, 'AW777', '-45 days']]) {
+  const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name) VALUES (1,1,?,?,?, 'served','ลูกค้าห่างหาย')`).run(num, code, awKey);
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 100, 'paid', datetime('now',?), 1)`).run(tk.lastInsertRowid, ago);
+}
+const awSeg = Q.customersList().find((c) => c.key === awKey);
+ok(awSeg && awSeg.segment === 'at_risk', `INVARIANT the 45-day-lapsed customer is segmented at_risk (got ${awSeg && awSeg.segment})`);
+Q.setAutoWinback(true); Q.setAutoWinbackCap(100);
+const aw1 = await Q.maybeAutoWinback();
+ok(aw1.reason === 'ok' && aw1.targeted >= 1, `INVARIANT auto-winback targets at-risk LINE customers (targeted ${aw1.targeted})`);
+ok(db.prepare(`SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='winback'`).get(awKey), 'INVARIANT the at-risk customer received a win-back coupon');
+ok((await Q.maybeAutoWinback()).reason === 'already', 'INVARIANT auto-winback runs at most once per day');
+// cap of 0 blocks sends
+db.prepare("UPDATE settings SET value='' WHERE key='winback:last_run'").run();   // clear day-dedup to test the cap path
+Q.setAutoWinbackCap(0);
+ok((await Q.maybeAutoWinback()).reason === 'cap', 'INVARIANT the monthly cap blocks further sends when reached');
+Q.setAutoWinback(false);
+
+// ---- Waste is recorded distinctly from use (so COGS vs waste cost are separable) ----
+const wIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบของเสีย','กก.', 20, 10)`).run().lastInsertRowid;
+const cogsW0 = Q.cogsForDay();
+Q.recordStockMove(wIng, { kind: 'use', qty: 2, note: 'เบิกใช้' });     // 2×10 = ฿20 COGS
+Q.recordStockMove(wIng, { kind: 'waste', qty: 1, note: 'ของเสีย' });   // 1×10 = ฿10 waste
+const cogsW1 = Q.cogsForDay();
+ok(Math.round((cogsW1.cogsActual - cogsW0.cogsActual) * 100) / 100 === 20, `INVARIANT a 'use' move feeds COGS, not waste (Δcogs ${Math.round((cogsW1.cogsActual - cogsW0.cogsActual) * 100) / 100})`);
+ok(Math.round((cogsW1.wasteCost - cogsW0.wasteCost) * 100) / 100 === 10, `INVARIANT a 'waste' move feeds wasteCost separately (Δwaste ${Math.round((cogsW1.wasteCost - cogsW0.wasteCost) * 100) / 100})`);
+ok(db.prepare("SELECT stock_qty FROM ingredients WHERE id=?").get(wIng).stock_qty === 17, 'INVARIANT both use and waste deduct on-hand stock');
+
+// ---- Suppliers + price history + purchase planning ----
+console.log('\n== Suppliers + purchase planning ==');
+const sup = Q.upsertSupplier(null, { name: 'แม็คโครทดสอบ', phone: '021112222', note: 'ส่งวันอังคาร' });
+ok(sup.id > 0 && Q.listSuppliers().some((s) => s.id === sup.id), 'INVARIANT a supplier can be created and listed');
+// buy 10 units for ฿300 from that supplier → unit price ฿30 in the history
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'purchase', qty: 10, cost: 300, supplierId: sup.id });
+const ph = Q.ingredientPriceHistory(mmIng.lastInsertRowid);
+ok(ph.length >= 1 && ph[0].unitPrice === 30 && ph[0].supplier === 'แม็คโครทดสอบ', `INVARIANT price history shows who/when/unit-price (got ฿${ph[0] && ph[0].unitPrice} from ${ph[0] && ph[0].supplier})`);
+// heavy usage → the plan must suggest reordering: use 70 over "14 days" ⇒ 5/day; stock left low
+const planIngBefore = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(mmIng.lastInsertRowid).stock_qty;
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'use', qty: planIngBefore - 3, note: 'จำลองใช้หนัก' });   // leave 3 on hand
+const plan = Q.purchasePlan();
+const pRow = plan.find((p) => p.id === mmIng.lastInsertRowid);
+ok(!!pRow && pRow.perDay > 0 && pRow.daysLeft != null && pRow.suggestQty > 0, `INVARIANT heavy usage yields a reorder suggestion (perDay ${pRow && pRow.perDay}, daysLeft ${pRow && pRow.daysLeft}, suggest ${pRow && pRow.suggestQty})`);
+ok(pRow.lastSupplier === 'แม็คโครทดสอบ' && pRow.lastUnitPrice === 30, 'INVARIANT the plan carries last supplier + last unit price for the call');
+ok(plan[0].id === pRow.id || (plan[0].daysLeft ?? 9e9) <= (pRow.daysLeft ?? 9e9), 'INVARIANT plan is sorted most-urgent first');
+Q.upsertSupplier(sup.id, { active: 0 });
+ok(!Q.listSuppliers().some((s) => s.id === sup.id), 'INVARIANT a deactivated supplier leaves the list (history kept)');
+
+// ---- Owner decisions: sell outside hours (cashier only) + audited cash-move deletion ----
+console.log('\n== Off-hours selling + cash-delete audit ==');
+// Close the store manually, then try both order sources.
+db.prepare('UPDATE stores SET is_open=0 WHERE id=1').run();
+const zoneRow = db.prepare('SELECT id FROM zones WHERE store_id=1 LIMIT 1').get();
+let custErr = null;
+try { Q.createOrder(zoneRow.id, [{ name: 'ทดสอบนอกเวลา', price: 10, qty: 1 }], { source: 'customer', lineUserId: 'Uoffhours0000000000000000000001' }); }
+catch (e) { custErr = e.message; }
+ok(custErr === 'store_closed', `INVARIANT a LINE customer still cannot order while closed (got ${custErr})`);
+const posOrder = Q.createOrder(zoneRow.id, [{ name: 'ทดสอบนอกเวลา', price: 10, qty: 1 }], { source: 'cashier' });
+ok(!!posOrder && posOrder.total === 10, 'INVARIANT the cashier POS can sell while the store is closed (ขายนอกเวลา)');
+db.prepare('UPDATE stores SET is_open=1 WHERE id=1').run();
+// Deleting a pay-in/out row must land in the ควบคุมการลดยอด audit trail.
+const cmRow = Q.addCashMove(1, 'pay_out', 250, 'ค่าน้ำแข็งทดสอบ', null);
+Q.deleteCashMove(cmRow.id, 1, null);
+await new Promise((r) => setImmediate(r));   // sale_events flush is batched on setImmediate
+const redu = Q.listReductions(1);
+const delEv = redu.events.find((e) => e.type === 'cash_delete' && e.amount === 250);
+ok(!!delEv, 'INVARIANT deleting a cash move is recorded as a cash_delete reduction event');
+ok(delEv && /จ่ายออก/.test(delEv.reason || '') && /ค่าน้ำแข็งทดสอบ/.test(delEv.reason || ''), `INVARIANT the audit row describes the deleted entry (got "${delEv && delEv.reason}")`);
+ok(redu.byType.cash_delete >= 250, 'INVARIANT cash_delete gets its own byType total for the tile');
+
+// ---- Push-stats date range (LINE cost report: จากวัน X ถึงวัน X) ----
+const psToday = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+const psr = Q.pushStatsRange(psToday, psToday);
+const psAll = Q.pushStats();
+ok(psr.from === psToday && psr.to === psToday && psr.total === psAll.today, `INVARIANT range report for today matches pushStats.today (${psr.total} vs ${psAll.today})`);
+ok(Q.pushStatsRange('bad-date', null).from !== 'bad-date', 'INVARIANT malformed range dates fall back to defaults');
+
+// ---- SCM: purchase orders, expiry lots, two-way sourcing ----
+console.log('\n== SCM: purchase orders + sourcing ==');
+const scmIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบ SCM','กก.', 0, 0)`).run().lastInsertRowid;
+const scmSupA = Q.upsertSupplier(null, { name: 'ผู้ขาย A' });
+const scmSupB = Q.upsertSupplier(null, { name: 'ผู้ขาย B' });
+// Draft a PO, then receive it → posts stock + expiry lot
+const draft = Q.savePurchaseOrder({ supplierId: scmSupA.id, note: 'ทดสอบ', lines: [
+  { ingredientId: scmIng, qty: 10, unitPrice: 25, expiry: '2026-08-31' },
+  { ingredientId: scmIng, qty: 0, unitPrice: 5 },   // qty 0 → dropped
+] });
+ok(draft.po_no && /^PO-\d{4}-\d{4}$/.test(draft.po_no) && draft.lines.length === 1 && draft.total === 250, `INVARIANT a draft PO auto-numbers + totals valid lines (no ${draft.po_no}, total ${draft.total})`);
+const stockBeforePO = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(scmIng).stock_qty;
+const recv = Q.receivePurchaseOrder(draft.id);
+ok(recv.status === 'received', 'INVARIANT receiving a PO marks it received');
+const stockAfterPO = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(scmIng).stock_qty;
+ok(rr(stockAfterPO - stockBeforePO) === 10, `INVARIANT receiving posts stock (Δ ${rr(stockAfterPO - stockBeforePO)})`);
+let reRecv = null; try { Q.receivePurchaseOrder(draft.id); } catch (e) { reRecv = e.message; }
+ok(reRecv === 'po_not_draft', 'INVARIANT a received PO cannot be received again (no double-posting)');
+let editRecv = null; try { Q.savePurchaseOrder({ id: draft.id, lines: [] }); } catch (e) { editRecv = e.message; }
+ok(editRecv === 'po_not_editable', 'INVARIANT a received PO is immutable');
+// Expiry lot surfaces in the alert window
+const exp = Q.expiringLots(400);   // 2026-08-31 is within a wide window relative to test clock
+ok(exp.some((l) => l.expiry === '2026-08-31' && l.name === 'วัตถุดิบ SCM'), 'INVARIANT a received lot with an expiry appears in expiringLots');
+// Two-way sourcing: buy the same item from supplier B too, then check both views
+Q.recordStockMove(scmIng, { kind: 'purchase', qty: 10, cost: 300, supplierId: scmSupB.id });   // ฿30/unit
+const srcs = Q.ingredientSources(scmIng);
+ok(srcs.sources.length === 2, `INVARIANT ingredientSources lists every supplier the item was bought from (got ${srcs.sources.length})`);
+ok(srcs.cheapest && srcs.cheapest.supplier === 'ผู้ขาย A' && srcs.cheapest.avgUnit === 25, `INVARIANT cheapest source is identified (got ${srcs.cheapest && srcs.cheapest.supplier} @${srcs.cheapest && srcs.cheapest.avgUnit})`);
+const cat = Q.supplierCatalog(scmSupA.id);
+ok(cat.items.some((i) => i.id === scmIng && i.avgUnit === 25) && cat.orders.some((o) => o.id === draft.id), 'INVARIANT supplierCatalog shows what they sold + their PO history');
+// Cancel guard
+const draft2 = Q.savePurchaseOrder({ supplierId: scmSupA.id, lines: [{ ingredientId: scmIng, qty: 1, unitPrice: 1 }] });
+ok(Q.cancelPurchaseOrder(draft2.id).ok === true, 'INVARIANT a draft PO can be cancelled');
+let cancelRecv = null; try { Q.cancelPurchaseOrder(draft.id); } catch (e) { cancelRecv = e.message; }
+ok(cancelRecv === 'po_already_received', 'INVARIANT a received PO cannot be cancelled');
+// ---- OCR receipt → PO line matching (pure mapper, vision call stays dormant) ----
+console.log('\n== Receipt OCR line matching ==');
+const ocrIngs = [{ id: 1, name: 'โยเกิร์ตรสธรรมชาติ', unit: 'กก.' }, { id: 2, name: 'สตรอเบอร์รี่แช่แข็ง', unit: 'กก.' }];
+const ocrParsed = [
+  { name: 'โยเกิร์ตรสธรรมชาติ', qty: 5, unitPrice: 53, expiry: '2026-09-01' }, // exact
+  { name: 'สตรอเบอร์รี่', qty: 2, unitPrice: 80 },                              // substring
+  { name: 'ของแปลกไม่รู้จัก', qty: 1, unitPrice: 10 },                          // no match
+];
+const matched = Q.matchReceiptLines(ocrParsed, ocrIngs);
+ok(matched[0].ingredientId === 1 && matched[0].expiry === '2026-09-01', 'INVARIANT OCR exact name maps to the ingredient + keeps expiry');
+ok(matched[1].ingredientId === 2 && matched[1].matched === true, 'INVARIANT OCR partial name still matches by substring');
+ok(matched[2].ingredientId === null && matched[2].matched === false, 'INVARIANT an unrecognized line is flagged for manual pick, not dropped');
+ok(Q.matchReceiptLines([{ name: 'x', qty: -5, unitPrice: -1, expiry: 'bad' }], ocrIngs)[0].qty === 0, 'INVARIANT OCR line qty/price are clamped, bad expiry nulled');
+ok(Q.ocrConfigured() === false, 'INVARIANT OCR vision call is dormant without OCR_API_URL/KEY (safe default)');
+let ocrOff = null; try { await Q.parseReceiptImage('data:image/png;base64,abc'); } catch (e) { ocrOff = e.message; }
+ok(ocrOff === 'ocr_off', 'INVARIANT parseReceiptImage refuses when unconfigured (no accidental external call)');
+// OCR learns: teach an alias, then the same wording auto-matches next time
+Q.learnAlias('นมสดยี่ห้อพิเศษ', ocrIngs[0].id);
+const relearned = Q.matchReceiptLines([{ name: 'นมสดยี่ห้อพิเศษ', qty: 1, unitPrice: 5 }], ocrIngs, Q.aliasMap());
+ok(relearned[0].ingredientId === ocrIngs[0].id && relearned[0].viaAlias === true, 'INVARIANT a learned alias makes an otherwise-unmatched wording auto-match (viaAlias)');
+Q.learnAlias('นมสดยี่ห้อพิเศษ', ocrIngs[1].id);   // correction overwrites
+ok(Q.aliasMap()[('นมสดยี่ห้อพิเศษ')] === ocrIngs[1].id, 'INVARIANT correcting an alias overwrites the old mapping');
+
+// ---- Slip-OCR learning: cashier teaches per-bank receiver wordings ----
+console.log('\n== Slip receiver aliases ==');
+Q.addSlipAlias('ธรรมนูญ ก. (KBANK)');
+ok(Q.listSlipAliases().includes('ธรรมนูญ ก. (KBANK)'), 'INVARIANT a taught receiver alias persists');
+Q.addSlipAlias('ธรรมนูญ  ก. (kbank)');   // same after normalization → no duplicate
+ok(Q.listSlipAliases().length === 1, `INVARIANT near-duplicate aliases are deduped (got ${Q.listSlipAliases().length})`);
+let aShort = null; try { Q.addSlipAlias('ab'); } catch (e) { aShort = e.message; }
+ok(aShort === 'alias_too_short', 'INVARIANT too-short alias rejected');
+for (let i = 0; i < 35; i++) Q.addSlipAlias('ผู้รับทดสอบหมายเลข ' + i);
+ok(Q.listSlipAliases().length <= 30, `INVARIANT alias list is capped at 30 (got ${Q.listSlipAliases().length})`);
+
+// ---- Purchasing report: monthly / per-item / per-supplier spend ----
+console.log('\n== Purchase report ==');
+const prIng = db.prepare(`INSERT INTO ingredients (name, unit) VALUES ('วัตถุดิบรายงาน','กก.')`).run().lastInsertRowid;
+const prSup = Q.upsertSupplier(null, { name: 'ผู้ขายรายงาน' });
+Q.recordStockMove(prIng, { kind: 'purchase', qty: 4, cost: 400, supplierId: prSup.id });   // ฿400
+const pr = Q.purchaseSummary();
+ok(pr.byItem.some((r) => r.name === 'วัตถุดิบรายงาน' && r.spent === 400 && r.avgUnit === 100), 'INVARIANT purchase report breaks spend down per item with avg unit price');
+ok(pr.bySupplier.some((r) => r.supplier === 'ผู้ขายรายงาน' && r.spent >= 400), 'INVARIANT purchase report breaks spend down per supplier');
+ok(pr.byMonth.length >= 1 && pr.byMonth[0].spent >= 400, 'INVARIANT purchase report rolls up by month');
+ok(Q.purchaseSummary('2000-01-01', '2000-01-02').total === 0, 'INVARIANT an empty date range totals zero');
+
+db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(scmIng);
 
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----

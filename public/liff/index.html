@@ -1514,7 +1514,7 @@ window.openCoupon=async(mode)=>{
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
     const meta = isReward
-      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
+      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : c.couponKind==='winback' ? '💛 ของขวัญจากร้าน' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
       : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
       <span style="min-width:0;display:block">

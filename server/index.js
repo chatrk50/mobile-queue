@@ -328,7 +328,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -341,6 +341,10 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.queueFirst != null) Object.assign(out, Q.setQueueFirst(!!req.body.queueFirst));
     if (req.body?.social != null) Object.assign(out, Q.setSocialProof(!!req.body.social));
     if (req.body?.mascot != null) Object.assign(out, Q.setMascot(!!req.body.mascot));
+    if (req.body?.autoSummary != null) Object.assign(out, Q.setAutoSummary(!!req.body.autoSummary));
+    if (req.body?.autoReorder != null) Object.assign(out, Q.setAutoReorder(!!req.body.autoReorder));
+    if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
+    if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -632,7 +636,13 @@ app.get('/api/tickets/:ticketId/slip', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   const s = Q.getSlip(req.params.ticketId);
   if (!s) return res.status(404).json({ error: 'no_slip' });
-  res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId) });
+  res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId), recvAliases: Q.listSlipAliases() });
+});
+// Slip-OCR learning: cashier verified a slip by eye → teach the reader the receiver text
+// this bank prints, so the same wording matches automatically next time.
+app.post('/api/slip-aliases', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.addSlipAlias(req.body?.text)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // LINE Pay (scaffold): reserve a payment → customer is redirected to LINE Pay's page.
 app.post('/api/tickets/:ticketId/linepay/reserve', async (req, res) => {
@@ -721,6 +731,30 @@ app.get('/api/customers/by-line/:lineUserId', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try { res.json(Q.customerProfile(req.params.lineUserId)); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+// LINE push volume (OA bills per message) — monthly counts + this month's breakdown by purpose.
+app.get('/api/push-stats', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.pushStats());
+});
+// Daily breakdown for a date range (?from=YYYY-MM-DD&to=YYYY-MM-DD, default last 31 days).
+app.get('/api/push-stats/range', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.pushStatsRange(req.query.from, req.query.to));
+});
+// CRM: full customer list + segments · targeted campaign send · campaign history (manager+).
+app.get('/api/crm/customers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ customers: Q.customersList() });
+});
+app.post('/api/crm/campaign', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.sendCampaign({ keys: req.body?.keys, message: req.body?.message, coupon: req.body?.coupon || null, actorId: req.staff?.id || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/crm/campaigns', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ campaigns: Q.listCampaigns() });
 });
 // CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
 app.get('/api/crm/lapsed', (req, res) => {
@@ -874,15 +908,16 @@ app.post('/api/zones/:zoneId/open', (req, res) => {
   res.json(z);
 });
 // Store master open/closed (PIN) — flips every zone so the store is open/closed as a whole.
+// Manager+ (was pinOK — a plain cashier session could flip the whole store or reset the queue).
 app.post('/api/store/:storeId/open', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const zoneIds = Q.setStoreOpen(req.params.storeId, req.body?.isOpen ? 1 : 0);
   for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
   res.json({ ok: true, isOpen: req.body?.isOpen ? 1 : 0, zones: zoneIds.length });
 });
-// Reset the whole queue to start from 0 (PIN-protected; also run by the daily scheduler).
+// Reset the whole queue to start from 0 (manager+; also run by the daily scheduler).
 app.post('/api/reset', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   doDailyReset();
   res.json({ ok: true });
 });
@@ -906,8 +941,19 @@ app.get('/api/reports/insights', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.customerInsights());
 });
+// Per-menu margin (sell price vs BOM cost) + the day's REAL ingredient cost from the stock ledger.
+app.get('/api/reports/margins', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
+  res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
+});
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+// Past closed rounds (Z-reports) — daily list + monthly rollup + last round's float.
+app.get('/api/cash/history', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.cashSessionHistory(cashBranch(req)));
+});
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));
@@ -939,7 +985,7 @@ app.post('/api/cash/move', (req, res) => {
 });
 app.post('/api/cash/move/:id/delete', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.deleteCashMove(req.params.id, cashBranch(req))); }
+  try { res.json(Q.deleteCashMove(req.params.id, cashBranch(req), req.staff?.id || null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Order history (PIN): completed/cancelled orders today, to re-check after the fact.
@@ -1016,6 +1062,93 @@ app.get('/api/ingredients/:id/moves', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.stockMoves(Number(req.params.id)));
 });
+// Suppliers + purchase planning (ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่ · สั่งเท่าไหร่ดี)
+app.get('/api/suppliers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ suppliers: Q.listSuppliers() });
+});
+app.post('/api/suppliers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.upsertSupplier(null, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/suppliers/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.upsertSupplier(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/ingredients/:id/prices', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ prices: Q.ingredientPriceHistory(Number(req.params.id)) });
+});
+app.get('/api/stock/plan', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ plan: Q.purchasePlan() });
+});
+// SCM: two-way sourcing views, expiry lots, purchase orders (manager+)
+app.get('/api/ingredients/:id/sources', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.ingredientSources(Number(req.params.id))); } catch (e) { res.status(404).json({ error: e.message }); }
+});
+app.get('/api/suppliers/:id/catalog', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.supplierCatalog(Number(req.params.id))); } catch (e) { res.status(404).json({ error: e.message }); }
+});
+app.get('/api/stock/expiring', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ lots: Q.expiringLots(Number(req.query.days) || 14) });
+});
+app.get('/api/purchase-orders', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ orders: Q.listPurchaseOrders({ supplierId: req.query.supplierId, status: req.query.status }) });
+});
+app.get('/api/purchase-orders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const po = Q.getPurchaseOrder(Number(req.params.id));
+  if (!po) return res.status(404).json({ error: 'po_not_found' });
+  res.json(po);
+});
+app.post('/api/purchase-orders', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.savePurchaseOrder({ ...req.body, actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.savePurchaseOrder({ ...req.body, id: Number(req.params.id), actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id/receive', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.receivePurchaseOrder(Number(req.params.id), { actorId: req.staff?.id || null })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/:id/cancel', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cancelPurchaseOrder(Number(req.params.id))); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/purchase-orders/from-plan', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const po = Q.draftPoFromPlan({ actorId: req.staff?.id || null });
+  if (!po) return res.status(400).json({ error: 'nothing_to_order' });
+  res.json(po);
+});
+// OCR a purchase receipt/invoice image → proposed PO lines matched to existing ingredients.
+// Dormant (404 ocr_off) until OCR_API_URL + OCR_API_KEY are set — the owner adds them, like SlipOK.
+app.post('/api/purchase-orders/ocr', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  if (!Q.ocrConfigured()) return res.status(404).json({ error: 'ocr_off' });
+  try {
+    const parsed = await Q.parseReceiptImage(req.body?.image);
+    const lines = Q.matchReceiptLines(parsed.lines, Q.listIngredients(), Q.aliasMap());
+    res.json({ supplier: parsed.supplier, lines });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Teach the OCR: remember {text → ingredientId} pairs the owner confirmed on an imported receipt.
+app.post('/api/ingredient-aliases', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.learnAliases(req.body?.pairs || []));
+});
+// Purchasing report: monthly + per-item + per-supplier spend for a date range.
+app.get('/api/purchase-report', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.purchaseSummary(req.query.from, req.query.to));
+});
 // Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
 app.get('/api/menu/:id/recipe', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1030,11 +1163,14 @@ app.post('/api/menu/:id/recipe', (req, res) => {
 app.get('/api/report.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
+    // ?date=YYYY-MM-DD exports THAT Bangkok day (matches the on-screen date picker) — without it the
+    // owner could view a past day and silently download today's numbers instead.
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
     const { buildReportWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
-    const buf = await buildReportWorkbook(Q.dailyReport(), { store: stores?.name || BRAND.name });
+    const buf = await buildReportWorkbook(Q.dailyReport(null, date), { store: stores?.name || BRAND.name });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.set('Content-Disposition', `attachment; filename="YO-DEE_Report_${date || new Date().toISOString().slice(0,10)}.xlsx"`);
     res.send(buf);
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
@@ -1054,9 +1190,11 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'export_failed', detail: e.message }); }
 });
 
-// ---------- Menu management + quick-service ordering (PIN) ----------
+// ---------- Menu management (manager+) ----------
+// Was pinOK: any logged-in CASHIER session passed, though the UI hides menu management below
+// manager — the API now matches the UI (legacy admin-PIN callers still pass managerOK).
 app.post('/api/menu', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { const item = Q.addMenuItem(req.body || {});
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(item.id, req.body.priceDelivery);
     res.json(item); }
@@ -1064,12 +1202,12 @@ app.post('/api/menu', (req, res) => {
 });
 // Drag-and-drop reorder — MUST be declared before '/api/menu/:id' so "order" isn't captured as an :id.
 app.post('/api/menu/order', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setMenuOrder(req.body?.ids)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/menu/:id', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { const item = Q.updateMenuItem(req.params.id, req.body || {});
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(Number(req.params.id), req.body.priceDelivery);
     res.json(item); }
@@ -1077,12 +1215,12 @@ app.post('/api/menu/:id', (req, res) => {
 });
 // Reorder a menu item within its category (changes what customer/cashier see in the order grid).
 app.post('/api/menu/:id/move', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.moveMenuItem(req.params.id, req.body?.dir === 'up' ? 'up' : 'down')); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.delete('/api/menu/:id', (req, res) => {
-  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.deleteMenuItem(req.params.id));
 });
 app.post('/api/zones/:zoneId/orders', (req, res) => {

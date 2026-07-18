@@ -376,6 +376,50 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_stock_moves_ing ON stock_moves(ingredient_id, at);
+-- Suppliers (ร้านค้า/ผู้ขายวัตถุดิบ): who the shop buys from. Purchases link here so the
+-- owner gets per-ingredient price history (ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่) for planning.
+CREATE TABLE IF NOT EXISTS suppliers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id  INTEGER NOT NULL DEFAULT 1,
+  name       TEXT NOT NULL,
+  phone      TEXT,
+  note       TEXT,                              -- LINE id / ที่อยู่ / เงื่อนไขส่งของ ฯลฯ
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Purchase orders (ใบสั่งซื้อ): a header + many lines. A draft is editable; on "รับของ"
+-- every line posts a purchase stock_move (updating on-hand + avg cost) and the PO is received.
+-- This is the SCM record: ซื้อกับใคร เมื่อไหร่ เลขที่ใบ กี่รายการ ราคาเท่าไหร่ หมดอายุเมื่อไหร่.
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   INTEGER NOT NULL DEFAULT 1,
+  branch_id   INTEGER,
+  po_no       TEXT,                              -- human ref, e.g. PO-2026-0001 (auto if blank)
+  supplier_id INTEGER REFERENCES suppliers(id),
+  status      TEXT NOT NULL DEFAULT 'draft',     -- draft | received | cancelled
+  note        TEXT,
+  ordered_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  received_at TEXT,
+  actor       INTEGER
+);
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_id         INTEGER NOT NULL REFERENCES purchase_orders(id),
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  qty           REAL NOT NULL DEFAULT 0,
+  unit_price    REAL NOT NULL DEFAULT 0,          -- price per unit (total = qty × unit_price)
+  expiry        TEXT,                             -- 'YYYY-MM-DD' of this lot (optional)
+  note          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_po_lines_po ON purchase_order_lines(po_id);
+-- OCR memory: a receipt line's raw text → the ingredient the owner matched it to. Lets the OCR
+-- importer "learn" — next time the same wording appears (any supplier's format) it auto-matches.
+CREATE TABLE IF NOT EXISTS ingredient_aliases (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias_norm    TEXT NOT NULL UNIQUE,             -- normalized receipt text (lowercased, spaces stripped)
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Recipe / bill-of-materials: how much of each ingredient one unit of a menu item uses.
 -- Drives AUTO stock deduction when a sale is paid. Empty by default → no deduction
 -- (dormant) until the owner defines recipes, so existing behaviour is unchanged.
@@ -451,6 +495,26 @@ CREATE TABLE IF NOT EXISTS rewards (
   active      INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS crm_campaigns (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  message      TEXT NOT NULL,
+  coupon_label TEXT,                            -- null = no coupon attached
+  coupon_cap   REAL,
+  coupon_days  INTEGER,
+  targeted     INTEGER NOT NULL DEFAULT 0,
+  sent         INTEGER NOT NULL DEFAULT 0,
+  failed       INTEGER NOT NULL DEFAULT 0,
+  actor_id     INTEGER,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS push_log (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  kind    TEXT NOT NULL DEFAULT 'other',  -- paid | queue | ready | cancel | loyalty | winback | birthday | other
+  ok      INTEGER NOT NULL DEFAULT 0,     -- 1 = LINE accepted the push
+  at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_push_log_at ON push_log(at);
 CREATE TABLE IF NOT EXISTS customer_coupons (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_key  TEXT NOT NULL,                  -- = customers.line_user_id
@@ -501,6 +565,9 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
+  `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
+  `ALTER TABLE stock_moves ADD COLUMN expiry TEXT`,         // purchases only: lot expiry 'YYYY-MM-DD' (→ near-expiry alerts)
+  `ALTER TABLE stock_moves ADD COLUMN po_id INTEGER`,       // purchases posted from a purchase order
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

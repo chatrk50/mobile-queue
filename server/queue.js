@@ -122,7 +122,7 @@ export function callNext(zoneId, threshold) {
     `🔔 ถึงคิวของคุณแล้ว!\n` +
     `หมายเลข: ${next.code}\n` +
     `กรุณามาที่เคาน์เตอร์ค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน');
+    queueLink(zoneId), 'ดูคิวของฉัน', 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -294,6 +294,96 @@ export function customerInsights() {
 /** LINE customers (real userId, not a 'tel:' phone key) whose most recent PAID order is at least
  *  `days` days ago — i.e. they've gone quiet. Newest-lapsed first. Phone-only customers can't be
  *  LINE-messaged, so they're excluded here. */
+/** LINE push volume — the OA bills by message count, so the owner needs to SEE the monthly volume.
+ *  Counts real sends only (the UAT stub never logs). */
+export function pushStats() {
+  const monthly = db.prepare(
+    `SELECT substr(datetime(at,'+7 hours'),1,7) ym, COUNT(*) n, SUM(ok) sent
+       FROM push_log GROUP BY ym ORDER BY ym DESC LIMIT 12`
+  ).all();
+  const KIND_TH = { paid: 'ยืนยันชำระ/คิว', queue: 'แจ้งเตือนคิว', winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', other: 'อื่น ๆ (ระบบ)' };
+  const byKind = db.prepare(
+    `SELECT kind, COUNT(*) n FROM push_log
+      WHERE substr(datetime(at,'+7 hours'),1,7) = substr(datetime('now','+7 hours'),1,7)
+      GROUP BY kind ORDER BY n DESC`
+  ).all().map((r) => ({ ...r, label: KIND_TH[r.kind] || r.kind }));
+  const today = db.prepare(`SELECT COUNT(*) n FROM push_log WHERE date(at,'+7 hours')=date('now','+7 hours')`).get().n;
+  return { monthly, byKind, today };
+}
+/** Per-day LINE-push counts for a Bangkok date range (owner cost report: จากวัน X ถึงวัน X).
+ *  Defaults to the last 31 days. Returns every day's count + the range total. */
+export function pushStatsRange(from = null, to = null) {
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const f = /^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) ? from
+    : db.prepare("SELECT date(datetime('now','+7 hours'),'-30 days') d").get().d;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(String(to || '')) ? to : today;
+  const daily = db.prepare(
+    `SELECT date(at,'+7 hours') day, COUNT(*) n, SUM(ok) sent
+       FROM push_log WHERE date(at,'+7 hours') BETWEEN ? AND ?
+      GROUP BY day ORDER BY day DESC`
+  ).all(f, t);
+  return { from: f, to: t, daily,
+    total: daily.reduce((s, r) => s + r.n, 0), sent: daily.reduce((s, r) => s + (r.sent || 0), 0) };
+}
+/** Full customer list + lifecycle segment for the CRM page. Segments (Bangkok days since last
+ *  paid visit): new = ≤1 visit · regular = ≤30d · at_risk = 31–60d · lost = >60d (or never paid).
+ *  canPush = real LINE user (tel:-only customers can't receive LINE messages). */
+export function customersList() {
+  const rows = db.prepare(
+    `SELECT c.line_user_id AS key, c.name, c.points, c.lifetime_points AS lifetime, c.birthday,
+            COUNT(DISTINCT CASE WHEN o.payment_status='paid' THEN t.id END) AS visits,
+            COALESCE(SUM(CASE WHEN o.payment_status='paid' THEN o.total - COALESCE(o.discount,0) END),0) AS spend,
+            MAX(CASE WHEN o.payment_status='paid' THEN o.paid_at END) AS lastVisit
+       FROM customers c
+       LEFT JOIN tickets t ON t.line_user_id = c.line_user_id
+       LEFT JOIN orders o  ON o.ticket_id = t.id
+      GROUP BY c.line_user_id`
+  ).all();
+  const now = Date.now();
+  return rows.map((r) => {
+    const days = r.lastVisit ? Math.floor((now - new Date(r.lastVisit.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null;
+    const segment = (r.visits <= 1) ? 'new' : (days == null || days > 60) ? 'lost' : (days > 30) ? 'at_risk' : 'regular';
+    return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U') };
+  }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
+}
+/** Targeted CRM send: message (+ optional attached coupon) to EXPLICITLY chosen customers.
+ *  A coupon is issued into customer_coupons first so "รับคูปอง" in the message is already true when
+ *  the customer opens the app. Results are persisted per campaign (sent/failed) — the owner asked
+ *  to see whether a blast actually went out. */
+export async function sendCampaign({ keys = [], message, coupon = null, actorId = null } = {}) {
+  const msg = String(message || '').trim().slice(0, 400);
+  if (!msg) throw new Error('empty_message');
+  const targets = [...new Set(keys)].filter((k) => String(k || '').startsWith('U')).slice(0, 500);
+  if (!targets.length) throw new Error('no_targets');
+  const cp = coupon && coupon.label ? {
+    label: String(coupon.label).slice(0, 80),
+    cap: Math.max(1, Math.min(500, Number(coupon.cap) || 49)),
+    days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || 30))),
+  } : null;
+  let sent = 0, failed = 0;
+  for (const key of targets) {
+    let text = msg;
+    if (cp) {
+      const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d;
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'winback', ?, ?, ?)`)
+        .run(key, cp.label, cp.cap, expiresAt);
+      text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
+    }
+    try { if ((await pushQueue(key, text, null, 'สั่งเลย', 'winback')) !== false) sent++; else failed++; }
+    catch { failed++; }
+  }
+  const info = db.prepare(
+    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id)
+     VALUES (?,?,?,?,?,?,?,?)`
+  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
+  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp };
+}
+export function listCampaigns(limit = 20) {
+  return db.prepare(
+    `SELECT cc.*, s.name AS actor_name FROM crm_campaigns cc LEFT JOIN staff s ON s.id = cc.actor_id
+      ORDER BY cc.id DESC LIMIT ?`
+  ).all(Math.max(1, Math.min(100, limit)));
+}
 export function lapsedLineCustomers(days = 30) {
   const d = Math.max(1, Math.floor(Number(days) || 30));
   return db.prepare(
@@ -318,7 +408,7 @@ export async function winBackBlast(message, { days = 30, max = 300 } = {}) {
   const list = all.slice(0, Math.max(1, Math.min(max, 1000)));
   let sent = 0;
   for (const c of list) {
-    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย')) !== false) sent++; } catch { /* skip one */ }
+    try { if ((await pushQueue(c.lineUserId, msg, null, 'สั่งเลย', 'winback')) !== false) sent++; } catch { /* skip one */ }
   }
   return { targeted: all.length, attempted: list.length, sent, capped: all.length > list.length };
 }
@@ -658,7 +748,12 @@ export function listCashMoves(branchId = 1, date = null) {
   const payOut = r2(rows.filter((r) => r.kind === 'pay_out').reduce((s, r) => s + r.amount, 0));
   return { date: day, moves: rows, payIn, payOut, net: r2(payIn - payOut) };
 }
-export function deleteCashMove(id, branchId = 1) {
+export function deleteCashMove(id, branchId = 1, actorId = null) {
+  // Owner decision 2026-07: deletions must show in ควบคุมการลดยอด — snapshot the row into the
+  // immutable sale_events audit trail BEFORE it disappears from the ledger.
+  const row = db.prepare('SELECT * FROM cash_moves WHERE id=? AND branch_id=?').get(Number(id), branchId);
+  if (row) logSaleEvent({ branchId, type: 'cash_delete', amount: row.amount, actor: actorId,
+    meta: { kind: row.kind, remark: row.remark || null, movedAt: row.at } });
   db.prepare('DELETE FROM cash_moves WHERE id=? AND branch_id=?').run(Number(id), branchId);
   return { ok: true };
 }
@@ -678,16 +773,22 @@ export function listReductions(branchId = 1, date = null) {
        FROM sale_events se
        LEFT JOIN staff s ON s.id=se.actor
        LEFT JOIN tickets t ON t.id=se.ticket_id
-      WHERE se.branch_id=? AND se.type IN ('void','waste','discount')
+      WHERE se.branch_id=? AND se.type IN ('void','waste','discount','cash_delete')
         AND date(se.at,'+7 hours')=? ORDER BY se.at DESC`
   ).all(branchId, day);
   const events = rows.map((r) => {
-    let reason = null; try { reason = r.meta ? (JSON.parse(r.meta).reason || null) : null; } catch { /* keep null */ }
+    let reason = null;
+    try {
+      const m = r.meta ? JSON.parse(r.meta) : null;
+      // cash_delete: describe the removed ledger row (รับเข้า/จ่ายออก + its remark)
+      reason = m ? (m.reason || (r.type === 'cash_delete'
+        ? `ลบรายการ${m.kind === 'pay_in' ? 'รับเข้า' : 'จ่ายออก'}${m.remark ? ' — ' + m.remark : ''}` : null)) : null;
+    } catch { /* keep null */ }
     return { id: r.id, type: r.type, amount: r2(r.amount || 0), at: r.at, staff: r.staff,
       ticketNo: r.ticket_no || null, customer: r.customer_name || null, reason };
   });
   const sumType = (t) => r2(events.filter((e) => e.type === t).reduce((s, e) => s + e.amount, 0));
-  const byType = { void: sumType('void'), waste: sumType('waste'), discount: sumType('discount') };
+  const byType = { void: sumType('void'), waste: sumType('waste'), discount: sumType('discount'), cash_delete: sumType('cash_delete') };
   const byStaffMap = {};
   for (const e of events) byStaffMap[e.staff] = r2((byStaffMap[e.staff] || 0) + e.amount);
   const byStaff = Object.entries(byStaffMap).map(([staff, amount]) => ({ staff, amount })).sort((a, b) => b.amount - a.amount);
@@ -724,7 +825,37 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
   const over = r2(counted - expected);
   db.prepare(`UPDATE cash_sessions SET closed_by=?, closed_at=datetime('now'), counted_cash=?, expected_cash=?, over_short=?, note=? WHERE id=?`)
     .run(actorId, counted, expected, over, note ? note.toString().slice(0, 200) : null, cur.id);
-  return { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
+  const out = { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
+  // Closing the drawer = end of day → optionally LINE the owner a full closing summary (once/day).
+  try { const s = maybeAutoSummary(branchId); out.summarySent = !!s.sent; } catch { /* never block a close */ }
+  try { const rr = maybeAutoReorder(branchId); out.reorderDrafted = !!rr.drafted; } catch { /* never block a close */ }
+  try { Promise.resolve(maybeAutoWinback(branchId)).catch(() => {}); } catch { /* fire-and-forget; never block a close */ }
+  return out;
+}
+
+/** Closed cash rounds (Z-report history), newest first, + a 12-month rollup — the owner asked for
+ *  day-by-day rounds that stay browsable daily OR aggregated monthly. lastFloat powers the
+ *  "same float as last round" one-tap when opening the next round. */
+export function cashSessionHistory(branchId = 1, limit = 60) {
+  const rows = db.prepare(
+    `SELECT cs.id, cs.open_float, cs.expected_cash, cs.counted_cash, cs.over_short, cs.note,
+            cs.opened_at, cs.closed_at,
+            date(cs.closed_at,'+7 hours') AS day,
+            so.name AS opened_by_name, sc.name AS closed_by_name
+       FROM cash_sessions cs
+       LEFT JOIN staff so ON so.id=cs.opened_by
+       LEFT JOIN staff sc ON sc.id=cs.closed_by
+      WHERE cs.branch_id=? AND cs.closed_at IS NOT NULL
+      ORDER BY cs.id DESC LIMIT ?`
+  ).all(branchId, Math.max(1, Math.min(365, limit)));
+  const monthly = db.prepare(
+    `SELECT substr(datetime(closed_at,'+7 hours'),1,7) ym, COUNT(*) rounds,
+            COALESCE(SUM(expected_cash),0) expected, COALESCE(SUM(counted_cash),0) counted,
+            COALESCE(SUM(over_short),0) overShort
+       FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL
+      GROUP BY ym ORDER BY ym DESC LIMIT 12`
+  ).all(branchId).map((m) => ({ ...m, expected: r2(m.expected), counted: r2(m.counted), overShort: r2(m.overShort) }));
+  return { sessions: rows, monthly, lastFloat: rows.length ? rows[0].open_float : null };
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
@@ -934,7 +1065,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
 }
 /** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;
  *  use/waste=qty out; adjust=set on-hand to qty (stock count). */
-export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null } = {}) {
+export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null, supplierId = null, expiry = null, poId = null } = {}) {
   const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
   if (!ing) throw new Error('ingredient_not_found');
   let q = Number(qty) || 0;
@@ -950,16 +1081,338 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
   } else { // use | waste
     q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
   }
+  const exp = (kind === 'purchase' && /^\d{4}-\d{2}-\d{2}$/.test(String(expiry || ''))) ? expiry : null;
   const tx = db.transaction(() => {
     db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
-    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor) VALUES (?,?,?,?,?,?,?)')
-      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId);
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId,
+        kind === 'purchase' ? (Number(supplierId) || null) : null, exp, kind === 'purchase' ? (Number(poId) || null) : null);
   });
   tx();
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
 }
 export function stockMoves(ingredientId, limit = 50) {
   return db.prepare('SELECT * FROM stock_moves WHERE ingredient_id=? ORDER BY id DESC LIMIT ?').all(ingredientId, limit);
+}
+
+// ---------- Suppliers (ร้านค้า/ผู้ขาย) + purchase planning ----------
+export function listSuppliers() {
+  return db.prepare('SELECT * FROM suppliers WHERE active=1 ORDER BY name').all();
+}
+export function upsertSupplier(id, { name, phone = null, note = null, active = 1 } = {}) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (id) {
+    const cur = db.prepare('SELECT id FROM suppliers WHERE id=?').get(id);
+    if (!cur) throw new Error('supplier_not_found');
+    db.prepare('UPDATE suppliers SET name=COALESCE(NULLIF(?,\'\'),name), phone=?, note=?, active=? WHERE id=?')
+      .run(n, phone ? String(phone).slice(0, 30) : null, note ? String(note).slice(0, 200) : null, active ? 1 : 0, id);
+    return db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
+  }
+  if (!n) throw new Error('name_required');
+  const r = db.prepare('INSERT INTO suppliers (name, phone, note) VALUES (?,?,?)')
+    .run(n, phone ? String(phone).slice(0, 30) : null, note ? String(note).slice(0, 200) : null);
+  return db.prepare('SELECT * FROM suppliers WHERE id=?').get(r.lastInsertRowid);
+}
+/** Purchase price history for one ingredient: when, from whom, at what unit price — the
+ *  owner's "ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่" answer, newest first. */
+export function ingredientPriceHistory(ingredientId, limit = 20) {
+  return db.prepare(
+    `SELECT sm.at, sm.qty, sm.cost, s.name AS supplier
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      ORDER BY sm.id DESC LIMIT ?`
+  ).all(ingredientId, limit).map((r) => ({
+    at: r.at, qty: r.qty, cost: r.cost, supplier: r.supplier || null,
+    unitPrice: r2(r.cost / r.qty),
+  }));
+}
+/** Purchase plan: for every active ingredient, burn rate from the last 14 days of 'use'
+ *  moves → days of stock left → suggested order qty to cover the NEXT 14 days (+ safety
+ *  = low_threshold), with the last supplier/price so the owner knows who to call. */
+export function purchasePlan(horizonDays = 14) {
+  const items = db.prepare('SELECT * FROM ingredients WHERE active=1 ORDER BY name').all();
+  return items.map((ing) => {
+    const used = db.prepare(
+      `SELECT SUM(-qty) u FROM stock_moves
+        WHERE ingredient_id=? AND kind='use' AND at >= datetime('now','-14 days')`
+    ).get(ing.id)?.u || 0;
+    const perDay = r2(used / 14);
+    const daysLeft = perDay > 0 ? Math.floor(ing.stock_qty / perDay) : null;   // null = no usage data
+    const need = perDay > 0 ? Math.max(0, r2(perDay * horizonDays + ing.low_threshold - ing.stock_qty)) : 0;
+    const lastBuy = db.prepare(
+      `SELECT sm.at, sm.qty, sm.cost, s.name AS supplier
+         FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+        WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0
+        ORDER BY sm.id DESC LIMIT 1`
+    ).get(ing.id);
+    return {
+      id: ing.id, name: ing.name, unit: ing.unit, stock: ing.stock_qty, low: ing.stock_qty <= ing.low_threshold,
+      perDay, daysLeft, suggestQty: need > 0 ? Math.ceil(need) : 0,
+      estCost: need > 0 && lastBuy?.cost > 0 && lastBuy?.qty > 0 ? r2(Math.ceil(need) * (lastBuy.cost / lastBuy.qty)) : null,
+      lastSupplier: lastBuy?.supplier || null,
+      lastUnitPrice: lastBuy?.cost > 0 && lastBuy?.qty > 0 ? r2(lastBuy.cost / lastBuy.qty) : null,
+      lastBuyAt: lastBuy?.at || null,
+    };
+  }).sort((a, b) => (a.daysLeft ?? 9e9) - (b.daysLeft ?? 9e9));
+}
+
+// ========== SCM: purchase orders, two-way sourcing views, expiry lots ==========
+/** By-ingredient sourcing: which suppliers we've bought this from + each one's latest/avg
+ *  unit price + times bought. Answers "รายการนี้เคยซื้อจากใครบ้าง ราคาเท่าไหร่" (multi-source). */
+export function ingredientSources(ingredientId) {
+  const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
+  if (!ing) throw new Error('ingredient_not_found');
+  const rows = db.prepare(
+    `SELECT COALESCE(s.name,'ไม่ระบุผู้ขาย') supplier, sm.supplier_id,
+            COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent, MAX(sm.at) lastAt
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      GROUP BY sm.supplier_id ORDER BY lastAt DESC`
+  ).all(ingredientId);
+  const sources = rows.map((r) => ({
+    supplierId: r.supplier_id || null, supplier: r.supplier, times: r.times,
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0, lastAt: r.lastAt,
+  }));
+  const cheapest = sources.filter((s) => s.avgUnit > 0).sort((a, b) => a.avgUnit - b.avgUnit)[0] || null;
+  return { ingredient: { id: ing.id, name: ing.name, unit: ing.unit, stock: ing.stock_qty, avgCost: ing.avg_cost },
+    sources, cheapest, history: ingredientPriceHistory(ingredientId, 30) };
+}
+/** By-supplier catalog: what this supplier has sold us, each item's latest unit price +
+ *  total spent, plus their purchase-order history. Answers "เจ้านี้ขายอะไร ราคาเท่าไหร่". */
+export function supplierCatalog(supplierId) {
+  const sup = db.prepare('SELECT * FROM suppliers WHERE id=?').get(supplierId);
+  if (!sup) throw new Error('supplier_not_found');
+  const items = db.prepare(
+    `SELECT i.id, i.name, i.unit, COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent,
+            MAX(sm.at) lastAt
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE sm.supplier_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      GROUP BY i.id ORDER BY lastAt DESC`
+  ).all(supplierId).map((r) => ({ id: r.id, name: r.name, unit: r.unit, times: r.times,
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0, spent: r2(r.spent), lastAt: r.lastAt }));
+  const orders = db.prepare(
+    `SELECT po.id, po.po_no, po.status, po.ordered_at, po.received_at,
+            COUNT(l.id) lines, COALESCE(SUM(l.qty*l.unit_price),0) total
+       FROM purchase_orders po LEFT JOIN purchase_order_lines l ON l.po_id=po.id
+      WHERE po.supplier_id=? GROUP BY po.id ORDER BY po.id DESC LIMIT 30`
+  ).all(supplierId).map((r) => ({ ...r, total: r2(r.total) }));
+  return { supplier: sup, items, orders, totalSpent: r2(items.reduce((s, i) => s + i.spent, 0)) };
+}
+/** Lots (purchase moves that carry an expiry) expiring within `days` — FEFO heads-up.
+ *  NOTE: this is a received-lot expiry alert, not remaining-qty-per-lot depletion tracking. */
+export function expiringLots(days = 14) {
+  const rows = db.prepare(
+    `SELECT sm.id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+       LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.kind='purchase' AND sm.expiry IS NOT NULL
+        AND date(sm.expiry) <= date('now','+7 hours',? )
+      ORDER BY sm.expiry ASC`
+  ).all(`+${Math.max(0, Number(days) || 14)} days`);
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  return rows.map((r) => ({ id: r.id, name: r.name, unit: r.unit, qty: r.qty, expiry: r.expiry,
+    supplier: r.supplier || null, boughtAt: r.at,
+    daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
+    expired: r.expiry < today }));
+}
+// ---- Purchase orders (ใบสั่งซื้อ) ----
+function poView(id) {
+  const po = db.prepare(
+    `SELECT po.*, s.name AS supplier_name, st.name AS actor_name FROM purchase_orders po
+       LEFT JOIN suppliers s ON s.id=po.supplier_id LEFT JOIN staff st ON st.id=po.actor WHERE po.id=?`
+  ).get(id);
+  if (!po) return null;
+  const lines = db.prepare(
+    `SELECT l.*, i.name AS ingredient_name, i.unit FROM purchase_order_lines l
+       JOIN ingredients i ON i.id=l.ingredient_id WHERE l.po_id=? ORDER BY l.id`
+  ).all(id).map((l) => ({ ...l, lineTotal: r2((Number(l.qty) || 0) * (Number(l.unit_price) || 0)) }));
+  return { ...po, lines, total: r2(lines.reduce((s, l) => s + l.lineTotal, 0)) };
+}
+export function getPurchaseOrder(id) { return poView(id); }
+export function listPurchaseOrders({ supplierId = null, status = null, limit = 40 } = {}) {
+  const where = [], args = [];
+  if (supplierId) { where.push('po.supplier_id=?'); args.push(Number(supplierId)); }
+  if (status) { where.push('po.status=?'); args.push(String(status)); }
+  const rows = db.prepare(
+    `SELECT po.id, po.po_no, po.status, po.ordered_at, po.received_at, s.name AS supplier_name,
+            COUNT(l.id) lines, COALESCE(SUM(l.qty*l.unit_price),0) total
+       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
+       LEFT JOIN purchase_order_lines l ON l.po_id=po.id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      GROUP BY po.id ORDER BY po.id DESC LIMIT ?`
+  ).all(...args, limit);
+  return rows.map((r) => ({ ...r, total: r2(r.total) }));
+}
+function nextPoNo() {
+  const y = db.prepare("SELECT strftime('%Y', datetime('now','+7 hours')) y").get().y;
+  const n = (db.prepare("SELECT COUNT(*) c FROM purchase_orders WHERE po_no LIKE ?").get(`PO-${y}-%`).c || 0) + 1;
+  return `PO-${y}-${String(n).padStart(4, '0')}`;
+}
+/** Create/replace a DRAFT purchase order (header + lines). Received POs are immutable. */
+export function savePurchaseOrder({ id = null, supplierId = null, poNo = null, note = null, lines = [], actorId = null } = {}) {
+  const clean = (Array.isArray(lines) ? lines : []).map((l) => ({
+    ingredientId: Number(l.ingredientId) || 0, qty: Math.max(0, Number(l.qty) || 0),
+    unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+    expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(l.expiry || '')) ? l.expiry : null,
+    note: l.note ? String(l.note).slice(0, 120) : null,
+  })).filter((l) => l.ingredientId && l.qty > 0);
+  const tx = db.transaction(() => {
+    let poId = id;
+    if (poId) {
+      const cur = db.prepare('SELECT status FROM purchase_orders WHERE id=?').get(poId);
+      if (!cur) throw new Error('po_not_found');
+      if (cur.status !== 'draft') throw new Error('po_not_editable');
+      db.prepare('UPDATE purchase_orders SET supplier_id=?, po_no=?, note=? WHERE id=?')
+        .run(supplierId ? Number(supplierId) : null, (poNo || '').toString().slice(0, 30) || null, note ? String(note).slice(0, 200) : null, poId);
+      db.prepare('DELETE FROM purchase_order_lines WHERE po_id=?').run(poId);
+    } else {
+      const info = db.prepare('INSERT INTO purchase_orders (po_no, supplier_id, note, actor) VALUES (?,?,?,?)')
+        .run((poNo || nextPoNo()).toString().slice(0, 30), supplierId ? Number(supplierId) : null, note ? String(note).slice(0, 200) : null, actorId);
+      poId = info.lastInsertRowid;
+    }
+    const ins = db.prepare('INSERT INTO purchase_order_lines (po_id, ingredient_id, qty, unit_price, expiry, note) VALUES (?,?,?,?,?,?)');
+    for (const l of clean) ins.run(poId, l.ingredientId, l.qty, l.unitPrice, l.expiry, l.note);
+    return poId;
+  });
+  return poView(tx());
+}
+/** Receive a draft PO: post every line as a purchase stock_move (on-hand + avg cost + expiry
+ *  lot + supplier + po_id), then mark received. Idempotent-guarded: a received PO can't re-post. */
+export function receivePurchaseOrder(id, { actorId = null } = {}) {
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(id);
+  if (!po) throw new Error('po_not_found');
+  if (po.status !== 'draft') throw new Error('po_not_draft');
+  const lines = db.prepare('SELECT * FROM purchase_order_lines WHERE po_id=?').all(id);
+  if (!lines.length) throw new Error('po_empty');
+  for (const l of lines) {
+    recordStockMove(l.ingredient_id, { kind: 'purchase', qty: l.qty, cost: r2(l.qty * l.unit_price),
+      note: `รับเข้าจากใบสั่งซื้อ ${po.po_no || ('#' + po.id)}`, actorId, supplierId: po.supplier_id, expiry: l.expiry, poId: po.id });
+  }
+  db.prepare("UPDATE purchase_orders SET status='received', received_at=datetime('now'), actor=COALESCE(?,actor) WHERE id=?").run(actorId, id);
+  return poView(id);
+}
+export function cancelPurchaseOrder(id) {
+  const po = db.prepare('SELECT status FROM purchase_orders WHERE id=?').get(id);
+  if (!po) throw new Error('po_not_found');
+  if (po.status === 'received') throw new Error('po_already_received');
+  db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);
+  return { ok: true };
+}
+/** Fuzzy-match OCR'd receipt line names to existing ingredients. PURE + testable — no I/O.
+ *  parsedLines: [{name, qty, unitPrice, expiry}] · ingredients: [{id,name,unit}].
+ *  Returns each line with the best ingredient match (or ingredientId:null = needs manual pick). */
+const aliasNorm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[.,()]/g, '');
+export function matchReceiptLines(parsedLines = [], ingredients = [], aliases = {}) {
+  const idx = ingredients.map((i) => ({ i, n: aliasNorm(i.name) }));
+  const byId = new Map(ingredients.map((i) => [i.id, i]));
+  return (Array.isArray(parsedLines) ? parsedLines : []).map((l) => {
+    const n = aliasNorm(l.name);
+    let hit = null, viaAlias = false;
+    // 1) learned alias (the owner matched this exact wording before) wins outright
+    if (n && aliases && aliases[n] != null && byId.has(aliases[n])) { hit = { i: byId.get(aliases[n]) }; viaAlias = true; }
+    if (!hit && n) {
+      hit = idx.find((x) => x.n === n)                                   // exact name
+        || idx.find((x) => x.n.includes(n) || n.includes(x.n))          // substring either way
+        || idx.find((x) => { const a = new Set(String(l.name).toLowerCase().split(/\s+/).filter(Boolean));
+            return [...a].some((w) => w.length >= 3 && x.n.includes(aliasNorm(w))); }); // token overlap
+    }
+    return {
+      name: String(l.name || '').slice(0, 60),
+      ingredientId: hit ? hit.i.id : null,
+      matchedName: hit ? hit.i.name : null,
+      qty: Math.max(0, Number(l.qty) || 0),
+      unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+      expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(l.expiry || '')) ? l.expiry : null,
+      matched: !!hit, viaAlias,
+    };
+  });
+}
+/** Current learned OCR aliases as a {normText: ingredientId} map (drops any pointing at a
+ *  deleted ingredient). Fed into matchReceiptLines so remembered wordings auto-match. */
+export function aliasMap() {
+  const out = {};
+  for (const r of db.prepare('SELECT alias_norm, ingredient_id FROM ingredient_aliases').all()) {
+    if (db.prepare('SELECT 1 FROM ingredients WHERE id=?').get(r.ingredient_id)) out[r.alias_norm] = r.ingredient_id;
+  }
+  return out;
+}
+/** Teach the OCR: remember that receipt text `text` means ingredient `ingredientId`.
+ *  Upsert on the normalized text so a corrected mapping overwrites the old one. */
+export function learnAlias(text, ingredientId) {
+  const norm = aliasNorm(text); const id = Number(ingredientId) || 0;
+  if (!norm || !id) return { ok: false };
+  if (!db.prepare('SELECT 1 FROM ingredients WHERE id=?').get(id)) throw new Error('ingredient_not_found');
+  db.prepare(`INSERT INTO ingredient_aliases (alias_norm, ingredient_id) VALUES (?,?)
+              ON CONFLICT(alias_norm) DO UPDATE SET ingredient_id=excluded.ingredient_id`).run(norm, id);
+  return { ok: true };
+}
+export function learnAliases(pairs = []) {
+  let n = 0; for (const p of (Array.isArray(pairs) ? pairs : [])) { try { if (learnAlias(p.text, p.ingredientId).ok) n++; } catch { /* skip bad */ } }
+  return { learned: n };
+}
+/** Purchasing report over a Bangkok date range: monthly rollup + per-item + per-supplier spend,
+ *  from the immutable purchase stock_moves ledger. Answers ซื้อไปเท่าไหร่ ต่อรายการ / ต่อ supplier. */
+export function purchaseSummary(from = null, to = null) {
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const f = /^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) ? from
+    : db.prepare("SELECT date(datetime('now','+7 hours'),'-365 days') d").get().d;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(String(to || '')) ? to : today;
+  const WHERE = `sm.kind='purchase' AND sm.qty>0 AND sm.cost>0 AND date(sm.at,'+7 hours') BETWEEN ? AND ?`;
+  const byMonth = db.prepare(
+    `SELECT substr(date(sm.at,'+7 hours'),1,7) ym, COUNT(*) lines, SUM(sm.qty) qty, SUM(sm.cost) spent
+       FROM stock_moves sm WHERE ${WHERE} GROUP BY ym ORDER BY ym DESC`
+  ).all(f, t).map((r) => ({ ym: r.ym, lines: r.lines, qty: r2(r.qty), spent: r2(r.spent) }));
+  const byItem = db.prepare(
+    `SELECT i.name, i.unit, COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id WHERE ${WHERE}
+      GROUP BY sm.ingredient_id ORDER BY spent DESC`
+  ).all(f, t).map((r) => ({ name: r.name, unit: r.unit, times: r.times, qty: r2(r.qty), spent: r2(r.spent),
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0 }));
+  const bySupplier = db.prepare(
+    `SELECT COALESCE(s.name,'ไม่ระบุผู้ขาย') supplier, COUNT(*) times, SUM(sm.cost) spent
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id WHERE ${WHERE}
+      GROUP BY sm.supplier_id ORDER BY spent DESC`
+  ).all(f, t).map((r) => ({ supplier: r.supplier, times: r.times, spent: r2(r.spent) }));
+  return { from: f, to: t, total: r2(byItem.reduce((s, r) => s + r.spent, 0)), byMonth, byItem, bySupplier };
+}
+export function ocrConfigured() { return !!(process.env.OCR_API_URL && process.env.OCR_API_KEY); }
+/** Call the configured vision endpoint to read a purchase receipt/invoice image into structured
+ *  lines. DORMANT until OCR_API_URL + OCR_API_KEY are set (owner adds them in Render, like SlipOK).
+ *  Returns { supplier, lines:[{name,qty,unitPrice,expiry}] }. Never trusted blindly — the UI makes
+ *  the owner review + match every line before the PO is saved. */
+export async function parseReceiptImage(dataUrl) {
+  if (!ocrConfigured()) throw new Error('ocr_off');
+  const m = /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(String(dataUrl || ''));
+  if (!m) throw new Error('bad_image');
+  const prompt = 'อ่านใบรายการซื้อ/ใบเสร็จวัตถุดิบนี้ ตอบเป็น JSON เท่านั้น: '
+    + '{"supplier":"ชื่อร้าน","lines":[{"name":"ชื่อสินค้า","qty":จำนวน,"unitPrice":ราคาต่อหน่วย,"expiry":"YYYY-MM-DD หรือ null"}]}. '
+    + 'ห้ามมีข้อความอื่นนอก JSON.';
+  const r = await fetch(process.env.OCR_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OCR_API_KEY}` },
+    body: JSON.stringify({
+      model: process.env.OCR_MODEL || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: dataUrl } },
+      ] }],
+      max_tokens: 1500,
+    }),
+  });
+  if (!r.ok) throw new Error('ocr_failed');
+  const j = await r.json();
+  const text = j.choices?.[0]?.message?.content || '';
+  const jm = text.match(/\{[\s\S]*\}/);
+  if (!jm) throw new Error('ocr_unparsed');
+  const parsed = JSON.parse(jm[0]);
+  return { supplier: parsed.supplier || null, lines: Array.isArray(parsed.lines) ? parsed.lines : [] };
+}
+/** Turn the purchase plan into a DRAFT PO of everything that needs reordering (one-tap). */
+export function draftPoFromPlan({ actorId = null } = {}) {
+  const need = purchasePlan().filter((p) => p.suggestQty > 0);
+  if (!need.length) return null;
+  return savePurchaseOrder({ actorId, note: 'สร้างจากคำแนะนำการสั่งซื้อ',
+    lines: need.map((p) => ({ ingredientId: p.id, qty: p.suggestQty, unitPrice: p.lastUnitPrice || 0 })) });
 }
 
 // ---------- Recipes (bill-of-materials) → auto stock deduction on sale ----------
@@ -996,6 +1449,40 @@ export function menuMakeable() {
     byMenu.set(r.mid, Math.min(byMenu.has(r.mid) ? byMenu.get(r.mid) : Infinity, can));
   }
   return byMenu;
+}
+/** Per-menu margin: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ยของวัตถุดิบ), ranked by margin.
+ *  Items without a recipe show cost 0 + hasRecipe:false so the owner can see what's un-costed. */
+export function menuMargins() {
+  const items = db.prepare(`SELECT id, name, price, category FROM menu_items WHERE active=1 ORDER BY price DESC`).all();
+  return items.map((it) => {
+    const parts = db.prepare(
+      `SELECT r.qty, i.name AS ing, i.unit, i.avg_cost FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.menu_item_id=?`
+    ).all(it.id);
+    const cost = r2(parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.avg_cost) || 0), 0));
+    const margin = r2(it.price - cost);
+    return { id: it.id, name: it.name, category: it.category, price: it.price, cost, margin,
+      marginPct: it.price > 0 ? r2((margin / it.price) * 100) : 0, hasRecipe: parts.length > 0,
+      parts: parts.map((p) => ({ ing: p.ing, qty: p.qty, unit: p.unit, cost: r2((p.qty || 0) * (p.avg_cost || 0)) })) };
+  }).sort((a, b) => b.margin - a.margin);
+}
+/** REAL ingredient cost for a Bangkok day from the stock ledger: use moves (auto-deducted on every
+ *  paid sale) net of returns (cancelled/not-made), valued at each ingredient's CURRENT weighted-avg
+ *  cost — an approximation (moves don't snapshot unit cost), stated as such in the UI. */
+export function cogsForDay(date = null) {
+  const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const rows = db.prepare(
+    `SELECT sm.kind, SUM(sm.qty) q, i.avg_cost
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')
+      GROUP BY sm.ingredient_id, sm.kind`
+  ).all(day);
+  // use rows carry negative qty (deduction); return rows positive — netting both gives real consumption.
+  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.avg_cost) || 0), 0);
+  const wasteRows = db.prepare(
+    `SELECT SUM(-sm.qty * i.avg_cost) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind='waste'`
+  ).get(day);
+  return { date: day, cogsActual: r2(Math.max(0, cogs)), wasteCost: r2(Math.max(0, wasteRows?.v || 0)) };
 }
 /** Auto-deduct ingredient stock for every line of a paid order, per its menu item's recipe.
  *  No-op for any line whose menu item has no recipe → safe/dormant until recipes are set. */
@@ -1317,6 +1804,25 @@ export function setMemberEnabled(on) { setSetting('member:enabled', on ? '1' : '
 // SlipOK auto-verify is an OWNER TOGGLE (default OFF) on top of the env creds, so the shop
 // can run manual "attach slip → cashier confirms" until it has a PromptPay account SlipOK
 // can verify against. Flip on (someday) only when a valid PromptPay merchant is configured.
+// Slip OCR learn-as-you-correct: banks print the shop's receiver name differently (garbled by
+// OCR too). When the cashier eyeballs a slip and confirms it's genuine, they can teach the
+// reader the receiver text THAT bank prints; future scans match against these learned aliases
+// on top of the built-in list. Stored as a JSON list in settings, deduped, capped.
+export function listSlipAliases() {
+  try { const a = JSON.parse(getSetting('slip:recv_aliases', '[]')); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+export function addSlipAlias(text) {
+  const t = String(text || '').trim().slice(0, 60);
+  if (t.length < 3) throw new Error('alias_too_short');
+  const cur = listSlipAliases();
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, '');
+  if (!cur.some((x) => norm(x) === norm(t))) {
+    cur.push(t);
+    setSetting('slip:recv_aliases', JSON.stringify(cur.slice(-30)));   // keep the latest 30
+  }
+  return { aliases: listSlipAliases() };
+}
 export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
 // Owner-uploadable promo/ad splash shown in the LIFF after loading (a data-URL image the owner
 // can change anytime in ⚙ จัดการ). enabled gates whether the customer actually sees it.
@@ -1437,7 +1943,90 @@ export function composeDailySummary(branchId = null) {
       if (red.redeems && red.redeems.length) lines.push(`🎁 แลกของรางวัล/วันเกิด ${red.redeems.length} รายการ`);
     }
   } catch { /* additive — never break the summary */ }
+  // Cash drawer over/short of the day's last closed round.
+  try {
+    const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=date('now','+7 hours') ORDER BY id DESC LIMIT 1").get(branchId || 1);
+    if (last) lines.push(last.over_short === 0 ? '💵 เงินสด: พอดี ✓' : `💵 เงินสด${last.over_short > 0 ? 'เกิน' : 'ขาด'} ฿${Math.abs(last.over_short)}`);
+  } catch { /* additive */ }
+  // Stock heads-up: low + near-expiry + what to reorder (uses the SCM engine).
+  try {
+    const low = listIngredients().filter((i) => i.low);
+    if (low.length) lines.push(`⚠️ ใกล้หมด ${low.length} รายการ: ${low.slice(0, 4).map((i) => i.name).join(', ')}${low.length > 4 ? ' …' : ''}`);
+    const exp = expiringLots(7);
+    if (exp.length) lines.push(`⏳ ใกล้/หมดอายุ ${exp.length} ล็อต${exp.some((l) => l.expired) ? ' (มีเลยกำหนดแล้ว!)' : ''}`);
+    const need = purchasePlan().filter((p) => p.suggestQty > 0);
+    if (need.length) { const est = need.reduce((s, p) => s + (p.estCost || 0), 0);
+      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`); }
+  } catch { /* additive */ }
   return lines.join('\n');
+}
+export function autoSummaryEnabled() { return getSetting('summary:auto', '0') === '1'; }
+export function setAutoSummary(on) { setSetting('summary:auto', on ? '1' : '0'); return { autoSummary: !!on }; }
+/** Fire the owner summary at most once per Bangkok day (dedup key), when auto-summary is on.
+ *  Called when the cash drawer is closed (the natural end-of-day moment). */
+export function maybeAutoSummary(branchId = null) {
+  if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
+  setSetting('summary:last_sent', day);
+  return pushOwnerSummary(branchId);
+}
+export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
+export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
+/** If anything needs reordering, draft ONE PO from the plan (once/day) and LINE the owner to
+ *  review + confirm it. Never auto-RECEIVES — the owner still approves before stock/cost change. */
+export function maybeAutoReorder(branchId = null) {
+  if (!autoReorderEnabled()) return { drafted: false, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('reorder:last_run', '') === day) return { drafted: false, reason: 'already' };
+  setSetting('reorder:last_run', day);
+  const po = draftPoFromPlan({ actorId: null });
+  if (!po) return { drafted: false, reason: 'nothing' };
+  const est = (po.lines || []).reduce((s, l) => s + l.lineTotal, 0);
+  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
+  return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
+}
+// C: automatic win-back — customers who slipped into "at_risk" get a coupon + LINE nudge without
+// the owner lifting a finger. Guard-railed: OFF by default, a MONTHLY message cap (LINE cost
+// control), and a per-customer cooldown so nobody is spammed.
+const WINBACK_COOLDOWN_DAYS = 45;
+export function autoWinbackEnabled() { return getSetting('winback:auto', '0') === '1'; }
+export function setAutoWinback(on) { setSetting('winback:auto', on ? '1' : '0'); return { autoWinback: !!on }; }
+export function getAutoWinbackCap() { return Math.max(0, Math.round(Number(getSetting('winback:cap', '100')) || 0)); }
+export function setAutoWinbackCap(n) { const v = Math.max(0, Math.min(5000, Math.round(Number(n) || 0))); setSetting('winback:cap', String(v)); return { autoWinbackCap: v }; }
+/** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
+ *  so it's exact even on UAT where LINE pushes are stubbed). */
+function winbackIssuedThisMonth() {
+  return db.prepare(
+    `SELECT COUNT(*) c FROM customer_coupons WHERE kind='winback'
+      AND strftime('%Y-%m', datetime(issued_at,'+7 hours')) = strftime('%Y-%m', datetime('now','+7 hours'))`
+  ).get().c || 0;
+}
+export async function maybeAutoWinback(branchId = null) {
+  if (!autoWinbackEnabled()) return { sent: 0, reason: 'off' };
+  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (getSetting('winback:last_run', '') === day) return { sent: 0, reason: 'already' };
+  const cap = getAutoWinbackCap();
+  const remaining = cap - winbackIssuedThisMonth();
+  if (remaining <= 0) { setSetting('winback:last_run', day); return { sent: 0, reason: 'cap' }; }
+  // at-risk, LINE-pushable, and not already win-backed within the cooldown window
+  const cutoff = db.prepare(`SELECT datetime('now', ?) t`).get(`-${WINBACK_COOLDOWN_DAYS} days`).t;
+  const targets = customersList()
+    .filter((c) => c.segment === 'at_risk' && c.canPush)
+    .filter((c) => !db.prepare(
+      `SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='winback' AND issued_at >= ? LIMIT 1`
+    ).get(c.key, cutoff))
+    .slice(0, remaining)
+    .map((c) => c.key);
+  setSetting('winback:last_run', day);
+  if (!targets.length) return { sent: 0, reason: 'none' };
+  const r = await sendCampaign({
+    keys: targets,
+    message: 'คิดถึงลูกค้าจังเลยค่ะ 💛 ไม่ได้เจอกันนาน แวะมาทานอีกนะคะ — ทางร้านมีคูปองเล็ก ๆ ฝากไว้ให้',
+    coupon: { label: 'คูปองคิดถึง — ส่วนลดต้อนรับกลับ', cap: 49, days: 30 },
+    actorId: null,
+  });
+  return { sent: r.sent, targeted: r.targeted, reason: 'ok' };
 }
 export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */
@@ -1845,7 +2434,7 @@ export function issueBirthdayCoupons() {
   for (const r of rows) {
     db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'birthday', ?, 100, ?)`)
       .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
-    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null); } catch { /* push is best-effort */ }
+    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };
 }
@@ -2124,10 +2713,11 @@ export function createOrder(zoneId, items, opts = {}) {
   const zone = getZone(zoneId);
   if (!zone) throw new Error('zone_not_found');
   if (!zone.is_open) throw new Error('zone_closed');
-  // Off-hours / manually-closed branch: reject here too — this is the customer LINE order path,
-  // reachable from the member card / deep link even when the LIFF order button is hidden.
+  // Off-hours / manually-closed branch: reject CUSTOMER (LINE) orders only — reachable from the
+  // member card / deep link even when the LIFF order button is hidden. The cashier POS keeps
+  // selling to walk-ins outside opening hours (owner decision 2026-07: ขายนอกเวลาได้).
   const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
-  if (_store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
+  if (source === 'customer' && _store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.
@@ -2248,7 +2838,7 @@ export function createOrder(zoneId, items, opts = {}) {
     const msg = (r.ticket && r.ticket.number > 0)
       ? `🎫 รับออเดอร์ + รับคิวแล้ว!\nหมายเลขคิวของคุณ: ${r.ticket.code}\nยอด ฿${r.total} — กรุณาชำระเงินก่อนรับเครื่องดื่มนะคะ 🙏`
       : `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\nกรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`;
-    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์');
+    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
   }
   return r;
 }
@@ -2337,7 +2927,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     } else {
       msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
-    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน');
+    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน', 'paid');
   }
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
