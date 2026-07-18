@@ -219,8 +219,14 @@
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="togglePlan()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleSuppliers()"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+      </div>
     </div>
+    <div id="planBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
+    <div id="supBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
         <button class="ok" style="width:100%;margin-bottom:10px" onclick="editIngForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มวัตถุดิบใหม่</button>
@@ -1367,7 +1373,7 @@ window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{me
 
 // ---------- Inventory / stock (owner/manager) ----------
 let STOCK=[];
-window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; $('dash').style.display=''; };
+window.hideStock=()=>{ $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; ['planBox','supBox'].forEach(b=>{const el=$(b); if(el) el.style.display='none';}); $('dash').style.display=''; };
 window.showStock=async()=>{ hideAllPanels(); $('stockCard').style.display=''; $('loyaltyCard').style.display='none'; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none';
   await loadStock(); };
 // ---------- Loyalty admin (owner/manager): earn-rate, rewards, lookup/redeem ----------
@@ -1404,7 +1410,59 @@ function renderLoyLookup(b){ const box=$('loyLookupResult');
     ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">ดวงยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
 window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ยืนยันแลก “'+name+'” ให้ลูกค้า?',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
-window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock(); }catch(e){ toast(err(e)); } };
+let SUPPLIERS=[];
+window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock();
+  try{ SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; }catch(e){ /* suppliers are optional */ } }catch(e){ toast(err(e)); } };
+// ---------- Suppliers (ผู้ขาย) ----------
+window.toggleSuppliers=async()=>{ const box=$('supBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  $('planBox').style.display='none'; box.style.display=''; renderSuppliers(); };
+function renderSuppliers(){ const box=$('supBox');
+  const rows=SUPPLIERS.map(s=>`<div class="row" style="gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px">
+      <span style="flex:1"><b>${esc(s.name)}</b>${s.phone?` <a href="tel:${esc(s.phone)}" style="color:var(--accent);text-decoration:none">📞 ${esc(s.phone)}</a>`:''}${s.note?`<div class="muted" style="font-size:11.5px">${esc(s.note)}</div>`:''}</span>
+      <button class="ghost" style="padding:4px 9px;font-size:12px" onclick="editSupplier(${s.id})">แก้ไข</button>
+      <button class="ghost danger" style="padding:4px 9px;font-size:12px" onclick="delSupplier(${s.id})">ลบ</button></div>`).join('');
+  box.innerHTML=`<h2 style="margin:0 0 8px">🚚 ผู้ขาย / ร้านค้าที่ซื้อวัตถุดิบ</h2>
+    ${rows||'<p class="muted" style="font-size:12.5px">ยังไม่มีผู้ขาย — เพิ่มด้านล่าง แล้วเวลารับเข้าสต๊อกเลือกได้ว่าซื้อจากใคร</p>'}
+    <div id="supForm" class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
+      <input id="sup_name" placeholder="ชื่อร้าน/ผู้ขาย เช่น แม็คโคร" style="flex:2;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <input id="sup_phone" placeholder="เบอร์โทร" inputmode="tel" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <input id="sup_note" placeholder="โน้ต เช่น ส่งของทุกวันอังคาร" style="flex:2;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <button class="ok" style="padding:8px 14px" onclick="saveSupplier()">เพิ่ม</button></div>`; }
+let _editSupId=null;
+window.editSupplier=(id)=>{ const s=SUPPLIERS.find(x=>x.id===id); if(!s) return; _editSupId=id;
+  $('sup_name').value=s.name; $('sup_phone').value=s.phone||''; $('sup_note').value=s.note||'';
+  $('supForm').querySelector('button.ok').textContent='บันทึก'; };
+window.saveSupplier=async()=>{ const name=$('sup_name').value.trim(); if(!name){ toast('กรอกชื่อผู้ขาย'); return; }
+  const body={name,phone:$('sup_phone').value.trim()||null,note:$('sup_note').value.trim()||null};
+  try{ await api('/api/suppliers'+(_editSupId?('/'+_editSupId):''),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    _editSupId=null; SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; renderSuppliers(); toast('บันทึกผู้ขายแล้ว'); }catch(e){ toast(err(e)); } };
+window.delSupplier=async(id)=>{ const s=SUPPLIERS.find(x=>x.id===id); if(!s) return;
+  if(!(await appConfirm({title:'ลบผู้ขาย',message:'ลบ “'+s.name+'” ออกจากรายชื่อ? (ประวัติการซื้อเดิมยังอยู่)',okText:'ลบ'}))) return;
+  try{ await api('/api/suppliers/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:0})});
+    SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; renderSuppliers(); }catch(e){ toast(err(e)); } };
+// ---------- Purchase planning (วางแผนสั่งซื้อ) ----------
+window.togglePlan=async()=>{ const box=$('planBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
+  $('supBox').style.display='none'; box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณจากการใช้จริง 14 วัน…</p>';
+  let d; try{ d=await api('/api/stock/plan'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
+  const plan=d.plan||[]; const need=plan.filter(p=>p.suggestQty>0), okRows=plan.filter(p=>!(p.suggestQty>0));
+  const dl=(p)=>p.daysLeft==null?'<span class="muted">ยังไม่มีข้อมูลใช้</span>':(p.daysLeft<=3?`<b style="color:var(--danger)">เหลือ ~${p.daysLeft} วัน</b>`:(p.daysLeft<=7?`<b style="color:#b45309">เหลือ ~${p.daysLeft} วัน</b>`:`เหลือ ~${p.daysLeft} วัน`));
+  const row=(p)=>`<div style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px">
+      <div class="row between" style="align-items:center"><b style="color:var(--navy)">${esc(p.name)}</b><span>${dl(p)}</span></div>
+      <div class="muted" style="font-size:11.5px">คงเหลือ ${p.stock} ${esc(p.unit)} · ใช้ ~${p.perDay}/วัน${p.lastSupplier?` · ล่าสุดซื้อ ${esc(p.lastSupplier)}${p.lastUnitPrice?` ฿${p.lastUnitPrice}/${esc(p.unit)}`:''}`:''}</div>
+      ${p.suggestQty>0?`<div style="margin-top:4px;font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px">🛒 แนะนำสั่ง <b>${p.suggestQty} ${esc(p.unit)}</b> (พอ 14 วัน)${p.estCost?` · ~฿${p.estCost}`:''}</div>`:''}</div>`;
+  const totalEst=need.reduce((s,p)=>s+(p.estCost||0),0);
+  box.innerHTML=`<h2 style="margin:0 0 4px">🛒 วางแผนสั่งซื้อ</h2>
+    <div class="muted" style="font-size:11.5px;margin-bottom:8px">คำนวณจากการใช้จริง 14 วันหลัง (ตัดสต๊อกอัตโนมัติ + เบิก) — แนะนำจำนวนให้พอขาย 14 วันข้างหน้า</div>
+    ${need.length?`<div style="margin-bottom:6px;font-size:12.5px"><b>ควรสั่ง ${need.length} รายการ</b>${totalEst?` · งบประมาณ ~฿${Math.round(totalEst)}`:''}</div>`+need.map(row).join(''):'<p class="muted" style="font-size:12.5px">👍 สต๊อกทุกตัวพอสำหรับ 14 วันข้างหน้า (หรือยังไม่มีข้อมูลการใช้)</p>'}
+    ${okRows.length?`<details style="margin-top:8px"><summary class="muted" style="font-size:12px;cursor:pointer">รายการที่ยังพอ (${okRows.length})</summary>${okRows.map(row).join('')}</details>`:''}`; };
+// ---------- Purchase price history (ประวัติราคาซื้อ) ----------
+window.showPriceHist=async(id)=>{ const box=$('priceHistBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let d; try{ d=await api('/api/ingredients/'+id+'/prices'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
+  const ps=d.prices||[];
+  box.innerHTML=ps.length?`<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:5px">📈 ประวัติราคาซื้อ</div>
+      ${ps.map(p=>`<div class="row between" style="font-size:12px;padding:2.5px 0"><span class="muted">${esc((p.at||'').slice(0,10))}${p.supplier?' · '+esc(p.supplier):''}</span><span>${p.qty} × <b>฿${p.unitPrice}</b>/หน่วย</span></div>`).join('')}</div>`
+    :'<p class="muted" style="font-size:12px">ยังไม่เคยบันทึกการรับเข้าพร้อมราคา</p>'; };
 let _selIngId=null;
 function renderStock(d){
   const s=d.summary||{}; $('stockSummary').textContent=`${s.items||0} รายการ · มูลค่ารวม ${baht2(s.totalValue)} · ใกล้หมด ${s.lowCount||0}`;
@@ -1437,11 +1495,14 @@ window.editIngForm=(id)=>{ _selIngId=id;
       <label class="ff" style="flex:1;min-width:90px">จำนวน (${esc(r.unit)})<input id="if_qty" type="number" inputmode="decimal"></label>
       <label class="ff" style="flex:1;min-width:90px">ราคารวม ฿ <span class="muted" style="font-weight:400">(เฉพาะรับเข้า)</span><input id="if_buycost" type="number" inputmode="decimal" placeholder="เว้นว่างได้"></label>
     </div>
-    <div class="row" style="gap:8px;margin:2px 0 16px">
+    <label class="ff">ซื้อจาก <span class="muted" style="font-weight:400">(เฉพาะรับเข้า — เพื่อดูประวัติราคา)</span>
+      <select id="if_supplier" style="padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="">— ไม่ระบุ —</option>${(SUPPLIERS||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    <div class="row" style="gap:8px;margin:2px 0 10px">
       <button class="ok" style="flex:1" onclick="stockMoveForm('purchase')">รับเข้า</button>
       <button class="ghost" style="flex:1" onclick="stockMoveForm('adjust')">นับใหม่</button>
       <button class="ghost danger" style="flex:1" onclick="stockMoveForm('use')">เบิก/ของเสีย</button>
     </div>
+    <div id="priceHistBox" style="margin:0 0 14px"><button class="ghost" style="width:100%;padding:7px;font-size:12.5px" onclick="showPriceHist(${r.id})">📈 ประวัติราคาซื้อ</button></div>
     <div style="border-top:1px solid var(--line);padding-top:12px">
       <h3 style="margin:0 0 8px;font-size:14px;color:var(--muted)">แก้ไขข้อมูล</h3>
       <label class="ff">ชื่อวัตถุดิบ<input id="if_name" value="${esc(r.name)}"></label>
@@ -1464,7 +1525,7 @@ window.saveIngForm=async()=>{ const errEl=$('ingErr'); if(errEl) errEl.textConte
 window.stockMoveForm=async(kind)=>{ const qty=Number($('if_qty').value);
   if(kind==='adjust'){ if(!(qty>=0)){ toast('ใส่จำนวนคงเหลือ'); return; } }
   else if(!(qty>0)){ toast('ใส่จำนวน'); return; }
-  const body={kind,qty}; if(kind==='purchase') body.cost=Number($('if_buycost').value)||0;
+  const body={kind,qty}; if(kind==='purchase'){ body.cost=Number($('if_buycost').value)||0; body.supplierId=Number($('if_supplier')&&$('if_supplier').value)||null; }
   const msg=kind==='purchase'?'รับเข้าสต๊อกแล้ว':(kind==='adjust'?'ปรับสต๊อกแล้ว':'บันทึกการเบิกแล้ว');
   try{ await api('/api/ingredients/'+_selIngId+'/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast(msg); await refreshStock(_selIngId); }catch(e){ toast(err(e)); } };
 

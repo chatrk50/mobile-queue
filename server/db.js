@@ -376,6 +376,17 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_stock_moves_ing ON stock_moves(ingredient_id, at);
+-- Suppliers (ร้านค้า/ผู้ขายวัตถุดิบ): who the shop buys from. Purchases link here so the
+-- owner gets per-ingredient price history (ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่) for planning.
+CREATE TABLE IF NOT EXISTS suppliers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id  INTEGER NOT NULL DEFAULT 1,
+  name       TEXT NOT NULL,
+  phone      TEXT,
+  note       TEXT,                              -- LINE id / ที่อยู่ / เงื่อนไขส่งของ ฯลฯ
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Recipe / bill-of-materials: how much of each ingredient one unit of a menu item uses.
 -- Drives AUTO stock deduction when a sale is paid. Empty by default → no deduction
 -- (dormant) until the owner defines recipes, so existing behaviour is unchanged.
@@ -521,6 +532,7 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
+  `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

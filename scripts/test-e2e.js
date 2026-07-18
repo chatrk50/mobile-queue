@@ -610,6 +610,25 @@ Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'return', qty: 2, note: 'คื
 ok(rr(Q.cogsForDay().cogsActual - cogs0) === 0, 'INVARIANT returns (cancelled orders) net out of real COGS');
 db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowid);
 
+// ---- Suppliers + price history + purchase planning ----
+console.log('\n== Suppliers + purchase planning ==');
+const sup = Q.upsertSupplier(null, { name: 'แม็คโครทดสอบ', phone: '021112222', note: 'ส่งวันอังคาร' });
+ok(sup.id > 0 && Q.listSuppliers().some((s) => s.id === sup.id), 'INVARIANT a supplier can be created and listed');
+// buy 10 units for ฿300 from that supplier → unit price ฿30 in the history
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'purchase', qty: 10, cost: 300, supplierId: sup.id });
+const ph = Q.ingredientPriceHistory(mmIng.lastInsertRowid);
+ok(ph.length >= 1 && ph[0].unitPrice === 30 && ph[0].supplier === 'แม็คโครทดสอบ', `INVARIANT price history shows who/when/unit-price (got ฿${ph[0] && ph[0].unitPrice} from ${ph[0] && ph[0].supplier})`);
+// heavy usage → the plan must suggest reordering: use 70 over "14 days" ⇒ 5/day; stock left low
+const planIngBefore = db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(mmIng.lastInsertRowid).stock_qty;
+Q.recordStockMove(mmIng.lastInsertRowid, { kind: 'use', qty: planIngBefore - 3, note: 'จำลองใช้หนัก' });   // leave 3 on hand
+const plan = Q.purchasePlan();
+const pRow = plan.find((p) => p.id === mmIng.lastInsertRowid);
+ok(!!pRow && pRow.perDay > 0 && pRow.daysLeft != null && pRow.suggestQty > 0, `INVARIANT heavy usage yields a reorder suggestion (perDay ${pRow && pRow.perDay}, daysLeft ${pRow && pRow.daysLeft}, suggest ${pRow && pRow.suggestQty})`);
+ok(pRow.lastSupplier === 'แม็คโครทดสอบ' && pRow.lastUnitPrice === 30, 'INVARIANT the plan carries last supplier + last unit price for the call');
+ok(plan[0].id === pRow.id || (plan[0].daysLeft ?? 9e9) <= (pRow.daysLeft ?? 9e9), 'INVARIANT plan is sorted most-urgent first');
+Q.upsertSupplier(sup.id, { active: 0 });
+ok(!Q.listSuppliers().some((s) => s.id === sup.id), 'INVARIANT a deactivated supplier leaves the list (history kept)');
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

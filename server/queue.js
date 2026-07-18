@@ -1034,7 +1034,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
 }
 /** Record a stock movement. purchase=qty in + (optional) cost → weighted-avg cost;
  *  use/waste=qty out; adjust=set on-hand to qty (stock count). */
-export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null } = {}) {
+export function recordStockMove(ingredientId, { kind, qty, cost = null, note = null, actorId = null, supplierId = null } = {}) {
   const ing = db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
   if (!ing) throw new Error('ingredient_not_found');
   let q = Number(qty) || 0;
@@ -1052,14 +1052,76 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
   }
   const tx = db.transaction(() => {
     db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
-    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor) VALUES (?,?,?,?,?,?,?)')
-      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId);
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id) VALUES (?,?,?,?,?,?,?,?)')
+      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId,
+        kind === 'purchase' ? (Number(supplierId) || null) : null);
   });
   tx();
   return db.prepare('SELECT * FROM ingredients WHERE id=?').get(ingredientId);
 }
 export function stockMoves(ingredientId, limit = 50) {
   return db.prepare('SELECT * FROM stock_moves WHERE ingredient_id=? ORDER BY id DESC LIMIT ?').all(ingredientId, limit);
+}
+
+// ---------- Suppliers (ร้านค้า/ผู้ขาย) + purchase planning ----------
+export function listSuppliers() {
+  return db.prepare('SELECT * FROM suppliers WHERE active=1 ORDER BY name').all();
+}
+export function upsertSupplier(id, { name, phone = null, note = null, active = 1 } = {}) {
+  const n = (name || '').toString().trim().slice(0, 60);
+  if (id) {
+    const cur = db.prepare('SELECT id FROM suppliers WHERE id=?').get(id);
+    if (!cur) throw new Error('supplier_not_found');
+    db.prepare('UPDATE suppliers SET name=COALESCE(NULLIF(?,\'\'),name), phone=?, note=?, active=? WHERE id=?')
+      .run(n, phone ? String(phone).slice(0, 30) : null, note ? String(note).slice(0, 200) : null, active ? 1 : 0, id);
+    return db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
+  }
+  if (!n) throw new Error('name_required');
+  const r = db.prepare('INSERT INTO suppliers (name, phone, note) VALUES (?,?,?)')
+    .run(n, phone ? String(phone).slice(0, 30) : null, note ? String(note).slice(0, 200) : null);
+  return db.prepare('SELECT * FROM suppliers WHERE id=?').get(r.lastInsertRowid);
+}
+/** Purchase price history for one ingredient: when, from whom, at what unit price — the
+ *  owner's "ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่" answer, newest first. */
+export function ingredientPriceHistory(ingredientId, limit = 20) {
+  return db.prepare(
+    `SELECT sm.at, sm.qty, sm.cost, s.name AS supplier
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+      WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0 AND sm.cost>0
+      ORDER BY sm.id DESC LIMIT ?`
+  ).all(ingredientId, limit).map((r) => ({
+    at: r.at, qty: r.qty, cost: r.cost, supplier: r.supplier || null,
+    unitPrice: r2(r.cost / r.qty),
+  }));
+}
+/** Purchase plan: for every active ingredient, burn rate from the last 14 days of 'use'
+ *  moves → days of stock left → suggested order qty to cover the NEXT 14 days (+ safety
+ *  = low_threshold), with the last supplier/price so the owner knows who to call. */
+export function purchasePlan(horizonDays = 14) {
+  const items = db.prepare('SELECT * FROM ingredients WHERE active=1 ORDER BY name').all();
+  return items.map((ing) => {
+    const used = db.prepare(
+      `SELECT SUM(-qty) u FROM stock_moves
+        WHERE ingredient_id=? AND kind='use' AND at >= datetime('now','-14 days')`
+    ).get(ing.id)?.u || 0;
+    const perDay = r2(used / 14);
+    const daysLeft = perDay > 0 ? Math.floor(ing.stock_qty / perDay) : null;   // null = no usage data
+    const need = perDay > 0 ? Math.max(0, r2(perDay * horizonDays + ing.low_threshold - ing.stock_qty)) : 0;
+    const lastBuy = db.prepare(
+      `SELECT sm.at, sm.qty, sm.cost, s.name AS supplier
+         FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id
+        WHERE sm.ingredient_id=? AND sm.kind='purchase' AND sm.qty>0
+        ORDER BY sm.id DESC LIMIT 1`
+    ).get(ing.id);
+    return {
+      id: ing.id, name: ing.name, unit: ing.unit, stock: ing.stock_qty, low: ing.stock_qty <= ing.low_threshold,
+      perDay, daysLeft, suggestQty: need > 0 ? Math.ceil(need) : 0,
+      estCost: need > 0 && lastBuy?.cost > 0 && lastBuy?.qty > 0 ? r2(Math.ceil(need) * (lastBuy.cost / lastBuy.qty)) : null,
+      lastSupplier: lastBuy?.supplier || null,
+      lastUnitPrice: lastBuy?.cost > 0 && lastBuy?.qty > 0 ? r2(lastBuy.cost / lastBuy.qty) : null,
+      lastBuyAt: lastBuy?.at || null,
+    };
+  }).sort((a, b) => (a.daysLeft ?? 9e9) - (b.daysLeft ?? 9e9));
 }
 
 // ---------- Recipes (bill-of-materials) → auto stock deduction on sale ----------

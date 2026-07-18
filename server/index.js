@@ -1047,6 +1047,27 @@ app.get('/api/ingredients/:id/moves', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.stockMoves(Number(req.params.id)));
 });
+// Suppliers + purchase planning (ซื้อกับใคร เมื่อไหร่ ราคาเท่าไหร่ · สั่งเท่าไหร่ดี)
+app.get('/api/suppliers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ suppliers: Q.listSuppliers() });
+});
+app.post('/api/suppliers', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.upsertSupplier(null, req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/suppliers/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.upsertSupplier(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/ingredients/:id/prices', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ prices: Q.ingredientPriceHistory(Number(req.params.id)) });
+});
+app.get('/api/stock/plan', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ plan: Q.purchasePlan() });
+});
 // Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
 app.get('/api/menu/:id/recipe', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
