@@ -15,7 +15,8 @@
   #adminMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
   #adminMenu button.adm svg{ flex:none; margin:0; }
   #adminMenu button.adm:hover{ background:var(--surface,#f1f5f9); }
-  #adminMenu .admhdr{ font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#64748b); padding:8px 14px 3px; }
+  #adminMenu .admhdr{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#64748b); padding:8px 14px 3px; }
+  #adminMenu .admhdr svg{ width:13px; height:13px; margin:0; vertical-align:0; stroke-width:1.9; }
   #adminMenu .admgrp{ display:flex; flex-direction:column; gap:2px; }
   #adminMenu .admgrp + .admgrp{ border-top:1px solid var(--line,#e2e8f0); margin-top:4px; padding-top:2px; }
   /* Split-screen order taking (Mobi-POS style): bill on the left, menu on the right */
@@ -99,25 +100,25 @@
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:230px;max-height:min(72vh,560px);overflow-y:auto;flex-direction:column;gap:2px">
-        <div class="admgrp"><div class="admhdr">📊 ดูยอด</div>
+        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
           <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</button>
           <button id="reportBtn" class="ghost adm" style="display:none" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</button>
           <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
           <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         </div>
-        <div class="admgrp"><div class="admhdr">💰 การเงิน / ต้นทุน</div>
+        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>การเงิน / ต้นทุน</div>
           <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
           <button id="tenderBtn" class="ghost adm" style="display:none" onclick="showTenders()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</button>
           <button id="stockBtn" class="ghost adm" style="display:none" onclick="showStock()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก/วัตถุดิบ</button>
           <button id="controlBtn" class="ghost adm" style="display:none" onclick="showControl()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</button>
         </div>
-        <div class="admgrp"><div class="admhdr">💛 ลูกค้า / การตลาด</div>
+        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
           <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
           <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
           <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         </div>
-        <div class="admgrp"><div class="admhdr">⚙ ตั้งค่าร้าน</div>
+        <div class="admgrp"><div class="admhdr"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
           <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
           <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
           <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
