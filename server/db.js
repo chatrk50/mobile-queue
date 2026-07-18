@@ -412,6 +412,14 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
   note          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_po_lines_po ON purchase_order_lines(po_id);
+-- OCR memory: a receipt line's raw text → the ingredient the owner matched it to. Lets the OCR
+-- importer "learn" — next time the same wording appears (any supplier's format) it auto-matches.
+CREATE TABLE IF NOT EXISTS ingredient_aliases (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias_norm    TEXT NOT NULL UNIQUE,             -- normalized receipt text (lowercased, spaces stripped)
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Recipe / bill-of-materials: how much of each ingredient one unit of a menu item uses.
 -- Drives AUTO stock deduction when a sale is paid. Empty by default → no deduction
 -- (dormant) until the owner defines recipes, so existing behaviour is unchanged.

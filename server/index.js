@@ -1125,9 +1125,19 @@ app.post('/api/purchase-orders/ocr', async (req, res) => {
   if (!Q.ocrConfigured()) return res.status(404).json({ error: 'ocr_off' });
   try {
     const parsed = await Q.parseReceiptImage(req.body?.image);
-    const lines = Q.matchReceiptLines(parsed.lines, Q.listIngredients());
+    const lines = Q.matchReceiptLines(parsed.lines, Q.listIngredients(), Q.aliasMap());
     res.json({ supplier: parsed.supplier, lines });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Teach the OCR: remember {text → ingredientId} pairs the owner confirmed on an imported receipt.
+app.post('/api/ingredient-aliases', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.learnAliases(req.body?.pairs || []));
+});
+// Purchasing report: monthly + per-item + per-supplier spend for a date range.
+app.get('/api/purchase-report', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.purchaseSummary(req.query.from, req.query.to));
 });
 // Recipe (bill-of-materials) per menu item → drives auto stock deduction on sale.
 app.get('/api/menu/:id/recipe', (req, res) => {

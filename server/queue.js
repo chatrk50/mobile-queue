@@ -1296,17 +1296,20 @@ export function cancelPurchaseOrder(id) {
 /** Fuzzy-match OCR'd receipt line names to existing ingredients. PURE + testable — no I/O.
  *  parsedLines: [{name, qty, unitPrice, expiry}] · ingredients: [{id,name,unit}].
  *  Returns each line with the best ingredient match (or ingredientId:null = needs manual pick). */
-export function matchReceiptLines(parsedLines = [], ingredients = []) {
-  const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[.,()]/g, '');
-  const idx = ingredients.map((i) => ({ i, n: norm(i.name) }));
+const aliasNorm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[.,()]/g, '');
+export function matchReceiptLines(parsedLines = [], ingredients = [], aliases = {}) {
+  const idx = ingredients.map((i) => ({ i, n: aliasNorm(i.name) }));
+  const byId = new Map(ingredients.map((i) => [i.id, i]));
   return (Array.isArray(parsedLines) ? parsedLines : []).map((l) => {
-    const n = norm(l.name);
-    let hit = null;
-    if (n) {
-      hit = idx.find((x) => x.n === n)                                   // exact
+    const n = aliasNorm(l.name);
+    let hit = null, viaAlias = false;
+    // 1) learned alias (the owner matched this exact wording before) wins outright
+    if (n && aliases && aliases[n] != null && byId.has(aliases[n])) { hit = { i: byId.get(aliases[n]) }; viaAlias = true; }
+    if (!hit && n) {
+      hit = idx.find((x) => x.n === n)                                   // exact name
         || idx.find((x) => x.n.includes(n) || n.includes(x.n))          // substring either way
         || idx.find((x) => { const a = new Set(String(l.name).toLowerCase().split(/\s+/).filter(Boolean));
-            return [...a].some((w) => w.length >= 3 && x.n.includes(norm(w))); }); // token overlap
+            return [...a].some((w) => w.length >= 3 && x.n.includes(aliasNorm(w))); }); // token overlap
     }
     return {
       name: String(l.name || '').slice(0, 60),
@@ -1315,9 +1318,57 @@ export function matchReceiptLines(parsedLines = [], ingredients = []) {
       qty: Math.max(0, Number(l.qty) || 0),
       unitPrice: Math.max(0, Number(l.unitPrice) || 0),
       expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(l.expiry || '')) ? l.expiry : null,
-      matched: !!hit,
+      matched: !!hit, viaAlias,
     };
   });
+}
+/** Current learned OCR aliases as a {normText: ingredientId} map (drops any pointing at a
+ *  deleted ingredient). Fed into matchReceiptLines so remembered wordings auto-match. */
+export function aliasMap() {
+  const out = {};
+  for (const r of db.prepare('SELECT alias_norm, ingredient_id FROM ingredient_aliases').all()) {
+    if (db.prepare('SELECT 1 FROM ingredients WHERE id=?').get(r.ingredient_id)) out[r.alias_norm] = r.ingredient_id;
+  }
+  return out;
+}
+/** Teach the OCR: remember that receipt text `text` means ingredient `ingredientId`.
+ *  Upsert on the normalized text so a corrected mapping overwrites the old one. */
+export function learnAlias(text, ingredientId) {
+  const norm = aliasNorm(text); const id = Number(ingredientId) || 0;
+  if (!norm || !id) return { ok: false };
+  if (!db.prepare('SELECT 1 FROM ingredients WHERE id=?').get(id)) throw new Error('ingredient_not_found');
+  db.prepare(`INSERT INTO ingredient_aliases (alias_norm, ingredient_id) VALUES (?,?)
+              ON CONFLICT(alias_norm) DO UPDATE SET ingredient_id=excluded.ingredient_id`).run(norm, id);
+  return { ok: true };
+}
+export function learnAliases(pairs = []) {
+  let n = 0; for (const p of (Array.isArray(pairs) ? pairs : [])) { try { if (learnAlias(p.text, p.ingredientId).ok) n++; } catch { /* skip bad */ } }
+  return { learned: n };
+}
+/** Purchasing report over a Bangkok date range: monthly rollup + per-item + per-supplier spend,
+ *  from the immutable purchase stock_moves ledger. Answers ซื้อไปเท่าไหร่ ต่อรายการ / ต่อ supplier. */
+export function purchaseSummary(from = null, to = null) {
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const f = /^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) ? from
+    : db.prepare("SELECT date(datetime('now','+7 hours'),'-365 days') d").get().d;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(String(to || '')) ? to : today;
+  const WHERE = `sm.kind='purchase' AND sm.qty>0 AND sm.cost>0 AND date(sm.at,'+7 hours') BETWEEN ? AND ?`;
+  const byMonth = db.prepare(
+    `SELECT substr(date(sm.at,'+7 hours'),1,7) ym, COUNT(*) lines, SUM(sm.qty) qty, SUM(sm.cost) spent
+       FROM stock_moves sm WHERE ${WHERE} GROUP BY ym ORDER BY ym DESC`
+  ).all(f, t).map((r) => ({ ym: r.ym, lines: r.lines, qty: r2(r.qty), spent: r2(r.spent) }));
+  const byItem = db.prepare(
+    `SELECT i.name, i.unit, COUNT(*) times, SUM(sm.qty) qty, SUM(sm.cost) spent
+       FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id WHERE ${WHERE}
+      GROUP BY sm.ingredient_id ORDER BY spent DESC`
+  ).all(f, t).map((r) => ({ name: r.name, unit: r.unit, times: r.times, qty: r2(r.qty), spent: r2(r.spent),
+    avgUnit: r.qty > 0 ? r2(r.spent / r.qty) : 0 }));
+  const bySupplier = db.prepare(
+    `SELECT COALESCE(s.name,'ไม่ระบุผู้ขาย') supplier, COUNT(*) times, SUM(sm.cost) spent
+       FROM stock_moves sm LEFT JOIN suppliers s ON s.id=sm.supplier_id WHERE ${WHERE}
+      GROUP BY sm.supplier_id ORDER BY spent DESC`
+  ).all(f, t).map((r) => ({ supplier: r.supplier, times: r.times, spent: r2(r.spent) }));
+  return { from: f, to: t, total: r2(byItem.reduce((s, r) => s + r.spent, 0)), byMonth, byItem, bySupplier };
 }
 export function ocrConfigured() { return !!(process.env.OCR_API_URL && process.env.OCR_API_KEY); }
 /** Call the configured vision endpoint to read a purchase receipt/invoice image into structured

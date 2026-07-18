@@ -710,6 +710,23 @@ ok(Q.matchReceiptLines([{ name: 'x', qty: -5, unitPrice: -1, expiry: 'bad' }], o
 ok(Q.ocrConfigured() === false, 'INVARIANT OCR vision call is dormant without OCR_API_URL/KEY (safe default)');
 let ocrOff = null; try { await Q.parseReceiptImage('data:image/png;base64,abc'); } catch (e) { ocrOff = e.message; }
 ok(ocrOff === 'ocr_off', 'INVARIANT parseReceiptImage refuses when unconfigured (no accidental external call)');
+// OCR learns: teach an alias, then the same wording auto-matches next time
+Q.learnAlias('นมสดยี่ห้อพิเศษ', ocrIngs[0].id);
+const relearned = Q.matchReceiptLines([{ name: 'นมสดยี่ห้อพิเศษ', qty: 1, unitPrice: 5 }], ocrIngs, Q.aliasMap());
+ok(relearned[0].ingredientId === ocrIngs[0].id && relearned[0].viaAlias === true, 'INVARIANT a learned alias makes an otherwise-unmatched wording auto-match (viaAlias)');
+Q.learnAlias('นมสดยี่ห้อพิเศษ', ocrIngs[1].id);   // correction overwrites
+ok(Q.aliasMap()[('นมสดยี่ห้อพิเศษ')] === ocrIngs[1].id, 'INVARIANT correcting an alias overwrites the old mapping');
+
+// ---- Purchasing report: monthly / per-item / per-supplier spend ----
+console.log('\n== Purchase report ==');
+const prIng = db.prepare(`INSERT INTO ingredients (name, unit) VALUES ('วัตถุดิบรายงาน','กก.')`).run().lastInsertRowid;
+const prSup = Q.upsertSupplier(null, { name: 'ผู้ขายรายงาน' });
+Q.recordStockMove(prIng, { kind: 'purchase', qty: 4, cost: 400, supplierId: prSup.id });   // ฿400
+const pr = Q.purchaseSummary();
+ok(pr.byItem.some((r) => r.name === 'วัตถุดิบรายงาน' && r.spent === 400 && r.avgUnit === 100), 'INVARIANT purchase report breaks spend down per item with avg unit price');
+ok(pr.bySupplier.some((r) => r.supplier === 'ผู้ขายรายงาน' && r.spent >= 400), 'INVARIANT purchase report breaks spend down per supplier');
+ok(pr.byMonth.length >= 1 && pr.byMonth[0].spent >= 400, 'INVARIANT purchase report rolls up by month');
+ok(Q.purchaseSummary('2000-01-01', '2000-01-02').total === 0, 'INVARIANT an empty date range totals zero');
 
 db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(scmIng);
 
