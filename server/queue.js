@@ -310,6 +310,21 @@ export function pushStats() {
   const today = db.prepare(`SELECT COUNT(*) n FROM push_log WHERE date(at,'+7 hours')=date('now','+7 hours')`).get().n;
   return { monthly, byKind, today };
 }
+/** Per-day LINE-push counts for a Bangkok date range (owner cost report: จากวัน X ถึงวัน X).
+ *  Defaults to the last 31 days. Returns every day's count + the range total. */
+export function pushStatsRange(from = null, to = null) {
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const f = /^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) ? from
+    : db.prepare("SELECT date(datetime('now','+7 hours'),'-30 days') d").get().d;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(String(to || '')) ? to : today;
+  const daily = db.prepare(
+    `SELECT date(at,'+7 hours') day, COUNT(*) n, SUM(ok) sent
+       FROM push_log WHERE date(at,'+7 hours') BETWEEN ? AND ?
+      GROUP BY day ORDER BY day DESC`
+  ).all(f, t);
+  return { from: f, to: t, daily,
+    total: daily.reduce((s, r) => s + r.n, 0), sent: daily.reduce((s, r) => s + (r.sent || 0), 0) };
+}
 /** Full customer list + lifecycle segment for the CRM page. Segments (Bangkok days since last
  *  paid visit): new = ≤1 visit · regular = ≤30d · at_risk = 31–60d · lost = >60d (or never paid).
  *  canPush = real LINE user (tel:-only customers can't receive LINE messages). */

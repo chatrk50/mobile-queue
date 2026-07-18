@@ -652,6 +652,13 @@ ok(!!delEv, 'INVARIANT deleting a cash move is recorded as a cash_delete reducti
 ok(delEv && /จ่ายออก/.test(delEv.reason || '') && /ค่าน้ำแข็งทดสอบ/.test(delEv.reason || ''), `INVARIANT the audit row describes the deleted entry (got "${delEv && delEv.reason}")`);
 ok(redu.byType.cash_delete >= 250, 'INVARIANT cash_delete gets its own byType total for the tile');
 
+// ---- Push-stats date range (LINE cost report: จากวัน X ถึงวัน X) ----
+const psToday = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+const psr = Q.pushStatsRange(psToday, psToday);
+const psAll = Q.pushStats();
+ok(psr.from === psToday && psr.to === psToday && psr.total === psAll.today, `INVARIANT range report for today matches pushStats.today (${psr.total} vs ${psAll.today})`);
+ok(Q.pushStatsRange('bad-date', null).from !== 'bad-date', 'INVARIANT malformed range dates fall back to defaults');
+
 // ---- Owner toggles: social-proof + mascot default OFF, flip independently, and soldTodayCount
 //      reflects paid drinks sold today (drives the LIFF "วันนี้ขายไปแล้ว N แก้ว" line). ----
 console.log('\n== Owner toggles (social proof + mascot) ==');

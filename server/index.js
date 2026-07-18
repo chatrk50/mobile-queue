@@ -727,6 +727,11 @@ app.get('/api/push-stats', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.pushStats());
 });
+// Daily breakdown for a date range (?from=YYYY-MM-DD&to=YYYY-MM-DD, default last 31 days).
+app.get('/api/push-stats/range', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.pushStatsRange(req.query.from, req.query.to));
+});
 // CRM: full customer list + segments · targeted campaign send · campaign history (manager+).
 app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

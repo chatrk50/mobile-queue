@@ -2942,6 +2942,16 @@ window.printKitchen=async(tid)=>{
   }catch(e){ toast(err(e)); }
 };
 // Owner: toggle prepared-but-dormant features (receipt printing, SlipOK auto-verify).
+// LINE-push cost report: per-day counts for any date range (default = last 31 days).
+window.loadPushRange=async()=>{ const box=$('pushRangeBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  const f=$('pushFrom').value, t=$('pushTo').value;
+  let d; try{ d=await api('/api/push-stats/range'+((f||t)?('?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)):'')); }
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
+  const rows=d.daily||[];
+  box.innerHTML=`<div style="background:var(--surface,#f1f5f9);border-radius:10px;padding:9px 12px;margin-top:4px">
+    <div class="row between" style="font-size:12.5px;font-weight:700;color:var(--navy)"><span>${d.from} → ${d.to}</span><span>รวม ${d.total} ข้อความ (ส่งสำเร็จ ${d.sent})</span></div>
+    ${rows.length?`<div style="max-height:180px;overflow-y:auto;margin-top:6px">${rows.map(r=>`<div class="row between" style="font-size:12px;padding:2.5px 0"><span class="muted">${r.day}</span><span><b>${r.n}</b> ข้อความ${r.sent<r.n?` <span style="color:var(--danger)">(สำเร็จ ${r.sent})</span>`:''}</span></div>`).join('')}</div>`
+      :'<p class="muted" style="font-size:12px;margin:6px 0 0">ไม่มีการส่งในช่วงนี้</p>'}</div>`; };
 window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
@@ -2976,8 +2986,15 @@ window.showFeatures=async()=>{
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.chart}</span><div><b>ข้อความ LINE ที่ส่ง (ต้นทุน OA)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">LINE OA คิดเงินตามจำนวนข้อความ — เดือนนี้ส่งแล้ว <b style="color:var(--navy)">${(ps.monthly[0]&&ps.monthly[0].ym===new Date(Date.now()+7*3600e3).toISOString().slice(0,7))?ps.monthly[0].n:0}</b> ข้อความ · วันนี้ ${ps.today}</div></div></div>
       ${ps.byKind.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${ps.byKind.map(k=>`<span style="background:var(--surface,#f1f5f9);border-radius:999px;padding:3px 10px;font-size:11.5px;color:var(--navy)">${esc(k.label)} <b>${k.n}</b></span>`).join('')}</div>`:''}
-      ${ps.monthly.length>1?`<div class="muted" style="font-size:11.5px">ย้อนหลัง: ${ps.monthly.slice(1,4).map(m=>`${m.ym} = ${m.n}`).join(' · ')}</div>`:''}
+      ${ps.monthly.length>1?`<div class="muted" style="font-size:11.5px">รายเดือน: ${ps.monthly.slice(0,6).map(m=>`${m.ym} = ${m.n}`).join(' · ')}</div>`:''}
       ${ps.monthly.length===0?'<div class="muted" style="font-size:11.5px">ยังไม่มีการส่งจริง (เริ่มนับจากนี้ · ระบบทดสอบไม่ถูกนับ)</div>':''}
+      <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;width:100%">
+        <input id="pushFrom" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+        <span class="muted" style="font-size:12px">ถึง</span>
+        <input id="pushTo" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+        <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="loadPushRange()">ดูรายวันตามช่วง</button>
+      </div>
+      <div id="pushRangeBox" style="width:100%"></div>
     </div>`:'')+
     `<div class="muted" style="font-size:12px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px">เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
     `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
