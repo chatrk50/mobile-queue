@@ -233,27 +233,39 @@
     </div>
   </div>
 
-  <!-- INVENTORY / STOCK (owner/manager) -->
+  <!-- INVENTORY / STOCK (owner/manager) — 4 tabs: คลัง · ใบสั่งซื้อ · ผู้ขาย · วางแผน -->
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / วัตถุดิบ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
-      <div class="row" style="gap:6px">
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleCount()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>นับสต๊อก</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="togglePlan()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleSuppliers()"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / จัดซื้อ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+    </div>
+    <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
+    <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
+      <button id="stkTabWh" class="ok" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('wh')"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>คลัง</button>
+      <button id="stkTabPo" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('po')"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>ใบสั่งซื้อ</button>
+      <button id="stkTabSup" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('sup')"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
+      <button id="stkTabPlan" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('plan')"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผน</button>
+    </div>
+    <!-- TAB: คลัง -->
+    <div id="stkPaneWh">
+      <div class="row" style="gap:8px;margin:8px 0;flex-wrap:wrap">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleCount()"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>นับสต๊อกเทียบของจริง</button>
+      </div>
+      <div id="countBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"></div>
+      <div class="ms-split">
+        <div class="ms-list">
+          <button class="ok" style="width:100%;margin-bottom:10px" onclick="editIngForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มวัตถุดิบใหม่</button>
+          <div id="stockBody"></div>
+        </div>
+        <div class="ms-edit"><div id="stockEditForm"><p class="muted" style="text-align:center;padding:34px 8px">← เลือกวัตถุดิบทางซ้ายเพื่อแก้ไข · รับเข้า · เบิก</p></div></div>
       </div>
     </div>
-    <div id="countBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
-    <div id="planBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
-    <div id="supBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
-    <div class="ms-split" style="margin-top:12px">
-      <div class="ms-list">
-        <button class="ok" style="width:100%;margin-bottom:10px" onclick="editIngForm('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มวัตถุดิบใหม่</button>
-        <div id="stockBody"></div>
-      </div>
-      <div class="ms-edit"><div id="stockEditForm"><p class="muted" style="text-align:center;padding:34px 8px">← เลือกวัตถุดิบทางซ้ายเพื่อแก้ไข · รับเข้า · เบิก</p></div></div>
-    </div>
+    <!-- TAB: ใบสั่งซื้อ -->
+    <div id="stkPanePo" style="display:none"></div>
+    <!-- TAB: ผู้ขาย -->
+    <div id="supBox" style="display:none"></div>
+    <!-- TAB: วางแผน -->
+    <div id="planBox" style="display:none"></div>
   </div>
 
   <!-- LOYALTY POINTS & REWARDS (owner/manager) -->
@@ -1436,12 +1448,28 @@ function renderLoyLookup(b){ const box=$('loyLookupResult');
     ${opts.length?`<div style="margin-top:10px;display:grid;gap:6px">${opts.map(r=>`<button class="ok" style="padding:8px" onclick="doRedeem(${r.id},'${esc(r.name)}')">แลก ${esc(r.name)} (−${r.cost_points})</button>`).join('')}</div>`:'<p class="muted" style="margin:8px 0 0">ดวงยังไม่พอแลกของรางวัลใด</p>'}</div>`; }
 window.doRedeem=async(rewardId,name)=>{ if(!LOY_KEY) return; if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ยืนยันแลก “'+name+'” ให้ลูกค้า?',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/loyalty/'+encodeURIComponent(LOY_KEY)+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rewardId})}); toast('แลกแล้ว เหลือ '+r.balance+' ดวง'); loyLookupGo(); }catch(e){ toast(err(e)==='insufficient_points'?'ดวงไม่พอ':err(e)); } };
-let SUPPLIERS=[];
+let SUPPLIERS=[], _stkTab='wh';
 window.loadStock=async()=>{ try{ const d=await api('/api/ingredients'); STOCK=d.items||[]; renderStock(d); refreshLowStock();
-  try{ SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; }catch(e){ /* suppliers are optional */ } }catch(e){ toast(err(e)); } };
+  try{ SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; }catch(e){ /* suppliers are optional */ }
+  loadExpiryBanner(); stkTab(_stkTab); }catch(e){ toast(err(e)); } };
+// Near-expiry heads-up across all tabs (FEFO reminder)
+async function loadExpiryBanner(){ const b=$('stkExpBanner'); if(!b) return;
+  let lots=[]; try{ lots=(await api('/api/stock/expiring?days=14')).lots||[]; }catch(e){ b.style.display='none'; return; }
+  if(!lots.length){ b.style.display='none'; return; }
+  const soon=lots.filter(l=>!l.expired), gone=lots.filter(l=>l.expired);
+  b.style.display=''; b.innerHTML=`<div style="padding:10px 14px;border-radius:12px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.28);font-size:12.5px">
+    <b style="color:var(--danger)">⚠️ ล็อตใกล้/หมดอายุ</b>
+    ${gone.length?`<span style="color:var(--danger)"> · เลยกำหนด ${gone.length}</span>`:''} · ภายใน 14 วัน ${soon.length}
+    <div class="muted" style="margin-top:4px;font-size:11.5px">${lots.slice(0,4).map(l=>`${esc(l.name)} (${l.qty} ${esc(l.unit)}) ${l.expired?'หมดอายุแล้ว':('เหลือ '+l.daysLeft+' วัน')} — ${l.expiry}`).join(' · ')}${lots.length>4?' …':''}</div></div>`; }
+// ---------- Stock tabs: คลัง · ใบสั่งซื้อ · ผู้ขาย · วางแผน ----------
+window.stkTab=(t)=>{ _stkTab=t;
+  const panes={wh:'stkPaneWh',po:'stkPanePo',sup:'supBox',plan:'planBox'};
+  const tabs={wh:'stkTabWh',po:'stkTabPo',sup:'stkTabSup',plan:'stkTabPlan'};
+  for(const k in panes){ const p=$(panes[k]); if(p) p.style.display=(k===t)?'':'none'; $(tabs[k]).className=(k===t)?'ok':'ghost'; }
+  if(t==='po') renderPoTab(); else if(t==='sup') renderSuppliers(); else if(t==='plan') loadPlan(); };
 // ---------- Stock count (นับสต๊อกเทียบของจริงก่อนสั่งซื้อ) ----------
 window.toggleCount=async()=>{ const box=$('countBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  $('planBox').style.display='none'; $('supBox').style.display='none'; box.style.display=''; renderCountSheet(); };
+  box.style.display=''; renderCountSheet(); };
 function renderCountSheet(){ const box=$('countBox'); const rows=STOCK||[];
   if(!rows.length){ box.innerHTML='<p class="muted" style="font-size:12.5px">ยังไม่มีวัตถุดิบ</p>'; return; }
   box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>นับสต๊อกเทียบของจริง</h2>
@@ -1499,8 +1527,7 @@ window.delSupplier=async(id)=>{ const s=SUPPLIERS.find(x=>x.id===id); if(!s) ret
   try{ await api('/api/suppliers/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:0})});
     SUPPLIERS=(await api('/api/suppliers')).suppliers||[]; renderSuppliers(); }catch(e){ toast(err(e)); } };
 // ---------- Purchase planning (วางแผนสั่งซื้อ) ----------
-window.togglePlan=async()=>{ const box=$('planBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  $('supBox').style.display='none'; $('countBox').style.display='none'; box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณจากการใช้จริง 14 วัน…</p>';
+window.loadPlan=async()=>{ const box=$('planBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณจากการใช้จริง 14 วัน…</p>';
   let d; try{ d=await api('/api/stock/plan'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
   const plan=d.plan||[]; const need=plan.filter(p=>p.suggestQty>0), okRows=plan.filter(p=>!(p.suggestQty>0));
   const dl=(p)=>p.daysLeft==null?'<span class="muted">ยังไม่มีข้อมูลใช้</span>':(p.daysLeft<=3?`<b style="color:var(--danger)">เหลือ ~${p.daysLeft} วัน</b>`:(p.daysLeft<=7?`<b style="color:#b45309">เหลือ ~${p.daysLeft} วัน</b>`:`เหลือ ~${p.daysLeft} วัน`));
@@ -1511,8 +1538,95 @@ window.togglePlan=async()=>{ const box=$('planBox'); if(box.style.display!=='non
   const totalEst=need.reduce((s,p)=>s+(p.estCost||0),0);
   box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผนสั่งซื้อ</h2>
     <div class="muted" style="font-size:11.5px;margin-bottom:8px">คำนวณจากการใช้จริง 14 วันหลัง (ตัดสต๊อกอัตโนมัติ + เบิก) — แนะนำจำนวนให้พอขาย 14 วันข้างหน้า</div>
-    ${need.length?`<div style="margin-bottom:6px;font-size:12.5px"><b>ควรสั่ง ${need.length} รายการ</b>${totalEst?` · งบประมาณ ~฿${Math.round(totalEst)}`:''}</div>`+need.map(row).join(''):'<p class="muted" style="font-size:12.5px">👍 สต๊อกทุกตัวพอสำหรับ 14 วันข้างหน้า (หรือยังไม่มีข้อมูลการใช้)</p>'}
+    ${need.length?`<div class="row between" style="align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px"><span style="font-size:12.5px"><b>ควรสั่ง ${need.length} รายการ</b>${totalEst?` · งบประมาณ ~฿${Math.round(totalEst)}`:''}</span>
+      <button class="ok" style="padding:8px 14px;font-size:13px" onclick="poFromPlan()">สร้างใบสั่งซื้อจากคำแนะนำ</button></div>`+need.map(row).join(''):'<p class="muted" style="font-size:12.5px">👍 สต๊อกทุกตัวพอสำหรับ 14 วันข้างหน้า (หรือยังไม่มีข้อมูลการใช้)</p>'}
     ${okRows.length?`<details style="margin-top:8px"><summary class="muted" style="font-size:12px;cursor:pointer">รายการที่ยังพอ (${okRows.length})</summary>${okRows.map(row).join('')}</details>`:''}`; };
+window.poFromPlan=async()=>{ if(!(await appConfirm({title:'สร้างใบสั่งซื้อ',message:'สร้างใบสั่งซื้อ (ร่าง) จากรายการที่แนะนำทั้งหมด?',okText:'สร้าง'}))) return;
+  try{ const po=await api('/api/purchase-orders/from-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); toast('สร้างใบสั่งซื้อ '+(po.po_no||'')+' แล้ว'); stkTab('po'); poEdit(po.id); }
+  catch(e){ toast(err(e)==='nothing_to_order'?'ไม่มีรายการที่ต้องสั่ง':err(e)); } };
+// ---------- Purchase orders tab (ใบสั่งซื้อ) ----------
+let _poFilter={status:'',supplierId:''};
+const PO_STATUS={draft:['ร่าง','#854f0b','#faeeda'],received:['รับของแล้ว','#0f6e56','#e1f5ee'],cancelled:['ยกเลิก','#a32d2d','#fcebeb']};
+window.renderPoTab=async()=>{ const box=$('stkPanePo'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  const qs=new URLSearchParams(); if(_poFilter.status) qs.set('status',_poFilter.status); if(_poFilter.supplierId) qs.set('supplierId',_poFilter.supplierId);
+  let d; try{ d=await api('/api/purchase-orders'+(qs.toString()?('?'+qs):'')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
+  const orders=d.orders||[];
+  const supOpts='<option value="">ผู้ขายทั้งหมด</option>'+(SUPPLIERS||[]).map(s=>`<option value="${s.id}" ${String(_poFilter.supplierId)===String(s.id)?'selected':''}>${esc(s.name)}</option>`).join('');
+  const statOpts=[['','สถานะทั้งหมด'],['draft','ร่าง'],['received','รับของแล้ว'],['cancelled','ยกเลิก']].map(([v,l])=>`<option value="${v}" ${_poFilter.status===v?'selected':''}>${l}</option>`).join('');
+  box.innerHTML=`<div class="row between" style="align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0">
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <select onchange="_poFilter.status=this.value;renderPoTab()" style="padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px">${statOpts}</select>
+        <select onchange="_poFilter.supplierId=this.value;renderPoTab()" style="padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px">${supOpts}</select>
+      </div>
+      <button class="ok" style="padding:8px 14px;font-size:13px" onclick="poEdit('new')"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>สร้างใบสั่งซื้อ</button>
+    </div>
+    <div id="poEditor"></div>
+    ${orders.length?orders.map(o=>{const st=PO_STATUS[o.status]||['?','#555','#eee'];
+      return `<div class="row between" style="align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1"><b style="color:var(--navy)">${esc(o.po_no||('#'+o.id))}</b>
+          <span style="background:${st[2]};color:${st[1]};font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-left:6px">${st[0]}</span>
+          <div class="muted" style="font-size:11.5px">${esc(o.supplier_name||'ไม่ระบุผู้ขาย')} · ${o.lines} รายการ · ฿${o.total} · ${fmtDT(o.ordered_at)}</div></div>
+        <div class="row" style="gap:6px">
+          <button class="ghost" style="padding:5px 11px;font-size:12px" onclick="poEdit(${o.id})">${o.status==='draft'?'แก้ไข':'ดู'}</button>
+          ${o.status==='draft'?`<button class="ok" style="padding:5px 11px;font-size:12px" onclick="poReceive(${o.id})">รับของ</button>`:''}
+        </div></div>`;}).join(''):'<p class="muted" style="text-align:center;padding:18px 0;font-size:12.5px">ยังไม่มีใบสั่งซื้อ — กด "สร้างใบสั่งซื้อ"</p>'}`; };
+let _poLines=[];   // working lines for the editor: {ingredientId,qty,unitPrice,expiry}
+window.poEdit=async(id)=>{ const box=$('poEditor');
+  let po=null;
+  if(id!=='new'){ try{ po=await api('/api/purchase-orders/'+id); }catch(e){ toast(err(e)); return; } }
+  const editable=!po||po.status==='draft';
+  _poLines = po ? po.lines.map(l=>({ingredientId:l.ingredient_id,qty:l.qty,unitPrice:l.unit_price,expiry:l.expiry||''})) : [];
+  const supOpts='<option value="">— เลือกผู้ขาย —</option>'+(SUPPLIERS||[]).map(s=>`<option value="${s.id}" ${po&&po.supplier_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px">
+    <div class="row between" style="align-items:center;margin-bottom:8px"><b style="color:var(--navy)">${po?esc(po.po_no||('ใบสั่งซื้อ #'+po.id)):'ใบสั่งซื้อใหม่'}</b>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poEditor').innerHTML=''">ปิด</button></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <select id="po_sup" ${editable?'':'disabled'} style="flex:1;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px">${supOpts}</select>
+      <input id="po_note" ${editable?'':'disabled'} placeholder="หมายเหตุ" value="${po?esc(po.note||''):''}" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px">
+    </div>
+    ${editable?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="ghost" style="padding:7px 12px;font-size:12.5px" onclick="poAddLine()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มรายการ</button>
+      <button class="ghost" style="padding:7px 12px;font-size:12.5px" onclick="poScan()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนใบรายการซื้อ (OCR)</button>
+    </div>`:''}
+    <div id="poLinesBox"></div>
+    <div class="row between" style="align-items:center;margin-top:10px"><b id="poTotal">รวม ฿0</b>
+      ${editable?`<div class="row" style="gap:6px"><button class="ghost" style="padding:8px 14px" onclick="poSave(${po?po.id:'null'},false)">บันทึกร่าง</button>
+        <button class="ok" style="padding:8px 14px" onclick="poSave(${po?po.id:'null'},true)">บันทึก + รับของ</button></div>`
+        :`<span style="color:${(PO_STATUS[po.status]||[])[1]};font-weight:700">${(PO_STATUS[po.status]||['',''])[0]}${po.received_at?(' · '+fmtDT(po.received_at)):''}</span>`}
+    </div></div>`;
+  renderPoLines(editable); };
+function ingOpts(sel){ return '<option value="">— วัตถุดิบ —</option>'+(STOCK||[]).map(i=>`<option value="${i.id}" ${sel===i.id?'selected':''}>${esc(i.name)} (${esc(i.unit)})</option>`).join(''); }
+window.poAddLine=()=>{ _poLines.push({ingredientId:0,qty:1,unitPrice:0,expiry:''}); renderPoLines(true); };
+window.poDelLine=(i)=>{ _poLines.splice(i,1); renderPoLines(true); };
+window.poLineSet=(i,f,v)=>{ _poLines[i][f]=(f==='expiry')?v:(f==='ingredientId'?Number(v):Number(v)||0); if(f!=='expiry') poTotalUpd(); };
+function poTotalUpd(){ const t=_poLines.reduce((s,l)=>s+(Number(l.qty)||0)*(Number(l.unitPrice)||0),0); const el=$('poTotal'); if(el) el.textContent='รวม ฿'+(Math.round(t*100)/100); }
+function renderPoLines(editable){ const box=$('poLinesBox'); if(!box) return;
+  if(!_poLines.length){ box.innerHTML='<p class="muted" style="font-size:12px;padding:6px 0">ยังไม่มีรายการ — กด "เพิ่มรายการ" หรือ "สแกนใบรายการซื้อ"</p>'; poTotalUpd(); return; }
+  box.innerHTML=_poLines.map((l,i)=>{ const ing=(STOCK||[]).find(x=>x.id===l.ingredientId);
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px;background:#fff">
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+        ${editable?`<select onchange="poLineSet(${i},'ingredientId',this.value)" style="flex:2;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12.5px">${ingOpts(l.ingredientId)}</select>`
+          :`<b style="flex:2;min-width:130px;font-size:13px">${esc(ing?ing.name:'?')}</b>`}
+        <input type="number" inputmode="decimal" value="${l.qty}" ${editable?'':'disabled'} oninput="poLineSet(${i},'qty',this.value)" placeholder="จำนวน" style="width:74px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;text-align:center">
+        <span class="muted" style="font-size:11px">${ing?esc(ing.unit):''}</span>
+        <span class="muted" style="font-size:12px">×฿</span>
+        <input type="number" inputmode="decimal" value="${l.unitPrice}" ${editable?'':'disabled'} oninput="poLineSet(${i},'unitPrice',this.value)" placeholder="ราคา/หน่วย" style="width:84px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;text-align:center">
+        ${editable?`<button class="ghost danger" style="padding:5px 9px;font-size:12px" onclick="poDelLine(${i})">ลบ</button>`:''}
+      </div>
+      <div class="row" style="gap:6px;align-items:center;margin-top:5px">
+        <span class="muted" style="font-size:11.5px">หมดอายุล็อตนี้</span>
+        <input type="date" value="${l.expiry||''}" ${editable?'':'disabled'} onchange="poLineSet(${i},'expiry',this.value)" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12px">
+      </div></div>`;}).join(''); poTotalUpd(); }
+window.poSave=async(id,receive)=>{ const supplierId=$('po_sup').value||null, note=$('po_note').value.trim()||null;
+  const lines=_poLines.filter(l=>l.ingredientId&&(Number(l.qty)>0));
+  if(!lines.length){ toast('เพิ่มรายการอย่างน้อย 1 รายการ'); return; }
+  try{ const po=await api('/api/purchase-orders'+(id?('/'+id):''),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({supplierId,note,lines})});
+    if(receive){ await poReceive(po.id,true); } else { toast('บันทึกร่างแล้ว'); $('poEditor').innerHTML=''; renderPoTab(); } }
+  catch(e){ toast(err(e)); } };
+window.poReceive=async(id,skipConfirm)=>{ if(!skipConfirm && !(await appConfirm({title:'รับของเข้าสต๊อก',message:'ยืนยันรับของตามใบสั่งซื้อนี้? ระบบจะเพิ่มสต๊อก + อัปเดตต้นทุนเฉลี่ย + บันทึกวันหมดอายุ',okText:'รับของ'}))) return;
+  try{ await api('/api/purchase-orders/'+id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); toast('รับของเข้าสต๊อกแล้ว ✓'); $('poEditor').innerHTML=''; await refreshStock(); loadExpiryBanner(); renderPoTab(); }
+  catch(e){ toast(err(e)==='po_empty'?'ใบสั่งซื้อยังไม่มีรายการ':err(e)); } };
+window.poScan=()=>{ toast('กำลังเตรียมฟังก์ชันสแกน…'); };   // replaced by OCR in the next stage
 // ---------- Purchase price history (ประวัติราคาซื้อ) ----------
 window.showPriceHist=async(id)=>{ const box=$('priceHistBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   let d; try{ d=await api('/api/ingredients/'+id+'/prices'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
