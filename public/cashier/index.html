@@ -33,6 +33,10 @@
   @media (max-width:820px){ .pos-split{ grid-template-columns:1fr; } .pos-bill{ position:static; } }
   /* iPad: use more of the screen width */
   .wrap.wide{ max-width:1280px; }
+  /* Sweetness segmented pills (mirror the customer detail sheet) */
+  .sweetseg{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .sweetseg-b{flex:1;min-width:56px;padding:10px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:14px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;transition:.1s}
+  .sweetseg-b.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 12px -4px var(--accent)}
   /* Bigger menu item images on the cashier order/topping screens (+~10%) */
   #orderCard .menu-grid{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
   #orderCard .menu-btn .mimg{ width:68px; height:68px; }
@@ -547,6 +551,28 @@
     <div class="row between"><h1 style="margin:0">เลือกระดับความหวาน</h1><button class="ghost" style="padding:6px 12px" onclick="abortDrink()" title="ยกเลิกแก้วนี้ เลือกเมนูอื่น">✕</button></div>
     <p class="muted" id="sweetItem" style="margin:3px 0 0;font-size:12px">เลือกความหวานของเครื่องดื่ม</p>
     <div id="sweetBtns" class="menu-grid" style="margin:12px 0"></div>
+  </div>
+</div>
+
+<!-- PRODUCT DETAIL SHEET (single screen — same as customer): ความหวาน (pills incl. 125%) + ท็อปปิ้ง + qty -->
+<div id="csDrinkSheet" onclick="if(event.target===this)csClose()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
+  <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:90vh;overflow:auto;padding:0;position:relative">
+    <button class="ghost" onclick="csClose()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
+    <div id="csImg" style="width:100%;height:148px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
+    <div style="padding:13px 16px 4px">
+      <div id="csName" style="font-weight:800;font-size:18px;color:var(--navy);line-height:1.25"></div>
+      <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
+      <div id="csSweet"></div>
+      <div id="csTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="csTops"></div></div>
+    </div>
+    <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
+      <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
+        <button class="ghost" onclick="csDecQty()" aria-label="ลด" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1">−</button>
+        <b id="csQtyN" style="min-width:16px;text-align:center;font-size:16px;color:var(--navy)">1</b>
+        <button class="ghost" onclick="csIncQty()" aria-label="เพิ่ม" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1;color:var(--accent)">+</button>
+      </div>
+      <button class="ok" onclick="csAdd()" style="flex:1;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:800;padding:14px 16px"><span id="csAddLbl">เพิ่มลงตะกร้า</span><span>฿<span id="csAddAmt">0</span></span></button>
+    </div>
   </div>
 </div>
 
@@ -2324,7 +2350,7 @@ window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); hideAllPanels(); $('dash').style.display='none'; $('orderCard').style.display=''; };   // hideAllPanels closes EVERY admin card (the old hand-written list missed tender/coupon/promo/control)
-window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; _orderCust=null; setEditMode(false); $('dash').style.display=''; };
+window.hideOrder=()=>{ ['orderCard','topPop','sweetPop','csDrinkSheet','basketPop'].forEach(id=>$(id).style.display='none'); _editTicket=null; _orderCust=null; setEditMode(false); $('dash').style.display=''; };
 // "สั่งให้ลูกค้าคนนี้": open a new order tied to a looked-up customer (phone or LINE); optional fav pre-add.
 window.orderForCustomer=async(key,name,favName)=>{
   closeCust();
@@ -2364,8 +2390,39 @@ window.saveEdit=async()=>{
 // Back out of the drink builder entirely (customer changed their mind) — clears the in-progress
 // drink + closes the topping/sweet popups, returning to the menu without adding anything.
 window.abortDrink=()=>{ pendingDrink=null; pendingTops={}; _editEntryIdx=null; $('topPop').style.display='none'; $('sweetPop').style.display='none'; };
-window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); pendingTops={};
-  $('topPopItem').textContent=pendingDrink.name+' · ฿'+pendingDrink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
+// Single detail sheet (same UX as the customer): pick a drink → sweetness pills + toppings + qty on
+// ONE screen, then add. Replaces the old two-popup topping→sweet flow.
+let csSweet=100, csQty=1;
+const CS_SWEET_LABEL={0:'ไม่หวานเลย',25:'หวานน้อย',50:'ปานกลาง',100:'ปกติ',125:'เพิ่มหวาน'};
+const CS_BULKY=['เฉาก๋วย','บุก','บัวลอย'];
+window.pickDrink=(id)=>{ pendingDrink=MENU.find(x=>x.id===id); if(!pendingDrink) return;
+  pendingTops={}; csSweet=100; csQty=1; _editEntryIdx=null; csRender(); $('csDrinkSheet').style.display='flex'; };
+window.csClose=()=>{ $('csDrinkSheet').style.display='none'; pendingDrink=null; pendingTops={}; _editEntryIdx=null; };
+function csCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
+function csRender(){ const d=pendingDrink; if(!d) return;
+  $('csImg').innerHTML=itemImg(d); $('csName').textContent=d.name;
+  $('csSweet').innerHTML='<div class="sweetseg">'+SWEETS.map(s=>`<button type="button" class="sweetseg-b${csSweet===s?' on':''}" onclick="csSetSweet(${s})">${s}%</button>`).join('')+
+    '</div><div class="muted" style="font-size:11.5px;margin-top:6px;text-align:center">'+(CS_SWEET_LABEL[csSweet]||'')+'</div>';
+  const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('csTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
+  $('csTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout;
+    return '<div '+(out?'':'onclick="csTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+csCheck(on)+'</span></div>'; }).join('');
+  csBar(); }
+window.csSetSweet=(s)=>{ csSweet=s; csRender(); };
+window.csTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return;
+  if(pendingTops[id]){ delete pendingTops[id]; csRender(); return; }
+  const names=[...Object.values(pendingTops).map(t=>t.name), m.name];
+  const bulky=names.some(n=>CS_BULKY.some(b=>n.includes(b))); const lim=bulky?2:3;
+  if(names.length>lim){ toast(bulky?'ท็อปปิ้งชิ้นใหญ่ (เฉาก๋วย/บุก/บัวลอย) เลือกได้รวม 2 อย่าง':'เลือกท็อปปิ้งได้สูงสุด 3 อย่าง'); return; }
+  pendingTops[id]={name:m.name,price:m.price,qty:1}; csRender(); };
+window.csIncQty=()=>{ csQty=Math.min(50,csQty+1); csBar(); };
+window.csDecQty=()=>{ csQty=Math.max(1,csQty-1); csBar(); };
+function csUnit(){ let p=pendingDrink?pendingDrink.price:0; Object.values(pendingTops).forEach(t=>p+=t.price*t.qty); return p; }
+function csBar(){ const q=$('csQtyN'); if(q) q.textContent=csQty; const a=$('csAddAmt'); if(a) a.textContent=csUnit()*csQty; const l=$('csAddLbl'); if(l) l.textContent=(_editEntryIdx!=null)?'บันทึกการแก้ไข':'เพิ่มลงตะกร้า'; }
+window.csAdd=()=>{ if(!pendingDrink) return;
+  const entry={ name:pendingDrink.name, price:pendingDrink.price, toppings:Object.values(pendingTops).map(t=>({...t})), sweet:csSweet, qty:csQty };
+  if(_editEntryIdx!=null && cart[_editEntryIdx]){ cart[_editEntryIdx]=entry; _editEntryIdx=null; toast('แก้ไขรายการแล้ว'); }
+  else { cart.push(entry); toast('เพิ่ม '+pendingDrink.name+' แล้ว'); }
+  $('csDrinkSheet').style.display='none'; pendingDrink=null; pendingTops={}; renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} } };
 function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
@@ -2376,8 +2433,8 @@ function renderTopPop(){
   }).join('')+`</div>` : '<p class="muted">ไม่มีท็อปปิ้ง</p>';
 }
 window.togTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(pendingTops[id]) delete pendingTops[id]; else pendingTops[id]={name:m.name,price:m.price,qty:1}; renderTopPop(); };
-// Step 3: sweetness. Skip/Next from toppings opens the sweet picker (default 100%).
-const SWEETS=[0,25,50,100];
+// Sweetness levels — mirror the customer side, incl. 125% (เพิ่มหวาน).
+const SWEETS=[0,25,50,100,125];
 window.skipToppings=()=>{ pendingTops={}; openSweet(); };
 window.confirmDrink=()=>{ openSweet(); };
 function openSweet(){ $('topPop').style.display='none';
@@ -2528,7 +2585,7 @@ window.detailEditOptions=()=>{ const e=cart[_detailIdx]; if(!e) return; const dr
   _editEntryIdx=_detailIdx; $('itemDetailPop').style.display='none';
   pendingDrink=drink; pendingTops={};
   e.toppings.forEach(tp=>{ const m=MENU.find(x=>x.name===tp.name); if(m) pendingTops[m.id]={name:tp.name,price:tp.price,qty:tp.qty}; });
-  $('topPopItem').textContent=drink.name+' · ฿'+drink.price+' · เพิ่มท็อปปิ้ง +฿10 หรือข้ามได้'; renderTopPop(); $('topPop').style.display='flex'; };
+  csSweet=(e.sweet==null?100:e.sweet); csQty=e.qty||1; csRender(); $('csDrinkSheet').style.display='flex'; };
 function renderBasket(){
   const FREE=freeNameSet();
   $('basketList').innerHTML = cart.length ? cart.map((e,i)=>`
