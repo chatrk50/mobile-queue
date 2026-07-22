@@ -412,6 +412,14 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
   note          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_po_lines_po ON purchase_order_lines(po_id);
+-- Coupon scoping: which menu items / categories a coupon applies to. A relational child table
+-- (not the legacy unread applies_to JSON) so pricing can JOIN it. NO rows = whole order.
+CREATE TABLE IF NOT EXISTS coupon_items (
+  coupon_id INTEGER NOT NULL REFERENCES coupons(id),
+  ref_type  TEXT NOT NULL,          -- 'menu_item' | 'category'
+  ref_value TEXT NOT NULL,          -- menu_items.name, or a category name
+  PRIMARY KEY (coupon_id, ref_type, ref_value)
+);
 -- OCR memory: a receipt line's raw text → the ingredient the owner matched it to. Lets the OCR
 -- importer "learn" — next time the same wording appears (any supplier's format) it auto-matches.
 CREATE TABLE IF NOT EXISTS ingredient_aliases (
@@ -565,6 +573,22 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
+  // A wallet coupon becomes an INSTANCE of a campaign (the model every major platform uses):
+  // coupon_id links it back to coupons; state makes claimed→redeemed explicit instead of
+  // inferring it from used_at; source records how it arrived.
+  // Claim campaigns: a link the customer taps to COLLECT the coupon into their wallet. The quota is
+  // consumed at claim time (Shopee/Lazada model) — that is what makes "only 50 available" honest.
+  `ALTER TABLE coupons ADD COLUMN distribution TEXT NOT NULL DEFAULT 'code'`,  // code | claim | auto | issue
+  `ALTER TABLE coupons ADD COLUMN claim_token TEXT`,       // random link token (claim campaigns only)
+  `ALTER TABLE coupons ADD COLUMN issue_limit INTEGER NOT NULL DEFAULT 0`,     // 0 = unlimited claims
+  `ALTER TABLE coupons ADD COLUMN issued_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE coupons ADD COLUMN claim_start TEXT`,       // claim window (separate from the usage window)
+  `ALTER TABLE coupons ADD COLUMN claim_end TEXT`,
+  `ALTER TABLE coupons ADD COLUMN valid_days INTEGER NOT NULL DEFAULT 0`,      // expiry N days AFTER claim; 0 = use expires_at
+  `ALTER TABLE coupons ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'`,       // all | new (first-time customers only)
+  `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
+  `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
+  `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
   `ALTER TABLE stock_moves ADD COLUMN expiry TEXT`,         // purchases only: lot expiry 'YYYY-MM-DD' (→ near-expiry alerts)
   `ALTER TABLE stock_moves ADD COLUMN po_id INTEGER`,       // purchases posted from a purchase order
@@ -608,6 +632,17 @@ for (const stmt of [
 }
 // Index the idempotency token (created after the ALTER so it exists on migrated DBs too).
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_client_token ON tickets(client_token)'); } catch { /* ignore */ }
+// One claim per customer per campaign, enforced by the DATABASE rather than app logic — the only
+// way to win the race when two taps arrive together. Partial so legacy rows (coupon_id NULL,
+// e.g. stamp/birthday gifts issued before campaigns existed) are unaffected.
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_coupons_once
+             ON customer_coupons(coupon_id, customer_key) WHERE coupon_id IS NOT NULL`);
+} catch { /* older SQLite without partial indexes — app-level guard still applies */ }
+// Claim tokens must be unique — SQLite can't add a UNIQUE column via ALTER, so index it after.
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_coupons_claim_token ON coupons(claim_token) WHERE claim_token IS NOT NULL'); } catch { /* ignore */ }
+// Backfill the new state column from the old used_at truth, once.
+try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check

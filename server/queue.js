@@ -369,7 +369,7 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
     let text = msg;
     if (cp) {
       const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d;
-      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'winback', ?, ?, ?)`)
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
         .run(key, cp.label, cp.cap, expiresAt);
       text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
     }
@@ -1645,28 +1645,143 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,audience,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
       c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
-      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0);
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,active=? WHERE id=?`)
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
     .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
       Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
       Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
-      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
+// ---------- Coupon scoping (which menu items a coupon applies to) + audience ----------
+export function couponItems(couponId) {
+  return db.prepare('SELECT ref_type, ref_value FROM coupon_items WHERE coupon_id=? ORDER BY ref_type, ref_value').all(Number(couponId));
+}
+/** Replace a coupon's scope. rows = [{refType:'menu_item'|'category', refValue}]; empty = whole order. */
+export function setCouponItems(couponId, rows = []) {
+  const id = Number(couponId);
+  if (!db.prepare('SELECT 1 FROM coupons WHERE id=?').get(id)) throw new Error('coupon_not_found');
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM coupon_items WHERE coupon_id=?').run(id);
+    const ins = db.prepare('INSERT OR IGNORE INTO coupon_items (coupon_id, ref_type, ref_value) VALUES (?,?,?)');
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      const t = r.refType === 'category' ? 'category' : 'menu_item';
+      const v = String(r.refValue || '').trim().slice(0, 60);
+      if (v) ins.run(id, t, v);
+    }
+  });
+  tx();
+  return couponItems(id);
+}
+/** The ฿ base a scoped coupon discounts: the matching lines only. No scope rows → the whole order.
+ *  lines = [{name, price, qty}]; a drink name may carry a " · หวาน X%" suffix, so match on the base name. */
+function scopedBase(couponId, lines, orderNet) {
+  const scope = couponItems(couponId);
+  if (!scope.length) return { base: orderNet, scoped: false };
+  if (!Array.isArray(lines)) return { base: null, scoped: true };   // caller can't prove eligibility
+  const names = new Set(scope.filter((s) => s.ref_type === 'menu_item').map((s) => s.ref_value));
+  const cats = new Set(scope.filter((s) => s.ref_type === 'category').map((s) => s.ref_value));
+  let base = 0;
+  for (const l of lines) {
+    const bare = String(l.name || '').split(' · ')[0];
+    let hit = names.has(bare);
+    if (!hit && cats.size) {
+      const cat = db.prepare('SELECT category FROM menu_items WHERE name=? LIMIT 1').get(bare)?.category;
+      hit = !!cat && cats.has(cat);
+    }
+    if (hit) base += (Number(l.price) || 0) * (Number(l.qty) || 1);
+  }
+  return { base: r2(Math.min(base, orderNet)), scoped: true };
+}
+/** Audience gate: 'new' campaigns are for customers with no paid order yet (acquisition offers). */
+function audienceOK(coupon, customerKey) {
+  if (!coupon.audience || coupon.audience === 'all') return true;
+  if (!customerKey) return false;                       // can't prove they're new → don't hand it out
+  const paid = db.prepare(
+    `SELECT COUNT(*) n FROM orders o JOIN tickets t ON t.id=o.ticket_id
+      WHERE o.payment_status='paid' AND (t.line_user_id=? OR t.customer_key=?)`
+  ).get(customerKey, customerKey).n;
+  return paid === 0;
+}
+// ---------- Claim campaigns: a link customers tap to COLLECT a coupon into their wallet ----------
+function randToken(n = 18) {
+  const A = 'abcdefghijkmnpqrstuvwxyz23456789';   // no look-alikes; high entropy beats guessable codes
+  let s = ''; for (let i = 0; i < n; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+/** Turn a coupon into a claim campaign (or update its claim settings). Returns the coupon incl. token. */
+export function setCouponClaim(id, { issueLimit = 0, claimStart = null, claimEnd = null, validDays = 0, enable = true } = {}) {
+  const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+  if (!cur) throw new Error('coupon_not_found');
+  if (!enable) { db.prepare("UPDATE coupons SET distribution='code' WHERE id=?").run(id); return db.prepare('SELECT * FROM coupons WHERE id=?').get(id); }
+  const token = cur.claim_token || randToken();
+  const d = (x) => (/^\d{4}-\d{2}-\d{2}$/.test(String(x || '')) ? String(x) : null);
+  db.prepare(`UPDATE coupons SET distribution='claim', claim_token=?, issue_limit=?, claim_start=?, claim_end=?, valid_days=? WHERE id=?`)
+    .run(token, Math.max(0, parseInt(issueLimit) || 0), d(claimStart), d(claimEnd), Math.max(0, parseInt(validDays) || 0), id);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+}
+/** Public view of a claim link — powers the landing page BEFORE the customer taps รับคูปอง. */
+export function claimInfo(token, customerKey = null) {
+  const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
+  if (!c) return { state: 'not_found' };
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const base = {
+    label: c.label, discType: c.disc_type, discValue: c.disc_value, minSpend: c.min_spend,
+    maxDisc: c.max_disc, expiresAt: c.expires_at, validDays: c.valid_days,
+    limit: c.issue_limit, claimed: c.issued_count,
+    remaining: c.issue_limit > 0 ? Math.max(0, c.issue_limit - c.issued_count) : null,
+  };
+  if (customerKey && db.prepare('SELECT 1 FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey)) return { ...base, state: 'already' };
+  if (!c.active) return { ...base, state: 'closed' };
+  if (customerKey && !audienceOK(c, customerKey)) return { ...base, state: 'not_eligible' };
+  if (c.claim_start && today < c.claim_start) return { ...base, state: 'not_started' };
+  if (c.claim_end && today > c.claim_end) return { ...base, state: 'ended' };
+  if (c.expires_at && today > c.expires_at) return { ...base, state: 'ended' };
+  if (c.issue_limit > 0 && c.issued_count >= c.issue_limit) return { ...base, state: 'sold_out' };
+  return { ...base, state: 'claimable' };
+}
+/** Collect the coupon into the customer's wallet. Quota is taken ATOMICALLY, and the unique index
+ *  on (coupon_id, customer_key) is what actually prevents a double claim under concurrency. */
+export function claimCoupon(token, customerKey) {
+  if (!customerKey) throw new Error('no_customer');
+  const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
+  if (!c) return { ok: false, state: 'not_found' };
+  const pre = claimInfo(token, customerKey);
+  if (pre.state !== 'claimable') return { ok: false, state: pre.state, ...pre };
+  // 1) take one unit of the quota — the predicate is evaluated inside the UPDATE, so the last
+  //    unit cannot be handed to two racers.
+  const took = db.prepare(
+    'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
+  ).run(c.id);
+  if (!took.changes) return { ok: false, state: 'sold_out' };
+  // 2) write the wallet row; the UNIQUE index rejects a second claim → hand the quota back.
+  const expiresAt = c.valid_days > 0
+    ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(c.valid_days).d
+    : (c.expires_at || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
+  try {
+    const ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source)
+                             VALUES (?,?, 'claim', ?, ?, ?, 'claim_link')`)
+      .run(customerKey, c.id, c.label, c.disc_type === 'percent' ? (c.max_disc || 0) : c.disc_value, expiresAt).lastInsertRowid;
+    return { ok: true, state: 'claimed', id: Number(ccId), label: c.label, expiresAt };
+  } catch {
+    db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(c.id);
+    return { ok: false, state: 'already' };
+  }
+}
 /** Validate a coupon for a customer + order net → the ONE source of truth (re-run on payment). */
-export function validateCoupon(code, customerKey, orderNet) {
+export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
@@ -1678,10 +1793,16 @@ export function validateCoupon(code, customerKey, orderNet) {
     const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
     if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
   }
-  let disc = c.disc_type === 'percent' ? (orderNet * c.disc_value / 100) : c.disc_value;
+  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น' };
+  // Scoped coupons discount ONLY the matching lines. Without the lines we cannot prove eligibility,
+  // so we refuse rather than risk discounting the whole bill.
+  const { base, scoped } = scopedBase(c.id, lines, orderNet);
+  if (scoped && base == null) return { ok: false, reason: 'ใช้ได้เฉพาะบางเมนู' };
+  if (scoped && base <= 0) return { ok: false, reason: 'ไม่มีเมนูที่ร่วมรายการในตะกร้า' };
+  let disc = c.disc_type === 'percent' ? (base * c.disc_value / 100) : c.disc_value;
   if (c.disc_type === 'percent' && c.max_disc > 0) disc = Math.min(disc, c.max_disc);
-  disc = Math.min(r2(disc), orderNet);
-  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
+  disc = Math.min(r2(disc), base);   // a fixed-baht coupon can never exceed the eligible items' value
+  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable, scoped };
 }
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
 /** Owner policy: a completed stamp card (10 ดวง) is CONVERTED into 1 coupon on the spot — the
@@ -1703,7 +1824,7 @@ export function convertReadyRewards(customerKey) {
       db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
         .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
-      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'reward', ?, 49, ?)`)
+      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, 49, ?, 'reward')`)
         .run(customerKey, reward.name, expiresAt).lastInsertRowid;
     })();
     issued.push({ id: Number(ccId), label: reward.name, expiresAt });
@@ -1719,8 +1840,8 @@ export function customerCoupons(customerKey) {
       ORDER BY expires_at, id`
   ).all(customerKey);
 }
-export function availableCoupons(customerKey, orderNet) {
-  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+export function availableCoupons(customerKey, orderNet, lines = null) {
+  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
@@ -1744,16 +1865,23 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   const existing = Math.max(0, Number(order.discount) || 0);
-  const v = validateCoupon(code, customerKey, order.total);
+  const orderLines = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+  const v = validateCoupon(code, customerKey, order.total, orderLines);
   if (!v.ok) return { ok: false, reason: v.reason };
   if (existing > 0 && !v.stackable) return { ok: false, reason: 'ใช้ร่วมกับส่วนลดอื่นไม่ได้' };
   const couponDisc = Math.min(v.discount, Math.max(0, order.total - existing));
   if (couponDisc <= 0) return { ok: false, reason: 'ไม่มีส่วนลดที่ใช้ได้' };
   const totalDisc = r2(existing + couponDisc);
   const reason = (order.discount_reason ? order.discount_reason + ' + ' : '') + 'คูปอง ' + v.code;
+  // Claim the redemption ATOMICALLY before touching the order. validateCoupon() read used_count a
+  // moment ago; between that read and here another till could have taken the last use. The predicate
+  // is evaluated inside the UPDATE, so two racers can never both take the final redemption.
+  const claimed = db.prepare(
+    'UPDATE coupons SET used_count = used_count + 1 WHERE id=? AND (usage_limit IS NULL OR usage_limit<=0 OR used_count < usage_limit)'
+  ).run(v.couponId);
+  if (!claimed.changes) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
   db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(totalDisc, reason, order.id);
   db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)').run(v.couponId, order.id, customerKey, couponDisc);
-  db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id=?').run(v.couponId);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: couponDisc, actor: null, meta: { coupon: v.code } });
   return { ok: true, discount: couponDisc, totalDiscount: totalDisc, code: v.code };
 }
@@ -2436,7 +2564,7 @@ export function issueBirthdayCoupons() {
   ).all(md, yr);
   const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
   for (const r of rows) {
-    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'birthday', ?, 100, ?)`)
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, 100, ?, 'birthday')`)
       .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
     try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
@@ -3120,7 +3248,11 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   const free = Math.round(Math.min(cc.free_cap, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = (cc.kind === 'birthday' ? '🎂 คูปองวันเกิด: ' : '🎁 คูปองสะสมครบ: ') + cc.label;
-  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=? WHERE id=?`).run(order.id, cc.id);
+  // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
+  // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
+  // already used, instead of the discount being applied twice.
+  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed' WHERE id=? AND used_at IS NULL`).run(order.id, cc.id);
+  if (!burned.changes) throw new Error('coupon_used');
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
   let autoPaid = false;
@@ -3158,7 +3290,7 @@ function returnStockForOrder(order) {
  *  to the ticket's own customer (positive = points given back). */
 function reverseLoyaltyForOrder(orderId, ownerKey) {
   // A coupon spent on this order comes back to the customer when the order is voided.
-  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
+  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
   const moves = db.prepare("SELECT customer_key, kind, points FROM loyalty_moves WHERE order_id=? AND kind IN ('earn','redeem')").all(orderId);
   if (!moves.length) return 0;
   const byKey = {};
