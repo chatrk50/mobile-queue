@@ -487,7 +487,7 @@
       </div>
     </div>
     <div style="background:#fff;border-radius:14px;border:1px solid var(--line);overflow:hidden">
-      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
+      <div id="acctCardRow" class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
         <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
         <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
       </div>
@@ -716,7 +716,7 @@ window.openMember=async()=>{
     $('memberVCard').style.backgroundImage = 'url(/assets/card-'+TIER.key+'.png?v=3)';   // ?v bump busts stale browser cache when art is replaced
     if($('memberBack')) $('memberBack').style.background = TIER.bg;   // back = same tier colour
     $('memberLevel').textContent = TIER.name;
-    $('memberVisits').textContent = visits>=1 ? ('มาแล้ว '+visits+' ครั้ง') : 'สมาชิกใหม่ 🎉';
+    $('memberVisits').textContent = visits>=1 ? ('เจอกันครั้งที่ '+visits+' แล้ว') : 'ยินดีที่ได้รู้จักค่ะ 🎉';
     const nextMin = visits<tcfg.bloomMin ? tcfg.bloomMin : (visits<tcfg.essenceMin ? tcfg.essenceMin : null);
     const nextName = visits<tcfg.bloomMin ? '🌷 BLOOM' : '👑 ESSENCE';
     $('memberNext').textContent = nextMin!=null ? ('อีก '+(nextMin-visits)+' → '+nextName) : '🎉 สูงสุดแล้ว';
@@ -819,7 +819,7 @@ async function doClaim(){
       '<div style="font-size:46px">✅</div>'+
       '<h1 style="margin:6px 0;color:var(--navy)">เช็คอินสำเร็จ!</h1>'+
       '<p class="muted">'+(displayName?('คุณ '+esc(displayName)+' '):'')+'เชื่อมออเดอร์นี้กับ LINE แล้ว</p>'+
-      (visits>=2?('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px;margin:12px 0;color:#c2410c;font-weight:800">★ คุณมาแล้ว '+visits+' ครั้ง · ขอบคุณนะคะ 💛</div>'):'')+
+      (visits>=2?('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px;margin:12px 0;color:#c2410c;font-weight:800">★ ขอบคุณที่แวะมาเป็นครั้งที่ '+visits+' นะคะ 💛</div>'):'')+
       '<p class="muted" style="font-size:13px;margin-top:10px">รับเครื่องดื่มที่เคาน์เตอร์ได้เลยค่ะ</p>'+
       '</div>';
   }catch(e){
@@ -876,9 +876,9 @@ async function loadMemberStrip(){
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
-    // The chip is the door to the account hub (coupons + history live there too), so it stays as long
-    // as EITHER card is on. Only when the owner turns both off does the door disappear.
-    if(conf && conf.memberEnabled===false && !conf.enabled) return;
+    // The chip opens the customer's PROFILE (their details + coupons + order history), which exists
+    // regardless of the two card switches — so it always shows for a LINE customer. Only the cards
+    // themselves are gated, inside the hub.
     let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
     const t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
     const tierEmoji = visits>=t.essenceMin ? '👑' : visits>=t.bloomMin ? '🌷' : '🌱';
@@ -906,7 +906,7 @@ async function loadReorder(){
     FAV=fav;
     const _visits = s.orderCount||0;
     const _greet = s.name ? ('คุณ '+esc(s.name)) : 'ยินดีต้อนรับกลับ';
-    const _vbadge = _visits>=3 ? (' <span style="color:#c2410c">· มาแล้ว '+_visits+' ครั้ง 💛</span>') : '';
+    const _vbadge = _visits>=3 ? (' <span style="color:#c2410c">· เจอกันครั้งที่ '+_visits+' แล้วนะคะ 💛</span>') : '';
     $('reorderHi').innerHTML = _greet + _vbadge + '<br><span style="font-weight:600;font-size:.92em;opacity:.9">วันนี้สั่งเหมือนเดิมไหม?</span>';
     const favNm = (fav.name||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
@@ -1254,7 +1254,7 @@ window.openOrderHistory=async()=>{ if(!lineUserId) return;
 window.closeOrderHistory=()=>{ $('historyLiffCard').style.display='none'; setNavTab('home'); };
 // บัญชี hub: profile summary + a menu list (ประวัติการสั่งซื้อ / บัตรสมาชิก are sub-items reached
 // from here, not the direct destination of the บัญชี nav tab itself).
-window.openAccount=()=>{
+window.openAccount=async()=>{
   closeAllPopups();
   setNavTab('account');
   $('accountPop').style.display='flex';
@@ -1262,6 +1262,12 @@ window.openAccount=()=>{
   const img=$('acctAvatarImg'), fb=$('acctAvatarFallback');
   if(pictureUrl){ img.src=pictureUrl; img.style.display='block'; fb.style.display='none'; }
   else { img.style.display='none'; fb.style.display='block'; }
+  // The profile itself (details, coupons, order history) is always available. Only the card row
+  // depends on the owner's two switches — with both off there is no card to open, so hide the row.
+  const row=$('acctCardRow');
+  if(row){ let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
+    const anyCard = !conf || (conf.memberEnabled!==false) || !!conf.enabled;
+    row.style.display = anyCard ? '' : 'none'; }
 };
 window.closeAccount=()=>{ $('accountPop').style.display='none'; setNavTab('home'); };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
