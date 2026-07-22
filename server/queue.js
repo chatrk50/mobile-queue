@@ -2017,6 +2017,85 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
 // Social proof (owner-toggleable, default OFF): the LIFF shows "วันนี้ขายไปแล้ว N แก้ว" on the home.
+// ---------- PDPA: consent + right to erasure ----------
+// Thai PDPA gives a customer the right to have their personal data deleted. Sales records are a
+// different thing — they are accounting records the shop must keep. So this ANONYMISES rather
+// than deletes: every identifier is stripped, the money stays. Irreversible on purpose.
+export function recordConsent(customerKey) {
+  if (!customerKey) return { ok: false };
+  // A first-time visitor may consent BEFORE they ever order, so there is no customers row yet —
+  // create the shell first, otherwise the consent silently lands nowhere. COALESCE keeps the
+  // ORIGINAL date: re-tapping must never refresh the audit trail.
+  db.prepare('INSERT OR IGNORE INTO customers (line_user_id) VALUES (?)').run(customerKey);
+  db.prepare("UPDATE customers SET consent_at=COALESCE(consent_at, datetime('now')) WHERE line_user_id=?").run(customerKey);
+  return { ok: true, at: db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(customerKey)?.consent_at || null };
+}
+export function consentGiven(customerKey) {
+  if (!customerKey) return false;
+  const r = db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(customerKey);
+  return !!(r && r.consent_at);
+}
+/** Erase one customer's personal data. Returns what was touched so the owner sees it happened. */
+export function forgetCustomer(customerKey) {
+  const key = String(customerKey || '').trim();
+  if (!key) throw new Error('customer_required');
+  const cust = db.prepare('SELECT * FROM customers WHERE line_user_id=?').get(key);
+  const touched = { orders: 0, tickets: 0, coupons: 0, loyaltyMoves: 0, pushLog: 0, customer: 0 };
+  // Count the sales BEFORE cutting the link, so the confirmation can honestly say what survived.
+  touched.orders = db.prepare(
+    'SELECT COUNT(*) n FROM orders o JOIN tickets t ON t.id=o.ticket_id WHERE t.line_user_id=? OR t.customer_key=?'
+  ).get(key, key).n;
+  db.transaction(() => {
+    // The identity lives on the TICKET (orders carry only money). Keep the ticket and its order —
+    // they are the accounting record — but strip every trace of who it was.
+    touched.tickets = db.prepare("UPDATE tickets SET line_user_id=NULL, customer_key=NULL, customer_name='(ลบข้อมูลแล้ว)' WHERE line_user_id=? OR customer_key=?").run(key, key).changes;
+    // Anything that only exists to identify or reward the person goes entirely.
+    touched.coupons = db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(key).changes;
+    touched.loyaltyMoves = db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(key).changes;
+    try { db.prepare('UPDATE coupon_uses SET customer_key=NULL WHERE customer_key=?').run(key); } catch { /* older DB */ }
+    try { touched.pushLog = db.prepare('DELETE FROM push_log WHERE user_id=?').run(key).changes; } catch { /* older DB */ }
+    try { db.prepare('UPDATE customers SET referred_by=NULL WHERE referred_by=?').run(key); } catch { /* older DB */ }
+    touched.customer = db.prepare('DELETE FROM customers WHERE line_user_id=?').run(key).changes;
+  })();
+  return { ok: true, name: cust ? cust.name : null, touched };
+}
+
+// ---------- Online ordering: manual kill switch + offline auto-pause ----------
+// The customer's LIFF talks to this server from THEIR phone, over THEIR data. When the shop's
+// own internet dies, orders keep arriving that nobody at the counter can see — and the cashier
+// cannot press "close" either, because their device has no connection. Two controls:
+//   1. onlineOrders  — an explicit switch: stop taking LINE orders, keep selling at the counter.
+//   2. posOfflineMinutes — a dead-man's switch: if no cashier device has checked in for N minutes
+//      the server pauses LINE ordering BY ITSELF, and resumes the moment a till reappears.
+// 0 minutes = the dead-man's switch is off (default, so nothing changes until the owner opts in).
+export function onlineOrdersEnabled() { return getSetting('online_orders', '1') !== '0'; }
+export function setOnlineOrders(on) { setSetting('online_orders', on ? '1' : '0'); return { onlineOrders: !!on }; }
+export function getPosOfflineMinutes() { return Math.max(0, parseInt(getSetting('pos_offline_minutes', '0'), 10) || 0); }
+export function setPosOfflineMinutes(n) {
+  const v = Math.max(0, Math.min(180, parseInt(n, 10) || 0));
+  setSetting('pos_offline_minutes', String(v));
+  return { posOfflineMinutes: v };
+}
+/** A till checked in. Called on cashier login and on a light periodic ping. */
+export function cashierHeartbeat() {
+  setSetting('pos_last_seen', db.prepare("SELECT datetime('now') t").get().t);
+  return { ok: true };
+}
+export function posLastSeen() { return getSetting('pos_last_seen', null); }
+/** Has every till gone quiet for longer than the configured window? */
+export function posOffline() {
+  const mins = getPosOfflineMinutes();
+  if (!mins) return false;
+  const last = posLastSeen();
+  if (!last) return false;              // never seen a till → don't block sales on a fresh install
+  return db.prepare(`SELECT (? < datetime('now','-${mins} minutes')) AS stale`).get(last).stale === 1;
+}
+/** Why (if at all) customer ordering is closed right now. One place, used by the API and the gate. */
+export function orderingPaused() {
+  if (!onlineOrdersEnabled()) return { paused: true, code: 'online_orders_off', reason: 'ร้านปิดรับออเดอร์ออนไลน์ชั่วคราว' };
+  if (posOffline()) return { paused: true, code: 'pos_offline', reason: 'ร้านออฟไลน์อยู่ — สั่งที่หน้าร้านได้ตามปกติ' };
+  return { paused: false, code: null, reason: null };
+}
 export function socialProofEnabled() { return getSetting('social:enabled', '0') === '1'; }
 export function setSocialProof(on) { setSetting('social:enabled', on ? '1' : '0'); return { social: !!on }; }
 // Count of drinks (base items) sold today across paid, non-void orders (Bangkok day).
@@ -2898,6 +2977,9 @@ export function createOrder(zoneId, items, opts = {}) {
   // selling to walk-ins outside opening hours (owner decision 2026-07: ขายนอกเวลาได้).
   const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
   if (source === 'customer' && _store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
+  // Online ordering switched off, or every till has gone quiet (shop internet down). The counter
+  // keeps selling either way — only the LINE channel closes.
+  if (source === 'customer') { const _p = orderingPaused(); if (_p.paused) throw new Error(_p.code); }
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.

@@ -450,6 +450,57 @@ let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
 ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
 
+// ---- Online-ordering channel: the shop's own internet dying does NOT stop customers ordering
+//      (their LIFF talks to this server from their own data), so there are two ways to close the
+//      channel — a manual switch and a dead-man's switch — and NEITHER may stop counter sales. ----
+console.log('\n== Online-ordering kill switch + offline auto-pause ==');
+const throwsWith = (opts) => { try { const r = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], opts); if (r?.ticket) Q.cancelOrderTicket(r.ticket.id, null, {}); return null; } catch (e) { return e.message; } };
+Q.setOnlineOrders(false);
+ok(Q.orderingPaused().code === 'online_orders_off', 'manual switch reports itself as the reason ordering is paused');
+ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000001' }) === 'online_orders_off', 'INVARIANT switch OFF blocks the LINE customer channel');
+ok(throwsWith({}) === null, 'INVARIANT switch OFF still lets the cashier sell at the counter');
+Q.setOnlineOrders(true);
+ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000002' }) === null, 'INVARIANT switching back on reopens the LINE channel');
+{ // Dead-man's switch: no till has checked in for longer than the window → server pauses by itself.
+  Q.setPosOfflineMinutes(0);
+  ok(Q.posOffline() === false, 'INVARIANT auto-pause is OFF by default (0 minutes = never pauses)');
+  Q.cashierHeartbeat();
+  Q.setPosOfflineMinutes(5);
+  ok(Q.posOffline() === false, 'a till that just checked in keeps the channel open');
+  db.prepare("UPDATE settings SET value=datetime('now','-30 minutes') WHERE key='pos_last_seen'").run();
+  ok(Q.posOffline() === true, 'INVARIANT 30 minutes of silence with a 5-minute window trips the auto-pause');
+  ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000003' }) === 'pos_offline', 'INVARIANT auto-pause blocks LINE orders the shop could not see');
+  ok(throwsWith({}) === null, 'INVARIANT auto-pause NEVER blocks the counter — that is the whole point');
+  Q.cashierHeartbeat();
+  ok(Q.posOffline() === false && throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000004' }) === null, 'INVARIANT the channel reopens by itself as soon as a till checks back in');
+  Q.setPosOfflineMinutes(0);
+}
+
+// ---- PDPA erasure: a customer's personal data must be removable, but the shop's SALES are
+//      accounting records that must survive. Anonymise, never delete the money. ----
+console.log('\n== PDPA: right to erasure (money survives, the person does not) ==');
+{
+  const fk = 'Uforgetme00000000000000000000001';
+  const fo = Q.createOrder(1, [{ name: 'Drink', price: 80, qty: 1 }], { source: 'customer', lineUserId: fk, customerName: 'ลูกค้าทดสอบลบ' });
+  Q.setOrderPaid(fo.ticket.id, { method: 'cash' });
+  const revBefore = Q.dailyReport().revenue;
+  ok(Q.consentGiven(fk) === false, 'a customer who has never tapped the notice shows no consent');
+  Q.recordConsent(fk);
+  ok(Q.consentGiven(fk) === true, 'INVARIANT consent is recorded server-side, not just in the phone');
+  const first = db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(fk).consent_at;
+  Q.recordConsent(fk);
+  ok(db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(fk).consent_at === first, 'INVARIANT re-consenting keeps the ORIGINAL date (the audit trail cannot be refreshed away)');
+  const res = Q.forgetCustomer(fk);
+  ok(res.ok && res.touched.orders >= 1, `erasure reports what it touched (orders ${res.touched.orders})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM customers WHERE line_user_id=?').get(fk).n === 0, 'INVARIANT the customer record is gone');
+  ok(db.prepare('SELECT COUNT(*) n FROM tickets WHERE line_user_id=? OR customer_key=?').get(fk, fk).n === 0, 'INVARIANT no ticket still points at the erased customer');
+  ok(db.prepare('SELECT COUNT(*) n FROM loyalty_moves WHERE customer_key=?').get(fk).n === 0, 'INVARIANT points history is erased with them');
+  ok(near(Q.dailyReport().revenue, revBefore), `INVARIANT revenue is UNCHANGED by an erasure (${revBefore} → ${Q.dailyReport().revenue})`);
+  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE customer_name='(ลบข้อมูลแล้ว)'").get().n >= 1, 'INVARIANT the sale is kept but labelled as anonymised');
+  let noKey = false; try { Q.forgetCustomer(''); } catch (e) { noKey = e.message === 'customer_required'; }
+  ok(noKey, 'INVARIANT erasing with no key is refused (never a mass wipe by accident)');
+}
+
 // ---- Coupon apply: the LIFF picker passes a code; createOrder re-validates SERVER-SIDE, applies the
 //      discount, records the use, and enforces the per-customer limit. ----
 console.log('\n== Coupon apply (server-enforced from the customer order) ==');

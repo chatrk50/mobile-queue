@@ -156,7 +156,7 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), ordering: Q.orderingPaused(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -353,7 +353,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -370,9 +370,27 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoReorder != null) Object.assign(out, Q.setAutoReorder(!!req.body.autoReorder));
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
+    if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// PDPA. The customer records their own consent (public, keyed to a real LINE id); erasure is an
+// owner-only action because it is irreversible and touches accounting records.
+app.post('/api/consent', (req, res) => {
+  const key = String(req.body?.lineUserId || '').trim();
+  if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
+  res.json(Q.recordConsent(key));
+});
+app.post('/api/crm/forget', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.forgetCustomer(req.body?.key)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// A till checking in. Cheap and frequent: it is the signal the dead-man's switch watches.
+app.post('/api/pos/heartbeat', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json({ ...Q.cashierHeartbeat(), ordering: Q.orderingPaused() });
 });
 // Manual "clear stale unpaid orders now" — cashier-triggered; mirrors the background sweep.
 app.post('/api/pending/sweep', (req, res) => {

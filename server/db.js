@@ -567,6 +567,9 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
   `ALTER TABLE customers ADD COLUMN birthday TEXT`,        // 'YYYY-MM-DD' (optional) → birthday free drink
+  // PDPA: when this customer agreed to the shop keeping their details. null = never asked (all
+  // pre-existing customers), so the notice is shown once and recorded from then on.
+  `ALTER TABLE customers ADD COLUMN consent_at TEXT`,
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list

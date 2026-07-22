@@ -100,6 +100,12 @@
   .cphint{ font-size:11px; color:var(--muted); margin-top:7px; }
 </style>
 </head><body>
+<!-- Connection state. navigator.onLine only says "a network exists" — it happily reports online
+     on a wifi that has no route out, which is exactly the market-stall failure. So this is driven
+     by whether the SERVER actually answers. Loud on purpose: a cashier must never tap into a void. -->
+<div id="netBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:#a32d2d;color:#fff;padding:9px 14px;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.2)">
+  ⚠️ ออฟไลน์ — ต่อเน็ตไม่ได้ · ยังบันทึกการขายไม่ได้ กรุณาเช็คสัญญาณก่อนรับเงิน
+</div>
 <div class="wrap wide">
   <div class="row between" style="align-items:flex-start">
     <div class="brand">
@@ -112,6 +118,9 @@
     <div class="row" style="gap:8px;position:relative">
       <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
       <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
+      <!-- Stops LINE orders only; the counter keeps selling. Separate from ร้านเปิด/ปิด on purpose:
+           "ปิดร้าน" is about opening hours, this is about the online channel. -->
+      <button id="onlineBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleOnlineOrders()"></button>
       <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
       <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
       <button id="scanBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตร</button>
@@ -845,10 +854,16 @@
       <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M6 12h.01M18 12h.01"/></svg>รับเงินสด</h1>
       <button class="ghost" style="padding:6px 12px" onclick="cashBack()">✕</button>
     </div>
-    <!-- Hero: amount due -->
-    <div style="text-align:center;padding:8px 0 2px">
-      <div class="muted" style="font-size:13px">ต้องชำระ</div>
-      <div style="font-size:34px;font-weight:800;color:var(--navy);line-height:1.1">฿<span id="cashDue">0</span></div>
+    <!-- Hero: the WHOLE money picture in one block at the top — due, received, change. The cashier
+         taps amounts below and reads the change without their eyes leaving the top of the sheet;
+         before this the change sat under the keypad and moved as the pad opened (owner UX). -->
+    <div style="background:var(--surface,#f1f5f9);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin:8px 0 10px">
+      <div class="row between" style="align-items:baseline"><span class="muted" style="font-size:13px">ต้องชำระ</span>
+        <b style="font-size:30px;font-weight:800;color:var(--navy);line-height:1.15">฿<span id="cashDue">0</span></b></div>
+      <div class="row between" style="align-items:baseline;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+        <span class="muted" style="font-size:13px">รับมา</span><b style="font-size:20px;color:var(--navy)">฿<span id="cashRecvDisp">0</span></b></div>
+      <div class="row between" style="align-items:baseline;margin-top:5px">
+        <span class="muted" style="font-size:13px" id="cashChangeLabel">เงินทอน</span><b id="cashChange" style="font-size:27px;color:#16876f">฿0</b></div>
     </div>
     <!-- PRIMARY: smart quick-cash — exact + the nearest notes above the bill (each shows its change). -->
     <div id="cashQuick" style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0"></div>
@@ -861,12 +876,7 @@
         <button class="ckey" onclick="cashKey('0')">0</button><button class="ckey" onclick="cashKey('00')">00</button><button class="ckey" style="color:var(--danger)" onclick="cashClear()" aria-label="ลบ">⌫</button>
       </div>
     </div>
-    <button class="ghost" id="cashToggle" style="width:100%;padding:8px;font-size:13px;font-weight:700;color:#0e7c93" onclick="toggleCashPad()">ระบุจำนวนเอง</button>
-    <!-- Received + change -->
-    <div style="background:var(--surface,#f1f5f9);border-radius:13px;padding:12px 16px;margin:8px 0 12px">
-      <div class="row between" style="align-items:baseline"><span class="muted" style="font-size:14px">รับมา</span><b style="font-size:20px;color:var(--navy)">฿<span id="cashRecvDisp">0</span></b></div>
-      <div class="row between" style="align-items:baseline;margin-top:6px"><span class="muted" style="font-size:14px" id="cashChangeLabel">เงินทอน</span><b id="cashChange" style="font-size:25px;color:#16876f">฿0</b></div>
-    </div>
+    <button class="ghost" id="cashToggle" style="width:100%;padding:8px;font-size:13px;font-weight:700;color:#0e7c93;margin-bottom:12px" onclick="toggleCashPad()">ระบุจำนวนเอง</button>
     <button class="ok" id="cashConfirmBtn" style="width:100%;min-height:54px;font-size:17px" onclick="confirmCash()">ยืนยันรับเงิน</button>
   </div>
 </div>
@@ -1123,8 +1133,13 @@ document.addEventListener('click',(e)=>{ const m=$('adminMenu'); if(!m||m.style.
 });
 async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
-  const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
+  let r;
+  // A rejected fetch means the request never reached the server — that is the offline signal, and
+  // every call is a probe, so the banner appears on the FIRST failed action, not at the next tick.
+  try{ r=await fetch(path,opts); }catch(e){ setNet(false); throw new Error('offline'); }
+  setNet(true);
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
+function err(e){ const m={offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -1195,11 +1210,14 @@ window.login=async()=>{
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; }
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
+    startHeartbeat();
     await loadMenu(); await boot();
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
+  stopHeartbeat(); { const ob=$('onlineBtn'); if(ob) ob.style.display='none'; }
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
@@ -2114,15 +2132,58 @@ function renderCash(){
     ${s.payOut?`<div class="row between" style="margin-top:6px"><span>จ่ายออก (pay-out)</span><b style="color:var(--danger)">−${baht2(s.payOut)}</b></div>`:''}
     <div class="row between" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;font-size:18px"><b>เงินสดที่ควรมี</b><b>${baht2(s.expectedCash)}</b></div></div>
   <div style="margin-top:14px;border:1px solid var(--line);border-radius:14px;padding:16px">
-    <div class="row" style="gap:8px;align-items:center"><span>นับเงินจริง ฿</span>
-      <input id="countedInp" type="number" inputmode="decimal" placeholder="0" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px"></div>
+    <div class="row between" style="align-items:center"><b style="font-size:14px">นับเงินในลิ้นชัก</b>
+      <button class="ghost" style="padding:5px 12px;font-size:12px" onclick="toggleDenom()"><span id="denomToggleTxt">นับแยกใบ/เหรียญ</span></button></div>
+    <!-- Counting sheet. A single total tells you money is missing but never where; counting by
+         note tells you "one 500 short" and that is a lead you can actually follow. Optional —
+         the plain total box still works for anyone who just wants to type a number. -->
+    <div id="denomBox" style="display:none;margin-top:10px"></div>
+    <div class="row" style="gap:8px;align-items:center;margin-top:10px"><span>รวมนับได้จริง ฿</span>
+      <input id="countedInp" type="number" inputmode="decimal" placeholder="0" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px" oninput="denomManual()"></div>
+    <div id="denomDiff" class="muted" style="font-size:12px;margin-top:6px"></div>
     <input id="cashNote" placeholder="หมายเหตุ (ไม่บังคับ)" style="width:100%;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px">
     <button class="danger" style="width:100%;margin-top:10px;padding:12px" onclick="closeDrawer()">ปิดรอบ & นับเงิน</button></div>`;
+  _denomOn=false; _denom={}; renderDenom();
 }
+// Thai notes and coins, largest first — the order you actually stack them in a drawer.
+const DENOMS=[1000,500,100,50,20,10,5,2,1];
+let _denomOn=false, _denom={};
+window.toggleDenom=()=>{ _denomOn=!_denomOn; renderDenom();
+  if(!_denomOn){ const t=$('denomToggleTxt'); if(t) t.textContent='นับแยกใบ/เหรียญ'; } };
+function denomTotal(){ return DENOMS.reduce((s,d)=>s+d*(Number(_denom[d])||0),0); }
+window.denomSet=(d,v)=>{ _denom[d]=Math.max(0,Math.floor(Number(v)||0)); const t=denomTotal();
+  $('countedInp').value=t?String(t):''; renderDenomTotals(); denomManual(); };
+function renderDenom(){ const box=$('denomBox'), t=$('denomToggleTxt'); if(!box) return;
+  box.style.display=_denomOn?'':'none'; if(t) t.textContent=_denomOn?'ซ่อนการนับแยก':'นับแยกใบ/เหรียญ';
+  if(!_denomOn){ box.innerHTML=''; return; }
+  box.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px">`
+    +DENOMS.map(d=>`<div class="row" style="gap:6px;align-items:center;background:var(--surface);border-radius:10px;padding:6px 9px">
+        <span style="width:44px;font-weight:800;color:var(--navy);font-size:13px">฿${d}</span>
+        <input type="number" inputmode="numeric" min="0" value="${_denom[d]||''}" placeholder="0" oninput="denomSet(${d},this.value)"
+          style="width:56px;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:13px;text-align:right">
+        <span class="muted" style="font-size:11px;flex:1;text-align:right" id="dsub_${d}">${_denom[d]?baht2(d*_denom[d]):''}</span></div>`).join('')
+    +`</div><div class="row between" style="margin-top:8px;font-size:13px"><span class="muted">รวมจากการนับแยก</span><b id="denomSum">${baht2(denomTotal())}</b></div>`;
+}
+function renderDenomTotals(){ DENOMS.forEach(d=>{ const el=$('dsub_'+d); if(el) el.textContent=_denom[d]?baht2(d*_denom[d]):''; });
+  const s=$('denomSum'); if(s) s.textContent=baht2(denomTotal()); }
+// Live over/short preview so the shortfall is visible BEFORE the round is closed, not after.
+window.denomManual=()=>{ const out=$('denomDiff'); if(!out||!CASH||!CASH.expectedCash&&CASH.expectedCash!==0) return;
+  const c=Number($('countedInp').value); if(!($('countedInp').value!=='')||!(c>=0)){ out.textContent=''; return; }
+  const diff=Math.round((c-CASH.expectedCash)*100)/100;
+  out.innerHTML=diff===0?'<b style="color:#16a34a">พอดีกับที่ควรมี ✓</b>'
+    :(diff>0?`<b style="color:#16a34a">เกิน ${baht2(diff)}</b> จากที่ควรมี ${baht2(CASH.expectedCash)}`
+           :`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(diff))}</b> จากที่ควรมี ${baht2(CASH.expectedCash)}`); };
 window.openDrawer=async()=>{ const f=Number($('openFloatInp').value)||0; try{ await api('/api/cash/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({openFloat:f})}); toast('เปิดรอบแล้ว'); loadCash(); }catch(e){ toast(err(e)==='session_already_open'?'มีรอบที่เปิดอยู่แล้ว':err(e)); } };
 window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(counted>=0)){ toast('ใส่จำนวนเงินที่นับได้'); return; }
-  if(!(await appConfirm({title:'ปิดรอบเงินสด',message:'ปิดรอบและบันทึกการนับเงิน?',okText:'ปิดรอบ'}))) return;
-  try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note:$('cashNote').value.trim()})}); renderCashResult(r);
+  // Keep the breakdown with the round: three weeks later "ขาด ฿500" means nothing, but
+  // "1000×2 500×1 100×3 …" lets the owner see which note never made it into the drawer.
+  const brk=_denomOn?DENOMS.filter(d=>_denom[d]>0).map(d=>d+'×'+_denom[d]).join(' '):'';
+  const note=[$('cashNote').value.trim(), brk?('นับแยก: '+brk):''].filter(Boolean).join(' · ');
+  const diff=Math.round((counted-(CASH?CASH.expectedCash:0))*100)/100;
+  if(!(await appConfirm({title:'ปิดรอบเงินสด',
+    message:'นับได้ '+baht2(counted)+' · ควรมี '+baht2(CASH?CASH.expectedCash:0)+'\n'+(diff===0?'พอดี ✓':(diff>0?('เกิน '+baht2(diff)):('ขาด '+baht2(Math.abs(diff)))))+(brk?('\n\nนับแยก: '+brk):''),
+    okText:'ปิดรอบ',danger:diff<0}))) return;
+  try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note})}); renderCashResult(r);
     try{ CASHHIST=await api('/api/cash/history'); renderCashHist(); }catch(e){ /* history refresh is best-effort */ } }catch(e){ toast(err(e)); } };
 function renderCashResult(r){
   const z=r.zreport||{}; const os=r.overShort;
@@ -2152,6 +2213,47 @@ window.toggleStore=async()=>{ if(!STORE) return; const next=STORE.is_open!==0?0:
     STORE.is_open=next; renderStoreBtn(); toast(next?'เปิดร้านแล้ว':'ปิดร้านแล้ว');
   }catch(e){ toast(err(e)); } };
 
+// ---------- Online-ordering channel (LINE) — separate from the shop's opening hours ----------
+// The customer's LIFF reaches the server over THEIR data, so the shop's own internet going down
+// does NOT stop orders arriving — it only stops the till from seeing them. Hence two things:
+// this manual switch, and the server-side dead-man's switch fed by posHeartbeat() below.
+let ONLINE_ON=true;
+function renderOnlineBtn(){ const b=$('onlineBtn'); if(!b) return;
+  b.className=ONLINE_ON?'ghost':'';
+  b.style.background=ONLINE_ON?'transparent':'var(--danger)';
+  b.style.color=ONLINE_ON?'var(--navy)':'#fff';
+  b.innerHTML=ONLINE_ON
+    ? '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14 0M8.5 16.1a6 6 0 0 1 7 0M2 8.8a16 16 0 0 1 20 0"/><path d="M12 20h.01"/></svg>รับออนไลน์'
+    : '<svg class="ic" viewBox="0 0 24 24"><path d="M2 2l20 20"/><path d="M8.5 16.1a6 6 0 0 1 7 0M5 12.55a11 11 0 0 1 5-2.4M16.7 11.1a11 11 0 0 1 2.3 1.45M2 8.8a16 16 0 0 1 6-3.5M12 20h.01"/></svg>ปิดรับออนไลน์'; }
+window.toggleOnlineOrders=async()=>{ const next=!ONLINE_ON;
+  if(!(await appConfirm({ title:next?'เปิดรับออเดอร์ออนไลน์':'ปิดรับออเดอร์ออนไลน์',
+    message:next?'ให้ลูกค้าสั่งผ่าน LINE ได้อีกครั้ง?':'ลูกค้าจะสั่งผ่าน LINE ไม่ได้ชั่วคราว\nแคชเชียร์ยังกดขายหน้าร้านได้ตามปกติ',
+    okText:next?'เปิดรับ':'ปิดรับ', danger:!next }))) return;
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({onlineOrders:next})});
+    ONLINE_ON=next; renderOnlineBtn(); toast(next?'เปิดรับออเดอร์ออนไลน์แล้ว':'ปิดรับออเดอร์ออนไลน์แล้ว · ขายหน้าร้านได้ปกติ');
+  }catch(e){ toast(err(e)); } };
+// Heartbeat: proves a till is alive. If it stops (shop internet down, iPad asleep) and the owner
+// set an auto-pause window, the SERVER closes the LINE channel by itself — no one has to press
+// anything, and it reopens on its own the moment a till checks in again.
+let _hbTimer=null, _netOk=true;
+// The heartbeat doubles as the connectivity probe: it is a real round-trip to OUR server, so it
+// catches the case navigator.onLine misses — connected to wifi that has no route to the internet.
+function setNet(ok){ if(_netOk===ok) return; _netOk=ok;
+  const b=$('netBar'); if(b) b.style.display=ok?'none':'';
+  document.body.style.paddingTop=ok?'':'38px';
+  if(!ok) toast('⚠️ ต่อเน็ตไม่ได้ — ยังบันทึกการขายไม่ได้'); else toast('✅ กลับมาออนไลน์แล้ว'); }
+window.netOnline=()=>_netOk;
+function posHeartbeat(){ api('/api/pos/heartbeat',{method:'POST'}).then(r=>{
+    setNet(true);
+    if(r&&r.ordering) { const on=!r.ordering.paused||r.ordering.code!=='online_orders_off'; if(ONLINE_ON!==on){ ONLINE_ON=on; renderOnlineBtn(); } }
+  }).catch(e=>{ if(e&&e.message==='offline') setNet(false); }); }   // a 401/500 means the server ANSWERED — that is not "offline"
+function startHeartbeat(){ if(_hbTimer) return; posHeartbeat(); _hbTimer=setInterval(posHeartbeat,30000); }
+function stopHeartbeat(){ if(_hbTimer){ clearInterval(_hbTimer); _hbTimer=null; } setNet(true); }
+// Re-probe the moment the OS says something changed or the till is picked back up — waiting up to
+// 30s to notice you are back online is fine; waiting 30s to notice you are OFFLINE is not.
+addEventListener('offline',()=>setNet(false));
+addEventListener('online',()=>posHeartbeat());
+addEventListener('visibilitychange',()=>{ if(!document.hidden && _hbTimer) posHeartbeat(); });
 const money=(n)=>'฿'+Math.round(n||0).toLocaleString();
 const pctf=(n)=>((n||0)*100).toFixed(1)+'%';
 
@@ -3496,6 +3598,15 @@ window.showFeatures=async()=>{
       </div>
       <div id="pushRangeBox" style="width:100%"></div>
     </div>`:'')+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.shield}</span><div><b>ปิดรับออเดอร์ออนไลน์อัตโนมัติเมื่อเครื่องแคชเชียร์เงียบ</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ลูกค้าสั่งผ่านเน็ตของตัวเอง — เน็ตที่ร้านล่มก็ยังสั่งเข้ามาได้ แต่ไม่มีใครเห็น
+        ตั้งเวลาไว้ ถ้าไม่มีเครื่องแคชเชียร์เช็คอินเกินกำหนด ระบบจะ<b>ปิดรับออนไลน์ให้เอง</b> และเปิดคืนทันทีที่เครื่องกลับมา · ขายหน้าร้านไม่กระทบ
+        ${f.posLastSeen?`<br>เครื่องล่าสุดเช็คอิน: <b>${fmtDT(f.posLastSeen)}</b>`:''}</div></div></div>
+      <div class="row" style="gap:8px;align-items:center;width:100%"><input id="posOffInp" type="number" inputmode="numeric" min="0" max="180" value="${f.posOfflineMinutes!=null?f.posOfflineMinutes:0}" style="width:90px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span class="muted" style="font-size:13px">นาที (0 = ปิดใช้ · แนะนำ 5)</span>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="savePosOffline()">บันทึก</button></div>
+      ${f.ordering&&f.ordering.paused?`<div style="width:100%;background:#fcebeb;color:#a32d2d;border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:700">ตอนนี้ปิดรับออนไลน์อยู่ — ${esc(f.ordering.reason)}</div>`:''}
+    </div>`+
     `<div class="muted" style="font-size:12px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px">เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
     `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start;color:var(--danger)"><span style="flex:none">${IC.trash}</span><div><b style="color:var(--danger)">ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
@@ -3519,6 +3630,9 @@ window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerLineId:id})}); toast('บันทึก LINE เจ้าของแล้ว'); }catch(e){ toast(err(e)); } };
 window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
+window.savePosOffline=async()=>{ const m=Math.max(0,Math.min(180,Math.floor(Number($('posOffInp').value)||0)));
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({posOfflineMinutes:m})});
+    toast(m?('ปิดรับออนไลน์เองเมื่อเครื่องเงียบเกิน '+m+' นาที'):'ปิดการปิดรับอัตโนมัติแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 window.sweepPending=async()=>{ if(!(await appConfirm({title:'เคลียร์ค้างชำระ',message:'ยกเลิกออเดอร์ที่ค้างชำระเกินเวลาทั้งหมดตอนนี้?',okText:'ยกเลิกทั้งหมด',danger:true}))) return;
   try{ const r=await api('/api/pending/sweep',{method:'POST'}); toast(r.voided?('เคลียร์ค้างชำระ '+r.voided+' รายการ'):'ไม่มีรายการค้างเกินเวลา'); }catch(e){ toast(err(e)); } };
 window.testOwnerSummary=async()=>{
@@ -3763,10 +3877,22 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
       <span style="text-align:right;font-size:12.5px;font-weight:700">฿${c.spend}</span>
       <span style="text-align:right;font-size:11.5px" class="muted">${last}</span>
       <span style="text-align:right;font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
-      <span style="text-align:right;font-size:12px">${rating}</span>
+      <span style="text-align:right;font-size:12px">${rating}${ME&&ME.role!=='owner'?'':`<button class="ghost" title="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" onclick="clForget('${c.key}','${esc((c.name||'').replace(/'/g,''))}')" style="padding:0 5px;font-size:11px;margin-left:6px;color:var(--muted);border:0;background:transparent">🗑</button>`}</span>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+((_clQ||_clFOn())?'ไม่พบลูกค้าที่ตรงกับตัวกรอง':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>';
   if(fkey){ const el=$('clList').querySelector('[data-f="'+fkey+'"]'); if(el){ el.focus(); if(fpos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(fpos,fpos); }catch(e){} } } } }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
+// PDPA right-to-erasure. Anonymises the person; the SALES stay, because those are the shop's own
+// accounting records. Two-step confirm because it cannot be undone.
+window.clForget=async(key,name)=>{
+  if(!(await appConfirm({title:'ลบข้อมูลส่วนตัวของลูกค้า',
+    message:'ลบชื่อ · LINE · เบอร์ · แต้ม · คูปอง ของ "'+(name||'ลูกค้ารายนี้')+'"\n\nยอดขายเดิมยังอยู่ครบ (เป็นเอกสารทางบัญชี) แต่จะไม่ผูกกับตัวบุคคลอีกต่อไป\n\nใช้เมื่อลูกค้าขอใช้สิทธิ์ตาม PDPA · ย้อนกลับไม่ได้',
+    okText:'ดำเนินการต่อ',danger:true}))) return;
+  const c=await appPrompt({title:'ยืนยันครั้งสุดท้าย',message:'พิมพ์  DELETE  เพื่อยืนยัน',placeholder:'DELETE',okText:'ลบข้อมูล'});
+  if(c!=='DELETE'){ toast('ยกเลิก — ไม่ได้ลบข้อมูล'); return; }
+  try{ const r=await api('/api/crm/forget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    toast('ลบข้อมูลส่วนตัวแล้ว · ยอดขาย '+(r.touched?.orders||0)+' รายการยังอยู่ครบ');
+    _clSel.delete(key); showCustomers(); }
+  catch(e){ toast(err(e)==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':err(e)); } };
 window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all=rows.every(c=>_clSel.has(c.key));
   rows.forEach(c=>{ if(all) _clSel.delete(c.key); else _clSel.add(c.key); }); $('clSelN').textContent=_clSel.size; renderCustList(); };
 window.clSendCampaign=async()=>{
