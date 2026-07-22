@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText } from './line.js';
+import { pushQueue, pushText, pushStage } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -118,11 +118,8 @@ export function callNext(zoneId, threshold) {
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
-  pushQueue(next.line_user_id,
-    `🔔 ถึงคิวของคุณแล้ว!\n` +
-    `หมายเลข: ${next.code}\n` +
-    `กรุณามาที่เคาน์เตอร์ค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน', 'queue');
+  pushStage(next.line_user_id, { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+    subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -140,9 +137,8 @@ export function markReady(ticketId, threshold) {
   if (o && o.payment_status !== 'paid') return { ok: false, reason: 'unpaid', zoneId: t.zone_id };   // pay-first: don't announce ready before payment
   db.prepare("UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?").run(ticketId);
   if (t.number > 0) db.prepare('UPDATE zones SET last_called=? WHERE id=?').run(t.number, t.zone_id);
-  if (t.line_user_id) pushQueue(t.line_user_id,
-    `🔔 เครื่องดื่มของคุณพร้อมรับแล้ว!\nหมายเลข: ${t.code}\nเชิญรับที่เคาน์เตอร์ได้เลยค่ะ`,
-    queueLink(t.zone_id), 'ดูคิวของฉัน');
+  if (t.line_user_id) pushStage(t.line_user_id, { stage: 3, title: 'เครื่องดื่มพร้อมรับแล้ว!', code: t.code,
+    subtitle: 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true, zoneId: t.zone_id };
 }
@@ -189,12 +185,8 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     const ahead = idx; // position in the ordered waiting list
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
-      pushQueue(t.line_user_id,
-        `⏰ ใกล้ถึงคิวของคุณแล้ว!\n` +
-        `หมายเลข: ${t.code}\n` +
-        `คิวรอก่อนหน้า: ${ahead}\n` +
-        `กรุณากลับมาที่ร้านค่ะ`,
-        queueLink(zoneId), 'ดูคิวของฉัน');
+      pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
+        subtitle: `คิวรอก่อนหน้า: ${ahead} · กรุณากลับมาที่ร้านค่ะ`, link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
     }
   });
 }
@@ -227,6 +219,39 @@ const FIN_KEYS = {
   supplies: ['FIN_SUPPLIES', 0],
   marketing: ['FIN_MARKETING', 0],
   targetRevenue: ['FIN_TARGET_REVENUE', 0],       // monthly target; 0 = no target/variance
+  // --- Full P&L expense set (owner asked for every line a normal set of accounts carries).
+  // All default to 0, so adding them changes NOTHING until the owner fills one in. Monthly ฿
+  // unless noted; each is prorated by daysPerMonth exactly like rent/wages already were.
+  freight: ['FIN_FREIGHT', 0],                    // COGS: ค่าขนส่ง/ค่าเดินทางไปซื้อวัตถุดิบ (freight-in)
+  staffBenefits: ['FIN_STAFF_BENEFITS', 0],       // Payroll: ประกันสังคม/สวัสดิการ/โบนัส
+  commonFee: ['FIN_COMMON_FEE', 0],               // Occupancy: ค่าส่วนกลาง/ที่จอดรถ/ค่าเช่าอุปกรณ์
+  payFees: ['FIN_PAY_FEES', 0],                   // Selling: ค่าธรรมเนียมรับชำระ (QR/บัตร) — คอมแพลตฟอร์มคิดแยกรายช่องทาง
+  repairs: ['FIN_REPAIRS', 0],                    // Other: ซ่อมบำรุง/ทำความสะอาด
+  software: ['FIN_SOFTWARE', 0],                  // Other: อินเทอร์เน็ต/โทรศัพท์/ซอฟต์แวร์ (POS, LINE OA)
+  insurance: ['FIN_INSURANCE', 0],                // Other: ประกันภัย
+  proFees: ['FIN_PRO_FEES', 0],                   // Other: ค่าบัญชี/ค่าธรรมเนียมธนาคาร
+  licenses: ['FIN_LICENSES', 0],                  // Other: ภาษีป้าย/ใบอนุญาต/ค่าธรรมเนียมราชการ
+  depreciation: ['FIN_DEPRECIATION', 0],          // below EBITDA: ค่าเสื่อมราคาอุปกรณ์/ตกแต่ง
+  interest: ['FIN_INTEREST', 0],                  // below EBIT: ดอกเบี้ยจ่ายเงินกู้
+  taxPct: ['FIN_TAX_PCT', 0],                     // 0.20 = 20% ภาษีเงินได้ (คิดเฉพาะเมื่อกำไรก่อนภาษี > 0)
+};
+// Operating-expense lines grouped the way an accountant reads a P&L. Anything NOT here
+// (depreciation / interest / tax) sits BELOW the operating line on purpose.
+export const OPEX_GROUPS = [
+  ['payroll',   'บุคลากร',            ['wages', 'staffBenefits']],
+  ['occupancy', 'สถานที่',            ['rent', 'utilities', 'commonFee']],
+  ['selling',   'การขาย / การตลาด',   ['marketing', 'payFees']],
+  ['other',     'ดำเนินงานอื่น ๆ',    ['supplies', 'repairs', 'software', 'insurance', 'proFees', 'licenses']],
+];
+export const FIN_LABELS = {
+  ingredientPct: 'วัตถุดิบ % ของยอดขาย', packagingPerCup: 'แพ็กเกจ ฿/แก้ว', freight: 'ค่าขนส่งวัตถุดิบ',
+  daysPerMonth: 'วันขาย / เดือน', targetRevenue: 'เป้ายอดขาย / เดือน',
+  wages: 'ค่าแรงพนักงาน', staffBenefits: 'ประกันสังคม / สวัสดิการ / โบนัส',
+  rent: 'ค่าเช่าที่', utilities: 'ค่าไฟ / ค่าน้ำ / น้ำแข็ง', commonFee: 'ค่าส่วนกลาง / เช่าอุปกรณ์',
+  marketing: 'การตลาด / โฆษณา', payFees: 'ค่าธรรมเนียมรับชำระ (QR/บัตร)',
+  supplies: 'วัสดุสิ้นเปลือง', repairs: 'ซ่อมบำรุง / ทำความสะอาด', software: 'เน็ต / โทรศัพท์ / ซอฟต์แวร์',
+  insurance: 'ประกันภัย', proFees: 'ค่าบัญชี / ค่าธรรมเนียมธนาคาร', licenses: 'ภาษีป้าย / ใบอนุญาต',
+  depreciation: 'ค่าเสื่อมราคาอุปกรณ์', interest: 'ดอกเบี้ยจ่าย', taxPct: 'ภาษีเงินได้ %',
 };
 // Per-branch costs are namespaced fin_<branchId>_<key>; a branch value falls back to
 // the global fin_<key>, then env, then the default. branchId null = global settings.
@@ -492,29 +517,60 @@ export function dailyReport(branchId = null, dateStr = null) {
 
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings(branchId);
+  const perDay = (monthly) => (f.daysPerMonth > 0 ? monthly / f.daysPerMonth : monthly);
   const ingredient = f.ingredientPct * revenue;
   const packaging = f.packagingPerCup * cups;
-  const cogs = ingredient + packaging;
+  const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
+  const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
   // Waste = product made then discarded: its ingredient+packaging is spent but earns nothing.
   // A real cost with no revenue → it reduces net profit (separate from sold-goods COGS).
   const wasteCost = Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
   voided.waste.cost = wasteCost;
-  const monthlyOpex = f.rent + f.wages + f.utilities + f.supplies + f.marketing;
-  const dailyOpex = f.daysPerMonth > 0 ? monthlyOpex / f.daysPerMonth : monthlyOpex;
-  const netProfit = grossProfit - dailyOpex - wasteCost;
+  // Operating expenses, grouped. Depreciation / interest / tax deliberately sit BELOW this line
+  // so the report can show EBITDA → EBIT → กำไรก่อนภาษี → กำไรสุทธิ like a real set of accounts.
+  const opexKeys = OPEX_GROUPS.flatMap(([, , keys]) => keys);
+  const monthlyOpex = opexKeys.reduce((s, k) => s + f[k], 0);
+  const opexLines = Object.fromEntries(opexKeys.map((k) => [k, f[k]]));
+  // Time clock: if anyone actually clocked a shift on this day, the wage line stops being a guess.
+  // We swap the prorated ค่าแรง for what the day really cost and record the difference, so the
+  // owner can see "จ้างเกินแผน ฿420" instead of the plan quietly hiding it. No shifts = no change.
+  const labor = laborActual(validDay ? dateStr : null);
+  const wagesPlanDaily = perDay(f.wages);
+  const laborVariance = labor.cost > 0 ? Math.round((labor.cost - wagesPlanDaily) * 100) / 100 : 0;
+  const dailyOpex = perDay(monthlyOpex) + laborVariance;   // no rounding: with no shifts this must stay bit-identical to the plan
+  const opexGroups = OPEX_GROUPS.map(([key, label, keys]) => {
+    const daily = (k) => (k === 'wages' && labor.cost > 0 ? labor.cost : perDay(f[k]));
+    const lbl = (k) => (k === 'wages' && labor.cost > 0 ? `${FIN_LABELS[k]} (ลงเวลาจริง ${labor.hours} ชม.)` : FIN_LABELS[k]);
+    return {
+      key, label, monthly: keys.reduce((s, k) => s + f[k], 0),
+      daily: keys.reduce((s, k) => s + daily(k), 0),
+      lines: keys.filter((k) => f[k] > 0 || daily(k) > 0)
+        .map((k) => ({ key: k, label: lbl(k), monthly: f[k], daily: daily(k) })),
+    };
+  });
+  const ebitda = grossProfit - wasteCost - dailyOpex;
+  const depreciation = perDay(f.depreciation);
+  const ebit = ebitda - depreciation;
+  const interest = perDay(f.interest);
+  const preTax = ebit - interest;
+  const taxRate = Math.max(0, Math.min(0.5, f.taxPct > 1 ? f.taxPct / 100 : f.taxPct)); // accepts 20 or 0.20
+  const incomeTax = preTax > 0 ? preTax * taxRate : 0;   // no tax on a loss
+  const netProfit = preTax - incomeTax;
   // Break-even: how many cups/day cover the prorated fixed costs, using the menu's
   // average drink price (so it's meaningful even before the first sale of the day).
+  const fixedDaily = dailyOpex + depreciation + interest;
   const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1").get().a || 0;
   const contribPerCup = refAvg * (1 - f.ingredientPct) - f.packagingPerCup;
-  const breakEvenCups = contribPerCup > 0 ? Math.ceil(dailyOpex / contribPerCup) : null;
+  const breakEvenCups = contribPerCup > 0 ? Math.ceil(fixedDaily / contribPerCup) : null;
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
-    ingredient, packaging, cogs, wasteCost,
+    ingredient, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
-    opexDaily: dailyOpex, opexMonthly: monthlyOpex,
-    opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
+    opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
+    labor, wagesPlanDaily, laborVariance,
+    ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
     breakEvenCups, contribPerCup, refAvgPrice: refAvg,
@@ -1519,7 +1575,7 @@ const branchIdsOf = (staffId) =>
   db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staffId).map((r) => r.branch_id);
 
 export function listStaff() {
-  const rows = db.prepare('SELECT id, name, role, active FROM staff ORDER BY role, name').all();
+  const rows = db.prepare('SELECT id, name, role, active, hourly_rate FROM staff ORDER BY role, name').all();
   return rows.map((s) => ({ ...s, branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id) }));
 }
 // True if `pin` already belongs to another active staffer (PINs identify the user at login).
@@ -1540,7 +1596,7 @@ export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenan
   if (role !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
   return { id: Number(id), name: n, role, branchIds: role === 'owner' ? [] : branchIds };
 }
-export function updateStaff(id, { name, role, active, pin, branchIds }) {
+export function updateStaff(id, { name, role, active, pin, branchIds, hourlyRate }) {
   const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
   if (!cur) throw new Error('staff_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
@@ -1559,12 +1615,64 @@ export function updateStaff(id, { name, role, active, pin, branchIds }) {
     if (pinTaken(p, id)) throw new Error('pin_taken');
     pinHash = hashPin(p);
   }
-  db.prepare('UPDATE staff SET name=?, role=?, active=?, pin_hash=? WHERE id=?').run(n, r, a, pinHash, id);
+  const hr = hourlyRate != null ? Math.max(0, Number(hourlyRate) || 0) : (cur.hourly_rate || 0);
+  db.prepare('UPDATE staff SET name=?, role=?, active=?, pin_hash=?, hourly_rate=? WHERE id=?').run(n, r, a, pinHash, hr, id);
   if (Array.isArray(branchIds)) {
     db.prepare('DELETE FROM staff_branches WHERE staff_id=?').run(id);
     if (r !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
   }
-  return { id: Number(id), name: n, role: r, active: a, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
+  return { id: Number(id), name: n, role: r, active: a, hourly_rate: hr, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
+}
+
+// ---------- Time clock ----------
+// The prorated monthly wage in the cost settings is a PLAN. This records what a day actually cost:
+// who was on, for how long, at the rate they were on at the time. A day with clocked shifts uses
+// the real number in the P&L; a day without falls back to the plan, so nothing changes until the
+// shop starts using the clock.
+export function openShift(staffId) {
+  const s = db.prepare('SELECT * FROM staff WHERE id=? AND active=1').get(staffId);
+  if (!s) throw new Error('staff_not_found');
+  const open = db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId);
+  if (open) return { ...open, already: true };            // idempotent: re-tapping "เข้างาน" never double-opens
+  const id = db.prepare('INSERT INTO staff_shifts (staff_id, rate) VALUES (?,?)').run(staffId, s.hourly_rate || 0).lastInsertRowid;
+  return db.prepare('SELECT * FROM staff_shifts WHERE id=?').get(id);
+}
+export function closeShift(staffId, note = null) {
+  const open = db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId);
+  if (!open) throw new Error('no_open_shift');
+  db.prepare("UPDATE staff_shifts SET clock_out=datetime('now'), note=? WHERE id=?").run(note || null, open.id);
+  const row = db.prepare("SELECT *, (julianday(clock_out)-julianday(clock_in))*24 AS hours FROM staff_shifts WHERE id=?").get(open.id);
+  const cost = Math.round(Math.max(0, row.hours) * (row.rate || 0) * 100) / 100;
+  db.prepare('UPDATE staff_shifts SET cost=? WHERE id=?').run(cost, open.id);
+  return { ...row, cost, hours: Math.round(row.hours * 100) / 100 };
+}
+export function openShiftOf(staffId) {
+  if (!staffId) return null;
+  return db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId) || null;
+}
+/** Shifts that STARTED on a Bangkok day, newest first, with the person's name. */
+export function shiftsForDay(dateStr = null) {
+  const day = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `'${dateStr}'` : `date('now','+7 hours')`;
+  return db.prepare(
+    `SELECT sh.*, st.name AS staff_name,
+            (julianday(COALESCE(sh.clock_out, datetime('now')))-julianday(sh.clock_in))*24 AS hours
+       FROM staff_shifts sh JOIN staff st ON st.id=sh.staff_id
+      WHERE date(sh.clock_in,'+7 hours')=${day}
+      ORDER BY sh.clock_in DESC`
+  ).all().map((r) => ({ ...r, hours: Math.round(r.hours * 100) / 100, open: !r.clock_out }));
+}
+/** What the day's labour actually cost. Only CLOSED shifts count — an open one is still running. */
+export function laborActual(dateStr = null) {
+  const day = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `'${dateStr}'` : `date('now','+7 hours')`;
+  const r = db.prepare(
+    `SELECT COUNT(*) AS shifts, COALESCE(SUM(cost),0) AS cost,
+            COALESCE(SUM((julianday(clock_out)-julianday(clock_in))*24),0) AS hours
+       FROM staff_shifts WHERE clock_out IS NOT NULL AND date(clock_in,'+7 hours')=${day}`
+  ).get();
+  const openN = db.prepare(
+    `SELECT COUNT(*) n FROM staff_shifts WHERE clock_out IS NULL AND date(clock_in,'+7 hours')=${day}`
+  ).get().n;
+  return { shifts: r.shifts, openShifts: openN, cost: Math.round(r.cost * 100) / 100, hours: Math.round(r.hours * 100) / 100 };
 }
 export function deactivateStaff(id) {
   const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
@@ -1645,10 +1753,11 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,audience,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
       c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
+      (c.valid_from || null) && String(c.valid_from).slice(0, 10),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
       Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
@@ -1656,10 +1765,12 @@ export function createCoupon(c = {}) {
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
     .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
       Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
-      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
+      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0),
+      (c.valid_from !== undefined ? (c.valid_from ? String(c.valid_from).slice(0, 10) : null) : cur.valid_from),
+      (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
       c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
@@ -1786,6 +1897,7 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
   if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
   if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
   if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
@@ -1969,6 +2081,112 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
 // Social proof (owner-toggleable, default OFF): the LIFF shows "วันนี้ขายไปแล้ว N แก้ว" on the home.
+// ---------- Full data backup ----------
+// The shop's data lives on someone else's server. Excel reports cover the numbers but not the
+// menu, recipes, stock, staff, customers or settings — so this dumps EVERY table as plain JSON
+// the owner can keep. Read-only and self-describing: any of it can be rebuilt from this file.
+// PIN hashes are stripped: a backup should never be a way to walk in with someone else's login.
+const BACKUP_SKIP = new Set(['sqlite_sequence', 'push_log']);   // internals / high-volume logs
+export function exportBackup() {
+  const tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+  ).all().map((r) => r.name).filter((n) => !BACKUP_SKIP.has(n));
+  const data = {};
+  let rows = 0;
+  for (const t of tables) {
+    try {
+      const list = db.prepare(`SELECT * FROM "${t}"`).all();
+      data[t] = t === 'staff' ? list.map(({ pin_hash, ...rest }) => rest) : list;
+      rows += list.length;
+    } catch { data[t] = []; }   // a table the current build cannot read must not sink the whole backup
+  }
+  return {
+    exportedAt: db.prepare("SELECT datetime('now','+7 hours') t").get().t,
+    timezone: 'Asia/Bangkok', tables: tables.length, rows,
+    note: 'YO-DEE full data backup · PIN hashes excluded on purpose',
+    data,
+  };
+}
+
+// ---------- PDPA: consent + right to erasure ----------
+// Thai PDPA gives a customer the right to have their personal data deleted. Sales records are a
+// different thing — they are accounting records the shop must keep. So this ANONYMISES rather
+// than deletes: every identifier is stripped, the money stays. Irreversible on purpose.
+export function recordConsent(customerKey) {
+  if (!customerKey) return { ok: false };
+  // A first-time visitor may consent BEFORE they ever order, so there is no customers row yet —
+  // create the shell first, otherwise the consent silently lands nowhere. COALESCE keeps the
+  // ORIGINAL date: re-tapping must never refresh the audit trail.
+  db.prepare('INSERT OR IGNORE INTO customers (line_user_id) VALUES (?)').run(customerKey);
+  db.prepare("UPDATE customers SET consent_at=COALESCE(consent_at, datetime('now')) WHERE line_user_id=?").run(customerKey);
+  return { ok: true, at: db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(customerKey)?.consent_at || null };
+}
+export function consentGiven(customerKey) {
+  if (!customerKey) return false;
+  const r = db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(customerKey);
+  return !!(r && r.consent_at);
+}
+/** Erase one customer's personal data. Returns what was touched so the owner sees it happened. */
+export function forgetCustomer(customerKey) {
+  const key = String(customerKey || '').trim();
+  if (!key) throw new Error('customer_required');
+  const cust = db.prepare('SELECT * FROM customers WHERE line_user_id=?').get(key);
+  const touched = { orders: 0, tickets: 0, coupons: 0, loyaltyMoves: 0, pushLog: 0, customer: 0 };
+  // Count the sales BEFORE cutting the link, so the confirmation can honestly say what survived.
+  touched.orders = db.prepare(
+    'SELECT COUNT(*) n FROM orders o JOIN tickets t ON t.id=o.ticket_id WHERE t.line_user_id=? OR t.customer_key=?'
+  ).get(key, key).n;
+  db.transaction(() => {
+    // The identity lives on the TICKET (orders carry only money). Keep the ticket and its order —
+    // they are the accounting record — but strip every trace of who it was.
+    touched.tickets = db.prepare("UPDATE tickets SET line_user_id=NULL, customer_key=NULL, customer_name='(ลบข้อมูลแล้ว)' WHERE line_user_id=? OR customer_key=?").run(key, key).changes;
+    // Anything that only exists to identify or reward the person goes entirely.
+    touched.coupons = db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(key).changes;
+    touched.loyaltyMoves = db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(key).changes;
+    try { db.prepare('UPDATE coupon_uses SET customer_key=NULL WHERE customer_key=?').run(key); } catch { /* older DB */ }
+    try { touched.pushLog = db.prepare('DELETE FROM push_log WHERE user_id=?').run(key).changes; } catch { /* older DB */ }
+    try { db.prepare('UPDATE customers SET referred_by=NULL WHERE referred_by=?').run(key); } catch { /* older DB */ }
+    touched.customer = db.prepare('DELETE FROM customers WHERE line_user_id=?').run(key).changes;
+  })();
+  return { ok: true, name: cust ? cust.name : null, touched };
+}
+
+// ---------- Online ordering: manual kill switch + offline auto-pause ----------
+// The customer's LIFF talks to this server from THEIR phone, over THEIR data. When the shop's
+// own internet dies, orders keep arriving that nobody at the counter can see — and the cashier
+// cannot press "close" either, because their device has no connection. Two controls:
+//   1. onlineOrders  — an explicit switch: stop taking LINE orders, keep selling at the counter.
+//   2. posOfflineMinutes — a dead-man's switch: if no cashier device has checked in for N minutes
+//      the server pauses LINE ordering BY ITSELF, and resumes the moment a till reappears.
+// 0 minutes = the dead-man's switch is off (default, so nothing changes until the owner opts in).
+export function onlineOrdersEnabled() { return getSetting('online_orders', '1') !== '0'; }
+export function setOnlineOrders(on) { setSetting('online_orders', on ? '1' : '0'); return { onlineOrders: !!on }; }
+export function getPosOfflineMinutes() { return Math.max(0, parseInt(getSetting('pos_offline_minutes', '0'), 10) || 0); }
+export function setPosOfflineMinutes(n) {
+  const v = Math.max(0, Math.min(180, parseInt(n, 10) || 0));
+  setSetting('pos_offline_minutes', String(v));
+  return { posOfflineMinutes: v };
+}
+/** A till checked in. Called on cashier login and on a light periodic ping. */
+export function cashierHeartbeat() {
+  setSetting('pos_last_seen', db.prepare("SELECT datetime('now') t").get().t);
+  return { ok: true };
+}
+export function posLastSeen() { return getSetting('pos_last_seen', null); }
+/** Has every till gone quiet for longer than the configured window? */
+export function posOffline() {
+  const mins = getPosOfflineMinutes();
+  if (!mins) return false;
+  const last = posLastSeen();
+  if (!last) return false;              // never seen a till → don't block sales on a fresh install
+  return db.prepare(`SELECT (? < datetime('now','-${mins} minutes')) AS stale`).get(last).stale === 1;
+}
+/** Why (if at all) customer ordering is closed right now. One place, used by the API and the gate. */
+export function orderingPaused() {
+  if (!onlineOrdersEnabled()) return { paused: true, code: 'online_orders_off', reason: 'ร้านปิดรับออเดอร์ออนไลน์ชั่วคราว' };
+  if (posOffline()) return { paused: true, code: 'pos_offline', reason: 'ร้านออฟไลน์อยู่ — สั่งที่หน้าร้านได้ตามปกติ' };
+  return { paused: false, code: null, reason: null };
+}
 export function socialProofEnabled() { return getSetting('social:enabled', '0') === '1'; }
 export function setSocialProof(on) { setSetting('social:enabled', on ? '1' : '0'); return { social: !!on }; }
 // Count of drinks (base items) sold today across paid, non-void orders (Bangkok day).
@@ -2680,7 +2898,15 @@ export function addMenuItem({ name, name_en, price, image, category, badge }) {
     .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }) {
+// Append-only price trail. A margin report from last month is only readable against the price that
+// was in force THEN — and "why is this item suddenly less profitable" needs a date and a name.
+export function priceHistory(itemId = null, limit = 100) {
+  const n = Math.max(1, Math.min(500, Number(limit) || 100));
+  return itemId
+    ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
+    : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
+}
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
@@ -2692,6 +2918,13 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
   db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, id);
+  // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
+  if (Number(p) !== Number(cur.price)) {
+    try {
+      db.prepare('INSERT INTO price_history (item_id, item_name, old_price, new_price, actor_id, actor_name) VALUES (?,?,?,?,?,?)')
+        .run(id, n, cur.price, p, actor?.id || null, actor?.name || null);
+    } catch { /* trail is best-effort: never block a price change */ }
+  }
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {
@@ -2850,6 +3083,9 @@ export function createOrder(zoneId, items, opts = {}) {
   // selling to walk-ins outside opening hours (owner decision 2026-07: ขายนอกเวลาได้).
   const _store = db.prepare('SELECT * FROM stores WHERE id=?').get(zone.store_id);
   if (source === 'customer' && _store && (_store.is_open === 0 || !isStoreOpenRow(_store))) throw new Error('store_closed');
+  // Online ordering switched off, or every till has gone quiet (shop internet down). The counter
+  // keeps selling either way — only the LINE channel closes.
+  if (source === 'customer') { const _p = orderingPaused(); if (_p.paused) throw new Error(_p.code); }
 
   // A LINE customer may only hold one open order at a time (prevents accidental
   // double-submits creating duplicate queue numbers). Return the existing one.
@@ -3040,9 +3276,8 @@ export function setOrderPaid(ticketId, opts = {}) {
   if (!skipLoyalty) { try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ } }
   if (ticket && ticket.line_user_id) {
     const ahead = aheadCount(ticket);
-    let msg = `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
-      `🎫 หมายเลขคิวของคุณ: ${ticket.code}\n` +
-      `คิวรอก่อนหน้า: ${ahead}`;
+    // Order-status progress card (LINE-MAN style): stage 2 = order in, being made.
+    let sub = `ชำระเงินเรียบร้อย ฿${order.total} · คิวรอก่อนหน้า ${ahead}`;
     if (loyalty && loyalty.awarded != null) {
       // Recognition: greet returning customers, show stamps earned + progress to the next free drink.
       const per = getStampsPerReward();
@@ -3050,16 +3285,17 @@ export function setOrderPaid(ticketId, opts = {}) {
       const free = Math.floor(bal / per);
       const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
-      msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
-      msg += (loyalty.coupons && loyalty.coupons.length)
+      sub = greet + sub + `\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
+      sub += (loyalty.coupons && loyalty.coupons.length)
         ? `\n🎉 สะสมครบ ${per} ดวง! รับคูปองฟรี 1 ${UNIT} — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
         : (free >= 1
           ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
           : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`);
     } else {
-      msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
+      sub += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
-    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน', 'paid');
+    pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
+      link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }

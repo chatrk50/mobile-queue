@@ -64,6 +64,77 @@ function buildQueueMessage(text, link, label) {
   };
 }
 
+/** Order-status Flex card with a LINE-MAN-style progress bar. A LIFF web app cannot create an
+ *  iOS Live Activity (that needs a native App Store app), so this is the closest equivalent:
+ *  the lock screen shows the alt-text status line, and the chat shows a progress card.
+ *  stage: 1 = รับออเดอร์แล้ว · 2 = กำลังทำ/ใกล้ถึงคิว · 3 = พร้อมรับ. Costs the SAME one message
+ *  as the plain push it replaces. */
+const STAGE_META = [
+  { icon: '🧾', label: 'รับออเดอร์' },
+  { icon: '🥤', label: 'กำลังทำ' },
+  { icon: '🔔', label: 'พร้อมรับ' },
+];
+const ON = '#16a34a', OFF = '#d9e2e8', INK = '#1e3a5f', MUT = '#8a9aa8';
+function buildStageMessage({ stage, title, subtitle, code, link, label }) {
+  const seg = (i) => ({ type: 'box', layout: 'vertical', height: '4px', flex: 3, backgroundColor: i < stage ? ON : OFF, cornerRadius: '2px', contents: [{ type: 'filler' }] });
+  const dot = (i) => ({
+    type: 'box', layout: 'vertical', flex: 2, contents: [
+      { type: 'text', text: STAGE_META[i].icon, align: 'center', size: i === stage - 1 ? 'md' : 'sm' },
+      { type: 'text', text: STAGE_META[i].label, align: 'center', size: 'xxs', color: i < stage ? ON : MUT, weight: i === stage - 1 ? 'bold' : 'regular' },
+    ],
+  });
+  return {
+    type: 'flex',
+    altText: `${STAGE_META[stage - 1].icon} ${title}${code ? ` · คิว ${code}` : ''}`,
+    contents: {
+      type: 'bubble', size: 'mega',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '16px',
+        contents: [
+          {
+            type: 'box', layout: 'horizontal', contents: [
+              { type: 'text', text: title, weight: 'bold', size: 'lg', color: INK, wrap: true, flex: 5 },
+              ...(code ? [{ type: 'text', text: code, weight: 'bold', size: 'lg', color: ON, align: 'end', flex: 2 }] : []),
+            ],
+          },
+          ...(subtitle ? [{ type: 'text', text: subtitle, size: 'sm', color: '#555555', wrap: true }] : []),
+          {
+            type: 'box', layout: 'horizontal', alignItems: 'center', margin: 'md', contents: [
+              dot(0), seg(1), dot(1), seg(2), dot(2),
+            ],
+          },
+        ],
+      },
+      ...(link ? {
+        footer: {
+          type: 'box', layout: 'vertical',
+          contents: [{ type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
+        },
+      } : {}),
+    },
+  };
+}
+/** Push an order-status progress card (falls back to plain text like pushQueue). */
+export async function pushStage(userId, opts, kind = 'queue') {
+  if (!userId) return false;
+  const fallbackText = `${STAGE_META[(opts.stage || 1) - 1].icon} ${opts.title}${opts.code ? `\nหมายเลข: ${opts.code}` : ''}${opts.subtitle ? `\n${opts.subtitle}` : ''}`;
+  if (!LINE_ENABLED) {
+    console.log(`\n[LINE-STUB stage${opts.stage}] -> ${userId}\n${fallbackText}\n`);
+    return false;
+  }
+  try {
+    await client.pushMessage({ to: userId, messages: [buildStageMessage(opts)] });
+    logPush(userId, kind, true);
+    return true;
+  } catch (err) {
+    console.error('[LINE] stage flex failed, falling back:', err?.statusMessage || err?.message || err);
+    try {
+      const t = opts.link ? `${fallbackText}\n\n👉 ${opts.link}` : fallbackText;
+      await client.pushMessage({ to: userId, messages: [{ type: 'text', text: t }] });
+      logPush(userId, kind, true); return true;
+    } catch (e) { logPush(userId, kind, false); return false; }
+  }
+}
 // Every REAL push (LINE enabled) is counted in push_log — LINE OA bills by message volume, and
 // before this the owner had no way to see how many messages a month the shop was paying for.
 // The UAT stub is NOT logged (it costs nothing). Best-effort: logging never blocks a push.

@@ -79,6 +79,28 @@ const dailyOpex = (f.rent + f.wages + f.utilities + f.supplies + f.marketing) / 
 ok(near(p.opexDaily, dailyOpex), `INVARIANT P&L opexDaily == Σopex/days (${p.opexDaily})`);
 ok(near(p.netProfit, p.grossProfit - p.opexDaily - p.wasteCost), `INVARIANT P&L netProfit == grossProfit−opexDaily−waste (${p.netProfit})`);
 ok(near(p.grossMargin, rep.revenue ? p.grossProfit / rep.revenue : 0), `INVARIANT P&L grossMargin == grossProfit/revenue (${p.grossMargin})`);
+// Full statement chain: gross → EBITDA → EBIT → pre-tax → net. Every step must be exactly the
+// step above minus one named cost, and the opex groups must add back up to the opex total.
+ok(near(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily), `INVARIANT EBITDA == gross−waste−opex (${p.ebitda})`);
+ok(near(p.ebit, p.ebitda - p.depreciation), `INVARIANT EBIT == EBITDA−depreciation (${p.ebit})`);
+ok(near(p.preTax, p.ebit - p.interest), `INVARIANT preTax == EBIT−interest (${p.preTax})`);
+ok(near(p.netProfit, p.preTax - p.incomeTax), `INVARIANT netProfit == preTax−tax (${p.netProfit})`);
+ok(near(p.opexGroups.reduce((s, g) => s + g.daily, 0), p.opexDaily), 'INVARIANT Σ opex groups == opexDaily (no expense line is orphaned)');
+ok(near(p.fixedDaily, p.opexDaily + p.depreciation + p.interest), `INVARIANT fixedDaily == opex+dep+interest (break-even base) (${p.fixedDaily})`);
+{ // Below-the-line costs must actually bite: set them, re-read, confirm each step moved.
+  const before = Q.getFinanceSettings();
+  Q.setFinanceSettings({ depreciation: 3000, interest: 1500, taxPct: 20, freight: 600 });
+  const p2 = Q.dailyReport().pnl, f2 = Q.getFinanceSettings();
+  const d = f2.daysPerMonth;
+  ok(near(p2.freight, 600 / d) && near(p2.cogs, p2.ingredient + p2.packaging + p2.freight), 'freight-in lands in COGS, not opex');
+  ok(near(p2.depreciation, 3000 / d) && near(p2.interest, 1500 / d), 'depreciation + interest prorate by selling days');
+  ok(p2.taxRate === 0.2, `taxPct entered as 20 is read as 0.20 (got ${p2.taxRate})`);
+  ok(p2.preTax <= 0 ? p2.incomeTax === 0 : near(p2.incomeTax, p2.preTax * 0.2), 'income tax is charged on profit only — never on a loss');
+  ok(near(p2.netProfit, p2.preTax - p2.incomeTax), 'net profit still closes the chain with every line switched on');
+  Q.setFinanceSettings({ depreciation: 0, interest: 0, taxPct: 0, freight: 0 });
+  const p3 = Q.dailyReport().pnl;
+  ok(near(p3.netProfit, before ? p3.grossProfit - p3.opexDaily - p3.wasteCost : 0), 'with the new lines at 0 the P&L is byte-identical to the old formula');
+}
 
 console.log('\n== Cash drawer ==');
 const cs = Q.currentCashSession(1);
@@ -428,6 +450,116 @@ let reopened = false;
 try { const rr = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], {}); reopened = !!(rr && rr.ticket); Q.cancelOrderTicket(rr.ticket.id, null, {}); } catch { reopened = false; }
 ok(reopened, `INVARIANT clearing hours reopens ordering — got ${reopened}`);
 
+// ---- Online-ordering channel: the shop's own internet dying does NOT stop customers ordering
+//      (their LIFF talks to this server from their own data), so there are two ways to close the
+//      channel — a manual switch and a dead-man's switch — and NEITHER may stop counter sales. ----
+console.log('\n== Online-ordering kill switch + offline auto-pause ==');
+const throwsWith = (opts) => { try { const r = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], opts); if (r?.ticket) Q.cancelOrderTicket(r.ticket.id, null, {}); return null; } catch (e) { return e.message; } };
+Q.setOnlineOrders(false);
+ok(Q.orderingPaused().code === 'online_orders_off', 'manual switch reports itself as the reason ordering is paused');
+ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000001' }) === 'online_orders_off', 'INVARIANT switch OFF blocks the LINE customer channel');
+ok(throwsWith({}) === null, 'INVARIANT switch OFF still lets the cashier sell at the counter');
+Q.setOnlineOrders(true);
+ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000002' }) === null, 'INVARIANT switching back on reopens the LINE channel');
+{ // Dead-man's switch: no till has checked in for longer than the window → server pauses by itself.
+  Q.setPosOfflineMinutes(0);
+  ok(Q.posOffline() === false, 'INVARIANT auto-pause is OFF by default (0 minutes = never pauses)');
+  Q.cashierHeartbeat();
+  Q.setPosOfflineMinutes(5);
+  ok(Q.posOffline() === false, 'a till that just checked in keeps the channel open');
+  db.prepare("UPDATE settings SET value=datetime('now','-30 minutes') WHERE key='pos_last_seen'").run();
+  ok(Q.posOffline() === true, 'INVARIANT 30 minutes of silence with a 5-minute window trips the auto-pause');
+  ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000003' }) === 'pos_offline', 'INVARIANT auto-pause blocks LINE orders the shop could not see');
+  ok(throwsWith({}) === null, 'INVARIANT auto-pause NEVER blocks the counter — that is the whole point');
+  Q.cashierHeartbeat();
+  ok(Q.posOffline() === false && throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000004' }) === null, 'INVARIANT the channel reopens by itself as soon as a till checks back in');
+  Q.setPosOfflineMinutes(0);
+}
+
+// ---- Price trail + backup: two things that only matter after the fact, so they must be right
+//      the FIRST time — you cannot retro-record a price change you never captured. ----
+console.log('\n== Menu price history + data backup ==');
+{
+  const item = Q.listMenu().find((m) => m.category !== 'topping');
+  const before = Q.priceHistory(item.id).length;
+  Q.updateMenuItem(item.id, { name: item.name }, { id: 9, name: 'ผู้ทดสอบ' });   // save with NO price change
+  ok(Q.priceHistory(item.id).length === before, 'INVARIANT saving without changing the price writes NOTHING (the trail stays signal, not noise)');
+  const oldP = item.price;
+  Q.updateMenuItem(item.id, { price: oldP + 7 }, { id: 9, name: 'ผู้ทดสอบ' });
+  const h = Q.priceHistory(item.id);
+  ok(h.length === before + 1, 'a price change is recorded');
+  ok(h[0].old_price === oldP && h[0].new_price === oldP + 7, `INVARIANT the trail keeps BOTH prices (฿${h[0].old_price} → ฿${h[0].new_price})`);
+  ok(h[0].actor_name === 'ผู้ทดสอบ', 'INVARIANT the trail records WHO changed it');
+  Q.updateMenuItem(item.id, { price: oldP }, { id: 9, name: 'ผู้ทดสอบ' });
+  ok(Q.priceHistory(item.id).length === before + 2, 'INVARIANT putting the price back is itself a change, not an undo of the record');
+  ok(Q.priceHistory(null, 5).length <= 5, 'the shop-wide trail respects its limit');
+}
+{
+  const b = Q.exportBackup();
+  ok(b.tables > 10 && b.rows > 0, `backup covers the whole database (${b.tables} tables, ${b.rows} rows)`);
+  for (const t of ['menu_items', 'customers', 'orders', 'settings', 'staff']) ok(Array.isArray(b.data[t]), `backup includes ${t}`);
+  ok((b.data.staff || []).every((s) => s.pin_hash === undefined), 'INVARIANT PIN hashes are NEVER in the backup file');
+  ok(JSON.parse(JSON.stringify(b)).rows === b.rows, 'INVARIANT the backup is plain JSON — it survives a round-trip through a file');
+}
+
+// ---- Time clock: the monthly wage in the settings is a PLAN. A day with clocked shifts must use
+//      what it REALLY cost, and a day without must stay exactly as it was. ----
+console.log('\n== Time clock → real daily labour cost ==');
+{
+  const planned = Q.dailyReport().pnl;
+  ok(planned.labor.cost === 0 && planned.laborVariance === 0, 'no shifts → labour is still the prorated plan (nothing changes until the clock is used)');
+  const st = Q.createStaff({ name: 'พนักงานลงเวลา', pin: '778899', role: 'cashier', branchIds: [1] });
+  Q.updateStaff(st.id, { hourlyRate: 60 });
+  ok(Q.listStaff().find((s) => s.id === st.id).hourly_rate === 60, 'hourly rate is stored on the staff record');
+  const s1 = Q.openShift(st.id);
+  const s2 = Q.openShift(st.id);
+  ok(s2.already === true && s2.id === s1.id, 'INVARIANT clocking in twice does NOT open a second shift (tap-happy staff never double-bill)');
+  ok(Q.openShiftOf(st.id)?.id === s1.id, 'the open shift is findable for the person it belongs to');
+  ok(Q.laborActual().cost === 0 && Q.laborActual().openShifts === 1, 'INVARIANT an OPEN shift costs nothing yet — it has not finished');
+  // Backdate the clock-in by 3 hours so the closed shift has real duration to price.
+  db.prepare("UPDATE staff_shifts SET clock_in=datetime('now','-3 hours') WHERE id=?").run(s1.id);
+  const closed = Q.closeShift(st.id);
+  ok(Math.abs(closed.hours - 3) < 0.02, `INVARIANT hours come from the clock, not from typing (${closed.hours})`);
+  ok(Math.abs(closed.cost - 180) < 1, `INVARIANT cost == hours × rate (3h × ฿60 = ฿${closed.cost})`);
+  let noOpen = false; try { Q.closeShift(st.id); } catch (e) { noOpen = e.message === 'no_open_shift'; }
+  ok(noOpen, 'INVARIANT clocking out twice is refused (no phantom second shift)');
+  Q.updateStaff(st.id, { hourlyRate: 999 });
+  ok(Math.abs(db.prepare('SELECT cost FROM staff_shifts WHERE id=?').get(s1.id).cost - 180) < 1, 'INVARIANT raising the rate does NOT rewrite what past days cost');
+  const withClock = Q.dailyReport().pnl;
+  const wagesLine = withClock.opexGroups.find((g) => g.key === 'payroll').lines.find((l) => l.key === 'wages');
+  ok(wagesLine && Math.abs(wagesLine.daily - closed.cost) < 1, `INVARIANT the P&L wage line becomes the REAL cost once shifts exist (฿${wagesLine && wagesLine.daily})`);
+  ok(Math.abs(withClock.laborVariance - (closed.cost - withClock.wagesPlanDaily)) < 0.02, `INVARIANT variance == actual − plan (${withClock.laborVariance})`);
+  ok(Math.abs(withClock.opexDaily - (planned.opexDaily + withClock.laborVariance)) < 0.02, 'INVARIANT the variance flows into opex — and therefore into net profit');
+  ok(Q.shiftsForDay().some((s) => s.staff_id === st.id && !s.open), "today's timesheet lists the finished shift");
+  db.prepare('DELETE FROM staff_shifts WHERE staff_id=?').run(st.id);   // leave the P&L as we found it for later invariants
+  ok(Q.dailyReport().pnl.laborVariance === 0, 'removing the shifts restores the planned figure exactly');
+}
+
+// ---- PDPA erasure: a customer's personal data must be removable, but the shop's SALES are
+//      accounting records that must survive. Anonymise, never delete the money. ----
+console.log('\n== PDPA: right to erasure (money survives, the person does not) ==');
+{
+  const fk = 'Uforgetme00000000000000000000001';
+  const fo = Q.createOrder(1, [{ name: 'Drink', price: 80, qty: 1 }], { source: 'customer', lineUserId: fk, customerName: 'ลูกค้าทดสอบลบ' });
+  Q.setOrderPaid(fo.ticket.id, { method: 'cash' });
+  const revBefore = Q.dailyReport().revenue;
+  ok(Q.consentGiven(fk) === false, 'a customer who has never tapped the notice shows no consent');
+  Q.recordConsent(fk);
+  ok(Q.consentGiven(fk) === true, 'INVARIANT consent is recorded server-side, not just in the phone');
+  const first = db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(fk).consent_at;
+  Q.recordConsent(fk);
+  ok(db.prepare('SELECT consent_at FROM customers WHERE line_user_id=?').get(fk).consent_at === first, 'INVARIANT re-consenting keeps the ORIGINAL date (the audit trail cannot be refreshed away)');
+  const res = Q.forgetCustomer(fk);
+  ok(res.ok && res.touched.orders >= 1, `erasure reports what it touched (orders ${res.touched.orders})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM customers WHERE line_user_id=?').get(fk).n === 0, 'INVARIANT the customer record is gone');
+  ok(db.prepare('SELECT COUNT(*) n FROM tickets WHERE line_user_id=? OR customer_key=?').get(fk, fk).n === 0, 'INVARIANT no ticket still points at the erased customer');
+  ok(db.prepare('SELECT COUNT(*) n FROM loyalty_moves WHERE customer_key=?').get(fk).n === 0, 'INVARIANT points history is erased with them');
+  ok(near(Q.dailyReport().revenue, revBefore), `INVARIANT revenue is UNCHANGED by an erasure (${revBefore} → ${Q.dailyReport().revenue})`);
+  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE customer_name='(ลบข้อมูลแล้ว)'").get().n >= 1, 'INVARIANT the sale is kept but labelled as anonymised');
+  let noKey = false; try { Q.forgetCustomer(''); } catch (e) { noKey = e.message === 'customer_required'; }
+  ok(noKey, 'INVARIANT erasing with no key is refused (never a mass wipe by accident)');
+}
+
 // ---- Coupon apply: the LIFF picker passes a code; createOrder re-validates SERVER-SIDE, applies the
 //      discount, records the use, and enforces the per-customer limit. ----
 console.log('\n== Coupon apply (server-enforced from the customer order) ==');
@@ -439,6 +571,31 @@ ok(cord && Number(cord.discount) === 50, `INVARIANT coupon discount applied serv
 ok(db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE customer_key=?').get(ck).n === 1, 'INVARIANT coupon use recorded once');
 ok(Q.validateCoupon('E2E50', ck, 100).ok === false, 'INVARIANT per-customer limit blocks a second use');
 ok(Q.validateCoupon('NOPE-NOT-REAL', ck, 100).ok === false, 'INVARIANT a fake code never validates');
+{ // Scheduled start (valid_from): a campaign built today for next week must not be usable today,
+  // and must start working on its own once the date arrives — no manual switch-flip.
+  const ck2 = 'Ucouponcust000000000000000000002';
+  const day = (n) => db.prepare(`SELECT date(datetime('now','+7 hours'),'${n >= 0 ? '+' : ''}${n} days') d`).get().d;
+  Q.createCoupon({ code: 'E2ESOON', label: 'ยังไม่เริ่ม', disc_type: 'baht', disc_value: 20, valid_from: day(3) });
+  const soon = Q.validateCoupon('E2ESOON', ck2, 200);
+  ok(soon.ok === false && /เริ่มใช้ได้/.test(soon.reason), `INVARIANT a future-dated coupon is refused until its start date (${soon.reason})`);
+  const id = Q.listCoupons(true).find((c) => c.code === 'E2ESOON').id;
+  Q.updateCoupon(id, { valid_from: day(-1) });
+  ok(Q.validateCoupon('E2ESOON', ck2, 200).ok === true, 'INVARIANT once the start date passes the same coupon validates');
+  Q.updateCoupon(id, { valid_from: '' });
+  ok(Q.listCoupons(true).find((c) => c.code === 'E2ESOON').valid_from === null, 'INVARIANT clearing the start date makes it live immediately');
+}
+{ // Percent cap + total-redemption budget: both existed in the schema but had no way in until now,
+  // so pin the behaviour the owner is about to rely on.
+  const ck3 = 'Ucouponcust000000000000000000003';
+  Q.createCoupon({ code: 'E2EPCT', label: 'ลด 50% สูงสุด 30', disc_type: 'percent', disc_value: 50, max_disc: 30, usage_limit: 1, per_customer: 0 });
+  const big = Q.validateCoupon('E2EPCT', ck3, 500);
+  ok(big.ok && big.discount === 30, `INVARIANT % discount is capped by max_disc (50% of 500 → ฿${big.discount}, not ฿250)`);
+  const small = Q.validateCoupon('E2EPCT', ck3, 40);
+  ok(small.ok && small.discount === 20, `INVARIANT under the cap the % still applies in full (฿${small.discount})`);
+  const bo = Q.createOrder(1, [{ name: 'Drink', price: 500, qty: 1 }], { source: 'customer', lineUserId: ck3, couponCode: 'E2EPCT' });
+  ok(Number(db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(bo.ticket.id).discount) === 30, 'INVARIANT the capped discount is what actually hits the bill');
+  ok(Q.validateCoupon('E2EPCT', 'Ucouponcust000000000000000000004', 500).ok === false, 'INVARIANT usage_limit 1 closes the coupon for everyone after one redemption');
+}
 
 // ---- Stamp-card reward surfaces as a self-service "coupon" once earned (owner ask: a customer
 //      who reaches the threshold should see it in the SAME coupon list and be able to apply it

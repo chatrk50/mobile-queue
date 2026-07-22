@@ -256,6 +256,31 @@ CREATE TABLE IF NOT EXISTS staff (
   active     INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Time clock. One row per shift: clocked in, maybe still open (clock_out null). The rate is COPIED
+-- onto the row at clock-in, so raising someone's pay never rewrites what past days cost.
+CREATE TABLE IF NOT EXISTS staff_shifts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id   INTEGER NOT NULL REFERENCES staff(id),
+  branch_id  INTEGER,
+  clock_in   TEXT NOT NULL DEFAULT (datetime('now')),
+  clock_out  TEXT,
+  rate       REAL NOT NULL DEFAULT 0,     -- ฿/hour at the moment of clock-in
+  cost       REAL,                        -- computed on clock-out: hours × rate
+  note       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shifts_staff ON staff_shifts(staff_id, clock_in);
+-- Menu price trail. Append-only: what a drink used to cost, what it costs now, who changed it.
+CREATE TABLE IF NOT EXISTS price_history (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id   INTEGER NOT NULL,
+  item_name TEXT NOT NULL,               -- kept verbatim: the item may be renamed or deleted later
+  old_price REAL NOT NULL,
+  new_price REAL NOT NULL,
+  actor_id  INTEGER,
+  actor_name TEXT,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_price_history_item ON price_history(item_id, at);
 -- Which branches a (non-owner) staffer may access. Owner role bypasses this = all branches.
 CREATE TABLE IF NOT EXISTS staff_branches (
   staff_id  INTEGER NOT NULL REFERENCES staff(id),
@@ -567,6 +592,9 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN channel_id INTEGER`,       // which sales channel the order came through
   `ALTER TABLE order_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'base'`, // base | addon
   `ALTER TABLE customers ADD COLUMN birthday TEXT`,        // 'YYYY-MM-DD' (optional) → birthday free drink
+  // PDPA: when this customer agreed to the shop keeping their details. null = never asked (all
+  // pre-existing customers), so the notice is shown once and recorded from then on.
+  `ALTER TABLE customers ADD COLUMN consent_at TEXT`,
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
@@ -586,6 +614,10 @@ for (const stmt of [
   `ALTER TABLE coupons ADD COLUMN claim_end TEXT`,
   `ALTER TABLE coupons ADD COLUMN valid_days INTEGER NOT NULL DEFAULT 0`,      // expiry N days AFTER claim; 0 = use expires_at
   `ALTER TABLE coupons ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'`,       // all | new (first-time customers only)
+  // Scheduled start. Every major loyalty platform lets you build a campaign today and have it go
+  // live on a future date; without this the only way to schedule was to create it inactive and
+  // remember to flip the switch by hand. null = live immediately (all existing coupons).
+  `ALTER TABLE coupons ADD COLUMN valid_from TEXT`,        // 'YYYY-MM-DD' Bangkok-local
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
@@ -595,6 +627,7 @@ for (const stmt of [
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE staff ADD COLUMN hourly_rate REAL NOT NULL DEFAULT 0`,   // 0 = not on the clock (labour stays the prorated estimate)
   `ALTER TABLE menu_items ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE price_tiers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE channels ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

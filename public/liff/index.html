@@ -176,6 +176,15 @@
       <span class="muted">ขณะนี้ยังไม่เปิดรับคิว กรุณาลองใหม่ภายหลังค่ะ</span>
     </div>
     <p id="liffNote" class="muted" style="font-size:12px;margin-top:12px"></p>
+    <!-- PDPA notice. Shown once per customer: what we keep, why, and how to have it removed.
+         Consent is recorded on the server so the shop can show WHEN each customer agreed. -->
+    <div id="pdpaBar" style="display:none;margin-top:12px;background:var(--surface,#f4f6f9);border:1px solid var(--line);border-radius:12px;padding:12px">
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.55">
+        ร้านเก็บ <b>ชื่อ LINE · เบอร์ (ถ้าให้) · ประวัติการสั่ง · แต้มสะสม</b> เพื่อออกคิว สะสมแต้ม และแจ้งสถานะออเดอร์เท่านั้น
+        ไม่ส่งต่อให้บุคคลภายนอก · ขอให้ลบข้อมูลได้ทุกเมื่อโดยแจ้งที่ร้าน
+      </div>
+      <button class="ok" style="width:100%;margin-top:10px;padding:9px;font-size:13px" onclick="acceptPdpa()">รับทราบและยินยอม</button>
+    </div>
   </div>
 
   <!-- STEP: build an order (self-order) -->
@@ -626,6 +635,19 @@ async function initLiff(){
   }
 }
 
+// PDPA consent: ask once, remember locally so it never nags, and tell the server so the shop has
+// a record of when this customer agreed. Never blocks ordering — it is a notice, not a gate.
+function maybeAskPdpa(){
+  const bar=$('pdpaBar'); if(!bar||!lineUserId) return;
+  if(localStorage.getItem('pdpa_ok')==='1') return;
+  bar.style.display='';
+}
+window.acceptPdpa=()=>{
+  localStorage.setItem('pdpa_ok','1');
+  const bar=$('pdpaBar'); if(bar) bar.style.display='none';
+  fetch('/api/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}).catch(()=>{});
+  toast('ขอบคุณค่ะ 💛');
+};
 async function isFriend(){
   if(!inLine || !liff.getFriendship) return true;       // can't check -> don't block
   try{ const fs = await liff.getFriendship(); return !!fs.friendFlag; }
@@ -841,11 +863,17 @@ async function loadZone(){
   $('aheadNow').textContent = ahead;
   $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
   // Open = zone is open AND the branch is within its own opening hours (auto-close).
-  const open = z.is_open===1 && (store ? store.open_now!==false : true);
+  // Ordering may also be paused independently of the hours: the shop switched the online channel
+  // off, or every till has gone quiet (shop internet down) and the server auto-paused. The shop
+  // itself is still serving — so say that, instead of the misleading "ร้านปิด".
+  const pause = cfg.ordering && cfg.ordering.paused ? cfg.ordering : null;
+  const open = z.is_open===1 && (store ? store.open_now!==false : true) && !pause;
   storeOpen = open;   // gate every ordering entry point (order button, member card, reorder, deep link)
   $('zoneState').className = 'pill '+(open?'open':'closed');
-  $('zoneState').textContent = open?'เปิด':'ปิด';
-  if(!open && z.is_open===1 && store && store.open_now===false && store.hours_open){
+  $('zoneState').textContent = open?'เปิด':(pause?'พักรับออเดอร์':'ปิด');
+  if(pause){
+    const cm=$('closedMsg'); if(cm) cm.innerHTML='<b>พักรับออเดอร์ออนไลน์ชั่วคราว</b><br>'+esc(pause.reason)+'<br><span style="font-size:13px">สั่งที่หน้าร้านได้ตามปกติค่ะ 🙏</span>';
+  } else if(!open && z.is_open===1 && store && store.open_now===false && store.hours_open){
     const cm=$('closedMsg'); if(cm) cm.textContent='⏰ ร้านปิดอยู่ · เปิด '+store.hours_open+'–'+store.hours_close+' น.';
   }
   show('orderNowBtn', open && cfg.selfOrder);
@@ -856,6 +884,7 @@ async function loadZone(){
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
   show('guestPhoneCard', !lineUserId && !!cfg.selfOrder);   // non-LINE: offer phone to collect stamps
+  maybeAskPdpa();           // one-time PDPA notice (never blocks ordering)
   loadLoyalty();            // show the customer's points balance (best-effort)
   loadReferral();           // invite-a-friend code + enter-a-code (best-effort)
 }
@@ -1379,6 +1408,8 @@ window.confirmBasket=async()=>{
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
     if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
       storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
+    } else if(_err==='online_orders_off'||_err==='pos_offline'){   // channel paused mid-checkout
+      storeOpen=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
     } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
