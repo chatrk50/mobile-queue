@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText } from './line.js';
+import { pushQueue, pushText, pushStage } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -118,11 +118,8 @@ export function callNext(zoneId, threshold) {
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
-  pushQueue(next.line_user_id,
-    `🔔 ถึงคิวของคุณแล้ว!\n` +
-    `หมายเลข: ${next.code}\n` +
-    `กรุณามาที่เคาน์เตอร์ค่ะ`,
-    queueLink(zoneId), 'ดูคิวของฉัน', 'queue');
+  pushStage(next.line_user_id, { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+    subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -140,9 +137,8 @@ export function markReady(ticketId, threshold) {
   if (o && o.payment_status !== 'paid') return { ok: false, reason: 'unpaid', zoneId: t.zone_id };   // pay-first: don't announce ready before payment
   db.prepare("UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?").run(ticketId);
   if (t.number > 0) db.prepare('UPDATE zones SET last_called=? WHERE id=?').run(t.number, t.zone_id);
-  if (t.line_user_id) pushQueue(t.line_user_id,
-    `🔔 เครื่องดื่มของคุณพร้อมรับแล้ว!\nหมายเลข: ${t.code}\nเชิญรับที่เคาน์เตอร์ได้เลยค่ะ`,
-    queueLink(t.zone_id), 'ดูคิวของฉัน');
+  if (t.line_user_id) pushStage(t.line_user_id, { stage: 3, title: 'เครื่องดื่มพร้อมรับแล้ว!', code: t.code,
+    subtitle: 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true, zoneId: t.zone_id };
 }
@@ -189,12 +185,8 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     const ahead = idx; // position in the ordered waiting list
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
-      pushQueue(t.line_user_id,
-        `⏰ ใกล้ถึงคิวของคุณแล้ว!\n` +
-        `หมายเลข: ${t.code}\n` +
-        `คิวรอก่อนหน้า: ${ahead}\n` +
-        `กรุณากลับมาที่ร้านค่ะ`,
-        queueLink(zoneId), 'ดูคิวของฉัน');
+      pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
+        subtitle: `คิวรอก่อนหน้า: ${ahead} · กรุณากลับมาที่ร้านค่ะ`, link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
     }
   });
 }
@@ -3040,9 +3032,8 @@ export function setOrderPaid(ticketId, opts = {}) {
   if (!skipLoyalty) { try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ } }
   if (ticket && ticket.line_user_id) {
     const ahead = aheadCount(ticket);
-    let msg = `✅ ชำระเงินเรียบร้อย ฿${order.total}\n` +
-      `🎫 หมายเลขคิวของคุณ: ${ticket.code}\n` +
-      `คิวรอก่อนหน้า: ${ahead}`;
+    // Order-status progress card (LINE-MAN style): stage 2 = order in, being made.
+    let sub = `ชำระเงินเรียบร้อย ฿${order.total} · คิวรอก่อนหน้า ${ahead}`;
     if (loyalty && loyalty.awarded != null) {
       // Recognition: greet returning customers, show stamps earned + progress to the next free drink.
       const per = getStampsPerReward();
@@ -3050,16 +3041,17 @@ export function setOrderPaid(ticketId, opts = {}) {
       const free = Math.floor(bal / per);
       const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
-      msg = greet + msg + `\n\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
-      msg += (loyalty.coupons && loyalty.coupons.length)
+      sub = greet + sub + `\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
+      sub += (loyalty.coupons && loyalty.coupons.length)
         ? `\n🎉 สะสมครบ ${per} ดวง! รับคูปองฟรี 1 ${UNIT} — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
         : (free >= 1
           ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
           : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`);
     } else {
-      msg += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
+      sub += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
-    pushQueue(ticket.line_user_id, msg, queueLink(ticket.zone_id), 'ดูคิว / แต้มของฉัน', 'paid');
+    pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
+      link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
   return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
