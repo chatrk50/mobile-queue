@@ -3454,10 +3454,20 @@ window.clSetSeg=(k)=>{ _clSeg=k; _clShown=CL_PAGE; renderCustSegs(); renderCustL
 // render CL_PAGE rows at a time with a "แสดงเพิ่ม" tail. Selection is key-based so it
 // survives search/paging, and "เลือกทั้งกลุ่มนี้" targets the FILTERED set, not just visible.
 const CL_PAGE=50; let _clShown=CL_PAGE, _clQ='';
+// Column sorting: tap a header to sort, tap again to flip direction. 'recent' sorts by
+// days-since-last-visit (never-visited sinks to the bottom either way).
+let _clSortKey='recent', _clSortDir=1;
+window.clSort=(k)=>{ if(_clSortKey===k) _clSortDir=-_clSortDir; else { _clSortKey=k; _clSortDir=(k==='name')?1:-1; }
+  _clShown=CL_PAGE; renderCustList(); };
 window.clSearchInput=()=>{ _clQ=($('clSearch').value||'').trim().toLowerCase(); _clShown=CL_PAGE; renderCustList(); };
 function clRows(){ let rows=_clSeg==='all' ? CL : CL.filter(c=>c.segment===_clSeg);
   if(_clQ) rows=rows.filter(c=>((c.name||'')+' '+(c.key||'')).toLowerCase().includes(_clQ));
-  return rows; }
+  const val=(c)=>({ name:(c.name||''), visits:c.visits||0, spend:c.spend||0,
+    recent:(c.daysSince==null?Number.MAX_SAFE_INTEGER:c.daysSince), points:c.points||0,
+    rating:(c.ratingAvg==null?-1:c.ratingAvg) }[_clSortKey]);
+  return rows.slice().sort((a,a2)=>{ const x=val(a), y=val(a2);
+    if(typeof x==='string') return x.localeCompare(y,'th')*_clSortDir;
+    return (x-y)*_clSortDir; }); }
 const SEG_TH={new:['ใหม่','#e6f1fb','#185fa5'],regular:['ประจำ','#e1f5ee','#0f6e56'],at_risk:['เสี่ยงหาย','#faeeda','#854f0b'],lost:['หายไป','#fcebeb','#a32d2d']};
 window.clMore=()=>{ _clShown+=CL_PAGE; renderCustList(); };
 // Column layout (owner UX): scannable data columns per customer, header row pinned on top.
@@ -3465,8 +3475,9 @@ const CL_GRID='display:grid;grid-template-columns:minmax(150px,2fr) 52px 76px 76
 function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   const more=all.length-rows.length;
   const tail=more>0?`<div style="padding:10px;text-align:center"><button class="ghost" style="padding:8px 18px;font-size:13px" onclick="clMore()">แสดงเพิ่มอีก ${Math.min(CL_PAGE,more)} (เหลือ ${more})</button></div>`:'';
+  const th=(key,label,right)=>`<span style="text-align:${right?'right':'left'};cursor:pointer;user-select:none;white-space:nowrap" onclick="clSort('${key}')" title="เรียงตาม${label}">${label}${_clSortKey===key?(_clSortDir>0?' ▲':' ▼'):''}</span>`;
   const head=`<div style="${CL_GRID};position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--line);font-size:11px;font-weight:800;color:var(--muted)">
-      <span>ลูกค้า</span><span style="text-align:right">มา</span><span style="text-align:right">ใช้จ่าย</span><span style="text-align:right">ล่าสุด</span><span style="text-align:right">แต้ม</span><span style="text-align:right">ให้ดาว</span></div>`;
+      ${th('name','ลูกค้า',false)}${th('visits','มา',true)}${th('spend','ใช้จ่าย',true)}${th('recent','ล่าสุด',true)}${th('points','แต้ม',true)}${th('rating','ให้ดาว',true)}</div>`;
   $('clList').innerHTML = '<div style="min-width:520px">'+head+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
     const last=c.daysSince==null?'—':(c.daysSince===0?'วันนี้':(c.daysSince+' วัน'));
     const rating=c.ratingAvg!=null?`<b style="color:#b8860b">★${c.ratingAvg}</b><span class="muted" style="font-size:9.5px"> (${c.ratingCount})</span>`:'<span class="muted">—</span>';
