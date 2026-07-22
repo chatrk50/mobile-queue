@@ -447,6 +447,13 @@
       <div id="stampMsg1" style="position:absolute;bottom:3%;left:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
       <div id="stampMsg2" style="position:absolute;bottom:3%;right:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;color:#8a5a12;line-height:1.15;padding:0 4px"></div>
     </div>
+    <!-- Shown when BOTH owner switches are off: the page still opens, but carries no card data. -->
+    <div id="memberEmpty" style="display:none;text-align:center;padding:38px 16px;color:var(--muted)">
+      <svg viewBox="0 0 24 24" style="width:46px;height:46px;fill:none;stroke:currentColor;stroke-width:1.4;opacity:.5"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 11h20M6 15.5h4"/></svg>
+      <div style="font-size:14.5px;font-weight:700;color:var(--navy);margin-top:10px">ยังไม่มีบัตรสมาชิก</div>
+      <div style="font-size:12.5px;margin-top:5px;line-height:1.6">ทางร้านยังไม่ได้เปิดใช้บัตรสมาชิกและบัตรสะสมแต้ม<br>สั่งเมนูได้ตามปกติเลยค่ะ</div>
+      <button class="ok" style="margin-top:16px;padding:11px 22px" onclick="closeMember();showOrderUI()">ดูเมนู</button>
+    </div>
     <div id="loyBdayMember" style="margin-top:11px"></div>
     <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
     <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
@@ -667,18 +674,30 @@ window.openMember=async()=>{
   // only the identity view. Both → tab toggle. Neither → don't open the popup at all.
   let conf={enabled:false,memberEnabled:true,stampsPerReward:10,tier:{bloomMin:10,essenceMin:25,purePerk:'',bloomPerk:'',essencePerk:''}};
   try{ const c=await api('/api/loyalty/config'); if(c) conf=c; }catch(e){}
+  // Each card follows ITS OWN owner switch, independently. The stamp card works at ANY stamps-per-
+  // reward (the punch grid lays itself out for N), so the programme is never silently hidden.
   const memberOn = conf.memberEnabled!==false;
   const per = conf.stampsPerReward||10;
-  const stampEligible = !!conf.enabled && per===10;   // per===10 is what the punch-card art assumes
+  const stampEligible = !!conf.enabled;
   let bal={points:0};
   if(conf.enabled){ try{ bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); }catch(e){} }
-  if(!memberOn && !stampEligible){ toast('ระบบสมาชิกยังไม่เปิดใช้งานค่ะ'); return; }
-  setNavTab('member');   // only mark the tab active once we know the popup will actually open
-
+  setNavTab('member');
   $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
+  // Both switches off → open the page anyway, but show an honest empty state instead of card data.
+  const emptyBox=$('memberEmpty');
+  if(!memberOn && !stampEligible){
+    $('memberTabs').style.display='none'; $('memberFlipWrap').style.display='none'; $('memberStampCard').style.display='none';
+    ['loyBdayMember','referralCard'].forEach(id=>{ const el=$(id); if(el){ el.style.display='none'; el.innerHTML=''; } });
+    $('memberReorder').style.display='none'; if(emptyBox) emptyBox.style.display='';
+    return;
+  }
+  if(emptyBox) emptyBox.style.display='none';
   $('memberTabs').style.display = (memberOn && stampEligible) ? 'flex' : 'none';
   showMemberTab(memberOn ? 'card' : 'stamp');
+  // A card whose switch is off must never render, even when the other one is on.
+  if(!memberOn) $('memberFlipWrap').style.display='none';
+  if(!stampEligible) $('memberStampCard').style.display='none';
 
   if(memberOn){
     $('memberQR').src='/api/member-qr?u='+encodeURIComponent(lineUserId||'')+'&_='+Date.now();
@@ -715,21 +734,20 @@ window.openMember=async()=>{
     const ready = pts>0 && (pts%per===0);
     const filled = ready ? per : (pts%per);
     const toGo = per-filled;
-    if(per===10){
-      $('stampName').textContent = displayName?('คุณ '+displayName):'สมาชิก';
-      const grid=$('stampGrid'); grid.innerHTML='';
-      for(let i=0;i<per;i++){
-        const on=i<filled;
-        grid.insertAdjacentHTML('beforeend','<div style="display:flex;align-items:center;justify-content:center">'+(on?'<svg viewBox="0 0 24 24" style="width:56%;height:56%;fill:#e55b6b;stroke:#c23553;stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>':'')+'</div>');
-      }
-      $('stampMsg1').textContent = ready ? '🎁 พร้อมแลกฟรี!' : ('อีก '+toGo+' ดวง ฟรี!');
-      $('stampMsg2').textContent = ready ? 'แสดงบัตรที่เคาน์เตอร์' : (filled+'/'+per+' ดวง');
-      try{ renderBday(bal,'loyBdayMember'); }catch(e){}
-    } else if(memberOn){
-      $('memberStamp').innerHTML = ready ? ('⭐ '+pts+' ดวง · พร้อมแลกฟรี 1 '+unit()+'! 🎁 แสดงบัตรที่เคาน์เตอร์')
-        : ('⭐ '+pts+'/'+per+' ดวง · อีก '+toGo+' '+unit()+' ฟรี 1 '+unit()+'!');
-      $('memberStamp').style.display='';
+    // Punch grid lays out for ANY N: keep 2 rows and split the columns, so 6/8/12/15 all look right.
+    $('stampName').textContent = displayName?('คุณ '+displayName):'สมาชิก';
+    const grid=$('stampGrid'); grid.innerHTML='';
+    const cols=Math.ceil(per/2), rows=per>1?2:1;
+    grid.style.gridTemplateColumns='repeat('+cols+',1fr)';
+    grid.style.gridTemplateRows='repeat('+rows+',1fr)';
+    const dot=Math.max(34, Math.min(56, Math.round(280/cols)));   // shrink the star as N grows
+    for(let i=0;i<per;i++){
+      const on=i<filled;
+      grid.insertAdjacentHTML('beforeend','<div style="display:flex;align-items:center;justify-content:center">'+(on?'<svg viewBox="0 0 24 24" style="width:'+dot+'%;height:'+dot+'%;fill:#e55b6b;stroke:#c23553;stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>':'')+'</div>');
     }
+    $('stampMsg1').textContent = ready ? '🎁 ได้คูปองแล้ว!' : ('อีก '+toGo+' ดวง ฟรี!');
+    $('stampMsg2').textContent = ready ? 'ดูที่ "คูปองของฉัน"' : (filled+'/'+per+' ดวง');
+    try{ renderBday(bal,'loyBdayMember'); }catch(e){}
   } else { const bd=$('loyBdayMember'); if(bd){ bd.style.display='none'; bd.innerHTML=''; } }
 
   // Referral (share code + enter-a-code) now lives inside this member card — refresh on open.
@@ -807,7 +825,9 @@ async function loadMemberStrip(){
   if(!lineUserId || !cfg.selfOrder) return;   // non-LINE customers are handled via phone capture (separate)
   try{
     let conf=null; try{ conf=await api('/api/loyalty/config'); }catch(e){}
-    if(conf && conf.memberEnabled===false) return;   // membership system turned off → no chip
+    // The chip is the door to the account hub (coupons + history live there too), so it stays as long
+    // as EITHER card is on. Only when the owner turns both off does the door disappear.
+    if(conf && conf.memberEnabled===false && !conf.enabled) return;
     let visits=0; try{ const s=await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'); visits=(s&&s.orderCount)||0; }catch(e){}
     const t=(conf&&conf.tier)||{bloomMin:10,essenceMin:25};
     const tierEmoji = visits>=t.essenceMin ? '👑' : visits>=t.bloomMin ? '🌷' : '🌱';
