@@ -531,13 +531,24 @@ export function dailyReport(branchId = null, dateStr = null) {
   // so the report can show EBITDA → EBIT → กำไรก่อนภาษี → กำไรสุทธิ like a real set of accounts.
   const opexKeys = OPEX_GROUPS.flatMap(([, , keys]) => keys);
   const monthlyOpex = opexKeys.reduce((s, k) => s + f[k], 0);
-  const dailyOpex = perDay(monthlyOpex);
   const opexLines = Object.fromEntries(opexKeys.map((k) => [k, f[k]]));
-  const opexGroups = OPEX_GROUPS.map(([key, label, keys]) => ({
-    key, label, monthly: keys.reduce((s, k) => s + f[k], 0),
-    daily: perDay(keys.reduce((s, k) => s + f[k], 0)),
-    lines: keys.filter((k) => f[k] > 0).map((k) => ({ key: k, label: FIN_LABELS[k], monthly: f[k], daily: perDay(f[k]) })),
-  }));
+  // Time clock: if anyone actually clocked a shift on this day, the wage line stops being a guess.
+  // We swap the prorated ค่าแรง for what the day really cost and record the difference, so the
+  // owner can see "จ้างเกินแผน ฿420" instead of the plan quietly hiding it. No shifts = no change.
+  const labor = laborActual(validDay ? dateStr : null);
+  const wagesPlanDaily = perDay(f.wages);
+  const laborVariance = labor.cost > 0 ? Math.round((labor.cost - wagesPlanDaily) * 100) / 100 : 0;
+  const dailyOpex = perDay(monthlyOpex) + laborVariance;   // no rounding: with no shifts this must stay bit-identical to the plan
+  const opexGroups = OPEX_GROUPS.map(([key, label, keys]) => {
+    const daily = (k) => (k === 'wages' && labor.cost > 0 ? labor.cost : perDay(f[k]));
+    const lbl = (k) => (k === 'wages' && labor.cost > 0 ? `${FIN_LABELS[k]} (ลงเวลาจริง ${labor.hours} ชม.)` : FIN_LABELS[k]);
+    return {
+      key, label, monthly: keys.reduce((s, k) => s + f[k], 0),
+      daily: keys.reduce((s, k) => s + daily(k), 0),
+      lines: keys.filter((k) => f[k] > 0 || daily(k) > 0)
+        .map((k) => ({ key: k, label: lbl(k), monthly: f[k], daily: daily(k) })),
+    };
+  });
   const ebitda = grossProfit - wasteCost - dailyOpex;
   const depreciation = perDay(f.depreciation);
   const ebit = ebitda - depreciation;
@@ -558,6 +569,7 @@ export function dailyReport(branchId = null, dateStr = null) {
     ingredient, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
+    labor, wagesPlanDaily, laborVariance,
     ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
@@ -1563,7 +1575,7 @@ const branchIdsOf = (staffId) =>
   db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staffId).map((r) => r.branch_id);
 
 export function listStaff() {
-  const rows = db.prepare('SELECT id, name, role, active FROM staff ORDER BY role, name').all();
+  const rows = db.prepare('SELECT id, name, role, active, hourly_rate FROM staff ORDER BY role, name').all();
   return rows.map((s) => ({ ...s, branchIds: s.role === 'owner' ? [] : branchIdsOf(s.id) }));
 }
 // True if `pin` already belongs to another active staffer (PINs identify the user at login).
@@ -1584,7 +1596,7 @@ export function createStaff({ name, pin, role = 'cashier', branchIds = [], tenan
   if (role !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
   return { id: Number(id), name: n, role, branchIds: role === 'owner' ? [] : branchIds };
 }
-export function updateStaff(id, { name, role, active, pin, branchIds }) {
+export function updateStaff(id, { name, role, active, pin, branchIds, hourlyRate }) {
   const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
   if (!cur) throw new Error('staff_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
@@ -1603,12 +1615,64 @@ export function updateStaff(id, { name, role, active, pin, branchIds }) {
     if (pinTaken(p, id)) throw new Error('pin_taken');
     pinHash = hashPin(p);
   }
-  db.prepare('UPDATE staff SET name=?, role=?, active=?, pin_hash=? WHERE id=?').run(n, r, a, pinHash, id);
+  const hr = hourlyRate != null ? Math.max(0, Number(hourlyRate) || 0) : (cur.hourly_rate || 0);
+  db.prepare('UPDATE staff SET name=?, role=?, active=?, pin_hash=?, hourly_rate=? WHERE id=?').run(n, r, a, pinHash, hr, id);
   if (Array.isArray(branchIds)) {
     db.prepare('DELETE FROM staff_branches WHERE staff_id=?').run(id);
     if (r !== 'owner') for (const b of branchIds) db.prepare('INSERT OR IGNORE INTO staff_branches (staff_id, branch_id) VALUES (?,?)').run(id, b);
   }
-  return { id: Number(id), name: n, role: r, active: a, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
+  return { id: Number(id), name: n, role: r, active: a, hourly_rate: hr, branchIds: r === 'owner' ? [] : branchIdsOf(id) };
+}
+
+// ---------- Time clock ----------
+// The prorated monthly wage in the cost settings is a PLAN. This records what a day actually cost:
+// who was on, for how long, at the rate they were on at the time. A day with clocked shifts uses
+// the real number in the P&L; a day without falls back to the plan, so nothing changes until the
+// shop starts using the clock.
+export function openShift(staffId) {
+  const s = db.prepare('SELECT * FROM staff WHERE id=? AND active=1').get(staffId);
+  if (!s) throw new Error('staff_not_found');
+  const open = db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId);
+  if (open) return { ...open, already: true };            // idempotent: re-tapping "เข้างาน" never double-opens
+  const id = db.prepare('INSERT INTO staff_shifts (staff_id, rate) VALUES (?,?)').run(staffId, s.hourly_rate || 0).lastInsertRowid;
+  return db.prepare('SELECT * FROM staff_shifts WHERE id=?').get(id);
+}
+export function closeShift(staffId, note = null) {
+  const open = db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId);
+  if (!open) throw new Error('no_open_shift');
+  db.prepare("UPDATE staff_shifts SET clock_out=datetime('now'), note=? WHERE id=?").run(note || null, open.id);
+  const row = db.prepare("SELECT *, (julianday(clock_out)-julianday(clock_in))*24 AS hours FROM staff_shifts WHERE id=?").get(open.id);
+  const cost = Math.round(Math.max(0, row.hours) * (row.rate || 0) * 100) / 100;
+  db.prepare('UPDATE staff_shifts SET cost=? WHERE id=?').run(cost, open.id);
+  return { ...row, cost, hours: Math.round(row.hours * 100) / 100 };
+}
+export function openShiftOf(staffId) {
+  if (!staffId) return null;
+  return db.prepare('SELECT * FROM staff_shifts WHERE staff_id=? AND clock_out IS NULL ORDER BY id DESC LIMIT 1').get(staffId) || null;
+}
+/** Shifts that STARTED on a Bangkok day, newest first, with the person's name. */
+export function shiftsForDay(dateStr = null) {
+  const day = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `'${dateStr}'` : `date('now','+7 hours')`;
+  return db.prepare(
+    `SELECT sh.*, st.name AS staff_name,
+            (julianday(COALESCE(sh.clock_out, datetime('now')))-julianday(sh.clock_in))*24 AS hours
+       FROM staff_shifts sh JOIN staff st ON st.id=sh.staff_id
+      WHERE date(sh.clock_in,'+7 hours')=${day}
+      ORDER BY sh.clock_in DESC`
+  ).all().map((r) => ({ ...r, hours: Math.round(r.hours * 100) / 100, open: !r.clock_out }));
+}
+/** What the day's labour actually cost. Only CLOSED shifts count — an open one is still running. */
+export function laborActual(dateStr = null) {
+  const day = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `'${dateStr}'` : `date('now','+7 hours')`;
+  const r = db.prepare(
+    `SELECT COUNT(*) AS shifts, COALESCE(SUM(cost),0) AS cost,
+            COALESCE(SUM((julianday(clock_out)-julianday(clock_in))*24),0) AS hours
+       FROM staff_shifts WHERE clock_out IS NOT NULL AND date(clock_in,'+7 hours')=${day}`
+  ).get();
+  const openN = db.prepare(
+    `SELECT COUNT(*) n FROM staff_shifts WHERE clock_out IS NULL AND date(clock_in,'+7 hours')=${day}`
+  ).get().n;
+  return { shifts: r.shifts, openShifts: openN, cost: Math.round(r.cost * 100) / 100, hours: Math.round(r.hours * 100) / 100 };
 }
 export function deactivateStaff(id) {
   const cur = db.prepare('SELECT * FROM staff WHERE id=?').get(id);
@@ -2017,6 +2081,33 @@ export function setSlipAuto(on) { setSetting('slip:auto', on ? '1' : '0'); retur
 export function printEnabled() { return getSetting('print:enabled', '0') === '1'; }
 export function setPrintEnabled(on) { setSetting('print:enabled', on ? '1' : '0'); return { printEnabled: !!on }; }
 // Social proof (owner-toggleable, default OFF): the LIFF shows "วันนี้ขายไปแล้ว N แก้ว" on the home.
+// ---------- Full data backup ----------
+// The shop's data lives on someone else's server. Excel reports cover the numbers but not the
+// menu, recipes, stock, staff, customers or settings — so this dumps EVERY table as plain JSON
+// the owner can keep. Read-only and self-describing: any of it can be rebuilt from this file.
+// PIN hashes are stripped: a backup should never be a way to walk in with someone else's login.
+const BACKUP_SKIP = new Set(['sqlite_sequence', 'push_log']);   // internals / high-volume logs
+export function exportBackup() {
+  const tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+  ).all().map((r) => r.name).filter((n) => !BACKUP_SKIP.has(n));
+  const data = {};
+  let rows = 0;
+  for (const t of tables) {
+    try {
+      const list = db.prepare(`SELECT * FROM "${t}"`).all();
+      data[t] = t === 'staff' ? list.map(({ pin_hash, ...rest }) => rest) : list;
+      rows += list.length;
+    } catch { data[t] = []; }   // a table the current build cannot read must not sink the whole backup
+  }
+  return {
+    exportedAt: db.prepare("SELECT datetime('now','+7 hours') t").get().t,
+    timezone: 'Asia/Bangkok', tables: tables.length, rows,
+    note: 'YO-DEE full data backup · PIN hashes excluded on purpose',
+    data,
+  };
+}
+
 // ---------- PDPA: consent + right to erasure ----------
 // Thai PDPA gives a customer the right to have their personal data deleted. Sales records are a
 // different thing — they are accounting records the shop must keep. So this ANONYMISES rather
@@ -2807,7 +2898,15 @@ export function addMenuItem({ name, name_en, price, image, category, badge }) {
     .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }) {
+// Append-only price trail. A margin report from last month is only readable against the price that
+// was in force THEN — and "why is this item suddenly less profitable" needs a date and a name.
+export function priceHistory(itemId = null, limit = 100) {
+  const n = Math.max(1, Math.min(500, Number(limit) || 100));
+  return itemId
+    ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
+    : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
+}
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
@@ -2819,6 +2918,13 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
   db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, id);
+  // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
+  if (Number(p) !== Number(cur.price)) {
+    try {
+      db.prepare('INSERT INTO price_history (item_id, item_name, old_price, new_price, actor_id, actor_name) VALUES (?,?,?,?,?,?)')
+        .run(id, n, cur.price, p, actor?.id || null, actor?.name || null);
+    } catch { /* trail is best-effort: never block a price change */ }
+  }
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
 }
 export function deleteMenuItem(id) {

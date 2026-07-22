@@ -256,6 +256,31 @@ CREATE TABLE IF NOT EXISTS staff (
   active     INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Time clock. One row per shift: clocked in, maybe still open (clock_out null). The rate is COPIED
+-- onto the row at clock-in, so raising someone's pay never rewrites what past days cost.
+CREATE TABLE IF NOT EXISTS staff_shifts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id   INTEGER NOT NULL REFERENCES staff(id),
+  branch_id  INTEGER,
+  clock_in   TEXT NOT NULL DEFAULT (datetime('now')),
+  clock_out  TEXT,
+  rate       REAL NOT NULL DEFAULT 0,     -- ฿/hour at the moment of clock-in
+  cost       REAL,                        -- computed on clock-out: hours × rate
+  note       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shifts_staff ON staff_shifts(staff_id, clock_in);
+-- Menu price trail. Append-only: what a drink used to cost, what it costs now, who changed it.
+CREATE TABLE IF NOT EXISTS price_history (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id   INTEGER NOT NULL,
+  item_name TEXT NOT NULL,               -- kept verbatim: the item may be renamed or deleted later
+  old_price REAL NOT NULL,
+  new_price REAL NOT NULL,
+  actor_id  INTEGER,
+  actor_name TEXT,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_price_history_item ON price_history(item_id, at);
 -- Which branches a (non-owner) staffer may access. Owner role bypasses this = all branches.
 CREATE TABLE IF NOT EXISTS staff_branches (
   staff_id  INTEGER NOT NULL REFERENCES staff(id),
@@ -602,6 +627,7 @@ for (const stmt of [
   // --- Multi-tenant SaaS insurance: tenant_id on every tenant-owned table (default 1) ---
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE staff ADD COLUMN hourly_rate REAL NOT NULL DEFAULT 0`,   // 0 = not on the clock (labour stays the prorated estimate)
   `ALTER TABLE menu_items ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE price_tiers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE channels ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

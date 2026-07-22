@@ -476,6 +476,65 @@ ok(throwsWith({ source: 'customer', lineUserId: 'Uofflinegate000000000000000002'
   Q.setPosOfflineMinutes(0);
 }
 
+// ---- Price trail + backup: two things that only matter after the fact, so they must be right
+//      the FIRST time — you cannot retro-record a price change you never captured. ----
+console.log('\n== Menu price history + data backup ==');
+{
+  const item = Q.listMenu().find((m) => m.category !== 'topping');
+  const before = Q.priceHistory(item.id).length;
+  Q.updateMenuItem(item.id, { name: item.name }, { id: 9, name: 'ผู้ทดสอบ' });   // save with NO price change
+  ok(Q.priceHistory(item.id).length === before, 'INVARIANT saving without changing the price writes NOTHING (the trail stays signal, not noise)');
+  const oldP = item.price;
+  Q.updateMenuItem(item.id, { price: oldP + 7 }, { id: 9, name: 'ผู้ทดสอบ' });
+  const h = Q.priceHistory(item.id);
+  ok(h.length === before + 1, 'a price change is recorded');
+  ok(h[0].old_price === oldP && h[0].new_price === oldP + 7, `INVARIANT the trail keeps BOTH prices (฿${h[0].old_price} → ฿${h[0].new_price})`);
+  ok(h[0].actor_name === 'ผู้ทดสอบ', 'INVARIANT the trail records WHO changed it');
+  Q.updateMenuItem(item.id, { price: oldP }, { id: 9, name: 'ผู้ทดสอบ' });
+  ok(Q.priceHistory(item.id).length === before + 2, 'INVARIANT putting the price back is itself a change, not an undo of the record');
+  ok(Q.priceHistory(null, 5).length <= 5, 'the shop-wide trail respects its limit');
+}
+{
+  const b = Q.exportBackup();
+  ok(b.tables > 10 && b.rows > 0, `backup covers the whole database (${b.tables} tables, ${b.rows} rows)`);
+  for (const t of ['menu_items', 'customers', 'orders', 'settings', 'staff']) ok(Array.isArray(b.data[t]), `backup includes ${t}`);
+  ok((b.data.staff || []).every((s) => s.pin_hash === undefined), 'INVARIANT PIN hashes are NEVER in the backup file');
+  ok(JSON.parse(JSON.stringify(b)).rows === b.rows, 'INVARIANT the backup is plain JSON — it survives a round-trip through a file');
+}
+
+// ---- Time clock: the monthly wage in the settings is a PLAN. A day with clocked shifts must use
+//      what it REALLY cost, and a day without must stay exactly as it was. ----
+console.log('\n== Time clock → real daily labour cost ==');
+{
+  const planned = Q.dailyReport().pnl;
+  ok(planned.labor.cost === 0 && planned.laborVariance === 0, 'no shifts → labour is still the prorated plan (nothing changes until the clock is used)');
+  const st = Q.createStaff({ name: 'พนักงานลงเวลา', pin: '778899', role: 'cashier', branchIds: [1] });
+  Q.updateStaff(st.id, { hourlyRate: 60 });
+  ok(Q.listStaff().find((s) => s.id === st.id).hourly_rate === 60, 'hourly rate is stored on the staff record');
+  const s1 = Q.openShift(st.id);
+  const s2 = Q.openShift(st.id);
+  ok(s2.already === true && s2.id === s1.id, 'INVARIANT clocking in twice does NOT open a second shift (tap-happy staff never double-bill)');
+  ok(Q.openShiftOf(st.id)?.id === s1.id, 'the open shift is findable for the person it belongs to');
+  ok(Q.laborActual().cost === 0 && Q.laborActual().openShifts === 1, 'INVARIANT an OPEN shift costs nothing yet — it has not finished');
+  // Backdate the clock-in by 3 hours so the closed shift has real duration to price.
+  db.prepare("UPDATE staff_shifts SET clock_in=datetime('now','-3 hours') WHERE id=?").run(s1.id);
+  const closed = Q.closeShift(st.id);
+  ok(Math.abs(closed.hours - 3) < 0.02, `INVARIANT hours come from the clock, not from typing (${closed.hours})`);
+  ok(Math.abs(closed.cost - 180) < 1, `INVARIANT cost == hours × rate (3h × ฿60 = ฿${closed.cost})`);
+  let noOpen = false; try { Q.closeShift(st.id); } catch (e) { noOpen = e.message === 'no_open_shift'; }
+  ok(noOpen, 'INVARIANT clocking out twice is refused (no phantom second shift)');
+  Q.updateStaff(st.id, { hourlyRate: 999 });
+  ok(Math.abs(db.prepare('SELECT cost FROM staff_shifts WHERE id=?').get(s1.id).cost - 180) < 1, 'INVARIANT raising the rate does NOT rewrite what past days cost');
+  const withClock = Q.dailyReport().pnl;
+  const wagesLine = withClock.opexGroups.find((g) => g.key === 'payroll').lines.find((l) => l.key === 'wages');
+  ok(wagesLine && Math.abs(wagesLine.daily - closed.cost) < 1, `INVARIANT the P&L wage line becomes the REAL cost once shifts exist (฿${wagesLine && wagesLine.daily})`);
+  ok(Math.abs(withClock.laborVariance - (closed.cost - withClock.wagesPlanDaily)) < 0.02, `INVARIANT variance == actual − plan (${withClock.laborVariance})`);
+  ok(Math.abs(withClock.opexDaily - (planned.opexDaily + withClock.laborVariance)) < 0.02, 'INVARIANT the variance flows into opex — and therefore into net profit');
+  ok(Q.shiftsForDay().some((s) => s.staff_id === st.id && !s.open), "today's timesheet lists the finished shift");
+  db.prepare('DELETE FROM staff_shifts WHERE staff_id=?').run(st.id);   // leave the P&L as we found it for later invariants
+  ok(Q.dailyReport().pnl.laborVariance === 0, 'removing the shifts restores the planned figure exactly');
+}
+
 // ---- PDPA erasure: a customer's personal data must be removable, but the shop's SALES are
 //      accounting records that must survive. Anonymise, never delete the money. ----
 console.log('\n== PDPA: right to erasure (money survives, the person does not) ==');

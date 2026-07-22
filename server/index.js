@@ -376,6 +376,38 @@ app.post('/api/admin/features', (req, res) => {
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Owner-downloadable full backup. Served as an attachment so a tap on the iPad saves a file.
+app.get('/api/admin/backup.json', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const dump = Q.exportBackup();
+    const name = `yodee-backup-${dump.exportedAt.replace(/[: ]/g, '-').slice(0, 16)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(JSON.stringify(dump, null, 1));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// ---------- Time clock ----------
+// Anyone signed in may clock THEMSELVES in/out; a manager sees the day's sheet.
+app.post('/api/shifts/clock-in', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const id = Number(req.body?.staffId ?? req.staff?.id);
+  if (!id) return res.status(400).json({ error: 'staff_required' });
+  if (req.staff && req.staff.role !== 'owner' && req.staff.role !== 'manager' && id !== req.staff.id) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.openShift(id)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/shifts/clock-out', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const id = Number(req.body?.staffId ?? req.staff?.id);
+  if (!id) return res.status(400).json({ error: 'staff_required' });
+  if (req.staff && req.staff.role !== 'owner' && req.staff.role !== 'manager' && id !== req.staff.id) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.closeShift(id, req.body?.note)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/shifts', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const d = typeof req.query.date === 'string' ? req.query.date : null;
+  res.json({ shifts: Q.shiftsForDay(d), total: Q.laborActual(d), mine: Q.openShiftOf(req.staff?.id || null) });
+});
 // PDPA. The customer records their own consent (public, keyed to a real LINE id); erasure is an
 // owner-only action because it is irreversible and touches accounting records.
 app.post('/api/consent', (req, res) => {
@@ -1263,10 +1295,15 @@ app.post('/api/menu/order', (req, res) => {
 });
 app.post('/api/menu/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { const item = Q.updateMenuItem(req.params.id, req.body || {});
+  try { const item = Q.updateMenuItem(req.params.id, req.body || {}, req.staff || null);
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(Number(req.params.id), req.body.priceDelivery);
     res.json(item); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+// The price trail — for one item (?item=) or the whole shop.
+app.get('/api/menu/price-history', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ history: Q.priceHistory(req.query.item ? Number(req.query.item) : null, req.query.limit) });
 });
 // Reorder a menu item within its category (changes what customer/cashier see in the order grid).
 app.post('/api/menu/:id/move', (req, res) => {
