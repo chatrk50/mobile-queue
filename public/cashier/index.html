@@ -1837,10 +1837,28 @@ function renderCoupons(list){ $('couponList').innerHTML=(list&&list.length)?list
     const disc=c.disc_type==='percent'?(c.disc_value+'%'+(c.max_disc>0?' (สูงสุด ฿'+c.max_disc+')':'')):('฿'+c.disc_value);
     const exp=c.expires_at?('หมดอายุ '+c.expires_at):'ไม่มีวันหมดอายุ';
     return `<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${c.active?'':'opacity:.55'}">
-      <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(c.label)}</b> <span style="font-size:11px;font-weight:800;color:var(--accent2)">ลด ${disc}</span><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.code)} · ขั้นต่ำ ฿${c.min_spend} · ${exp}${c.usage_limit>0?(' · ใช้ '+c.used_count+'/'+c.usage_limit):''}</div></div>
+      <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(c.label)}</b> <span style="font-size:11px;font-weight:800;color:var(--accent2)">ลด ${disc}</span>
+        ${c.distribution==='claim'?`<span style="font-size:10px;font-weight:800;background:#fffbea;color:#b45309;padding:1px 8px;border-radius:999px;margin-left:6px">ลิงก์รับคูปอง</span>`:''}
+        <div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.code)} · ขั้นต่ำ ฿${c.min_spend} · ${exp}${c.usage_limit>0?(' · ใช้ '+c.used_count+'/'+c.usage_limit):''}</div>
+        ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:3px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit+(c.issued_count>=c.issue_limit?' · รับครบแล้ว':'')):' (ไม่จำกัด)'}</div>`:''}
+      </div>
+      ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px;margin-right:6px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
+      <button class="ghost" style="padding:5px 10px;font-size:12px;margin-right:6px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
       <button class="tgl ${c.active?'on':'off'}" style="margin:0 10px" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
       <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delCoupon(${c.id})">ลบ</button>
     </div>`;}).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง'; }
+// Claim campaign: quota is taken when the customer TAPS the link, so "50 สิทธิ์" is honest.
+window.setupClaim=async(id,isClaim,curLimit,curDays)=>{
+  const n=await appPrompt({title:'ลิงก์รับคูปอง',message:'ให้รับได้กี่สิทธิ์? (0 = ไม่จำกัด)\nครบแล้วลิงก์จะขึ้น "รับครบแล้ว" อัตโนมัติ',type:'number',inputMode:'numeric',value:String(curLimit||0),okText:'ถัดไป'});
+  if(n===null) return;
+  const d=await appPrompt({title:'อายุคูปองหลังรับ',message:'ใช้ได้กี่วันนับจากวันที่ลูกค้ากดรับ? (0 = ใช้วันหมดอายุของคูปอง)',type:'number',inputMode:'numeric',value:String(curDays||0),okText:'สร้างลิงก์'});
+  if(d===null) return;
+  try{ const c=await api('/api/coupons/'+id+'/claim-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({issueLimit:Number(n)||0,validDays:Number(d)||0,enable:true})});
+    loadCoupons(); copyClaimLink(c.claim_token); }catch(e){ toast(err(e)); } };
+window.copyClaimLink=(tok)=>{ if(!tok){ toast('ยังไม่มีลิงก์'); return; }
+  const url=location.origin+'/liff/?coupon='+encodeURIComponent(tok);
+  try{ navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว ✓ ส่งให้ลูกค้าได้เลย'); }
+  catch(e){ appConfirm({title:'ลิงก์รับคูปอง',message:url,okText:'ปิด',cancelText:''}); } };
 window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
 window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabel').value.trim(), disc_type=$('cpType').value, disc_value=Number($('cpValue').value), min_spend=Number($('cpMin').value)||0, expires_at=$('cpExp').value||null;
   if(!code){ toast('ใส่โค้ดคูปอง'); return; } if(!(disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }

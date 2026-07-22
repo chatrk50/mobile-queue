@@ -552,6 +552,7 @@
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
+const couponTok = qs.get('coupon');                        // claim-a-coupon link (?coupon=TOKEN)
 let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
@@ -758,6 +759,56 @@ window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('member
 window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; el.style.transform = (el.style.transform||'').includes('180') ? 'rotateY(0deg)' : 'rotateY(180deg)'; };
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
 
+// Claim-a-coupon landing: the customer tapped a shared link. Every outcome gets its own screen —
+// never a bare error — and the remaining count is shown before the tap when the quota is small.
+function couponValueText(i){
+  if(i.discType==='percent') return 'ลด '+i.discValue+'%'+(i.maxDisc?(' (สูงสุด ฿'+i.maxDisc+')'):'');
+  return 'ลด ฿'+i.discValue;
+}
+function couponScreen(html){ document.querySelector('.wrap').innerHTML='<div class="card" style="text-align:center;padding:26px 20px">'+html+'</div>'; }
+window.goCouponWallet=()=>{ location.href='/liff/'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''); };
+async function doCouponClaim(){
+  let info=null; try{ info=await (await fetch('/api/claim/'+encodeURIComponent(couponTok)+(lineUserId?('?u='+encodeURIComponent(lineUserId)):''))).json(); }catch(e){}
+  if(!info || info.state==='not_found'){
+    couponScreen('<div style="font-size:44px">🔍</div><h1 style="margin:8px 0;color:var(--navy)">ไม่พบคูปองนี้</h1><p class="muted">ลิงก์อาจหมดอายุหรือถูกยกเลิกแล้ว</p>'
+      +'<button class="ok" style="width:100%;margin-top:16px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
+  }
+  const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12.5px;margin-top:4px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
+  const card='<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0">'
+    +'<div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(info.label||'คูปอง')+'</div>'
+    +'<div style="font-weight:800;color:#c2410c;font-size:15px;margin-top:3px">'+val+'</div>'+cond+'</div>';
+  if(info.state==='already'){
+    couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
+      +'<p class="muted" style="font-size:12.5px">อยู่ในเมนู "คูปองของฉัน" พร้อมใช้ได้เลย</p>'
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">สั่งเลย</button>'); return;
+  }
+  if(info.state==='sold_out'){
+    couponScreen('<div style="font-size:44px">😢</div><h1 style="margin:8px 0;color:var(--navy)">คูปองนี้ถูกรับครบแล้ว</h1>'+card
+      +'<p class="muted" style="font-size:12.5px">มีจำนวนจำกัด '+(info.limit||0)+' สิทธิ์ — ไว้รอบหน้านะคะ 💛</p>'
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ดูเมนูอื่น</button>'); return;
+  }
+  if(info.state==='not_started'||info.state==='ended'||info.state==='closed'){
+    couponScreen('<div style="font-size:44px">🕓</div><h1 style="margin:8px 0;color:var(--navy)">'+(info.state==='not_started'?'ยังไม่เริ่มแจก':'หมดเวลารับแล้ว')+'</h1>'+card
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
+  }
+  const left=(info.remaining!=null&&info.remaining<=50)?('<div style="font-weight:800;color:#c2410c;font-size:13px;margin-bottom:6px">เหลืออีก '+info.remaining+' สิทธิ์เท่านั้น!</div>'):'';
+  couponScreen('<div style="font-size:44px">🎁</div><h1 style="margin:8px 0;color:var(--navy)">คูปองพิเศษสำหรับคุณ</h1>'+left+card
+    +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:50px;font-size:16px" onclick="doCouponClaimGo()">รับคูปอง</button>');
+}
+window.doCouponClaimGo=async()=>{
+  const b=$('cpClaimBtn'); if(b){ b.disabled=true; b.textContent='กำลังรับ…'; }
+  let r=null; try{ r=await (await fetch('/api/claim/'+encodeURIComponent(couponTok),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})})).json(); }catch(e){}
+  if(r && r.ok){
+    couponScreen('<div style="font-size:52px">🎉</div><h1 style="margin:8px 0;color:var(--navy)">รับคูปองแล้ว!</h1>'
+      +'<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
+      +'<div class="muted" style="font-size:12.5px;margin-top:4px">ใช้ได้ถึง '+esc(r.expiresAt||'')+'</div></div>'
+      +'<p class="muted" style="font-size:12.5px">เก็บไว้ในเมนู "คูปองของฉัน" แล้ว</p>'
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">สั่งเลย</button>');
+    try{ if(window.confetti) confetti(); }catch(e){}
+    return;
+  }
+  await doCouponClaim();   // re-render with the honest state (already / sold_out / ended)
+};
 // QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
 async function doClaim(){
   try{
@@ -1909,6 +1960,7 @@ async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabl
   try{
     await initLiff();
     if(claimId){ await doClaim(); return; }   // QR check-in handshake — not the normal order flow
+    if(couponTok){ await doCouponClaim(); return; }   // claim-a-coupon landing
     if(cfg.lineEnabled && inLine && cfg.addFriendUrl && !(await isFriend())){ show('addCard',true); return; }
     await proceed();
     normal=true;
