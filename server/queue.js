@@ -369,7 +369,7 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
     let text = msg;
     if (cp) {
       const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d;
-      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'winback', ?, ?, ?)`)
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
         .run(key, cp.label, cp.cap, expiresAt);
       text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
     }
@@ -1703,7 +1703,7 @@ export function convertReadyRewards(customerKey) {
       db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
         .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
-      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'reward', ?, 49, ?)`)
+      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, 49, ?, 'reward')`)
         .run(customerKey, reward.name, expiresAt).lastInsertRowid;
     })();
     issued.push({ id: Number(ccId), label: reward.name, expiresAt });
@@ -2442,7 +2442,7 @@ export function issueBirthdayCoupons() {
   ).all(md, yr);
   const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
   for (const r of rows) {
-    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at) VALUES (?, 'birthday', ?, 100, ?)`)
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, 100, ?, 'birthday')`)
       .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
     try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
@@ -3129,7 +3129,7 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
   // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
   // already used, instead of the discount being applied twice.
-  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=? WHERE id=? AND used_at IS NULL`).run(order.id, cc.id);
+  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed' WHERE id=? AND used_at IS NULL`).run(order.id, cc.id);
   if (!burned.changes) throw new Error('coupon_used');
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
@@ -3168,7 +3168,7 @@ function returnStockForOrder(order) {
  *  to the ticket's own customer (positive = points given back). */
 function reverseLoyaltyForOrder(orderId, ownerKey) {
   // A coupon spent on this order comes back to the customer when the order is voided.
-  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
+  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
   const moves = db.prepare("SELECT customer_key, kind, points FROM loyalty_moves WHERE order_id=? AND kind IN ('earn','redeem')").all(orderId);
   if (!moves.length) return 0;
   const byKey = {};

@@ -666,6 +666,32 @@ console.log('\n== Coupon race guards ==');
   ok(db.prepare('SELECT COUNT(*) c FROM customer_coupons WHERE id=? AND used_at IS NOT NULL').get(ccId).c === 1, 'INVARIANT the wallet coupon is burned exactly once');
 }
 
+// ---- Wallet coupons are instances: state transitions + one-claim-per-campaign constraint ----
+console.log('\n== Wallet coupon state + claim constraint ==');
+{
+  const skey = 'Ustatecoupon0000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าสถานะ')`).run(skey);
+  const st = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status) VALUES (1,1,0,'SC',?, 'waiting')`).run(skey).lastInsertRowid;
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, branch_id) VALUES (?, 200, 'unpaid', 1)`).run(st);
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES ((SELECT id FROM orders WHERE ticket_id=?), 'เครื่องดื่มสถานะ', 60, 1)`).run(st);
+  const scc = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source)
+                          VALUES (?, 'reward', 'คูปองสถานะ', 49, date('now','+7 hours','+30 days'), 'reward')`).run(skey).lastInsertRowid;
+  ok(db.prepare('SELECT state FROM customer_coupons WHERE id=?').get(scc).state === 'claimed', 'INVARIANT a fresh wallet coupon starts in state=claimed');
+  Q.redeemCustomerCoupon(st, scc, null);
+  ok(db.prepare('SELECT state FROM customer_coupons WHERE id=?').get(scc).state === 'redeemed', 'INVARIANT redeeming moves it to state=redeemed');
+  Q.cancelOrderTicket(st, { reason: 'ทดสอบคืน' });
+  ok(db.prepare('SELECT state FROM customer_coupons WHERE id=?').get(scc).state === 'claimed', 'INVARIANT voiding the order returns the coupon to state=claimed');
+  // The DB itself must reject a second claim of the same campaign by the same customer.
+  db.prepare(`INSERT INTO coupons (code, label, disc_type, disc_value, active) VALUES ('ONCE1','คูปองครั้งเดียว','amount',10,1)`).run();
+  const campId = db.prepare("SELECT id FROM coupons WHERE code='ONCE1'").get().id;
+  const claim = () => db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source)
+                                  VALUES (?, ?, 'claim', 'คูปองครั้งเดียว', 10, date('now','+7 hours','+30 days'), 'claim_link')`).run(skey, campId);
+  claim();
+  let dup = null; try { claim(); } catch (e) { dup = 'rejected'; }
+  ok(dup === 'rejected', 'INVARIANT the database rejects a second claim of the same campaign by the same customer');
+  ok(db.prepare('SELECT COUNT(*) c FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(campId, skey).c === 1, 'INVARIANT exactly one claim row survives');
+}
+
 // ---- Customer list carries the star rating each customer gave + exports to Excel ----
 console.log('\n== Customer ratings + Excel export ==');
 {

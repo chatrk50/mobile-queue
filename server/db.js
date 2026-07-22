@@ -565,6 +565,12 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
+  // A wallet coupon becomes an INSTANCE of a campaign (the model every major platform uses):
+  // coupon_id links it back to coupons; state makes claimed→redeemed explicit instead of
+  // inferring it from used_at; source records how it arrived.
+  `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
+  `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
+  `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
   `ALTER TABLE stock_moves ADD COLUMN expiry TEXT`,         // purchases only: lot expiry 'YYYY-MM-DD' (→ near-expiry alerts)
   `ALTER TABLE stock_moves ADD COLUMN po_id INTEGER`,       // purchases posted from a purchase order
@@ -608,6 +614,15 @@ for (const stmt of [
 }
 // Index the idempotency token (created after the ALTER so it exists on migrated DBs too).
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_client_token ON tickets(client_token)'); } catch { /* ignore */ }
+// One claim per customer per campaign, enforced by the DATABASE rather than app logic — the only
+// way to win the race when two taps arrive together. Partial so legacy rows (coupon_id NULL,
+// e.g. stamp/birthday gifts issued before campaigns existed) are unaffected.
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_coupons_once
+             ON customer_coupons(coupon_id, customer_key) WHERE coupon_id IS NOT NULL`);
+} catch { /* older SQLite without partial indexes — app-level guard still applies */ }
+// Backfill the new state column from the old used_at truth, once.
+try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check
