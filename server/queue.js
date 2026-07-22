@@ -1665,6 +1665,70 @@ export function updateCoupon(id, c = {}) {
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
+// ---------- Claim campaigns: a link customers tap to COLLECT a coupon into their wallet ----------
+function randToken(n = 18) {
+  const A = 'abcdefghijkmnpqrstuvwxyz23456789';   // no look-alikes; high entropy beats guessable codes
+  let s = ''; for (let i = 0; i < n; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+/** Turn a coupon into a claim campaign (or update its claim settings). Returns the coupon incl. token. */
+export function setCouponClaim(id, { issueLimit = 0, claimStart = null, claimEnd = null, validDays = 0, enable = true } = {}) {
+  const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+  if (!cur) throw new Error('coupon_not_found');
+  if (!enable) { db.prepare("UPDATE coupons SET distribution='code' WHERE id=?").run(id); return db.prepare('SELECT * FROM coupons WHERE id=?').get(id); }
+  const token = cur.claim_token || randToken();
+  const d = (x) => (/^\d{4}-\d{2}-\d{2}$/.test(String(x || '')) ? String(x) : null);
+  db.prepare(`UPDATE coupons SET distribution='claim', claim_token=?, issue_limit=?, claim_start=?, claim_end=?, valid_days=? WHERE id=?`)
+    .run(token, Math.max(0, parseInt(issueLimit) || 0), d(claimStart), d(claimEnd), Math.max(0, parseInt(validDays) || 0), id);
+  return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
+}
+/** Public view of a claim link — powers the landing page BEFORE the customer taps รับคูปอง. */
+export function claimInfo(token, customerKey = null) {
+  const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
+  if (!c) return { state: 'not_found' };
+  const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const base = {
+    label: c.label, discType: c.disc_type, discValue: c.disc_value, minSpend: c.min_spend,
+    maxDisc: c.max_disc, expiresAt: c.expires_at, validDays: c.valid_days,
+    limit: c.issue_limit, claimed: c.issued_count,
+    remaining: c.issue_limit > 0 ? Math.max(0, c.issue_limit - c.issued_count) : null,
+  };
+  if (customerKey && db.prepare('SELECT 1 FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey)) return { ...base, state: 'already' };
+  if (!c.active) return { ...base, state: 'closed' };
+  if (c.claim_start && today < c.claim_start) return { ...base, state: 'not_started' };
+  if (c.claim_end && today > c.claim_end) return { ...base, state: 'ended' };
+  if (c.expires_at && today > c.expires_at) return { ...base, state: 'ended' };
+  if (c.issue_limit > 0 && c.issued_count >= c.issue_limit) return { ...base, state: 'sold_out' };
+  return { ...base, state: 'claimable' };
+}
+/** Collect the coupon into the customer's wallet. Quota is taken ATOMICALLY, and the unique index
+ *  on (coupon_id, customer_key) is what actually prevents a double claim under concurrency. */
+export function claimCoupon(token, customerKey) {
+  if (!customerKey) throw new Error('no_customer');
+  const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
+  if (!c) return { ok: false, state: 'not_found' };
+  const pre = claimInfo(token, customerKey);
+  if (pre.state !== 'claimable') return { ok: false, state: pre.state, ...pre };
+  // 1) take one unit of the quota — the predicate is evaluated inside the UPDATE, so the last
+  //    unit cannot be handed to two racers.
+  const took = db.prepare(
+    'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
+  ).run(c.id);
+  if (!took.changes) return { ok: false, state: 'sold_out' };
+  // 2) write the wallet row; the UNIQUE index rejects a second claim → hand the quota back.
+  const expiresAt = c.valid_days > 0
+    ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(c.valid_days).d
+    : (c.expires_at || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
+  try {
+    const ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source)
+                             VALUES (?,?, 'claim', ?, ?, ?, 'claim_link')`)
+      .run(customerKey, c.id, c.label, c.disc_type === 'percent' ? (c.max_disc || 0) : c.disc_value, expiresAt).lastInsertRowid;
+    return { ok: true, state: 'claimed', id: Number(ccId), label: c.label, expiresAt };
+  } catch {
+    db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(c.id);
+    return { ok: false, state: 'already' };
+  }
+}
 /** Validate a coupon for a customer + order net → the ONE source of truth (re-run on payment). */
 export function validateCoupon(code, customerKey, orderNet) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);

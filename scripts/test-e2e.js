@@ -692,6 +692,34 @@ console.log('\n== Wallet coupon state + claim constraint ==');
   ok(db.prepare('SELECT COUNT(*) c FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(campId, skey).c === 1, 'INVARIANT exactly one claim row survives');
 }
 
+// ---- Claim links: quota is taken at CLAIM time, one per customer, honest states ----
+console.log('\n== Coupon claim links ==');
+{
+  db.prepare(`INSERT INTO coupons (code, label, disc_type, disc_value, active) VALUES ('CLAIM50','ลด 20 บาท','baht',20,1)`).run();
+  const cid = db.prepare("SELECT id FROM coupons WHERE code='CLAIM50'").get().id;
+  const camp = Q.setCouponClaim(cid, { issueLimit: 2, validDays: 7 });
+  ok(camp.distribution === 'claim' && /^[a-z2-9]{18}$/.test(camp.claim_token || ''), `INVARIANT enabling a claim link mints a high-entropy token (${camp.claim_token})`);
+  const tok = camp.claim_token;
+  const k = (n) => 'Uclaimer' + String(n).padStart(25, '0');
+  ok(Q.claimInfo(tok).state === 'claimable' && Q.claimInfo(tok).remaining === 2, 'INVARIANT the landing page shows claimable + remaining count');
+  const c1 = Q.claimCoupon(tok, k(1));
+  ok(c1.ok && c1.state === 'claimed', `INVARIANT the first customer collects the coupon (${c1.state})`);
+  ok(db.prepare('SELECT COUNT(*) c FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(cid, k(1)).c === 1, 'INVARIANT the coupon lands in that customer\'s wallet');
+  const again = Q.claimCoupon(tok, k(1));
+  ok(!again.ok && again.state === 'already', `INVARIANT the same customer cannot claim twice (${again.state})`);
+  ok(db.prepare('SELECT issued_count c FROM coupons WHERE id=?').get(cid).c === 1, 'INVARIANT a rejected re-claim does NOT burn quota');
+  Q.claimCoupon(tok, k(2));                       // quota now 2/2
+  const c3 = Q.claimCoupon(tok, k(3));
+  ok(!c3.ok && c3.state === 'sold_out', `INVARIANT past the quota the link reports sold_out (${c3.state})`);
+  ok(db.prepare('SELECT issued_count c FROM coupons WHERE id=?').get(cid).c === 2, 'INVARIANT issued_count never exceeds the issue limit');
+  ok(Q.claimInfo(tok, k(3)).state === 'sold_out' && Q.claimInfo(tok, k(1)).state === 'already', 'INVARIANT the landing page reflects sold_out vs already-claimed per customer');
+  // relative expiry: valid_days=7 from claim, not the campaign end
+  const exp = db.prepare('SELECT expires_at FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(cid, k(1)).expires_at;
+  const want = db.prepare("SELECT date(datetime('now','+7 hours'),'+7 days') d").get().d;
+  ok(exp === want, `INVARIANT valid_days sets expiry relative to the claim (${exp} vs ${want})`);
+  ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
+}
+
 // ---- Customer list carries the star rating each customer gave + exports to Excel ----
 console.log('\n== Customer ratings + Excel export ==');
 {

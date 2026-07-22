@@ -568,6 +568,15 @@ for (const stmt of [
   // A wallet coupon becomes an INSTANCE of a campaign (the model every major platform uses):
   // coupon_id links it back to coupons; state makes claimed→redeemed explicit instead of
   // inferring it from used_at; source records how it arrived.
+  // Claim campaigns: a link the customer taps to COLLECT the coupon into their wallet. The quota is
+  // consumed at claim time (Shopee/Lazada model) — that is what makes "only 50 available" honest.
+  `ALTER TABLE coupons ADD COLUMN distribution TEXT NOT NULL DEFAULT 'code'`,  // code | claim | auto | issue
+  `ALTER TABLE coupons ADD COLUMN claim_token TEXT`,       // random link token (claim campaigns only)
+  `ALTER TABLE coupons ADD COLUMN issue_limit INTEGER NOT NULL DEFAULT 0`,     // 0 = unlimited claims
+  `ALTER TABLE coupons ADD COLUMN issued_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE coupons ADD COLUMN claim_start TEXT`,       // claim window (separate from the usage window)
+  `ALTER TABLE coupons ADD COLUMN claim_end TEXT`,
+  `ALTER TABLE coupons ADD COLUMN valid_days INTEGER NOT NULL DEFAULT 0`,      // expiry N days AFTER claim; 0 = use expires_at
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
@@ -621,6 +630,8 @@ try {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_coupons_once
              ON customer_coupons(coupon_id, customer_key) WHERE coupon_id IS NOT NULL`);
 } catch { /* older SQLite without partial indexes — app-level guard still applies */ }
+// Claim tokens must be unique — SQLite can't add a UNIQUE column via ALTER, so index it after.
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_coupons_claim_token ON coupons(claim_token) WHERE claim_token IS NOT NULL'); } catch { /* ignore */ }
 // Backfill the new state column from the old used_at truth, once.
 try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
 

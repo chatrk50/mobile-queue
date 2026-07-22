@@ -274,6 +274,20 @@ app.get('/api/coupons/all', (req, res) => { if (!managerOK(req)) return res.stat
 app.post('/api/coupons', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.createCoupon(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/coupons/:id', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.updateCoupon(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.delete('/api/coupons/:id', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); try { res.json(Q.deleteCoupon(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); } });
+// Turn a coupon into a claim campaign (link + quota + claim window + relative expiry).
+app.post('/api/coupons/:id/claim-link', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setCouponClaim(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// PUBLIC: the customer taps a claim link. GET = what the landing page should say; POST = collect it.
+app.get('/api/claim/:token', (req, res) => {
+  res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
+});
+app.post('/api/claim/:token', (req, res) => {
+  const key = String(req.body?.lineUserId || '').trim();
+  if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
+  try { res.json(Q.claimCoupon(req.params.token, key)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
