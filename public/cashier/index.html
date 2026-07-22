@@ -382,8 +382,19 @@
         <input id="cpValue" type="number" inputmode="decimal" placeholder="จำนวน" style="width:88px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
         <input id="cpMin" type="number" inputmode="decimal" placeholder="ขั้นต่ำ ฿" style="width:96px;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
         <input id="cpExp" type="date" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px" title="วันหมดอายุ (ไม่บังคับ)">
+        <select id="cpAud" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px" title="ใครใช้ได้"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option></select>
       </div>
       <button class="ok" style="width:100%;padding:11px" onclick="addCoupon()">สร้างคูปอง</button>
+      <div class="muted" style="font-size:11.5px;margin-top:6px">สร้างแล้วกด "เมนูที่ร่วม" เพื่อจำกัดเฉพาะบางเมนู · กด "ทำลิงก์รับ" เพื่อแจกแบบจำกัดสิทธิ์</div>
+    </div>
+  </div>
+
+  <!-- COUPON SCOPE: which menus a coupon applies to (none ticked = whole bill) -->
+  <div id="scopePop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
+    <div class="card" style="max-width:440px;width:100%;max-height:86vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
+      <div class="row between" style="flex:none;align-items:center"><h1 style="margin:0;font-size:18px">เมนูที่ร่วมรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeScope()">✕</button></div>
+      <div id="scopeBody" style="overflow-y:auto;flex:1;min-height:0;margin:10px 0"></div>
+      <button class="ok" style="width:100%;flex:none" onclick="saveScope()">บันทึก</button>
     </div>
   </div>
 
@@ -1839,10 +1850,12 @@ function renderCoupons(list){ $('couponList').innerHTML=(list&&list.length)?list
     return `<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${c.active?'':'opacity:.55'}">
       <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(c.label)}</b> <span style="font-size:11px;font-weight:800;color:var(--accent2)">ลด ${disc}</span>
         ${c.distribution==='claim'?`<span style="font-size:10px;font-weight:800;background:#fffbea;color:#b45309;padding:1px 8px;border-radius:999px;margin-left:6px">ลิงก์รับคูปอง</span>`:''}
+        ${c.audience==='new'?`<span style="font-size:10px;font-weight:800;background:#e6f1fb;color:#185fa5;padding:1px 8px;border-radius:999px;margin-left:6px">ลูกค้าใหม่เท่านั้น</span>`:''}
         <div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.code)} · ขั้นต่ำ ฿${c.min_spend} · ${exp}${c.usage_limit>0?(' · ใช้ '+c.used_count+'/'+c.usage_limit):''}</div>
         ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:3px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit+(c.issued_count>=c.issue_limit?' · รับครบแล้ว':'')):' (ไม่จำกัด)'}</div>`:''}
       </div>
       ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px;margin-right:6px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
+      <button class="ghost" style="padding:5px 10px;font-size:12px;margin-right:6px" onclick="editCouponScope(${c.id})">เมนูที่ร่วม</button>
       <button class="ghost" style="padding:5px 10px;font-size:12px;margin-right:6px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
       <button class="tgl ${c.active?'on':'off'}" style="margin:0 10px" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
       <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delCoupon(${c.id})">ลบ</button>
@@ -1855,14 +1868,35 @@ window.setupClaim=async(id,isClaim,curLimit,curDays)=>{
   if(d===null) return;
   try{ const c=await api('/api/coupons/'+id+'/claim-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({issueLimit:Number(n)||0,validDays:Number(d)||0,enable:true})});
     loadCoupons(); copyClaimLink(c.claim_token); }catch(e){ toast(err(e)); } };
+// Scope a coupon to specific menus: no ticks = whole order (the default everyone expects).
+let _scopeId=null, _scopeSel=new Set();
+window.editCouponScope=async(id)=>{ _scopeId=id; _scopeSel=new Set();
+  try{ const r=await api('/api/coupons/'+id+'/items'); (r.items||[]).filter(i=>i.ref_type==='menu_item').forEach(i=>_scopeSel.add(i.ref_value)); }catch(e){ toast(err(e)); return; }
+  renderScopePop(); $('scopePop').style.display='flex'; };
+window.closeScope=()=>{ $('scopePop').style.display='none'; };
+window.scopeTog=(n)=>{ if(_scopeSel.has(n)) _scopeSel.delete(n); else _scopeSel.add(n); renderScopePop(); };
+function renderScopePop(){
+  const items=(MENU||[]).filter(m=>m.active);
+  $('scopeBody').innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px">ไม่เลือกเลย = ใช้ได้ทั้งบิล · เลือกบางเมนู = ส่วนลดคิดเฉพาะเมนูที่เลือก</div>`
+    +items.map(m=>{ const on=_scopeSel.has(m.name);
+      return `<div onclick="scopeTog('${esc(m.name).replace(/'/g,"\\'")}')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);cursor:pointer">
+        <span style="font-size:13.5px;color:var(--navy)">${esc(m.name)}${m.category==='topping'?' <span class="muted" style="font-size:11px">· ท็อปปิ้ง</span>':''}</span>
+        <span style="font-size:18px;color:${on?'var(--accent)':'var(--line)'}">${on?'☑':'☐'}</span></div>`; }).join('')
+    +`<div class="muted" style="font-size:12px;margin-top:10px">เลือกแล้ว ${_scopeSel.size} เมนู</div>`;
+}
+window.saveScope=async()=>{
+  try{ await api('/api/coupons/'+_scopeId+'/items',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({items:[..._scopeSel].map(n=>({refType:'menu_item',refValue:n}))})});
+    toast(_scopeSel.size?('จำกัด '+_scopeSel.size+' เมนูแล้ว ✓'):'ใช้ได้ทั้งบิลแล้ว ✓'); closeScope(); loadCoupons(); }
+  catch(e){ toast(err(e)); } };
 window.copyClaimLink=(tok)=>{ if(!tok){ toast('ยังไม่มีลิงก์'); return; }
   const url=location.origin+'/liff/?coupon='+encodeURIComponent(tok);
   try{ navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว ✓ ส่งให้ลูกค้าได้เลย'); }
   catch(e){ appConfirm({title:'ลิงก์รับคูปอง',message:url,okText:'ปิด',cancelText:''}); } };
 window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
-window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabel').value.trim(), disc_type=$('cpType').value, disc_value=Number($('cpValue').value), min_spend=Number($('cpMin').value)||0, expires_at=$('cpExp').value||null;
+window.addCoupon=async()=>{ const code=$('cpCode').value.trim(), label=$('cpLabel').value.trim(), disc_type=$('cpType').value, disc_value=Number($('cpValue').value), min_spend=Number($('cpMin').value)||0, expires_at=$('cpExp').value||null, audience=($('cpAud')&&$('cpAud').value)||'all';
   if(!code){ toast('ใส่โค้ดคูปอง'); return; } if(!(disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
-  try{ await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,label,disc_type,disc_value,min_spend,expires_at})});
+  try{ await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,label,disc_type,disc_value,min_spend,expires_at,audience})});
     ['cpCode','cpLabel','cpValue','cpMin','cpExp'].forEach(id=>{const el=$(id); if(el) el.value='';}); toast('สร้างคูปองแล้ว ✓'); loadCoupons(); }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };

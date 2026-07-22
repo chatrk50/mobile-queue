@@ -720,6 +720,47 @@ console.log('\n== Coupon claim links ==');
   ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
 }
 
+// ---- Coupon scoping (specific menu items) + audience (new customers only) ----
+console.log('\n== Coupon scoping + audience ==');
+{
+  const drink = db.prepare("SELECT name, category FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1").get();
+  const other = db.prepare("SELECT name FROM menu_items WHERE active=1 AND name<>? ORDER BY id DESC LIMIT 1").get(drink.name);
+  db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,per_customer,active) VALUES ('SCOPED1','ลดเฉพาะเมนู','percent',50,0,1)`).run();
+  const sid = db.prepare("SELECT id FROM coupons WHERE code='SCOPED1'").get().id;
+  ok(Q.validateCoupon('SCOPED1', null, 100, [{ name: drink.name, price: 100, qty: 1 }]).discount === 50, 'INVARIANT an unscoped coupon discounts the whole order');
+  Q.setCouponItems(sid, [{ refType: 'menu_item', refValue: drink.name }]);
+  ok(Q.couponItems(sid).length === 1, 'INVARIANT the coupon scope persists');
+  // cart: 100 of the eligible drink + 100 of something else → 50% applies to the eligible 100 only
+  const mixed = [{ name: drink.name, price: 100, qty: 1 }, { name: other.name, price: 100, qty: 1 }];
+  const vMixed = Q.validateCoupon('SCOPED1', null, 200, mixed);
+  ok(vMixed.ok && vMixed.discount === 50 && vMixed.scoped === true, `INVARIANT a scoped coupon discounts ONLY the matching lines (got ฿${vMixed.discount} of 200)`);
+  // sweetness suffix must still match the base menu name
+  const vSuffix = Q.validateCoupon('SCOPED1', null, 100, [{ name: drink.name + ' · หวาน 50%', price: 100, qty: 1 }]);
+  ok(vSuffix.ok && vSuffix.discount === 50, 'INVARIANT the sweetness suffix does not break scope matching');
+  // no eligible item in the cart → refused, with a reason
+  const vNone = Q.validateCoupon('SCOPED1', null, 100, [{ name: other.name, price: 100, qty: 1 }]);
+  ok(!vNone.ok && /ไม่มีเมนูที่ร่วมรายการ/.test(vNone.reason), `INVARIANT a scoped coupon is refused when nothing matches (${vNone.reason})`);
+  // caller that cannot prove the cart contents must NOT get a whole-order discount
+  const vBlind = Q.validateCoupon('SCOPED1', null, 100, null);
+  ok(!vBlind.ok && /เฉพาะบางเมนู/.test(vBlind.reason), 'INVARIANT without cart lines a scoped coupon is refused, never applied to the whole bill');
+  // category scoping
+  Q.setCouponItems(sid, [{ refType: 'category', refValue: drink.category }]);
+  ok(Q.validateCoupon('SCOPED1', null, 100, [{ name: drink.name, price: 100, qty: 1 }]).discount === 50, 'INVARIANT scoping by category matches its items');
+
+  // audience: new-customers-only
+  db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,per_customer,audience,active) VALUES ('NEWONLY','ลูกค้าใหม่','baht',20,0,'new',1)`).run();
+  const newKey = 'Unewcustomer0000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าใหม่')`).run(newKey);
+  ok(Q.validateCoupon('NEWONLY', newKey, 100).ok === true, 'INVARIANT a first-time customer can use a new-customers-only coupon');
+  const oldKey = 'Uoldcustomer0000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าเก่า')`).run(oldKey);
+  { const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status) VALUES (1,1,0,'OC',?, 'served')`).run(oldKey).lastInsertRowid;
+    db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 50, 'paid', datetime('now'), 1)`).run(tk); }
+  const vOld = Q.validateCoupon('NEWONLY', oldKey, 100);
+  ok(!vOld.ok && /ลูกค้าใหม่/.test(vOld.reason), `INVARIANT a returning customer is refused (${vOld.reason})`);
+  ok(Q.validateCoupon('NEWONLY', null, 100).ok === false, 'INVARIANT an unidentified customer cannot claim a new-only coupon');
+}
+
 // ---- Customer list carries the star rating each customer gave + exports to Excel ----
 console.log('\n== Customer ratings + Excel export ==');
 {

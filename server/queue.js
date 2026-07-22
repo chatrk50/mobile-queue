@@ -1645,26 +1645,76 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,audience,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
       c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
-      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0);
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,active=? WHERE id=?`)
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
     .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
       Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
       Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
-      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
+// ---------- Coupon scoping (which menu items a coupon applies to) + audience ----------
+export function couponItems(couponId) {
+  return db.prepare('SELECT ref_type, ref_value FROM coupon_items WHERE coupon_id=? ORDER BY ref_type, ref_value').all(Number(couponId));
+}
+/** Replace a coupon's scope. rows = [{refType:'menu_item'|'category', refValue}]; empty = whole order. */
+export function setCouponItems(couponId, rows = []) {
+  const id = Number(couponId);
+  if (!db.prepare('SELECT 1 FROM coupons WHERE id=?').get(id)) throw new Error('coupon_not_found');
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM coupon_items WHERE coupon_id=?').run(id);
+    const ins = db.prepare('INSERT OR IGNORE INTO coupon_items (coupon_id, ref_type, ref_value) VALUES (?,?,?)');
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      const t = r.refType === 'category' ? 'category' : 'menu_item';
+      const v = String(r.refValue || '').trim().slice(0, 60);
+      if (v) ins.run(id, t, v);
+    }
+  });
+  tx();
+  return couponItems(id);
+}
+/** The ฿ base a scoped coupon discounts: the matching lines only. No scope rows → the whole order.
+ *  lines = [{name, price, qty}]; a drink name may carry a " · หวาน X%" suffix, so match on the base name. */
+function scopedBase(couponId, lines, orderNet) {
+  const scope = couponItems(couponId);
+  if (!scope.length) return { base: orderNet, scoped: false };
+  if (!Array.isArray(lines)) return { base: null, scoped: true };   // caller can't prove eligibility
+  const names = new Set(scope.filter((s) => s.ref_type === 'menu_item').map((s) => s.ref_value));
+  const cats = new Set(scope.filter((s) => s.ref_type === 'category').map((s) => s.ref_value));
+  let base = 0;
+  for (const l of lines) {
+    const bare = String(l.name || '').split(' · ')[0];
+    let hit = names.has(bare);
+    if (!hit && cats.size) {
+      const cat = db.prepare('SELECT category FROM menu_items WHERE name=? LIMIT 1').get(bare)?.category;
+      hit = !!cat && cats.has(cat);
+    }
+    if (hit) base += (Number(l.price) || 0) * (Number(l.qty) || 1);
+  }
+  return { base: r2(Math.min(base, orderNet)), scoped: true };
+}
+/** Audience gate: 'new' campaigns are for customers with no paid order yet (acquisition offers). */
+function audienceOK(coupon, customerKey) {
+  if (!coupon.audience || coupon.audience === 'all') return true;
+  if (!customerKey) return false;                       // can't prove they're new → don't hand it out
+  const paid = db.prepare(
+    `SELECT COUNT(*) n FROM orders o JOIN tickets t ON t.id=o.ticket_id
+      WHERE o.payment_status='paid' AND (t.line_user_id=? OR t.customer_key=?)`
+  ).get(customerKey, customerKey).n;
+  return paid === 0;
+}
 // ---------- Claim campaigns: a link customers tap to COLLECT a coupon into their wallet ----------
 function randToken(n = 18) {
   const A = 'abcdefghijkmnpqrstuvwxyz23456789';   // no look-alikes; high entropy beats guessable codes
@@ -1695,6 +1745,7 @@ export function claimInfo(token, customerKey = null) {
   };
   if (customerKey && db.prepare('SELECT 1 FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey)) return { ...base, state: 'already' };
   if (!c.active) return { ...base, state: 'closed' };
+  if (customerKey && !audienceOK(c, customerKey)) return { ...base, state: 'not_eligible' };
   if (c.claim_start && today < c.claim_start) return { ...base, state: 'not_started' };
   if (c.claim_end && today > c.claim_end) return { ...base, state: 'ended' };
   if (c.expires_at && today > c.expires_at) return { ...base, state: 'ended' };
@@ -1730,7 +1781,7 @@ export function claimCoupon(token, customerKey) {
   }
 }
 /** Validate a coupon for a customer + order net → the ONE source of truth (re-run on payment). */
-export function validateCoupon(code, customerKey, orderNet) {
+export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
@@ -1742,10 +1793,16 @@ export function validateCoupon(code, customerKey, orderNet) {
     const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
     if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
   }
-  let disc = c.disc_type === 'percent' ? (orderNet * c.disc_value / 100) : c.disc_value;
+  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น' };
+  // Scoped coupons discount ONLY the matching lines. Without the lines we cannot prove eligibility,
+  // so we refuse rather than risk discounting the whole bill.
+  const { base, scoped } = scopedBase(c.id, lines, orderNet);
+  if (scoped && base == null) return { ok: false, reason: 'ใช้ได้เฉพาะบางเมนู' };
+  if (scoped && base <= 0) return { ok: false, reason: 'ไม่มีเมนูที่ร่วมรายการในตะกร้า' };
+  let disc = c.disc_type === 'percent' ? (base * c.disc_value / 100) : c.disc_value;
   if (c.disc_type === 'percent' && c.max_disc > 0) disc = Math.min(disc, c.max_disc);
-  disc = Math.min(r2(disc), orderNet);
-  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable };
+  disc = Math.min(r2(disc), base);   // a fixed-baht coupon can never exceed the eligible items' value
+  return { ok: true, discount: disc, couponId: c.id, code: c.code, label: c.label, stackable: !!c.stackable, scoped };
 }
 /** Coupons a customer can see for their current order (each with eligibility + computed discount). */
 /** Owner policy: a completed stamp card (10 ดวง) is CONVERTED into 1 coupon on the spot — the
@@ -1783,8 +1840,8 @@ export function customerCoupons(customerKey) {
       ORDER BY expires_at, id`
   ).all(customerKey);
 }
-export function availableCoupons(customerKey, orderNet) {
-  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet);
+export function availableCoupons(customerKey, orderNet, lines = null) {
+  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
@@ -1808,7 +1865,8 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   const existing = Math.max(0, Number(order.discount) || 0);
-  const v = validateCoupon(code, customerKey, order.total);
+  const orderLines = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+  const v = validateCoupon(code, customerKey, order.total, orderLines);
   if (!v.ok) return { ok: false, reason: v.reason };
   if (existing > 0 && !v.stackable) return { ok: false, reason: 'ใช้ร่วมกับส่วนลดอื่นไม่ได้' };
   const couponDisc = Math.min(v.discount, Math.max(0, order.total - existing));

@@ -412,6 +412,14 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
   note          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_po_lines_po ON purchase_order_lines(po_id);
+-- Coupon scoping: which menu items / categories a coupon applies to. A relational child table
+-- (not the legacy unread applies_to JSON) so pricing can JOIN it. NO rows = whole order.
+CREATE TABLE IF NOT EXISTS coupon_items (
+  coupon_id INTEGER NOT NULL REFERENCES coupons(id),
+  ref_type  TEXT NOT NULL,          -- 'menu_item' | 'category'
+  ref_value TEXT NOT NULL,          -- menu_items.name, or a category name
+  PRIMARY KEY (coupon_id, ref_type, ref_value)
+);
 -- OCR memory: a receipt line's raw text → the ingredient the owner matched it to. Lets the OCR
 -- importer "learn" — next time the same wording appears (any supplier's format) it auto-matches.
 CREATE TABLE IF NOT EXISTS ingredient_aliases (
@@ -577,6 +585,7 @@ for (const stmt of [
   `ALTER TABLE coupons ADD COLUMN claim_start TEXT`,       // claim window (separate from the usage window)
   `ALTER TABLE coupons ADD COLUMN claim_end TEXT`,
   `ALTER TABLE coupons ADD COLUMN valid_days INTEGER NOT NULL DEFAULT 0`,      // expiry N days AFTER claim; 0 = use expires_at
+  `ALTER TABLE coupons ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'`,       // all | new (first-time customers only)
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
