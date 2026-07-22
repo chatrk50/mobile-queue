@@ -31,6 +31,18 @@
    PINCH-zoom, so accessibility zoom and the slip viewer keep working. Elements that need a
    different value (e.g. the drag handle's touch-action:none) override this via their own class. */
 html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
+/* Scroll containment. Owner report: "เลื่อนเมนู แต่ด้านล่างเลื่อนขึ้นลงแทน" — dragging inside an
+   inner list (menu manager, ⚙ dropdown, modal bodies) handed the leftover scroll to the PAGE,
+   so the background moved instead of the list. Any pane that scrolls on its own must swallow
+   its own overscroll. The attribute selectors catch the many panes styled inline in the two
+   single-file app bundles; the class/id list covers the ones styled in CSS. */
+.ms-list,.full-page-body,.glass-ovl>.card,#adminMenu,#loginCard,#moreMenu,
+[style*="overflow:auto"],[style*="overflow: auto"],
+[style*="overflow-y:auto"],[style*="overflow-y: auto"],
+[style*="overflow-x:auto"],[style*="overflow-x: auto"]{overscroll-behavior:contain}
+/* Tap feedback: a tinted flash proves to the user that a press registered (the owner reported
+   buttons "กดไม่ค่อยติด" — with no highlight there was no way to tell a tap from a miss). */
+button,.btn,.pinkey,.menu-btn{-webkit-tap-highlight-color:rgba(0,181,216,.22)}
 a{text-decoration:none}
 .ic{width:18px;height:18px;vertical-align:-4px;margin-right:6px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 body{margin:0;font-family:"Nunito Sans","LINE Seed Sans TH",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;

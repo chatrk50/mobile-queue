@@ -79,6 +79,28 @@ const dailyOpex = (f.rent + f.wages + f.utilities + f.supplies + f.marketing) / 
 ok(near(p.opexDaily, dailyOpex), `INVARIANT P&L opexDaily == Σopex/days (${p.opexDaily})`);
 ok(near(p.netProfit, p.grossProfit - p.opexDaily - p.wasteCost), `INVARIANT P&L netProfit == grossProfit−opexDaily−waste (${p.netProfit})`);
 ok(near(p.grossMargin, rep.revenue ? p.grossProfit / rep.revenue : 0), `INVARIANT P&L grossMargin == grossProfit/revenue (${p.grossMargin})`);
+// Full statement chain: gross → EBITDA → EBIT → pre-tax → net. Every step must be exactly the
+// step above minus one named cost, and the opex groups must add back up to the opex total.
+ok(near(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily), `INVARIANT EBITDA == gross−waste−opex (${p.ebitda})`);
+ok(near(p.ebit, p.ebitda - p.depreciation), `INVARIANT EBIT == EBITDA−depreciation (${p.ebit})`);
+ok(near(p.preTax, p.ebit - p.interest), `INVARIANT preTax == EBIT−interest (${p.preTax})`);
+ok(near(p.netProfit, p.preTax - p.incomeTax), `INVARIANT netProfit == preTax−tax (${p.netProfit})`);
+ok(near(p.opexGroups.reduce((s, g) => s + g.daily, 0), p.opexDaily), 'INVARIANT Σ opex groups == opexDaily (no expense line is orphaned)');
+ok(near(p.fixedDaily, p.opexDaily + p.depreciation + p.interest), `INVARIANT fixedDaily == opex+dep+interest (break-even base) (${p.fixedDaily})`);
+{ // Below-the-line costs must actually bite: set them, re-read, confirm each step moved.
+  const before = Q.getFinanceSettings();
+  Q.setFinanceSettings({ depreciation: 3000, interest: 1500, taxPct: 20, freight: 600 });
+  const p2 = Q.dailyReport().pnl, f2 = Q.getFinanceSettings();
+  const d = f2.daysPerMonth;
+  ok(near(p2.freight, 600 / d) && near(p2.cogs, p2.ingredient + p2.packaging + p2.freight), 'freight-in lands in COGS, not opex');
+  ok(near(p2.depreciation, 3000 / d) && near(p2.interest, 1500 / d), 'depreciation + interest prorate by selling days');
+  ok(p2.taxRate === 0.2, `taxPct entered as 20 is read as 0.20 (got ${p2.taxRate})`);
+  ok(p2.preTax <= 0 ? p2.incomeTax === 0 : near(p2.incomeTax, p2.preTax * 0.2), 'income tax is charged on profit only — never on a loss');
+  ok(near(p2.netProfit, p2.preTax - p2.incomeTax), 'net profit still closes the chain with every line switched on');
+  Q.setFinanceSettings({ depreciation: 0, interest: 0, taxPct: 0, freight: 0 });
+  const p3 = Q.dailyReport().pnl;
+  ok(near(p3.netProfit, before ? p3.grossProfit - p3.opexDaily - p3.wasteCost : 0), 'with the new lines at 0 the P&L is byte-identical to the old formula');
+}
 
 console.log('\n== Cash drawer ==');
 const cs = Q.currentCashSession(1);
@@ -439,6 +461,31 @@ ok(cord && Number(cord.discount) === 50, `INVARIANT coupon discount applied serv
 ok(db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE customer_key=?').get(ck).n === 1, 'INVARIANT coupon use recorded once');
 ok(Q.validateCoupon('E2E50', ck, 100).ok === false, 'INVARIANT per-customer limit blocks a second use');
 ok(Q.validateCoupon('NOPE-NOT-REAL', ck, 100).ok === false, 'INVARIANT a fake code never validates');
+{ // Scheduled start (valid_from): a campaign built today for next week must not be usable today,
+  // and must start working on its own once the date arrives — no manual switch-flip.
+  const ck2 = 'Ucouponcust000000000000000000002';
+  const day = (n) => db.prepare(`SELECT date(datetime('now','+7 hours'),'${n >= 0 ? '+' : ''}${n} days') d`).get().d;
+  Q.createCoupon({ code: 'E2ESOON', label: 'ยังไม่เริ่ม', disc_type: 'baht', disc_value: 20, valid_from: day(3) });
+  const soon = Q.validateCoupon('E2ESOON', ck2, 200);
+  ok(soon.ok === false && /เริ่มใช้ได้/.test(soon.reason), `INVARIANT a future-dated coupon is refused until its start date (${soon.reason})`);
+  const id = Q.listCoupons(true).find((c) => c.code === 'E2ESOON').id;
+  Q.updateCoupon(id, { valid_from: day(-1) });
+  ok(Q.validateCoupon('E2ESOON', ck2, 200).ok === true, 'INVARIANT once the start date passes the same coupon validates');
+  Q.updateCoupon(id, { valid_from: '' });
+  ok(Q.listCoupons(true).find((c) => c.code === 'E2ESOON').valid_from === null, 'INVARIANT clearing the start date makes it live immediately');
+}
+{ // Percent cap + total-redemption budget: both existed in the schema but had no way in until now,
+  // so pin the behaviour the owner is about to rely on.
+  const ck3 = 'Ucouponcust000000000000000000003';
+  Q.createCoupon({ code: 'E2EPCT', label: 'ลด 50% สูงสุด 30', disc_type: 'percent', disc_value: 50, max_disc: 30, usage_limit: 1, per_customer: 0 });
+  const big = Q.validateCoupon('E2EPCT', ck3, 500);
+  ok(big.ok && big.discount === 30, `INVARIANT % discount is capped by max_disc (50% of 500 → ฿${big.discount}, not ฿250)`);
+  const small = Q.validateCoupon('E2EPCT', ck3, 40);
+  ok(small.ok && small.discount === 20, `INVARIANT under the cap the % still applies in full (฿${small.discount})`);
+  const bo = Q.createOrder(1, [{ name: 'Drink', price: 500, qty: 1 }], { source: 'customer', lineUserId: ck3, couponCode: 'E2EPCT' });
+  ok(Number(db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(bo.ticket.id).discount) === 30, 'INVARIANT the capped discount is what actually hits the bill');
+  ok(Q.validateCoupon('E2EPCT', 'Ucouponcust000000000000000000004', 500).ok === false, 'INVARIANT usage_limit 1 closes the coupon for everyone after one redemption');
+}
 
 // ---- Stamp-card reward surfaces as a self-service "coupon" once earned (owner ask: a customer
 //      who reaches the threshold should see it in the SAME coupon list and be able to apply it

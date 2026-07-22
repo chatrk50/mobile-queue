@@ -23,8 +23,7 @@ export async function buildReportWorkbook(r, { store='YO-DEE Yogurt' } = {}){
   const wb=new ExcelJS.Workbook();
   wb.creator=store;
   const p=r.pnl||{}, s=r.settings||{};
-  const days=s.daysPerMonth||30;
-  const dailyLine=(monthly)=>days>0?monthly/days:monthly;
+  const days=s.daysPerMonth||30;   // expense lines arrive already prorated in p.opexGroups
 
   // ---------- Report (P&L) ----------
   const rp=wb.addWorksheet('Report',{views:[{showGridLines:false}]});
@@ -49,16 +48,22 @@ export async function buildReportWorkbook(r, { store='YO-DEE Yogurt' } = {}){
   C(rp,'A'+R,'Cost of Goods Sold',{bold:true,color:ACCENT,bd:true});C(rp,'B'+R,'',{bd:true});C(rp,'C'+R,'',{bd:true});R++;
   line('  Ingredients ('+(s.ingredientPct?(s.ingredientPct*100).toFixed(0):'-')+'% of rev)',p.ingredient);
   line('  Packaging (฿'+(s.packagingPerCup??0)+'/cup)',p.packaging);
+  if((p.freight||0)>0) line('  Inbound freight',p.freight);
   line('Total COGS',p.cogs,{bold:true});
   line('Gross Profit',p.grossProfit,{bold:true,fill:ACCENT});
   C(rp,'A'+R,"Operating Expenses (today's share)",{bold:true,color:ACCENT,bd:true});C(rp,'B'+R,'',{bd:true});C(rp,'C'+R,'',{bd:true});R++;
-  const ol=p.opexLines||{};
-  line('  Rent / stall fee',dailyLine(ol.rent||0));
-  line('  Staff wages',dailyLine(ol.wages||0));
-  line('  Utilities',dailyLine(ol.utilities||0));
-  line('  Supplies & misc',dailyLine(ol.supplies||0));
-  line('  Marketing / LINE',dailyLine(ol.marketing||0));
+  if((p.wasteCost||0)>0) line('  Waste (made then binned)',p.wasteCost);
+  // Grouped exactly like the on-screen P&L; zero lines are hidden so the sheet stays readable.
+  for(const g of (p.opexGroups||[])){
+    if(!(g.monthly>0)) continue;
+    C(rp,'A'+R,'  '+g.label,{bold:true,color:GREY,bd:true});C(rp,'B'+R,'',{bd:true});C(rp,'C'+R,'',{bd:true});R++;
+    for(const l of g.lines) line('    '+l.label,l.daily);
+  }
   line('Total Operating Expenses',p.opexDaily,{bold:true});
+  line('EBITDA',p.ebitda,{bold:true,fill:ACCENT});
+  if((p.depreciation||0)>0){ line('  Depreciation',p.depreciation); line('EBIT',p.ebit,{bold:true}); }
+  if((p.interest||0)>0){ line('  Interest expense',p.interest); line('Profit before tax',p.preTax,{bold:true}); }
+  if((p.incomeTax||0)>0) line('  Income tax ('+Math.round((p.taxRate||0)*100)+'%)',p.incomeTax);
   line('NET PROFIT',p.netProfit,{bold:true,fill:NAVY});
   R++;
   C(rp,'A'+R,'Fixed costs prorated from monthly ÷ '+days+' selling days. Avg ฿/cup: '+(p.avgPerCup?p.avgPerCup.toFixed(2):'-'),{italic:true,size:8,color:GREY}); rp.mergeCells('A'+R+':C'+R); R++;

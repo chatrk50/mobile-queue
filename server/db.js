@@ -586,6 +586,10 @@ for (const stmt of [
   `ALTER TABLE coupons ADD COLUMN claim_end TEXT`,
   `ALTER TABLE coupons ADD COLUMN valid_days INTEGER NOT NULL DEFAULT 0`,      // expiry N days AFTER claim; 0 = use expires_at
   `ALTER TABLE coupons ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'`,       // all | new (first-time customers only)
+  // Scheduled start. Every major loyalty platform lets you build a campaign today and have it go
+  // live on a future date; without this the only way to schedule was to create it inactive and
+  // remember to flip the switch by hand. null = live immediately (all existing coupons).
+  `ALTER TABLE coupons ADD COLUMN valid_from TEXT`,        // 'YYYY-MM-DD' Bangkok-local
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,

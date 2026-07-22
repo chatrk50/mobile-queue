@@ -219,6 +219,39 @@ const FIN_KEYS = {
   supplies: ['FIN_SUPPLIES', 0],
   marketing: ['FIN_MARKETING', 0],
   targetRevenue: ['FIN_TARGET_REVENUE', 0],       // monthly target; 0 = no target/variance
+  // --- Full P&L expense set (owner asked for every line a normal set of accounts carries).
+  // All default to 0, so adding them changes NOTHING until the owner fills one in. Monthly ฿
+  // unless noted; each is prorated by daysPerMonth exactly like rent/wages already were.
+  freight: ['FIN_FREIGHT', 0],                    // COGS: ค่าขนส่ง/ค่าเดินทางไปซื้อวัตถุดิบ (freight-in)
+  staffBenefits: ['FIN_STAFF_BENEFITS', 0],       // Payroll: ประกันสังคม/สวัสดิการ/โบนัส
+  commonFee: ['FIN_COMMON_FEE', 0],               // Occupancy: ค่าส่วนกลาง/ที่จอดรถ/ค่าเช่าอุปกรณ์
+  payFees: ['FIN_PAY_FEES', 0],                   // Selling: ค่าธรรมเนียมรับชำระ (QR/บัตร) — คอมแพลตฟอร์มคิดแยกรายช่องทาง
+  repairs: ['FIN_REPAIRS', 0],                    // Other: ซ่อมบำรุง/ทำความสะอาด
+  software: ['FIN_SOFTWARE', 0],                  // Other: อินเทอร์เน็ต/โทรศัพท์/ซอฟต์แวร์ (POS, LINE OA)
+  insurance: ['FIN_INSURANCE', 0],                // Other: ประกันภัย
+  proFees: ['FIN_PRO_FEES', 0],                   // Other: ค่าบัญชี/ค่าธรรมเนียมธนาคาร
+  licenses: ['FIN_LICENSES', 0],                  // Other: ภาษีป้าย/ใบอนุญาต/ค่าธรรมเนียมราชการ
+  depreciation: ['FIN_DEPRECIATION', 0],          // below EBITDA: ค่าเสื่อมราคาอุปกรณ์/ตกแต่ง
+  interest: ['FIN_INTEREST', 0],                  // below EBIT: ดอกเบี้ยจ่ายเงินกู้
+  taxPct: ['FIN_TAX_PCT', 0],                     // 0.20 = 20% ภาษีเงินได้ (คิดเฉพาะเมื่อกำไรก่อนภาษี > 0)
+};
+// Operating-expense lines grouped the way an accountant reads a P&L. Anything NOT here
+// (depreciation / interest / tax) sits BELOW the operating line on purpose.
+export const OPEX_GROUPS = [
+  ['payroll',   'บุคลากร',            ['wages', 'staffBenefits']],
+  ['occupancy', 'สถานที่',            ['rent', 'utilities', 'commonFee']],
+  ['selling',   'การขาย / การตลาด',   ['marketing', 'payFees']],
+  ['other',     'ดำเนินงานอื่น ๆ',    ['supplies', 'repairs', 'software', 'insurance', 'proFees', 'licenses']],
+];
+export const FIN_LABELS = {
+  ingredientPct: 'วัตถุดิบ % ของยอดขาย', packagingPerCup: 'แพ็กเกจ ฿/แก้ว', freight: 'ค่าขนส่งวัตถุดิบ',
+  daysPerMonth: 'วันขาย / เดือน', targetRevenue: 'เป้ายอดขาย / เดือน',
+  wages: 'ค่าแรงพนักงาน', staffBenefits: 'ประกันสังคม / สวัสดิการ / โบนัส',
+  rent: 'ค่าเช่าที่', utilities: 'ค่าไฟ / ค่าน้ำ / น้ำแข็ง', commonFee: 'ค่าส่วนกลาง / เช่าอุปกรณ์',
+  marketing: 'การตลาด / โฆษณา', payFees: 'ค่าธรรมเนียมรับชำระ (QR/บัตร)',
+  supplies: 'วัสดุสิ้นเปลือง', repairs: 'ซ่อมบำรุง / ทำความสะอาด', software: 'เน็ต / โทรศัพท์ / ซอฟต์แวร์',
+  insurance: 'ประกันภัย', proFees: 'ค่าบัญชี / ค่าธรรมเนียมธนาคาร', licenses: 'ภาษีป้าย / ใบอนุญาต',
+  depreciation: 'ค่าเสื่อมราคาอุปกรณ์', interest: 'ดอกเบี้ยจ่าย', taxPct: 'ภาษีเงินได้ %',
 };
 // Per-branch costs are namespaced fin_<branchId>_<key>; a branch value falls back to
 // the global fin_<key>, then env, then the default. branchId null = global settings.
@@ -484,29 +517,48 @@ export function dailyReport(branchId = null, dateStr = null) {
 
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings(branchId);
+  const perDay = (monthly) => (f.daysPerMonth > 0 ? monthly / f.daysPerMonth : monthly);
   const ingredient = f.ingredientPct * revenue;
   const packaging = f.packagingPerCup * cups;
-  const cogs = ingredient + packaging;
+  const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
+  const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
   // Waste = product made then discarded: its ingredient+packaging is spent but earns nothing.
   // A real cost with no revenue → it reduces net profit (separate from sold-goods COGS).
   const wasteCost = Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
   voided.waste.cost = wasteCost;
-  const monthlyOpex = f.rent + f.wages + f.utilities + f.supplies + f.marketing;
-  const dailyOpex = f.daysPerMonth > 0 ? monthlyOpex / f.daysPerMonth : monthlyOpex;
-  const netProfit = grossProfit - dailyOpex - wasteCost;
+  // Operating expenses, grouped. Depreciation / interest / tax deliberately sit BELOW this line
+  // so the report can show EBITDA → EBIT → กำไรก่อนภาษี → กำไรสุทธิ like a real set of accounts.
+  const opexKeys = OPEX_GROUPS.flatMap(([, , keys]) => keys);
+  const monthlyOpex = opexKeys.reduce((s, k) => s + f[k], 0);
+  const dailyOpex = perDay(monthlyOpex);
+  const opexLines = Object.fromEntries(opexKeys.map((k) => [k, f[k]]));
+  const opexGroups = OPEX_GROUPS.map(([key, label, keys]) => ({
+    key, label, monthly: keys.reduce((s, k) => s + f[k], 0),
+    daily: perDay(keys.reduce((s, k) => s + f[k], 0)),
+    lines: keys.filter((k) => f[k] > 0).map((k) => ({ key: k, label: FIN_LABELS[k], monthly: f[k], daily: perDay(f[k]) })),
+  }));
+  const ebitda = grossProfit - wasteCost - dailyOpex;
+  const depreciation = perDay(f.depreciation);
+  const ebit = ebitda - depreciation;
+  const interest = perDay(f.interest);
+  const preTax = ebit - interest;
+  const taxRate = Math.max(0, Math.min(0.5, f.taxPct > 1 ? f.taxPct / 100 : f.taxPct)); // accepts 20 or 0.20
+  const incomeTax = preTax > 0 ? preTax * taxRate : 0;   // no tax on a loss
+  const netProfit = preTax - incomeTax;
   // Break-even: how many cups/day cover the prorated fixed costs, using the menu's
   // average drink price (so it's meaningful even before the first sale of the day).
+  const fixedDaily = dailyOpex + depreciation + interest;
   const refAvg = db.prepare("SELECT AVG(price) AS a FROM menu_items WHERE category='drink' AND active=1").get().a || 0;
   const contribPerCup = refAvg * (1 - f.ingredientPct) - f.packagingPerCup;
-  const breakEvenCups = contribPerCup > 0 ? Math.ceil(dailyOpex / contribPerCup) : null;
+  const breakEvenCups = contribPerCup > 0 ? Math.ceil(fixedDaily / contribPerCup) : null;
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
-    ingredient, packaging, cogs, wasteCost,
+    ingredient, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
-    opexDaily: dailyOpex, opexMonthly: monthlyOpex,
-    opexLines: { rent: f.rent, wages: f.wages, utilities: f.utilities, supplies: f.supplies, marketing: f.marketing },
+    opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
+    ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
     breakEvenCups, contribPerCup, refAvgPrice: refAvg,
@@ -1637,10 +1689,11 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,expires_at,usage_limit,per_customer,stackable,audience,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
       c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
+      (c.valid_from || null) && String(c.valid_from).slice(0, 10),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
       Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
@@ -1648,10 +1701,12 @@ export function createCoupon(c = {}) {
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
     .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
       Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
-      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0), (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
+      Math.max(0, Number(g('min_spend', cur.min_spend)) || 0),
+      (c.valid_from !== undefined ? (c.valid_from ? String(c.valid_from).slice(0, 10) : null) : cur.valid_from),
+      (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
       c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
@@ -1778,6 +1833,7 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
   if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
   if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
   if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
