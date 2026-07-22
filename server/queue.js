@@ -1751,9 +1751,15 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
   if (couponDisc <= 0) return { ok: false, reason: 'ไม่มีส่วนลดที่ใช้ได้' };
   const totalDisc = r2(existing + couponDisc);
   const reason = (order.discount_reason ? order.discount_reason + ' + ' : '') + 'คูปอง ' + v.code;
+  // Claim the redemption ATOMICALLY before touching the order. validateCoupon() read used_count a
+  // moment ago; between that read and here another till could have taken the last use. The predicate
+  // is evaluated inside the UPDATE, so two racers can never both take the final redemption.
+  const claimed = db.prepare(
+    'UPDATE coupons SET used_count = used_count + 1 WHERE id=? AND (usage_limit IS NULL OR usage_limit<=0 OR used_count < usage_limit)'
+  ).run(v.couponId);
+  if (!claimed.changes) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
   db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(totalDisc, reason, order.id);
   db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)').run(v.couponId, order.id, customerKey, couponDisc);
-  db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id=?').run(v.couponId);
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: couponDisc, actor: null, meta: { coupon: v.code } });
   return { ok: true, discount: couponDisc, totalDiscount: totalDisc, code: v.code };
 }
@@ -3120,7 +3126,11 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   const free = Math.round(Math.min(cc.free_cap, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = (cc.kind === 'birthday' ? '🎂 คูปองวันเกิด: ' : '🎁 คูปองสะสมครบ: ') + cc.label;
-  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=? WHERE id=?`).run(order.id, cc.id);
+  // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
+  // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
+  // already used, instead of the discount being applied twice.
+  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=? WHERE id=? AND used_at IS NULL`).run(order.id, cc.id);
+  if (!burned.changes) throw new Error('coupon_used');
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
   let autoPaid = false;

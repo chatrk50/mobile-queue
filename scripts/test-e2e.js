@@ -637,6 +637,35 @@ ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (o
 ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
 Q.setAutoReorder(false);
 
+// ---- Coupon caps are atomic: the last redemption can only be taken once ----
+console.log('\n== Coupon race guards ==');
+{
+  // A coupon with exactly ONE redemption left, then two orders try to use it.
+  db.prepare(`INSERT INTO coupons (code, label, disc_type, disc_value, usage_limit, used_count, per_customer, active)
+              VALUES ('RACE1','คูปองทดสอบ race','amount',5,1,0,0,1)`).run();
+  const mk = () => { const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, status) VALUES (1,1,0,'RC','waiting')`).run().lastInsertRowid;
+    db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, branch_id) VALUES (?, 100, 'unpaid', 1)`).run(tk); return tk; };
+  const t1 = mk(), t2 = mk();
+  const r1 = Q.applyCouponToOrder(t1, 'RACE1', null);
+  const r2 = Q.applyCouponToOrder(t2, 'RACE1', null);
+  ok(r1.ok === true && r2.ok === false, `INVARIANT only ONE order can take a coupon's last redemption (got ${r1.ok}/${r2.ok})`);
+  ok(db.prepare("SELECT used_count c FROM coupons WHERE code='RACE1'").get().c === 1, 'INVARIANT used_count never exceeds usage_limit');
+  ok(db.prepare("SELECT COUNT(*) c FROM coupon_uses WHERE coupon_id=(SELECT id FROM coupons WHERE code='RACE1')").get().c === 1, 'INVARIANT the ledger records exactly one use');
+
+  // Wallet coupon: two taps on the same coupon must not discount twice.
+  const wkey = 'Uwalletrace00000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าคูปอง')`).run(wkey);
+  const wt = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status) VALUES (1,1,0,'WC',?, 'waiting')`).run(wkey).lastInsertRowid;
+  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, branch_id) VALUES (?, 200, 'unpaid', 1)`).run(wt);
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES ((SELECT id FROM orders WHERE ticket_id=?), 'เครื่องดื่มทดสอบ', 60, 1)`).run(wt);
+  const ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at)
+                           VALUES (?, 'reward', 'คูปองทดสอบ', 49, date('now','+7 hours','+30 days'))`).run(wkey).lastInsertRowid;
+  Q.redeemCustomerCoupon(wt, ccId, null);
+  let twice = null; try { Q.redeemCustomerCoupon(wt, ccId, null); } catch (e) { twice = e.message; }
+  ok(twice === 'coupon_used', `INVARIANT a wallet coupon cannot be redeemed twice (got ${twice})`);
+  ok(db.prepare('SELECT COUNT(*) c FROM customer_coupons WHERE id=? AND used_at IS NOT NULL').get(ccId).c === 1, 'INVARIANT the wallet coupon is burned exactly once');
+}
+
 // ---- Customer list carries the star rating each customer gave + exports to Excel ----
 console.log('\n== Customer ratings + Excel export ==');
 {
