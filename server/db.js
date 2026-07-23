@@ -628,6 +628,10 @@ for (const stmt of [
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN hourly_rate REAL NOT NULL DEFAULT 0`,   // 0 = not on the clock (labour stays the prorated estimate)
+  // Tender reconciliation: the owner keys the ACTUALLY-received amount per e-channel (from the
+  // PromptPay/bank/wallet statement) at close; JSON {method:{actual,note}, by, at}. Cash reconciles
+  // itself from the drawer count. null = not yet reconciled.
+  `ALTER TABLE cash_sessions ADD COLUMN recon_json TEXT`,
   `ALTER TABLE menu_items ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE price_tiers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE channels ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,

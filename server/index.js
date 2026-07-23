@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting, DURABLE, reconnectDb } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
+import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
@@ -74,6 +75,16 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
         'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
+    } else if (ev.type === 'message' && ev.message?.type === 'text') {
+      // Owner self-service: getting one's own LINE userId is otherwise painful. Send "id" (or
+      // "รหัส" / "myid") to the OA and it replies with your userId — paste that into
+      // ⚙ ตั้งค่าระบบ → แจ้งเตือนเจ้าของทาง LINE to receive the daily summary. Read-only: it just
+      // echoes the sender their own id; it does NOT make anyone the owner.
+      const t = (ev.message.text || '').trim().toLowerCase();
+      if (['id', 'myid', 'รหัส', 'ไอดี', 'line id', 'lineid'].includes(t) && ev.source?.userId) {
+        await replyText(ev.replyToken,
+          `LINE userId ของคุณคือ:\n${ev.source.userId}\n\nคัดลอกไปวางที่ ⚙ ตั้งค่าระบบ → แจ้งเตือนเจ้าของทาง LINE เพื่อรับสรุปยอดรายวันค่ะ`);
+      }
     }
   }
   res.sendStatus(200);
@@ -1041,6 +1052,17 @@ app.get('/api/cash/history', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.cashSessionHistory(cashBranch(req)));
 });
+app.get('/api/cash/history/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cashSessionDetail(cashBranch(req), req.params.id)); }
+  catch (e) { res.status(404).json({ error: e.message }); }
+});
+// Save the owner's actually-received amounts per e-channel for one round → reconciliation.
+app.post('/api/cash/history/:id/reconcile', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.saveTenderRecon(cashBranch(req), req.params.id, { lines: req.body?.lines || [], actorId: req.staff?.id || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));
@@ -1430,6 +1452,10 @@ else if (!DURABLE) {
     // Queue-first model is exercised on UAT only; prod stays pay-first (seed '0') until the owner
     // flips it on in ⚙ จัดการ after testing here.
     Q.setQueueFirst(true);
+    // UAT-ONLY realistic sales simulation so every report/chart/reconciliation has data to verify
+    // against. Idempotent (skips if orders exist) and gated behind !DURABLE, so prod NEVER gets it.
+    try { const m = seedMockData(); if (m.seeded) console.log(`[seed] Mock sales simulation — ${m.orders} orders, ${m.customers} customers, ${m.ratings} ratings (UAT only).`); }
+    catch (e) { console.error('[seed] mock sales skipped:', e.message); }
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
 

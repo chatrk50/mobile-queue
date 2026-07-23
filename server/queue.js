@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage } from './line.js';
+import { pushQueue, pushText, pushStage, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -785,7 +785,14 @@ function cashComponents(branchId, sinceAt) {
   // Manual drawer movements in the window: pay_in adds cash, pay_out removes it.
   const payIn = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_in' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   const payOut = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
-  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut) };
+  // ALL cash taken this Bangkok day, regardless of when the round was opened. cashIn only counts
+  // sales made AFTER the round opened; the difference is money rung up before the round existed —
+  // the single most common reason "over/short" looks wrong (owner opened the round mid-day).
+  const dayCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
+    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=?
+      AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const preRoundCash = r2(Math.max(0, dayCash - cashIn));
+  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut), dayCash: r2(dayCash), preRoundCash };
 }
 /** Add a manual cash drawer movement (pay-in / pay-out). */
 export function addCashMove(branchId = 1, kind, amount, remark = null, actorId = null) {
@@ -916,6 +923,87 @@ export function cashSessionHistory(branchId = 1, limit = 60) {
       GROUP BY ym ORDER BY ym DESC LIMIT 12`
   ).all(branchId).map((m) => ({ ...m, expected: r2(m.expected), counted: r2(m.counted), overShort: r2(m.overShort) }));
   return { sessions: rows, monthly, lastFloat: rows.length ? rows[0].open_float : null };
+}
+/** Full detail of ONE past round so the owner can open it and see everything that made the
+ *  over/short — the tender mix collected DURING the round, the cash components, and the
+ *  denomination note. Scoped to the round's own [opened_at, closed_at] window. */
+export function cashSessionDetail(branchId, sessionId) {
+  const s = db.prepare(
+    `SELECT cs.*, date(cs.closed_at,'+7 hours') AS day, so.name AS opened_by_name, sc.name AS closed_by_name
+       FROM cash_sessions cs LEFT JOIN staff so ON so.id=cs.opened_by LEFT JOIN staff sc ON sc.id=cs.closed_by
+      WHERE cs.id=? AND cs.branch_id=?`
+  ).get(Number(sessionId), branchId);
+  if (!s) throw new Error('session_not_found');
+  const until = s.closed_at || db.prepare("SELECT datetime('now') t").get().t;
+  // Every tender taken while this round was open, grouped by method (what was in the drawer +
+  // what came in electronically), so the round's money is fully explained after the fact.
+  const payments = db.prepare(
+    `SELECT COALESCE(o.payment_method,'other') AS method, COUNT(*) AS orders,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
+       FROM orders o
+      WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
+      GROUP BY method ORDER BY amount DESC`
+  ).all(branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
+  const moves = db.prepare(
+    `SELECT kind, amount, remark, at FROM cash_moves WHERE branch_id=? AND at >= ? AND at <= ? ORDER BY at`
+  ).all(branchId, s.opened_at, until);
+  return { session: s, payments, moves, reconciliation: tenderReconciliation(s, payments) };
+}
+// A tender is "auto-reconciled" only if the till physically proves it — that's cash (you count the
+// drawer). Every electronic channel needs the owner to check its own statement, so it starts as an
+// open reconciling item until a real received-amount is keyed in.
+const TENDER_LABELS = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', kplus: 'K PLUS', '6040': 'เป๋าตัง/คนละครึ่ง', online: 'ออนไลน์', slip: 'สลิปโอน', linepay: 'LINE Pay', reward: 'แลกแต้ม', other: 'อื่นๆ' };
+/** Reconcile one round's tenders: system-recorded (book) vs actually-received (statement/drawer),
+ *  with the difference per channel. Cash is settled by the drawer count; e-channels carry the
+ *  owner-entered actual. `expected` is ALWAYS recomputed here — a stored actual can never silently
+ *  drift the book side. */
+export function tenderReconciliation(session, payments) {
+  const saved = (() => { try { return JSON.parse(session.recon_json || '{}'); } catch { return {}; } })();
+  const lines = (payments || []).map((p) => {
+    const method = p.method || 'other';
+    const expected = r2(p.amount);
+    if (method === 'cash') {
+      // The drawer IS the statement for cash: what the round should hold vs what was counted.
+      const actual = session.counted_cash != null ? r2(session.counted_cash) : null;
+      const expDrawer = r2(session.expected_cash);
+      return { method, label: TENDER_LABELS.cash, expected: expDrawer, actual, diff: actual != null ? r2(actual - expDrawer) : null, auto: true, note: 'นับจากลิ้นชัก', reconciled: actual != null };
+    }
+    const rec = saved[method] || {};
+    const actual = rec.actual != null ? r2(rec.actual) : null;
+    return { method, label: TENDER_LABELS[method] || method, expected, actual, diff: actual != null ? r2(actual - expected) : null, auto: false, note: rec.note || '', reconciled: actual != null };
+  });
+  const sum = (k) => r2(lines.reduce((s, l) => s + (l[k] || 0), 0));
+  const done = lines.filter((l) => l.reconciled);
+  return {
+    lines,
+    totalExpected: sum('expected'),
+    totalActual: done.length ? r2(done.reduce((s, l) => s + (l.actual || 0), 0)) : null,
+    totalDiff: done.length ? r2(done.reduce((s, l) => s + (l.diff || 0), 0)) : null,
+    openItems: lines.filter((l) => !l.reconciled).length,   // channels still needing a statement check
+    reconciledBy: saved.by || null, reconciledAt: saved.at || null,
+  };
+}
+/** Save the owner's actually-received amounts for a round's e-channels. Cash is ignored (the drawer
+ *  count is the source of truth). Recomputes + returns the fresh reconciliation. */
+export function saveTenderRecon(branchId, sessionId, { lines = [], actorId = null } = {}) {
+  const s = db.prepare('SELECT * FROM cash_sessions WHERE id=? AND branch_id=?').get(Number(sessionId), branchId);
+  if (!s) throw new Error('session_not_found');
+  if (!s.closed_at) throw new Error('round_not_closed');
+  const prev = (() => { try { return JSON.parse(s.recon_json || '{}'); } catch { return {}; } })();
+  const out = { ...prev };
+  for (const l of Array.isArray(lines) ? lines : []) {
+    const m = String(l.method || '').trim();
+    if (!m || m === 'cash') continue;              // cash is settled by the count, never keyed
+    if (l.actual == null || l.actual === '') { delete out[m]; continue; }
+    const a = Math.max(0, Number(l.actual) || 0);
+    out[m] = { actual: r2(a), note: (l.note || '').toString().slice(0, 120) };
+  }
+  const actor = actorId ? db.prepare('SELECT name FROM staff WHERE id=?').get(actorId) : null;
+  out.by = actor?.name || null;
+  out.at = db.prepare("SELECT datetime('now','+7 hours') t").get().t;
+  db.prepare('UPDATE cash_sessions SET recon_json=? WHERE id=?').run(JSON.stringify(out), s.id);
+  const detail = cashSessionDetail(branchId, s.id);
+  return detail.reconciliation;
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
@@ -2272,13 +2360,42 @@ export function isStoreOpen() {
 // Owner LINE notifications: DORMANT until the owner stores their LINE userId. notifyOwner()
 // no-ops when unset or when the LINE channel is off — so this is safe to ship disabled.
 export function getOwnerLineId() { return (getSetting('owner:line_id', '') || '').trim(); }
-export function setOwnerLineId(id) { setSetting('owner:line_id', (id || '').toString().trim().slice(0, 80)); return { ownerLineId: getOwnerLineId() }; }
-export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text) pushText(id, text); return { sent: !!id }; }
+// A LINE userId is ALWAYS 'U' + 32 hex chars. The owner had typed "Keys7" — the summary then
+// silently failed forever because the destination was garbage. Reject anything that isn't a real
+// id (empty is allowed = "clear it"), so the mistake is caught at the moment of saving.
+const LINE_UID_RE = /^U[0-9a-f]{32}$/i;
+export function validOwnerLineId(id) { return LINE_UID_RE.test(String(id || '').trim()); }
+export function setOwnerLineId(id) {
+  const v = (id || '').toString().trim().slice(0, 80);
+  if (v && !validOwnerLineId(v)) throw new Error('owner_id_invalid');
+  setSetting('owner:line_id', v);
+  return { ownerLineId: getOwnerLineId() };
+}
+// Push to the owner and report what we can know synchronously — the old version returned sent:true
+// whenever an id existed, so "Keys7" read as success. reason: no_id | invalid_id | line_off | sent.
+// The push itself is fire-and-forget (its own success/failure is recorded in push_log); the point
+// here is to catch the common, knowable failures — no id, or an id that could never work.
+export function notifyOwner(text) {
+  const id = getOwnerLineId();
+  if (!id) return { sent: false, reason: 'no_id' };
+  if (!validOwnerLineId(id)) return { sent: false, reason: 'invalid_id' };
+  if (!text) return { sent: false, reason: 'no_text' };
+  if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
+  pushText(id, text);
+  return { sent: true, reason: 'sent' };
+}
 /** Compose a short Thai end-of-day summary from today's report. */
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
+  // Thai-formatted Bangkok date (e.g. "พฤ 24 ก.ค. 2569") so a saved/forwarded summary is always
+  // anchored to the day it covers — the owner reads these later, not only at close time.
+  const bk = db.prepare("SELECT strftime('%d',datetime('now','+7 hours')) d, strftime('%m',datetime('now','+7 hours')) m, strftime('%Y',datetime('now','+7 hours')) y, strftime('%w',datetime('now','+7 hours')) w").get();
+  const THMON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const THDOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  const dateTh = `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`;
   const lines = [
     `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `🗓️ ${dateTh}`,
     `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
@@ -2306,7 +2423,11 @@ export function composeDailySummary(branchId = null) {
     if (exp.length) lines.push(`⏳ ใกล้/หมดอายุ ${exp.length} ล็อต${exp.some((l) => l.expired) ? ' (มีเลยกำหนดแล้ว!)' : ''}`);
     const need = purchasePlan().filter((p) => p.suggestQty > 0);
     if (need.length) { const est = need.reduce((s, p) => s + (p.estCost || 0), 0);
-      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`); }
+      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`);
+      // The owner explicitly wants to see WHICH items to buy, not just a count.
+      for (const p of need.slice(0, 10)) lines.push(`   • ${p.name} ×${p.suggestQty}${p.unit ? ' ' + p.unit : ''}`);
+      if (need.length > 10) lines.push(`   …และอีก ${need.length - 10} รายการ`);
+    }
   } catch { /* additive */ }
   return lines.join('\n');
 }
@@ -2318,8 +2439,11 @@ export function maybeAutoSummary(branchId = null) {
   if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
   const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
-  setSetting('summary:last_sent', day);
-  return pushOwnerSummary(branchId);
+  const r = pushOwnerSummary(branchId);
+  // Only mark the day done once it actually went out. If the owner has no id / a bad id, the next
+  // close will try again — so fixing "Keys7" makes the very next round's summary arrive.
+  if (r.sent) setSetting('summary:last_sent', day);
+  return r;
 }
 export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
 export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
@@ -2333,7 +2457,11 @@ export function maybeAutoReorder(branchId = null) {
   const po = draftPoFromPlan({ actorId: null });
   if (!po) return { drafted: false, reason: 'nothing' };
   const est = (po.lines || []).reduce((s, l) => s + l.lineTotal, 0);
-  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
+  // List what to buy, not just a count — the owner asked to see "which items". Cap the lines so a
+  // huge PO never blows past LINE's message length; the rest are a "+N more" tail.
+  const items = (po.lines || []).slice(0, 12).map((l) => `• ${l.ingredient_name} ×${l.qty}${l.unit ? ' ' + l.unit : ''}`).join('\n');
+  const more = (po.lines || []).length - 12;
+  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\n${items}${more > 0 ? `\n…และอีก ${more} รายการ` : ''}\n\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
   return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
 }
 // C: automatic win-back — customers who slipped into "at_risk" get a coupon + LINE nudge without

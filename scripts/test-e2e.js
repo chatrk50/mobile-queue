@@ -107,8 +107,81 @@ const cs = Q.currentCashSession(1);
 ok(near(cs.cashIn, 230), `cashIn 230 (S1 100 + S2 80 + S4 50, incl. refunded) — got ${cs.cashIn}`);
 ok(near(cs.cashRefund, 50), `cashRefund 50 — got ${cs.cashRefund}`);
 ok(near(cs.expectedCash, 680), `INVARIANT expected==float+cashIn−refund: 500+230−50==${cs.expectedCash}`);
+ok(near(cs.dayCash, cs.cashIn) && cs.preRoundCash === 0, 'INVARIANT a round opened before the sales has no pre-round cash (dayCash==cashIn)');
 const close = Q.closeCashSession(1, { countedCash: 680 });
 ok(near(close.overShort, 0), `counted 680 == expected → over/short 0 (got ${close.overShort})`);
+// Pre-round cash: the exact confusion from the owner's screenshot. Open a NEW round, then plant a
+// cash sale whose paid_at is BEFORE the round opened (money rung up before the round existed). It
+// must NOT inflate the round's expected cash, but the report must SHOW it so "over" isn't a mystery.
+{
+  Q.openCashSession(1, { openFloat: 500 });
+  const ses = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=1 AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get();
+  const c0 = Q.currentCashSession(1);   // baseline (the shared DB already holds earlier cash sales)
+  const tk = db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,'PRC1','served')").run().lastInsertRowid;
+  // A cash sale whose paid_at is 10 min BEFORE this round opened → money that existed before the round.
+  db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid','cash', datetime(?, '-10 minutes'), 1)").run(tk, 697, ses.opened_at);
+  const c2 = Q.currentCashSession(1);
+  ok(near(c2.cashIn, c0.cashIn), `INVARIANT cash sold BEFORE the round opened does NOT change in-round cash (${c0.cashIn} → ${c2.cashIn})`);
+  ok(near(c2.dayCash, c0.dayCash + 697), `INVARIANT the pre-round ฿697 still shows in the DAY total (${c0.dayCash} → ${c2.dayCash})`);
+  ok(near(c2.preRoundCash, c0.preRoundCash + 697), `INVARIANT the ฿697 is surfaced as pre-round cash so over/short is explainable (preRound ${c2.preRoundCash})`);
+  ok(near(c2.expectedCash, c0.expectedCash), 'INVARIANT expected cash is unchanged — the round is honest about what IT collected');
+  const cl2 = Q.closeCashSession(1, { countedCash: c2.expectedCash + 697 });
+  ok(near(cl2.overShort, 697), `INVARIANT the apparent "over" equals exactly the pre-round cash — no money is actually missing (over ${cl2.overShort})`);
+  ok(near(cl2.preRoundCash, c0.preRoundCash + 697), 'INVARIANT the Z-report carries the pre-round figure so the UI can explain the gap');
+  db.prepare('DELETE FROM orders WHERE ticket_id=?').run(tk);
+  db.prepare('DELETE FROM tickets WHERE id=?').run(tk);
+}
+// Cash history drill-down: a past round must be openable to see everything behind its over/short.
+{
+  const hist = Q.cashSessionHistory(1);
+  ok(hist.sessions.length >= 1, 'a closed round is listed in the history');
+  const rid = hist.sessions[0].id;
+  const det = Q.cashSessionDetail(1, rid);
+  ok(det.session && det.session.id === rid, 'INVARIANT a past round can be opened by id (the "ดูย้อนหลัง" drill-down)');
+  ok(Array.isArray(det.payments) && Array.isArray(det.moves), 'INVARIANT the detail carries the tender mix + cash moves that made the over/short');
+  ok(det.payments.every((p) => p.method && p.amount != null), 'each tender line names its method and amount');
+  let missing = false; try { Q.cashSessionDetail(1, 99999); } catch (e) { missing = e.message === 'session_not_found'; }
+  ok(missing, 'INVARIANT opening a non-existent round fails cleanly (never a blank/hung panel)');
+}
+// Tender reconciliation: system-recorded vs actually-received per channel, with the difference.
+{
+  // Isolate on a private branch so the shared branch-1 cash state can't skew expected_cash.
+  const RB = 77;
+  Q.openCashSession(RB, { openFloat: 300 });
+  const ses = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(RB);
+  const mkPaid = (amt, method) => {
+    const t = db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,'RCN','served')").run().lastInsertRowid;
+    db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid',?, ?, ?)").run(t, amt, method, ses.opened_at, RB);
+    return t;
+  };
+  const tA = mkPaid(500, 'promptpay'), tB = mkPaid(200, 'kplus'), tC = mkPaid(150, 'cash');
+  const cl = Q.closeCashSession(RB, { countedCash: 450 });   // 300 float + 150 cash sale = 450 → cash reconciles to 0
+  const det0 = Q.cashSessionDetail(RB, cl.session.id);
+  const rc0 = det0.reconciliation;
+  ok(rc0.lines.length === 3, `reconciliation lists every tender the round took (${rc0.lines.length})`);
+  const cashLine = rc0.lines.find((l) => l.method === 'cash');
+  ok(cashLine.auto === true && cashLine.actual === 450 && cashLine.diff === 0, `INVARIANT cash auto-reconciles from the drawer count (diff ${cashLine.diff})`);
+  const pp = rc0.lines.find((l) => l.method === 'promptpay');
+  ok(pp.auto === false && pp.actual === null && pp.reconciled === false, 'INVARIANT an e-channel starts as an OPEN reconciling item until a statement amount is keyed');
+  ok(rc0.openItems === 2, `INVARIANT the two e-channels are counted as still-to-check (open ${rc0.openItems})`);
+  // Owner keys the actuals from statements: PromptPay landed exactly, K PLUS is ฿20 short.
+  const rc1 = Q.saveTenderRecon(RB, cl.session.id, { lines: [{ method: 'promptpay', actual: 500 }, { method: 'kplus', actual: 180, note: 'ธนาคารตัด' }], actorId: null });
+  ok(rc1.lines.find((l) => l.method === 'promptpay').diff === 0, 'INVARIANT a channel that matches its statement reconciles to 0');
+  const k = rc1.lines.find((l) => l.method === 'kplus');
+  ok(k.diff === -20 && k.actual === 180, `INVARIANT a short channel shows the exact gap (−฿20, got ${k.diff})`);
+  ok(rc1.openItems === 0 && rc1.totalDiff === -20, `INVARIANT once all channels are checked, the round's total variance is the sum of the gaps (${rc1.totalDiff})`);
+  // Persisted + recomputed: the book side (expected) can never be overwritten by a saved actual.
+  const det2 = Q.cashSessionDetail(RB, cl.session.id);
+  ok(det2.reconciliation.lines.find((l) => l.method === 'kplus').expected === 200, 'INVARIANT expected is always recomputed from orders — a stored actual cannot drift the book');
+  ok(det2.reconciliation.lines.find((l) => l.method === 'kplus').actual === 180, 'INVARIANT the keyed actual survives a reload (auditable)');
+  // Clearing an actual reopens that channel.
+  const rc3 = Q.saveTenderRecon(RB, cl.session.id, { lines: [{ method: 'kplus', actual: null }] });
+  ok(rc3.lines.find((l) => l.method === 'kplus').reconciled === false && rc3.openItems === 1, 'INVARIANT clearing an actual reopens the channel as unreconciled');
+  let notClosed = false; try { const o = Q.openCashSession(RB, { openFloat: 0 }); Q.saveTenderRecon(RB, o.session.id, { lines: [] }); } catch (e) { notClosed = e.message === 'round_not_closed'; }
+  ok(notClosed, 'INVARIANT an OPEN round cannot be reconciled yet (nothing final to reconcile against)');
+  db.prepare('DELETE FROM cash_sessions WHERE branch_id=?').run(RB);
+  for (const t of [tA, tB, tC]) { db.prepare('DELETE FROM orders WHERE ticket_id=?').run(t); db.prepare('DELETE FROM tickets WHERE id=?').run(t); }
+}
 
 console.log('\n== Per-branch scoping ==');
 ok(near(Q.dailyReport(1).revenue, rep.revenue), `INVARIANT dailyReport(1)==dailyReport(null) (${rep.revenue})`);
@@ -525,6 +598,9 @@ console.log('\n== Time clock → real daily labour cost ==');
   ok(noOpen, 'INVARIANT clocking out twice is refused (no phantom second shift)');
   Q.updateStaff(st.id, { hourlyRate: 999 });
   ok(Math.abs(db.prepare('SELECT cost FROM staff_shifts WHERE id=?').get(s1.id).cost - 180) < 1, 'INVARIANT raising the rate does NOT rewrite what past days cost');
+  // Pin the shift onto Bangkok-today at a fixed 3h span so the daily-report asserts never straddle
+  // the midnight boundary (the -3h backdate above can land on "yesterday" when run after 17:00 UTC).
+  db.prepare("UPDATE staff_shifts SET clock_in=datetime(date('now','+7 hours')||' 09:00:00','-7 hours'), clock_out=datetime(date('now','+7 hours')||' 12:00:00','-7 hours'), cost=180 WHERE id=?").run(s1.id);
   const withClock = Q.dailyReport().pnl;
   const wagesLine = withClock.opexGroups.find((g) => g.key === 'payroll').lines.find((l) => l.key === 'wages');
   ok(wagesLine && Math.abs(wagesLine.daily - closed.cost) < 1, `INVARIANT the P&L wage line becomes the REAL cost once shifts exist (฿${wagesLine && wagesLine.daily})`);
@@ -773,10 +849,27 @@ console.log('\n== Auto closing summary ==');
 Q.setAutoSummary(false);
 ok(Q.maybeAutoSummary().reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
 Q.setAutoSummary(true);
-const sum1 = Q.maybeAutoSummary();   // no owner LINE id on UAT → sent:false but NOT 'off'/'already'
-ok(sum1.reason !== 'off' && sum1.reason !== 'already', 'INVARIANT enabling auto-summary attempts a send');
-ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT auto-summary fires at most once per day');
+Q.setOwnerLineId('');                 // no id on UAT
+const sum1 = Q.maybeAutoSummary();
+ok(sum1.reason === 'no_id', `INVARIANT with no owner id the summary reports no_id (not a false success) — got ${sum1.reason}`);
+ok(Q.maybeAutoSummary().reason === 'no_id', 'INVARIANT a failed summary does NOT mark the day done — it retries so fixing the id makes the next close arrive');
 ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
+// Once it genuinely sends (simulated), it dedups for the rest of the Bangkok day.
+db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('summary:last_sent', date('now','+7 hours'))").run();
+ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT after a real send the summary fires at most once per day');
+db.prepare("DELETE FROM settings WHERE key='summary:last_sent'").run();
+// The "Keys7" bug: an invalid owner id must be rejected at save, and reported honestly.
+let badId = false; try { Q.setOwnerLineId('Keys7'); } catch (e) { badId = e.message === 'owner_id_invalid'; }
+ok(badId, 'INVARIANT a non-U-id like "Keys7" is refused at save (the exact bug from the field)');
+ok(Q.getOwnerLineId() === '', 'INVARIANT the rejected id is NOT stored');
+ok(Q.notifyOwner('x').reason === 'no_id', 'notifyOwner with no id reports no_id');
+db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('owner:line_id','Keys7')").run();   // pretend an old bad value slipped in
+ok(Q.notifyOwner('x').reason === 'invalid_id', 'INVARIANT a stored-but-invalid id reports invalid_id, never a false sent:true');
+db.prepare("DELETE FROM settings WHERE key='owner:line_id'").run();
+const goodId = 'U' + '0123456789abcdef0123456789abcdef';
+Q.setOwnerLineId(goodId);
+ok(Q.getOwnerLineId() === goodId, 'INVARIANT a real U-id is accepted');
+Q.setOwnerLineId('');
 Q.setAutoSummary(false);
 
 // ---- D: auto-draft PO from the plan (once/day, drafts only — never auto-receives) ----
@@ -792,6 +885,9 @@ ok(ar.drafted === true && /^PO-/.test(ar.poNo), `INVARIANT auto-reorder drafts a
 const arPo = Q.getPurchaseOrder(ar.poId);
 ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (owner still confirms — no silent stock change)');
 ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
+// The owner asked to SEE which items to buy — the summary must name them, not just count them.
+const sumTxt = Q.composeDailySummary();
+ok(sumTxt.includes('🛒 ควรสั่งซื้อ') && sumTxt.includes('วัตถุดิบสั่งซื้ออัตโนมัติ'), 'INVARIANT the closing summary lists the actual items to reorder by name');
 Q.setAutoReorder(false);
 
 // ---- Coupon caps are atomic: the last redemption can only be taken once ----
