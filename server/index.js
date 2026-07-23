@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting, DURABLE, reconnectDb } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
+import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
@@ -1451,6 +1452,10 @@ else if (!DURABLE) {
     // Queue-first model is exercised on UAT only; prod stays pay-first (seed '0') until the owner
     // flips it on in ⚙ จัดการ after testing here.
     Q.setQueueFirst(true);
+    // UAT-ONLY realistic sales simulation so every report/chart/reconciliation has data to verify
+    // against. Idempotent (skips if orders exist) and gated behind !DURABLE, so prod NEVER gets it.
+    try { const m = seedMockData(); if (m.seeded) console.log(`[seed] Mock sales simulation — ${m.orders} orders, ${m.customers} customers, ${m.ratings} ratings (UAT only).`); }
+    catch (e) { console.error('[seed] mock sales skipped:', e.message); }
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
 
