@@ -2517,6 +2517,9 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         (p.opexGroups||[]).filter(g=>g.monthly>0).map(g=>
           sub(g.label,g.daily)+g.lines.map(l=>pl('− '+l.label,l.daily,{neg:true,small:true})).join('')).join('')+
         ((p.opexDaily||0)>0?pl('รวมค่าใช้จ่ายดำเนินงาน',p.opexDaily,{bold:true,neg:true}):'')+
+        // Cash spent straight out of the drawer that day — a real expense, shown on its own line
+        // so it is never confused with the planned monthly costs above.
+        ((p.drawerPayOut||0)>0?pl('− จ่ายออกจากลิ้นชัก (ซื้อของหน้างาน)',p.drawerPayOut,{neg:true}):'')+
         // When anyone clocked in, the wage line above is the REAL cost, not the plan — say by how
         // much it differed so an over-staffed day is visible instead of averaged away.
         ((p.labor&&p.labor.cost>0)?`<div class="qitem" style="padding:6px 12px;background:#fff;font-size:12px">

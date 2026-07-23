@@ -60,6 +60,7 @@ export async function buildReportWorkbook(r, { store='YO-DEE Yogurt' } = {}){
     for(const l of g.lines) line('    '+l.label,l.daily);
   }
   line('Total Operating Expenses',p.opexDaily,{bold:true});
+  if((p.drawerPayOut||0)>0) line('  Cash paid out of drawer',p.drawerPayOut);
   line('EBITDA',p.ebitda,{bold:true,fill:ACCENT});
   if((p.depreciation||0)>0){ line('  Depreciation',p.depreciation); line('EBIT',p.ebit,{bold:true}); }
   if((p.interest||0)>0){ line('  Interest expense',p.interest); line('Profit before tax',p.preTax,{bold:true}); }
