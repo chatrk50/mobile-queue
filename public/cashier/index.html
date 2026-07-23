@@ -2091,13 +2091,13 @@ window.loadCash=async()=>{
   // (that was the "รอบเงินสดย้อนหลัง stuck on กำลังโหลด" bug — one error hid the whole section).
   try{ CASH=await api('/api/cash/session'); }catch(e){ CASH=null; toast(err(e)); }
   try{ CASHHIST=await api('/api/cash/history'); }catch(e){ CASHHIST=null; }
-  renderCash(); renderCashHist(); };
+  renderCash(); renderCashHist(true); };   // auto-open the latest round so reconciliation is visible
 // ---------- Cash-round history: daily Z-report list + monthly rollup ----------
 let CASHHIST=null, _chTab='day';
 window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ok':'ghost'; $('chTabMonth').className=t==='month'?'ok':'ghost';
   $('chTabDay').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; $('chTabMonth').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; renderCashHist(); };
 const osFmt=(os)=> os===0?'<b style="color:#16a34a">พอดี ✓</b>':(os>0?`<b style="color:#16a34a">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
-function renderCashHist(){ const box=$('cashHistList'); if(!box) return;
+function renderCashHist(autoExpand){ const box=$('cashHistList'); if(!box) return;
   if(!CASHHIST){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดไม่สำเร็จ</p>'; return; }
   if(_chTab==='month'){
     const ms=CASHHIST.monthly||[];
@@ -2107,16 +2107,21 @@ function renderCashHist(){ const box=$('cashHistList'); if(!box) return;
       : '<p class="muted" style="font-size:12px">ยังไม่มีรอบที่ปิดแล้ว</p>';
     return; }
   const ss=CASHHIST.sessions||[];
-  box.innerHTML = ss.length ? ss.slice(0,60).map(s=>`<div style="border-bottom:1px solid var(--line)">
+  box.innerHTML = ss.length ? (`<div class="muted" style="font-size:11px;margin-bottom:4px">แตะแต่ละวันเพื่อดูรายละเอียด + เทียบยอดรับแต่ละช่องทาง (พร้อมเพย์ / K PLUS / เป๋าตัง …)</div>`
+    + ss.slice(0,60).map(s=>`<div style="border-bottom:1px solid var(--line)">
       <div role="button" tabindex="0" onclick="chToggle(${s.id})" style="padding:8px 2px;font-size:13px;cursor:pointer">
         <div class="row between" style="align-items:center"><b>${s.day} <span class="muted" style="font-weight:400;font-size:11px">${chHM(s.opened_at)}–${chHM(s.closed_at)}</span></b>
           <span>${osFmt(s.over_short)} <svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;margin:0;opacity:.4"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="muted" style="font-size:11.5px">ทอนตั้งต้น ${baht2(s.open_float)} · ควรมี ${baht2(s.expected_cash)} · นับได้ ${baht2(s.counted_cash)}${s.closed_by_name?(' · ปิดโดย '+esc(s.closed_by_name)):''}</div>
       </div>
       <div id="chDet_${s.id}" style="display:none;padding:0 2px 10px"></div>
-    </div>`).join('') : '<p class="muted" style="font-size:12px">ยังไม่มีรอบที่ปิดแล้ว — ปิดรอบแรกแล้วจะเห็นที่นี่</p>'; }
+    </div>`).join('')) : '<p class="muted" style="font-size:12px">ยังไม่มีรอบที่ปิดแล้ว — ปิดรอบแรกแล้วจะเห็นที่นี่</p>';
+  // Auto-open the most recent round so the per-channel reconciliation fields are visible without
+  // hunting — the owner reported "ไม่เห็นช่องให้เทียบยอด" because it was hidden behind a tap.
+  if(autoExpand && ss.length) chExpand(ss[0].id); }
 const chHM=(s)=>{ if(!s) return '—'; const d=new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?'—':d.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}); };
 const _chDet={};   // cache fetched round details so re-opening a row is instant
+window.chExpand=(id)=>{ const box=$('chDet_'+id); if(box && box.style.display==='none') chToggle(id); };
 // Tap a past round → open its full breakdown (tender mix, pay-in/out, times, staff, note).
 window.chToggle=async(id)=>{ const box=$('chDet_'+id); if(!box) return;
   if(box.style.display!=='none'){ box.style.display='none'; return; }
@@ -2285,7 +2290,8 @@ window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(
     message:'นับได้ '+baht2(counted)+' · ควรมี '+baht2(CASH?CASH.expectedCash:0)+'\n'+(diff===0?'พอดี ✓':(diff>0?('เกิน '+baht2(diff)):('ขาด '+baht2(Math.abs(diff)))))+(brk?('\n\nนับแยก: '+brk):''),
     okText:'ปิดรอบ',danger:diff<0}))) return;
   try{ const r=await api('/api/cash/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countedCash:counted,note})}); renderCashResult(r);
-    try{ CASHHIST=await api('/api/cash/history'); renderCashHist(); }catch(e){ /* history refresh is best-effort */ } }catch(e){ toast(err(e)); } };
+    try{ CASHHIST=await api('/api/cash/history'); renderCashHist(true);   // auto-open the just-closed round → its reconciliation shows right below
+      const el=$('cashHistList'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ /* history refresh is best-effort */ } }catch(e){ toast(err(e)); } };
 function renderCashResult(r){
   const z=r.zreport||{}; const os=r.overShort;
   const osTxt= os===0?'<b style="color:var(--ok,#16a34a)">พอดี ✓</b>':(os>0?`<b style="color:var(--ok,#16a34a)">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
@@ -2308,6 +2314,8 @@ function renderCashResult(r){
       ${(z.payments||[]).map(p=>`<div class="row between" style="font-size:13px;color:var(--muted)"><span>· ${esc(p.method)}</span><span>${baht2(p.amount)}</span></div>`).join('')}
       <div class="row between" style="margin-top:6px"><span class="muted">ส่วนลด</span><span>${baht2(z.discountTotal||0)}</span></div>
       <div class="row between"><span class="muted">ยกเลิก/คืน</span><span>${(z.voidTotals?.void?.count||0)+(z.voidTotals?.refund?.count||0)} รายการ</span></div></div>
+    <div style="margin-top:12px;background:#eef7fb;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--navy)">
+      🧾 <b>ตรวจสอบยอดรับแต่ละช่องทาง</b> (พร้อมเพย์ / K PLUS / เป๋าตัง …) ได้ที่ <b>"รอบเงินสดย้อนหลัง"</b> ด้านล่าง — รอบนี้เปิดให้กรอกยอดจริงแล้ว ⬇</div>
     <button class="ghost" style="width:100%;margin-top:12px;padding:10px" onclick="loadCash()">เริ่มรอบใหม่</button></div>`;
 }
 
