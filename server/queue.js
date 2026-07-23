@@ -2306,8 +2306,15 @@ export function notifyOwner(text) {
 /** Compose a short Thai end-of-day summary from today's report. */
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
+  // Thai-formatted Bangkok date (e.g. "พฤ 24 ก.ค. 2569") so a saved/forwarded summary is always
+  // anchored to the day it covers — the owner reads these later, not only at close time.
+  const bk = db.prepare("SELECT strftime('%d',datetime('now','+7 hours')) d, strftime('%m',datetime('now','+7 hours')) m, strftime('%Y',datetime('now','+7 hours')) y, strftime('%w',datetime('now','+7 hours')) w").get();
+  const THMON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const THDOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  const dateTh = `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`;
   const lines = [
     `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `🗓️ ${dateTh}`,
     `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
