@@ -924,6 +924,31 @@ export function cashSessionHistory(branchId = 1, limit = 60) {
   ).all(branchId).map((m) => ({ ...m, expected: r2(m.expected), counted: r2(m.counted), overShort: r2(m.overShort) }));
   return { sessions: rows, monthly, lastFloat: rows.length ? rows[0].open_float : null };
 }
+/** Full detail of ONE past round so the owner can open it and see everything that made the
+ *  over/short — the tender mix collected DURING the round, the cash components, and the
+ *  denomination note. Scoped to the round's own [opened_at, closed_at] window. */
+export function cashSessionDetail(branchId, sessionId) {
+  const s = db.prepare(
+    `SELECT cs.*, date(cs.closed_at,'+7 hours') AS day, so.name AS opened_by_name, sc.name AS closed_by_name
+       FROM cash_sessions cs LEFT JOIN staff so ON so.id=cs.opened_by LEFT JOIN staff sc ON sc.id=cs.closed_by
+      WHERE cs.id=? AND cs.branch_id=?`
+  ).get(Number(sessionId), branchId);
+  if (!s) throw new Error('session_not_found');
+  const until = s.closed_at || db.prepare("SELECT datetime('now') t").get().t;
+  // Every tender taken while this round was open, grouped by method (what was in the drawer +
+  // what came in electronically), so the round's money is fully explained after the fact.
+  const payments = db.prepare(
+    `SELECT COALESCE(o.payment_method,'other') AS method, COUNT(*) AS orders,
+            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
+       FROM orders o
+      WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
+      GROUP BY method ORDER BY amount DESC`
+  ).all(branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
+  const moves = db.prepare(
+    `SELECT kind, amount, remark, at FROM cash_moves WHERE branch_id=? AND at >= ? AND at <= ? ORDER BY at`
+  ).all(branchId, s.opened_at, until);
+  return { session: s, payments, moves };
+}
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
 export function resetAllZones() {

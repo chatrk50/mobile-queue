@@ -1051,6 +1051,11 @@ app.get('/api/cash/history', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.cashSessionHistory(cashBranch(req)));
 });
+app.get('/api/cash/history/:id', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cashSessionDetail(cashBranch(req), req.params.id)); }
+  catch (e) { res.status(404).json({ error: e.message }); }
+});
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));

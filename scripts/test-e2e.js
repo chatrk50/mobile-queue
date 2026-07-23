@@ -131,6 +131,18 @@ ok(near(close.overShort, 0), `counted 680 == expected → over/short 0 (got ${cl
   db.prepare('DELETE FROM orders WHERE ticket_id=?').run(tk);
   db.prepare('DELETE FROM tickets WHERE id=?').run(tk);
 }
+// Cash history drill-down: a past round must be openable to see everything behind its over/short.
+{
+  const hist = Q.cashSessionHistory(1);
+  ok(hist.sessions.length >= 1, 'a closed round is listed in the history');
+  const rid = hist.sessions[0].id;
+  const det = Q.cashSessionDetail(1, rid);
+  ok(det.session && det.session.id === rid, 'INVARIANT a past round can be opened by id (the "ดูย้อนหลัง" drill-down)');
+  ok(Array.isArray(det.payments) && Array.isArray(det.moves), 'INVARIANT the detail carries the tender mix + cash moves that made the over/short');
+  ok(det.payments.every((p) => p.method && p.amount != null), 'each tender line names its method and amount');
+  let missing = false; try { Q.cashSessionDetail(1, 99999); } catch (e) { missing = e.message === 'session_not_found'; }
+  ok(missing, 'INVARIANT opening a non-existent round fails cleanly (never a blank/hung panel)');
+}
 
 console.log('\n== Per-branch scoping ==');
 ok(near(Q.dailyReport(1).revenue, rep.revenue), `INVARIANT dailyReport(1)==dailyReport(null) (${rep.revenue})`);
