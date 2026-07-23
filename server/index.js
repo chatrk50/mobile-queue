@@ -74,6 +74,16 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
         'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
+    } else if (ev.type === 'message' && ev.message?.type === 'text') {
+      // Owner self-service: getting one's own LINE userId is otherwise painful. Send "id" (or
+      // "รหัส" / "myid") to the OA and it replies with your userId — paste that into
+      // ⚙ ตั้งค่าระบบ → แจ้งเตือนเจ้าของทาง LINE to receive the daily summary. Read-only: it just
+      // echoes the sender their own id; it does NOT make anyone the owner.
+      const t = (ev.message.text || '').trim().toLowerCase();
+      if (['id', 'myid', 'รหัส', 'ไอดี', 'line id', 'lineid'].includes(t) && ev.source?.userId) {
+        await replyText(ev.replyToken,
+          `LINE userId ของคุณคือ:\n${ev.source.userId}\n\nคัดลอกไปวางที่ ⚙ ตั้งค่าระบบ → แจ้งเตือนเจ้าของทาง LINE เพื่อรับสรุปยอดรายวันค่ะ`);
+      }
     }
   }
   res.sendStatus(200);

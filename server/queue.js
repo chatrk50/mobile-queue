@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage } from './line.js';
+import { pushQueue, pushText, pushStage, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -785,7 +785,14 @@ function cashComponents(branchId, sinceAt) {
   // Manual drawer movements in the window: pay_in adds cash, pay_out removes it.
   const payIn = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_in' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   const payOut = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
-  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut) };
+  // ALL cash taken this Bangkok day, regardless of when the round was opened. cashIn only counts
+  // sales made AFTER the round opened; the difference is money rung up before the round existed —
+  // the single most common reason "over/short" looks wrong (owner opened the round mid-day).
+  const dayCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
+    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=?
+      AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const preRoundCash = r2(Math.max(0, dayCash - cashIn));
+  return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut), dayCash: r2(dayCash), preRoundCash };
 }
 /** Add a manual cash drawer movement (pay-in / pay-out). */
 export function addCashMove(branchId = 1, kind, amount, remark = null, actorId = null) {
@@ -2272,8 +2279,30 @@ export function isStoreOpen() {
 // Owner LINE notifications: DORMANT until the owner stores their LINE userId. notifyOwner()
 // no-ops when unset or when the LINE channel is off — so this is safe to ship disabled.
 export function getOwnerLineId() { return (getSetting('owner:line_id', '') || '').trim(); }
-export function setOwnerLineId(id) { setSetting('owner:line_id', (id || '').toString().trim().slice(0, 80)); return { ownerLineId: getOwnerLineId() }; }
-export function notifyOwner(text) { const id = getOwnerLineId(); if (id && text) pushText(id, text); return { sent: !!id }; }
+// A LINE userId is ALWAYS 'U' + 32 hex chars. The owner had typed "Keys7" — the summary then
+// silently failed forever because the destination was garbage. Reject anything that isn't a real
+// id (empty is allowed = "clear it"), so the mistake is caught at the moment of saving.
+const LINE_UID_RE = /^U[0-9a-f]{32}$/i;
+export function validOwnerLineId(id) { return LINE_UID_RE.test(String(id || '').trim()); }
+export function setOwnerLineId(id) {
+  const v = (id || '').toString().trim().slice(0, 80);
+  if (v && !validOwnerLineId(v)) throw new Error('owner_id_invalid');
+  setSetting('owner:line_id', v);
+  return { ownerLineId: getOwnerLineId() };
+}
+// Push to the owner and report what we can know synchronously — the old version returned sent:true
+// whenever an id existed, so "Keys7" read as success. reason: no_id | invalid_id | line_off | sent.
+// The push itself is fire-and-forget (its own success/failure is recorded in push_log); the point
+// here is to catch the common, knowable failures — no id, or an id that could never work.
+export function notifyOwner(text) {
+  const id = getOwnerLineId();
+  if (!id) return { sent: false, reason: 'no_id' };
+  if (!validOwnerLineId(id)) return { sent: false, reason: 'invalid_id' };
+  if (!text) return { sent: false, reason: 'no_text' };
+  if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
+  pushText(id, text);
+  return { sent: true, reason: 'sent' };
+}
 /** Compose a short Thai end-of-day summary from today's report. */
 export function composeDailySummary(branchId = null) {
   const r = dailyReport(branchId); const v = r.voided || {};
@@ -2306,7 +2335,11 @@ export function composeDailySummary(branchId = null) {
     if (exp.length) lines.push(`⏳ ใกล้/หมดอายุ ${exp.length} ล็อต${exp.some((l) => l.expired) ? ' (มีเลยกำหนดแล้ว!)' : ''}`);
     const need = purchasePlan().filter((p) => p.suggestQty > 0);
     if (need.length) { const est = need.reduce((s, p) => s + (p.estCost || 0), 0);
-      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`); }
+      lines.push(`🛒 ควรสั่งซื้อ ${need.length} รายการ${est ? ` (~฿${Math.round(est)})` : ''}`);
+      // The owner explicitly wants to see WHICH items to buy, not just a count.
+      for (const p of need.slice(0, 10)) lines.push(`   • ${p.name} ×${p.suggestQty}${p.unit ? ' ' + p.unit : ''}`);
+      if (need.length > 10) lines.push(`   …และอีก ${need.length - 10} รายการ`);
+    }
   } catch { /* additive */ }
   return lines.join('\n');
 }
@@ -2318,8 +2351,11 @@ export function maybeAutoSummary(branchId = null) {
   if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
   const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
-  setSetting('summary:last_sent', day);
-  return pushOwnerSummary(branchId);
+  const r = pushOwnerSummary(branchId);
+  // Only mark the day done once it actually went out. If the owner has no id / a bad id, the next
+  // close will try again — so fixing "Keys7" makes the very next round's summary arrive.
+  if (r.sent) setSetting('summary:last_sent', day);
+  return r;
 }
 export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
 export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
@@ -2333,7 +2369,11 @@ export function maybeAutoReorder(branchId = null) {
   const po = draftPoFromPlan({ actorId: null });
   if (!po) return { drafted: false, reason: 'nothing' };
   const est = (po.lines || []).reduce((s, l) => s + l.lineTotal, 0);
-  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
+  // List what to buy, not just a count — the owner asked to see "which items". Cap the lines so a
+  // huge PO never blows past LINE's message length; the rest are a "+N more" tail.
+  const items = (po.lines || []).slice(0, 12).map((l) => `• ${l.ingredient_name} ×${l.qty}${l.unit ? ' ' + l.unit : ''}`).join('\n');
+  const more = (po.lines || []).length - 12;
+  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\n${items}${more > 0 ? `\n…และอีก ${more} รายการ` : ''}\n\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
   return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
 }
 // C: automatic win-back — customers who slipped into "at_risk" get a coupon + LINE nudge without
