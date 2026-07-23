@@ -143,6 +143,45 @@ ok(near(close.overShort, 0), `counted 680 == expected → over/short 0 (got ${cl
   let missing = false; try { Q.cashSessionDetail(1, 99999); } catch (e) { missing = e.message === 'session_not_found'; }
   ok(missing, 'INVARIANT opening a non-existent round fails cleanly (never a blank/hung panel)');
 }
+// Tender reconciliation: system-recorded vs actually-received per channel, with the difference.
+{
+  // Isolate on a private branch so the shared branch-1 cash state can't skew expected_cash.
+  const RB = 77;
+  Q.openCashSession(RB, { openFloat: 300 });
+  const ses = db.prepare('SELECT * FROM cash_sessions WHERE branch_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1').get(RB);
+  const mkPaid = (amt, method) => {
+    const t = db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,'RCN','served')").run().lastInsertRowid;
+    db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid',?, ?, ?)").run(t, amt, method, ses.opened_at, RB);
+    return t;
+  };
+  const tA = mkPaid(500, 'promptpay'), tB = mkPaid(200, 'kplus'), tC = mkPaid(150, 'cash');
+  const cl = Q.closeCashSession(RB, { countedCash: 450 });   // 300 float + 150 cash sale = 450 → cash reconciles to 0
+  const det0 = Q.cashSessionDetail(RB, cl.session.id);
+  const rc0 = det0.reconciliation;
+  ok(rc0.lines.length === 3, `reconciliation lists every tender the round took (${rc0.lines.length})`);
+  const cashLine = rc0.lines.find((l) => l.method === 'cash');
+  ok(cashLine.auto === true && cashLine.actual === 450 && cashLine.diff === 0, `INVARIANT cash auto-reconciles from the drawer count (diff ${cashLine.diff})`);
+  const pp = rc0.lines.find((l) => l.method === 'promptpay');
+  ok(pp.auto === false && pp.actual === null && pp.reconciled === false, 'INVARIANT an e-channel starts as an OPEN reconciling item until a statement amount is keyed');
+  ok(rc0.openItems === 2, `INVARIANT the two e-channels are counted as still-to-check (open ${rc0.openItems})`);
+  // Owner keys the actuals from statements: PromptPay landed exactly, K PLUS is ฿20 short.
+  const rc1 = Q.saveTenderRecon(RB, cl.session.id, { lines: [{ method: 'promptpay', actual: 500 }, { method: 'kplus', actual: 180, note: 'ธนาคารตัด' }], actorId: null });
+  ok(rc1.lines.find((l) => l.method === 'promptpay').diff === 0, 'INVARIANT a channel that matches its statement reconciles to 0');
+  const k = rc1.lines.find((l) => l.method === 'kplus');
+  ok(k.diff === -20 && k.actual === 180, `INVARIANT a short channel shows the exact gap (−฿20, got ${k.diff})`);
+  ok(rc1.openItems === 0 && rc1.totalDiff === -20, `INVARIANT once all channels are checked, the round's total variance is the sum of the gaps (${rc1.totalDiff})`);
+  // Persisted + recomputed: the book side (expected) can never be overwritten by a saved actual.
+  const det2 = Q.cashSessionDetail(RB, cl.session.id);
+  ok(det2.reconciliation.lines.find((l) => l.method === 'kplus').expected === 200, 'INVARIANT expected is always recomputed from orders — a stored actual cannot drift the book');
+  ok(det2.reconciliation.lines.find((l) => l.method === 'kplus').actual === 180, 'INVARIANT the keyed actual survives a reload (auditable)');
+  // Clearing an actual reopens that channel.
+  const rc3 = Q.saveTenderRecon(RB, cl.session.id, { lines: [{ method: 'kplus', actual: null }] });
+  ok(rc3.lines.find((l) => l.method === 'kplus').reconciled === false && rc3.openItems === 1, 'INVARIANT clearing an actual reopens the channel as unreconciled');
+  let notClosed = false; try { const o = Q.openCashSession(RB, { openFloat: 0 }); Q.saveTenderRecon(RB, o.session.id, { lines: [] }); } catch (e) { notClosed = e.message === 'round_not_closed'; }
+  ok(notClosed, 'INVARIANT an OPEN round cannot be reconciled yet (nothing final to reconcile against)');
+  db.prepare('DELETE FROM cash_sessions WHERE branch_id=?').run(RB);
+  for (const t of [tA, tB, tC]) { db.prepare('DELETE FROM orders WHERE ticket_id=?').run(t); db.prepare('DELETE FROM tickets WHERE id=?').run(t); }
+}
 
 console.log('\n== Per-branch scoping ==');
 ok(near(Q.dailyReport(1).revenue, rep.revenue), `INVARIANT dailyReport(1)==dailyReport(null) (${rep.revenue})`);

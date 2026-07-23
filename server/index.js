@@ -1056,6 +1056,12 @@ app.get('/api/cash/history/:id', (req, res) => {
   try { res.json(Q.cashSessionDetail(cashBranch(req), req.params.id)); }
   catch (e) { res.status(404).json({ error: e.message }); }
 });
+// Save the owner's actually-received amounts per e-channel for one round → reconciliation.
+app.post('/api/cash/history/:id/reconcile', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.saveTenderRecon(cashBranch(req), req.params.id, { lines: req.body?.lines || [], actorId: req.staff?.id || null })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/cash/session', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.currentCashSession(cashBranch(req)));

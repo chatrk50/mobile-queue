@@ -2124,21 +2124,65 @@ window.chToggle=async(id)=>{ const box=$('chDet_'+id); if(!box) return;
   if(!_chDet[id]){ box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
     try{ _chDet[id]=await api('/api/cash/history/'+id); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดรายละเอียดไม่สำเร็จ</p>'; return; } }
   const d=_chDet[id], s=d.session||{};
-  const TEN={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
-  const pay=(d.payments||[]).map(p=>`<div class="row between" style="font-size:12px;padding:2px 0"><span class="muted">· ${TEN[p.method]||esc(p.method)} (${p.orders})</span><span>${baht2(p.amount)}</span></div>`).join('')||'<div class="muted" style="font-size:12px">— ไม่มีการรับชำระในรอบนี้</div>';
   const mv=(d.moves||[]).map(m=>`<div class="row between" style="font-size:12px;padding:2px 0"><span class="muted">${m.kind==='pay_out'?'จ่ายออก':'รับเข้า'}${m.remark?(' · '+esc(m.remark)):''}</span><span style="color:${m.kind==='pay_out'?'var(--danger)':'#16a34a'}">${m.kind==='pay_out'?'−':'+'}${baht2(m.amount)}</span></div>`).join('');
   box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:10px 12px">
     <div class="row between" style="font-size:12px"><span class="muted">เปิดรอบ</span><span>${chHM(s.opened_at)}${s.opened_by_name?(' · '+esc(s.opened_by_name)):''}</span></div>
     <div class="row between" style="font-size:12px"><span class="muted">ปิดรอบ</span><span>${chHM(s.closed_at)}${s.closed_by_name?(' · '+esc(s.closed_by_name)):''}</span></div>
-    <div style="border-top:1px solid var(--line);margin:6px 0;padding-top:6px"><b style="font-size:12px;color:var(--navy)">ช่องทางรับชำระในรอบนี้</b>${pay}</div>
-    ${mv?`<div style="border-top:1px solid var(--line);margin:6px 0;padding-top:6px"><b style="font-size:12px;color:var(--navy)">รับ/จ่ายเงินสด</b>${mv}</div>`:''}
-    <div style="border-top:1px solid var(--line);margin:6px 0;padding-top:6px">
-      <div class="row between" style="font-size:12px"><span class="muted">ทอนตั้งต้น</span><b>${baht2(s.open_float)}</b></div>
-      <div class="row between" style="font-size:12px"><span class="muted">ควรมี</span><b>${baht2(s.expected_cash)}</b></div>
-      <div class="row between" style="font-size:12px"><span class="muted">นับได้จริง</span><b>${baht2(s.counted_cash)}</b></div>
-      <div class="row between" style="font-size:12px"><span class="muted">ส่วนต่าง</span>${osFmt(s.over_short)}</div></div>
+    <div id="chRecon_${id}" style="margin-top:8px"></div>
+    ${mv?`<div style="border-top:1px solid var(--line);margin:8px 0 0;padding-top:6px"><b style="font-size:12px;color:var(--navy)">รับ/จ่ายเงินสด</b>${mv}</div>`:''}
     ${s.note?`<div class="muted" style="font-size:11.5px;border-top:1px solid var(--line);margin-top:6px;padding-top:6px">📝 ${esc(s.note)}</div>`:''}
-  </div>`; };
+  </div>`;
+  renderRecon(id); };
+// ---------- Tender reconciliation: system-recorded vs actually-received, per channel ----------
+// Cash settles from the drawer count (read-only). For each e-channel the owner keys the amount that
+// actually landed (PromptPay/bank/wallet statement); the difference is computed + flagged. Saved
+// per round so it's auditable — who reconciled it and when.
+function reconDiff(diff){ if(diff==null) return '<span class="muted" style="font-size:11px">—</span>';
+  return diff===0?'<b style="color:#16a34a;font-size:12px">พอดี ✓</b>':(diff>0?`<b style="color:#16a34a;font-size:12px">+${baht2(diff)}</b>`:`<b style="color:var(--danger);font-size:12px">−${baht2(Math.abs(diff))}</b>`); }
+function renderRecon(id){ const box=$('chRecon_'+id); if(!box) return; const d=_chDet[id]; if(!d) return;
+  const rc=d.reconciliation||{lines:[]};
+  if(!rc.lines.length){ box.innerHTML='<div class="muted" style="font-size:12px;border-top:1px solid var(--line);padding-top:6px">— ไม่มีการรับชำระในรอบนี้</div>'; return; }
+  const head=`<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.9fr;gap:6px;font-size:10.5px;font-weight:800;color:var(--muted);padding:0 2px 3px">
+      <span>ช่องทาง</span><span style="text-align:right">ระบบบันทึก</span><span style="text-align:right">รับจริง</span><span style="text-align:right">ส่วนต่าง</span></div>`;
+  const rows=rc.lines.map(l=>{
+    const actualCell = l.auto
+      ? `<span style="text-align:right;font-size:12px;font-weight:700">${l.actual!=null?baht2(l.actual):'—'}</span>`
+      : `<input type="number" inputmode="decimal" data-recon="${id}" data-method="${esc(l.method)}" value="${l.actual!=null?l.actual:''}" placeholder="กรอก" oninput="reconLive(${id})" style="width:100%;box-sizing:border-box;text-align:right;padding:4px 6px;font-size:12px;border:1px solid var(--line);border-radius:7px;background:#fff">`;
+    return `<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.9fr;gap:6px;align-items:center;padding:3px 2px;border-bottom:1px solid var(--line)">
+      <span style="font-size:12px;color:var(--navy)">${esc(l.label)}${l.auto?' <span class="muted" style="font-size:9.5px">(ลิ้นชัก)</span>':''}</span>
+      <span style="text-align:right;font-size:12px">${baht2(l.expected)}</span>
+      ${actualCell}
+      <span style="text-align:right" data-recondiff="${esc(l.method)}">${reconDiff(l.diff)}</span></div>`;}).join('');
+  const totDiff = rc.totalDiff;
+  const foot=`<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.9fr;gap:6px;align-items:center;padding:5px 2px;margin-top:2px;font-weight:800;font-size:12px">
+      <span>รวม</span><span style="text-align:right">${baht2(rc.totalExpected)}</span>
+      <span style="text-align:right" id="reconTotAct_${id}">${rc.totalActual!=null?baht2(rc.totalActual):'—'}</span>
+      <span style="text-align:right" id="reconTotDiff_${id}">${reconDiff(totDiff)}</span></div>`;
+  const meta = rc.reconciledAt ? `<div class="muted" style="font-size:10.5px;margin-top:2px">ตรวจสอบเมื่อ ${esc(rc.reconciledAt)}${rc.reconciledBy?(' · โดย '+esc(rc.reconciledBy)):''}</div>` : '';
+  const openN = rc.openItems||0;
+  box.innerHTML=`<div style="border-top:1px solid var(--line);padding-top:8px">
+    <div class="row between" style="align-items:center;margin-bottom:5px"><b style="font-size:12.5px;color:var(--navy)">🧾 ตรวจสอบยอดรับแต่ละช่องทาง</b>
+      ${openN?`<span style="font-size:10px;font-weight:800;background:#fff7ed;color:#b45309;padding:1px 8px;border-radius:999px">รอตรวจ ${openN}</span>`:'<span style="font-size:10px;font-weight:800;background:#e1f5ee;color:#0f6e56;padding:1px 8px;border-radius:999px">ตรวจครบแล้ว ✓</span>'}</div>
+    ${head}${rows}${foot}${meta}
+    <button class="ok" style="width:100%;margin-top:8px;padding:8px;font-size:12.5px" onclick="reconSave(${id})">บันทึกยอดรับจริง</button>
+    <div class="muted" style="font-size:10.5px;margin-top:4px">กรอกยอดที่ได้รับจริงจากแอปธนาคาร/พร้อมเพย์/วอลเล็ต แล้วระบบจะเทียบกับที่บันทึกไว้ให้ · เงินสดเทียบจากการนับลิ้นชัก</div>
+  </div>`; }
+// Live difference as the owner types, before saving.
+window.reconLive=(id)=>{ const d=_chDet[id]; if(!d) return; const rc=d.reconciliation; let totAct=0, totDiff=0, any=false;
+  rc.lines.forEach(l=>{ let actual=l.actual, exp=l.expected;
+    if(!l.auto){ const inp=document.querySelector(`[data-recon="${id}"][data-method="${CSS.escape(l.method)}"]`); const v=inp&&inp.value!==''?Number(inp.value):null; actual=(v!=null&&isFinite(v))?v:null; }
+    const diff=actual!=null?Math.round((actual-exp)*100)/100:null;
+    const cell=document.querySelector(`#chDet_${id} [data-recondiff="${CSS.escape(l.method)}"]`); if(cell) cell.innerHTML=reconDiff(diff);
+    if(actual!=null){ any=true; totAct+=actual; totDiff+=diff; } });
+  const ta=$('reconTotAct_'+id); if(ta) ta.textContent=any?baht2(Math.round(totAct*100)/100):'—';
+  const td=$('reconTotDiff_'+id); if(td) td.innerHTML=any?reconDiff(Math.round(totDiff*100)/100):reconDiff(null); };
+window.reconSave=async(id)=>{
+  const inputs=[...document.querySelectorAll(`[data-recon="${id}"]`)];
+  const lines=inputs.map(i=>({ method:i.getAttribute('data-method'), actual:i.value!==''?Number(i.value):null }));
+  try{ const rc=await api('/api/cash/history/'+id+'/reconcile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines})});
+    _chDet[id].reconciliation=rc; renderRecon(id);
+    toast(rc.openItems?('บันทึกแล้ว · เหลือรอตรวจ '+rc.openItems+' ช่องทาง'):'ตรวจสอบครบทุกช่องทางแล้ว ✓'); }
+  catch(e){ toast(err(e)); } };
 // Pay In/Out ledger (per Bangkok day, navigable). pay_out shown as a deduction; pay_in as added cash.
 let CMDATE=null;
 window.loadCashMoves=async()=>{ try{ const q=CMDATE?('?date='+encodeURIComponent(CMDATE)):''; const d=await api('/api/cash/moves'+q); CMDATE=d.date; renderCashMoves(d); }catch(e){ const l=$('cashMovesList'); if(l) l.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };

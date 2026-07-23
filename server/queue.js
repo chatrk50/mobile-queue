@@ -947,7 +947,63 @@ export function cashSessionDetail(branchId, sessionId) {
   const moves = db.prepare(
     `SELECT kind, amount, remark, at FROM cash_moves WHERE branch_id=? AND at >= ? AND at <= ? ORDER BY at`
   ).all(branchId, s.opened_at, until);
-  return { session: s, payments, moves };
+  return { session: s, payments, moves, reconciliation: tenderReconciliation(s, payments) };
+}
+// A tender is "auto-reconciled" only if the till physically proves it — that's cash (you count the
+// drawer). Every electronic channel needs the owner to check its own statement, so it starts as an
+// open reconciling item until a real received-amount is keyed in.
+const TENDER_LABELS = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', kplus: 'K PLUS', '6040': 'เป๋าตัง/คนละครึ่ง', online: 'ออนไลน์', slip: 'สลิปโอน', linepay: 'LINE Pay', reward: 'แลกแต้ม', other: 'อื่นๆ' };
+/** Reconcile one round's tenders: system-recorded (book) vs actually-received (statement/drawer),
+ *  with the difference per channel. Cash is settled by the drawer count; e-channels carry the
+ *  owner-entered actual. `expected` is ALWAYS recomputed here — a stored actual can never silently
+ *  drift the book side. */
+export function tenderReconciliation(session, payments) {
+  const saved = (() => { try { return JSON.parse(session.recon_json || '{}'); } catch { return {}; } })();
+  const lines = (payments || []).map((p) => {
+    const method = p.method || 'other';
+    const expected = r2(p.amount);
+    if (method === 'cash') {
+      // The drawer IS the statement for cash: what the round should hold vs what was counted.
+      const actual = session.counted_cash != null ? r2(session.counted_cash) : null;
+      const expDrawer = r2(session.expected_cash);
+      return { method, label: TENDER_LABELS.cash, expected: expDrawer, actual, diff: actual != null ? r2(actual - expDrawer) : null, auto: true, note: 'นับจากลิ้นชัก', reconciled: actual != null };
+    }
+    const rec = saved[method] || {};
+    const actual = rec.actual != null ? r2(rec.actual) : null;
+    return { method, label: TENDER_LABELS[method] || method, expected, actual, diff: actual != null ? r2(actual - expected) : null, auto: false, note: rec.note || '', reconciled: actual != null };
+  });
+  const sum = (k) => r2(lines.reduce((s, l) => s + (l[k] || 0), 0));
+  const done = lines.filter((l) => l.reconciled);
+  return {
+    lines,
+    totalExpected: sum('expected'),
+    totalActual: done.length ? r2(done.reduce((s, l) => s + (l.actual || 0), 0)) : null,
+    totalDiff: done.length ? r2(done.reduce((s, l) => s + (l.diff || 0), 0)) : null,
+    openItems: lines.filter((l) => !l.reconciled).length,   // channels still needing a statement check
+    reconciledBy: saved.by || null, reconciledAt: saved.at || null,
+  };
+}
+/** Save the owner's actually-received amounts for a round's e-channels. Cash is ignored (the drawer
+ *  count is the source of truth). Recomputes + returns the fresh reconciliation. */
+export function saveTenderRecon(branchId, sessionId, { lines = [], actorId = null } = {}) {
+  const s = db.prepare('SELECT * FROM cash_sessions WHERE id=? AND branch_id=?').get(Number(sessionId), branchId);
+  if (!s) throw new Error('session_not_found');
+  if (!s.closed_at) throw new Error('round_not_closed');
+  const prev = (() => { try { return JSON.parse(s.recon_json || '{}'); } catch { return {}; } })();
+  const out = { ...prev };
+  for (const l of Array.isArray(lines) ? lines : []) {
+    const m = String(l.method || '').trim();
+    if (!m || m === 'cash') continue;              // cash is settled by the count, never keyed
+    if (l.actual == null || l.actual === '') { delete out[m]; continue; }
+    const a = Math.max(0, Number(l.actual) || 0);
+    out[m] = { actual: r2(a), note: (l.note || '').toString().slice(0, 120) };
+  }
+  const actor = actorId ? db.prepare('SELECT name FROM staff WHERE id=?').get(actorId) : null;
+  out.by = actor?.name || null;
+  out.at = db.prepare("SELECT datetime('now','+7 hours') t").get().t;
+  db.prepare('UPDATE cash_sessions SET recon_json=? WHERE id=?').run(JSON.stringify(out), s.id);
+  const detail = cashSessionDetail(branchId, s.id);
+  return detail.reconciliation;
 }
 
 /** Daily reset: clear all tickets and restart numbering from 0 in every zone. */
