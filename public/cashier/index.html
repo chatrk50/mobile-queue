@@ -132,7 +132,8 @@
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:230px;max-height:min(72vh,560px);overflow-y:auto;flex-direction:column;gap:2px">
         <div class="admgrp"><div class="admhdr c1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
-          <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</button>
+          <button id="homeBtn" class="ghost adm" style="display:none" onclick="showHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>หน้าหลัก (ภาพรวมวันนี้)</button>
+          <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>แนวโน้ม / ย้อนหลัง</button>
           <button id="reportBtn" class="ghost adm" style="display:none" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</button>
           <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
           <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
@@ -177,6 +178,21 @@
       <button class="ghost" style="width:100%;font-size:13px;padding:9px;color:var(--muted)" onclick="forceUpdate()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>อัปเดตแอป (โหลดเวอร์ชันล่าสุด)</button>
       <div class="muted" style="font-size:10px;margin-top:6px">เวอร์ชัน <span id="appVer">…</span></div>
     </div>
+  </div>
+
+  <!-- HOME DASHBOARD — the one screen that answers "how is the shop doing right now".
+       Assembles today's money, cash-round status, stock warnings and best sellers so the owner
+       stops having to open four panels to build the picture. Every block links to its deep panel. -->
+  <div id="homeCard" class="card" style="display:none;max-width:1000px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>หน้าหลัก</h1>
+        <p class="muted" style="margin:2px 0 0;font-size:12.5px" id="homeSub">ภาพรวมวันนี้</p></div>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>รีเฟรช</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHome()">ปิด</button>
+      </div>
+    </div>
+    <div id="homeBody" style="margin-top:12px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
   </div>
 
   <!-- DAILY REPORT -->
@@ -1211,7 +1227,7 @@ window.login=async()=>{
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; }
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; } { const hb=$('homeBtn'); if(hb) hb.style.display=mgr?'':'none'; }
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
@@ -1245,7 +1261,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
+const ADMIN_PANELS=['homeCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -2431,6 +2447,101 @@ function chartBars(rows, fmt){
     </div>`;}).join('')+'</div>';
 }
 window.hideCharts=()=>{ $('chartsCard').style.display='none'; $('dash').style.display=''; };
+// ---------- HOME DASHBOARD ----------
+// One screen that answers "how is the shop doing right now" so the owner stops assembling the
+// picture from four panels. Everything here already exists in an endpoint — this only composes
+// it. Each block is a shortcut into its deep panel, so the dashboard adds a layer, never a
+// dead end. Laid out with auto-fit so iPad landscape gets 4 columns, portrait 2, phone 1.
+window.hideHome=()=>{ $('homeCard').style.display='none'; $('dash').style.display=''; };
+window.showHome=async()=>{ hideAllPanels(); closeAdmin();
+  $('homeCard').style.display=''; $('dash').style.display='none';
+  $('homeBody').innerHTML='<p class="muted" style="font-size:13px">กำลังโหลด…</p>';
+  // Fetch in parallel; every source is optional so one slow/failing call can't blank the page.
+  const grab=(p)=>api(p).catch(()=>null);
+  const [rep,det,hist,cash,plan,exp]=await Promise.all([
+    grab('/api/report'), grab('/api/reports/detailed'), grab('/api/sales-history'),
+    grab('/api/cash/session'), grab('/api/stock/plan'), grab('/api/stock/expiring')]);
+  renderHome({rep,det,hist,cash,plan,exp}); };
+function renderHome(d){
+  const box=$('homeBody'); if(!box) return;
+  const rep=d.rep||{}, p=rep.pnl||{}, det=d.det||{}, cash=d.cash||{};
+  // Yesterday = the most recent ARCHIVED day (today isn't archived yet), for a like-for-like delta.
+  const daily=(d.hist&&d.hist.daily)||[]; const today=bkkToday();
+  const prev=daily.find(r=>r.date!==today)||null;
+  const delta=(cur,was)=>{ if(was==null||!(was>0)) return '';
+    const pc=Math.round(((cur-was)/was)*100);
+    const up=pc>=0; return `<span style="font-size:11px;font-weight:800;color:${up?'#0f6e56':'var(--danger)'}">${up?'▲':'▼'}${Math.abs(pc)}%</span>`; };
+  const tile=(label,value,sub,accent)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0">
+      <div class="muted" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+      <div style="font-size:24px;font-weight:800;color:${accent||'var(--navy)'};line-height:1.2;margin-top:2px">${value}</div>
+      <div class="muted" style="font-size:11px;margin-top:1px">${sub||''}</div></div>`;
+  // 1) Money today
+  const net=p.netProfit||0;
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${rep.cupsSold||0} ${unit()}`))}
+      ${tile('กำไรสุทธิ',money(net),(p.netMargin!=null?('อัตรากำไร '+pctf(p.netMargin)):''),net>=0?'#0f6e56':'var(--danger)')}
+      ${tile('ขายแล้ว',(p.cups||0)+' '+unit(),(det.paidOrders!=null?det.paidOrders+' ออเดอร์':''))}
+      ${tile('คะแนนร้าน',rep.avgRating!=null?('★ '+rep.avgRating):'—',(rep.ratingCount?rep.ratingCount+' รีวิววันนี้':'ยังไม่มีรีวิววันนี้'))}
+    </div>`;
+  // 2) Cash round status — the thing a cashier forgets
+  const cashBlock=(()=>{
+    if(cash&&cash.open) return `<div role="button" tabindex="0" onclick="showCash()" style="cursor:pointer;background:#e9f8fb;border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:var(--navy)">รอบเงินสดเปิดอยู่</b><div class="muted" style="font-size:11.5px">เปิดเมื่อ ${fmtDT(cash.session&&cash.session.opened_at)} · ควรมี ${baht2(cash.expectedCash||0)}</div></span>
+        <span style="font-size:12px;font-weight:800;color:var(--accent);white-space:nowrap">ไปปิดรอบ →</span></div>`;
+    return `<div role="button" tabindex="0" onclick="showCash()" style="cursor:pointer;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:#8a6d00">ยังไม่ได้เปิดรอบเงินสด</b><div class="muted" style="font-size:11.5px">เปิดรอบตั้งแต่ต้นวันเพื่อให้ยอดเงินตรงเป๊ะ</div></span>
+        <span style="font-size:12px;font-weight:800;color:#8a6d00;white-space:nowrap">เปิดรอบ →</span></div>`; })();
+  // 3) Things that need attention — only rendered when they actually exist
+  // Both endpoints wrap their array ({plan:[…]}, {lots:[…]}) — read through the wrapper.
+  const planArr=(d.plan&&d.plan.plan)||[];
+  const low=planArr.filter(x=>x.low);
+  const need=planArr.filter(x=>x.suggestQty>0);
+  const expiring=(d.exp&&d.exp.lots)||[];
+  const alerts=[];
+  if(low.length) alerts.push(['#fcebeb','#a32d2d','วัตถุดิบใกล้หมด '+low.length+' รายการ',low.slice(0,3).map(i=>esc(i.name)).join(', ')+(low.length>3?' …':''),'showStock()']);
+  if(expiring.length) alerts.push(['#fff7ed','#b45309','ใกล้/หมดอายุ '+expiring.length+' ล็อต',expiring.some(l=>l.expired)?'มีเลยกำหนดแล้ว':'ภายใน 7 วัน','showStock()']);
+  if(need.length) alerts.push(['#eef7fb','#0e7c93','ควรสั่งซื้อ '+need.length+' รายการ',need.slice(0,3).map(i=>esc(i.name)).join(', ')+(need.length>3?' …':''),'showStock()']);
+  const alertBlock=alerts.length?`<div style="display:grid;gap:8px">${alerts.map(([bg,fg,t,s,go])=>
+      `<div role="button" tabindex="0" onclick="${go}" style="cursor:pointer;background:${bg};border-radius:12px;padding:10px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:${fg}">${t}</b><div class="muted" style="font-size:11.5px">${s}</div></span>
+        <span style="font-size:16px;color:${fg}">›</span></div>`).join('')}</div>`
+    :`<div style="background:#e1f5ee;border-radius:12px;padding:11px 13px;font-size:13px;color:#0f6e56"><b>สต๊อกปกติดี ✓</b> <span class="muted" style="font-size:11.5px">ไม่มีของใกล้หมดหรือใกล้หมดอายุ</span></div>`;
+  // 4) Best sellers + peak hour (today)
+  const top=(det.topItems||[]).slice(0,5);
+  const maxQ=Math.max(1,...top.map(t=>t.qty||0));
+  const topBlock=top.length?top.map(t=>`<div style="margin:5px 0">
+      <div class="row between" style="font-size:12.5px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.name)}</span><span class="muted" style="white-space:nowrap">${t.qty} ${unit()}</span></div>
+      <div style="height:6px;background:var(--surface);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${((t.qty||0)/maxQ*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div></div>`).join('')
+    :'<p class="muted" style="font-size:12.5px">ยังไม่มีการขายวันนี้</p>';
+  const peak=(det.hourly||[]).slice().sort((a,b)=>(b.orders||0)-(a.orders||0))[0];
+  // 5) Shortcuts — the deep panels, one tap away
+  const jump=(fn,label,icon)=>`<button class="ghost" style="padding:10px;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:60px" onclick="${fn}">${icon}<span>${label}</span></button>`;
+  box.innerHTML=kpis
+    +`<div style="margin-top:12px">${cashBlock}</div>`
+    +`<div style="margin-top:12px">${alertBlock}</div>`
+    +`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+          <div class="row between" style="align-items:center;margin-bottom:4px"><b style="font-size:13px;color:var(--navy)">เมนูขายดีวันนี้</b>
+            <button class="ghost" style="padding:8px 12px;min-height:44px;font-size:11.5px" onclick="showReport()">รายงาน →</button></div>${topBlock}</div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+          <b style="font-size:13px;color:var(--navy)">สรุปเงินวันนี้</b>
+          <div class="row between" style="font-size:12.5px;margin-top:6px"><span class="muted">ยอดขายสุทธิ</span><b>${money(rep.revenue||0)}</b></div>
+          <div class="row between" style="font-size:12.5px"><span class="muted">ต้นทุนขาย</span><b>−${money(p.cogs||0)}</b></div>
+          <div class="row between" style="font-size:12.5px"><span class="muted">ค่าใช้จ่าย/วัน</span><b>−${money((p.opexDaily||0)+(p.drawerPayOut||0))}</b></div>
+          <div class="row between" style="font-size:13px;border-top:1px solid var(--line);margin-top:5px;padding-top:5px"><b>กำไรสุทธิ</b><b style="color:${net>=0?'#0f6e56':'var(--danger)'}">${money(net)}</b></div>
+          ${peak?`<div class="muted" style="font-size:11.5px;margin-top:6px">⏰ ช่วงพีค ${peak.hr}:00 น. (${peak.orders} ออเดอร์)</div>`:''}
+          ${(rep.voided&&(rep.voided.cancelled?.orders||rep.voided.refunded?.orders||rep.voided.waste?.cups))?`<div class="muted" style="font-size:11.5px">ยกเลิก ${rep.voided.cancelled?.orders||0} · คืนเงิน ${rep.voided.refunded?.orders||0} · ของเสีย ${rep.voided.waste?.cups||0}</div>`:''}
+        </div>
+      </div>`
+    +`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:12px">
+        ${jump('showReport()','รายงานวัน','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>')}
+        ${jump('showCharts()','แนวโน้ม','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>')}
+        ${jump('showCash()','รอบเงินสด','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>')}
+        ${jump('showStock()','สต๊อก','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>')}
+        ${jump('showCustomers()','ลูกค้า','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>')}
+      </div>`;
+  const sub=$('homeSub'); if(sub) sub.textContent='ภาพรวมวันนี้ · '+today+(prev?(' · เทียบกับ '+prev.date):'');
+}
 window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none';
   ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
   $('dash').style.display='none'; $('chartsCard').style.display='';
