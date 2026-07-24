@@ -372,7 +372,9 @@ app.post('/api/admin/features', (req, res) => {
     const out = {};
     if (req.body?.slipAuto != null) Object.assign(out, Q.setSlipAuto(!!req.body.slipAuto));
     if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
-    if (req.body?.ownerLineId != null) Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId));
+    // Where the daily revenue/profit summary is pushed — only the OWNER may redirect it. A manager
+    // could otherwise point the owner's financials at their own LINE (audit finding #6).
+    if (req.body?.ownerLineId != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId)); }
     if (req.body?.pendingVoidMinutes != null) Object.assign(out, Q.setPendingVoidMinutes(req.body.pendingVoidMinutes));
     if (req.body?.queueFirst != null) Object.assign(out, Q.setQueueFirst(!!req.body.queueFirst));
     if (req.body?.social != null) Object.assign(out, Q.setSocialProof(!!req.body.social));

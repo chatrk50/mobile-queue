@@ -3722,7 +3722,9 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
  *  Atomic; returns the row count removed per table. */
 export function clearTransactions() {
   // order matters for FKs: order_items → orders → tickets; the rest are independent.
-  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  // customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset that deletes customers
+  // but left their wallet coupons behind kept those coupons REDEEMABLE with no owner (audit #8).
+  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
   return db.transaction(() => {
     const removed = {};
     for (const t of tables) {
