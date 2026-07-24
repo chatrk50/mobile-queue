@@ -549,7 +549,11 @@ export function dailyReport(branchId = null, dateStr = null) {
         .map((k) => ({ key: k, label: lbl(k), monthly: f[k], daily: daily(k) })),
     };
   });
-  const ebitda = grossProfit - wasteCost - dailyOpex;
+  // Cash taken OUT of the drawer that day (ซื้อน้ำแข็ง/ถุง/ของใช้) is a real expense paid from
+  // takings. The drawer reconciliation already expects it to be gone, but until now it never
+  // reached the P&L — so net profit was overstated by exactly the amount spent.
+  const drawerPayOut = payOutForDay(branchId || 1, validDay ? dateStr : null);
+  const ebitda = grossProfit - wasteCost - dailyOpex - drawerPayOut;
   const depreciation = perDay(f.depreciation);
   const ebit = ebitda - depreciation;
   const interest = perDay(f.interest);
@@ -569,7 +573,7 @@ export function dailyReport(branchId = null, dateStr = null) {
     ingredient, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
-    labor, wagesPlanDaily, laborVariance,
+    labor, wagesPlanDaily, laborVariance, drawerPayOut,
     ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
@@ -699,7 +703,9 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   ).all(D, ...b);
 
   const hourly = db.prepare(
-    `SELECT strftime('%H', o.paid_at, '+7 hours') AS hr, COUNT(*) AS orders, SUM(o.total) AS revenue
+    // NET of discounts, same as payments/channels above — a gross SUM here made the hourly bars
+    // add up to more than the day's "ยอดขาย" on the very same report whenever a coupon was used.
+    `SELECT strftime('%H', o.paid_at, '+7 hours') AS hr, COUNT(*) AS orders, SUM(o.total - COALESCE(o.discount,0)) AS revenue
        FROM orders o
       WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
       GROUP BY hr ORDER BY hr`
@@ -3716,7 +3722,9 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
  *  Atomic; returns the row count removed per table. */
 export function clearTransactions() {
   // order matters for FKs: order_items → orders → tickets; the rest are independent.
-  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  // customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset that deletes customers
+  // but left their wallet coupons behind kept those coupons REDEEMABLE with no owner (audit #8).
+  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
   return db.transaction(() => {
     const removed = {};
     for (const t of tables) {

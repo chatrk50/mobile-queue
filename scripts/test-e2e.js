@@ -81,7 +81,7 @@ ok(near(p.netProfit, p.grossProfit - p.opexDaily - p.wasteCost), `INVARIANT P&L 
 ok(near(p.grossMargin, rep.revenue ? p.grossProfit / rep.revenue : 0), `INVARIANT P&L grossMargin == grossProfit/revenue (${p.grossMargin})`);
 // Full statement chain: gross → EBITDA → EBIT → pre-tax → net. Every step must be exactly the
 // step above minus one named cost, and the opex groups must add back up to the opex total.
-ok(near(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily), `INVARIANT EBITDA == gross−waste−opex (${p.ebitda})`);
+ok(near(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily - p.drawerPayOut), `INVARIANT EBITDA == gross−waste−opex−drawerPayOut (${p.ebitda})`);
 ok(near(p.ebit, p.ebitda - p.depreciation), `INVARIANT EBIT == EBITDA−depreciation (${p.ebit})`);
 ok(near(p.preTax, p.ebit - p.interest), `INVARIANT preTax == EBIT−interest (${p.preTax})`);
 ok(near(p.netProfit, p.preTax - p.incomeTax), `INVARIANT netProfit == preTax−tax (${p.netProfit})`);
@@ -100,6 +100,28 @@ ok(near(p.fixedDaily, p.opexDaily + p.depreciation + p.interest), `INVARIANT fix
   Q.setFinanceSettings({ depreciation: 0, interest: 0, taxPct: 0, freight: 0 });
   const p3 = Q.dailyReport().pnl;
   ok(near(p3.netProfit, before ? p3.grossProfit - p3.opexDaily - p3.wasteCost : 0), 'with the new lines at 0 the P&L is byte-identical to the old formula');
+}
+
+// ---- Two reporting defects found in the back-office audit: the hourly chart summed GROSS while
+//      the day's sales figure was net, and cash paid out of the drawer never reached the P&L. ----
+console.log('\n== Report consistency: hourly net + drawer pay-out ==');
+{
+  const d0 = Q.detailedReports({});
+  const hourlySum = (d0.hourly || []).reduce((s, h) => s + (h.revenue || 0), 0);
+  const paySum = (d0.payments || []).reduce((s, x) => s + (x.amount || 0), 0);
+  ok(near(hourlySum, paySum), `INVARIANT the hourly bars sum to the SAME figure as the tender total (${hourlySum} vs ${paySum})`);
+  ok(d0.discountTotal > 0, `the fixture actually has discounts, so this would catch a gross/net mix-up (฿${d0.discountTotal})`);
+  // Drawer pay-out must land in the P&L, not just the cash reconciliation.
+  const before = Q.dailyReport().pnl;
+  Q.addCashMove(1, 'pay_out', 500, 'ซื้อน้ำแข็ง (ทดสอบ)');
+  const after = Q.dailyReport().pnl;
+  ok(near(after.drawerPayOut, before.drawerPayOut + 500), `INVARIANT a drawer pay-out is reported in the P&L (${after.drawerPayOut})`);
+  ok(near(after.netProfit, before.netProfit - 500), `INVARIANT ฿500 out of the drawer reduces net profit by exactly ฿500 (${before.netProfit} → ${after.netProfit})`);
+  ok(near(after.ebitda, after.grossProfit - after.wasteCost - after.opexDaily - after.drawerPayOut), 'INVARIANT the pay-out sits in the EBITDA chain, not bolted on after tax');
+  // Remove the probe: a pay-out also lowers expected drawer cash, which would skew the cash-drawer
+  // fixture below. (That coupling is itself the proof the two views share one source of truth.)
+  db.prepare("DELETE FROM cash_moves WHERE remark='ซื้อน้ำแข็ง (ทดสอบ)'").run();
+  ok(Q.dailyReport().pnl.drawerPayOut === before.drawerPayOut, 'removing the pay-out restores the P&L exactly');
 }
 
 console.log('\n== Cash drawer ==');

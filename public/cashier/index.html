@@ -132,10 +132,10 @@
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:230px;max-height:min(72vh,560px);overflow-y:auto;flex-direction:column;gap:2px">
         <div class="admgrp"><div class="admhdr c1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
-          <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</button>
+          <button id="homeBtn" class="ghost adm" style="display:none" onclick="showHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>หน้าหลัก (ภาพรวมวันนี้)</button>
+          <button id="chartsBtn" class="ghost adm" style="display:none" onclick="showCharts()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>แนวโน้ม / ย้อนหลัง</button>
           <button id="reportBtn" class="ghost adm" style="display:none" onclick="showReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>รายงานประจำวัน</button>
           <button id="detailBtn" class="ghost adm" style="display:none" onclick="showDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</button>
-          <button id="salesBtn" class="ghost adm" style="display:none" onclick="showSales()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขายย้อนหลัง</button>
         </div>
         <div class="admgrp"><div class="admhdr c2"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>การเงิน / ต้นทุน</div>
           <button id="cashBtn" class="ghost adm" style="display:none" onclick="showCash()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</button>
@@ -150,10 +150,9 @@
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         </div>
         <div class="admgrp"><div class="admhdr c4"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
+          <button id="settingsBtn" class="ghost adm" style="display:none" onclick="showSettings()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าทั้งหมด</button>
           <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
-          <button id="branchBtn" class="ghost adm" style="display:none" onclick="showBranch()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>สาขา</button>
           <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
-          <button id="featuresBtn" class="ghost adm" style="display:none" onclick="showFeatures()"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>ตั้งค่าระบบ</button>
           <button class="ghost adm" onclick="forceUpdate()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>อัปเดตแอป (เวอร์ชันล่าสุด)</button>
         </div>
       </div>
@@ -179,6 +178,34 @@
     </div>
   </div>
 
+  <!-- HOME DASHBOARD — the one screen that answers "how is the shop doing right now".
+       Assembles today's money, cash-round status, stock warnings and best sellers so the owner
+       stops having to open four panels to build the picture. Every block links to its deep panel. -->
+  <div id="homeCard" class="card" style="display:none;max-width:1000px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>หน้าหลัก</h1>
+        <p class="muted" style="margin:2px 0 0;font-size:12.5px" id="homeSub">ภาพรวมวันนี้</p></div>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>รีเฟรช</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHome()">ปิด</button>
+      </div>
+    </div>
+    <div id="homeBody" style="margin-top:12px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
+  </div>
+
+  <!-- SETTINGS HUB — every configurable thing behind ONE door (the audit's top finding: settings
+       were scattered across six panels, with the cost model hidden inside a report). Rows either
+       expand inline (costs) or jump to the owning panel — nothing was rewritten, only re-homed. -->
+  <div id="settingsCard" class="card" style="display:none;max-width:720px;margin:14px auto">
+    <div class="row between" style="align-items:flex-start">
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าทั้งหมด</h1>
+        <p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการตั้งค่าอยู่ที่นี่ที่เดียว</p></div>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSettings()">ปิด</button>
+    </div>
+    <div id="settingsBody" style="margin-top:12px"></div>
+    <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
+  </div>
+
   <!-- DAILY REPORT -->
   <div id="reportCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
@@ -189,12 +216,11 @@
         </div></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleFinance()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ต้นทุน</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="openSettingsCost()" title="แก้ต้นทุน/ค่าใช้จ่าย (อยู่ในตั้งค่าทั้งหมด)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>ต้นทุน</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleMargins()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไร/เมนู</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">ปิด</button>
       </div>
     </div>
-    <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="marginsBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
     <div id="reportBody" style="margin-top:14px"></div>
   </div>
@@ -212,14 +238,19 @@
   <!-- SELL HISTORY (daily / monthly) -->
   <div id="salesCard" class="card" style="display:none;max-width:640px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ยอดขาย & กำไร (P&L) ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>แนวโน้ม / ย้อนหลัง</h1><p class="muted" style="margin:2px 0 0">P&L ย้อนหลัง · บันทึกอัตโนมัติทุกวันตอนรีเซ็ต 00:00 (เวลาไทย)</p></div>
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="archivePastDay()" title="บันทึกยอดของวันที่ผ่านมา (กู้คืนวันที่ระบบบันทึกอัตโนมัติพลาด)"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>บันทึกย้อนหลัง</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()">ปิด</button>
       </div>
     </div>
+    <!-- Same switcher as chartsCard — the two panels present as ONE destination. -->
     <div class="row" style="gap:6px;margin-top:12px">
+      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showCharts()">กราฟ</button>
+      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">ตาราง P&amp;L</button>
+    </div>
+    <div class="row" style="gap:6px;margin-top:10px">
       <button id="salesTabDaily" class="ok" style="padding:6px 14px;font-size:13px" onclick="salesTab('daily')">รายวัน</button>
       <button id="salesTabWeekly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('weekly')">รายสัปดาห์</button>
       <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
@@ -474,7 +505,7 @@
   <!-- COUPON SCOPE: which menus a coupon applies to (none ticked = whole bill) -->
   <div id="scopePop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
     <div class="card" style="max-width:440px;width:100%;max-height:86vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
-      <div class="row between" style="flex:none;align-items:center"><h1 style="margin:0;font-size:18px">เมนูที่ร่วมรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeScope()">✕</button></div>
+      <div class="row between" style="flex:none;align-items:center"><h1 style="margin:0;font-size:18px">เมนูที่ร่วมรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeScope()">ปิด</button></div>
       <div id="scopeBody" style="overflow-y:auto;flex:1;min-height:0;margin:10px 0"></div>
       <button class="ok" style="width:100%;flex:none" onclick="saveScope()">บันทึก</button>
     </div>
@@ -536,8 +567,14 @@
   <!-- OVERVIEW / CHARTS (owner/manager) -->
   <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
-      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>ภาพรวม / กราฟ</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
+      <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>แนวโน้ม / ย้อนหลัง</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">ปิด</button>
+    </div>
+    <!-- Shared view switcher: กราฟ (this panel) ↔ ตาราง P&L (salesCard). One destination, two
+         renderings of the same /api/sales-history data — merged per the IA audit. -->
+    <div class="row" style="gap:6px;margin-top:12px">
+      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">กราฟ</button>
+      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showSales()">ตาราง P&amp;L</button>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
   </div>
@@ -694,7 +731,7 @@
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
     <div class="row between" style="margin-bottom:10px">
       <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
-      <button class="ghost" style="padding:6px 12px" onclick="closeCust()">✕</button>
+      <button class="ghost" style="padding:6px 12px" onclick="closeCust()">ปิด</button>
     </div>
     <div id="custPad">
       <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
@@ -754,7 +791,7 @@
 <!-- QR check-in: customer scans to link their LINE identity to this order -->
 <div id="checkinPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:57;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:320px;width:100%;margin:0;text-align:center;padding:18px">
-    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()">✕</button></div>
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()">ปิด</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">สแกนด้วย LINE เพื่อสะสมประวัติ — ไม่ต้องพิมพ์เบอร์</p>
     <img id="checkinImg" alt="QR เช็คอิน" style="width:240px;height:240px;border-radius:14px;border:1px solid var(--line);object-fit:contain;background:#fff">
     <p class="muted" id="checkinHint" style="font-size:12px;margin:10px 0 0">รอลูกค้าสแกน… ระบบจะแสดงชื่อบนการ์ดเองเมื่อเช็คอินสำเร็จ</p>
@@ -764,7 +801,7 @@
 <!-- Scan a customer's "บัตรของฉัน" member QR → pull up their profile (no typing) -->
 <div id="scanPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
-    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">✕</button></div>
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">ปิด</button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
     <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
     <div id="scanStatus" style="font-size:13px;margin-top:8px;min-height:16px;color:var(--navy);font-weight:600;white-space:pre-line"></div>
@@ -947,7 +984,7 @@
 
 <div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">✕</button></div>
+    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">ปิด</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -1210,9 +1247,10 @@ window.login=async()=>{
     const mgr=(!ME||['owner','manager'].includes(ME.role)), own=(!ME||ME.role==='owner');
     $('loginCard').style.display='none'; $('dash').style.display=''; $('logoutBtn').style.display='';
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
-    $('reportBtn').style.display=mgr?'':'none'; $('salesBtn').style.display=mgr?'':'none';
-    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; }
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('branchBtn').style.display=own?'':'none'; $('featuresBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    $('reportBtn').style.display=mgr?'':'none';
+    $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; } { const hb=$('homeBtn'); if(hb) hb.style.display=mgr?'':'none'; }
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    { const sb=$('settingsBtn'); if(sb) sb.style.display=mgr?'':'none'; }   // the hub; owner-only rows inside gate themselves
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
     await loadMenu(); await boot();
@@ -1226,13 +1264,14 @@ window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'P
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
   $('cashBtn').style.display='none'; $('cashCard').style.display='none';
   $('controlBtn').style.display='none'; const _cc=$('controlCard'); if(_cc) _cc.style.display='none';
-  $('branchBtn').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
+  { const sb=$('settingsBtn'); if(sb) sb.style.display='none'; const sc=$('settingsCard'); if(sc) sc.style.display='none'; }
   $('adminBtn').style.display='none'; closeAdmin();
   $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
   $('reportBtn').style.display='none'; $('reportCard').style.display='none';
   $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
   $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('scanBtn').style.display='none'; $('historyCard').style.display='none';
-  $('salesBtn').style.display='none'; $('salesCard').style.display='none';
+  $('salesCard').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 let HIST=[];
@@ -1245,7 +1284,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
+const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -2431,6 +2470,101 @@ function chartBars(rows, fmt){
     </div>`;}).join('')+'</div>';
 }
 window.hideCharts=()=>{ $('chartsCard').style.display='none'; $('dash').style.display=''; };
+// ---------- HOME DASHBOARD ----------
+// One screen that answers "how is the shop doing right now" so the owner stops assembling the
+// picture from four panels. Everything here already exists in an endpoint — this only composes
+// it. Each block is a shortcut into its deep panel, so the dashboard adds a layer, never a
+// dead end. Laid out with auto-fit so iPad landscape gets 4 columns, portrait 2, phone 1.
+window.hideHome=()=>{ $('homeCard').style.display='none'; $('dash').style.display=''; };
+window.showHome=async()=>{ hideAllPanels(); closeAdmin();
+  $('homeCard').style.display=''; $('dash').style.display='none';
+  $('homeBody').innerHTML='<p class="muted" style="font-size:13px">กำลังโหลด…</p>';
+  // Fetch in parallel; every source is optional so one slow/failing call can't blank the page.
+  const grab=(p)=>api(p).catch(()=>null);
+  const [rep,det,hist,cash,plan,exp]=await Promise.all([
+    grab('/api/report'), grab('/api/reports/detailed'), grab('/api/sales-history'),
+    grab('/api/cash/session'), grab('/api/stock/plan'), grab('/api/stock/expiring')]);
+  renderHome({rep,det,hist,cash,plan,exp}); };
+function renderHome(d){
+  const box=$('homeBody'); if(!box) return;
+  const rep=d.rep||{}, p=rep.pnl||{}, det=d.det||{}, cash=d.cash||{};
+  // Yesterday = the most recent ARCHIVED day (today isn't archived yet), for a like-for-like delta.
+  const daily=(d.hist&&d.hist.daily)||[]; const today=bkkToday();
+  const prev=daily.find(r=>r.date!==today)||null;
+  const delta=(cur,was)=>{ if(was==null||!(was>0)) return '';
+    const pc=Math.round(((cur-was)/was)*100);
+    const up=pc>=0; return `<span style="font-size:11px;font-weight:800;color:${up?'#0f6e56':'var(--danger)'}">${up?'▲':'▼'}${Math.abs(pc)}%</span>`; };
+  const tile=(label,value,sub,accent)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0">
+      <div class="muted" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+      <div style="font-size:24px;font-weight:800;color:${accent||'var(--navy)'};line-height:1.2;margin-top:2px">${value}</div>
+      <div class="muted" style="font-size:11px;margin-top:1px">${sub||''}</div></div>`;
+  // 1) Money today
+  const net=p.netProfit||0;
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${rep.cupsSold||0} ${unit()}`))}
+      ${tile('กำไรสุทธิ',money(net),(p.netMargin!=null?('อัตรากำไร '+pctf(p.netMargin)):''),net>=0?'#0f6e56':'var(--danger)')}
+      ${tile('ขายแล้ว',(p.cups||0)+' '+unit(),(det.paidOrders!=null?det.paidOrders+' ออเดอร์':''))}
+      ${tile('คะแนนร้าน',rep.avgRating!=null?('★ '+rep.avgRating):'—',(rep.ratingCount?rep.ratingCount+' รีวิววันนี้':'ยังไม่มีรีวิววันนี้'))}
+    </div>`;
+  // 2) Cash round status — the thing a cashier forgets
+  const cashBlock=(()=>{
+    if(cash&&cash.open) return `<div role="button" tabindex="0" onclick="showCash()" style="cursor:pointer;background:#e9f8fb;border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:var(--navy)">รอบเงินสดเปิดอยู่</b><div class="muted" style="font-size:11.5px">เปิดเมื่อ ${fmtDT(cash.session&&cash.session.opened_at)} · ควรมี ${baht2(cash.expectedCash||0)}</div></span>
+        <span style="font-size:12px;font-weight:800;color:var(--accent);white-space:nowrap">ไปปิดรอบ →</span></div>`;
+    return `<div role="button" tabindex="0" onclick="showCash()" style="cursor:pointer;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:#8a6d00">ยังไม่ได้เปิดรอบเงินสด</b><div class="muted" style="font-size:11.5px">เปิดรอบตั้งแต่ต้นวันเพื่อให้ยอดเงินตรงเป๊ะ</div></span>
+        <span style="font-size:12px;font-weight:800;color:#8a6d00;white-space:nowrap">เปิดรอบ →</span></div>`; })();
+  // 3) Things that need attention — only rendered when they actually exist
+  // Both endpoints wrap their array ({plan:[…]}, {lots:[…]}) — read through the wrapper.
+  const planArr=(d.plan&&d.plan.plan)||[];
+  const low=planArr.filter(x=>x.low);
+  const need=planArr.filter(x=>x.suggestQty>0);
+  const expiring=(d.exp&&d.exp.lots)||[];
+  const alerts=[];
+  if(low.length) alerts.push(['#fcebeb','#a32d2d','วัตถุดิบใกล้หมด '+low.length+' รายการ',low.slice(0,3).map(i=>esc(i.name)).join(', ')+(low.length>3?' …':''),'showStock()']);
+  if(expiring.length) alerts.push(['#fff7ed','#b45309','ใกล้/หมดอายุ '+expiring.length+' ล็อต',expiring.some(l=>l.expired)?'มีเลยกำหนดแล้ว':'ภายใน 7 วัน','showStock()']);
+  if(need.length) alerts.push(['#eef7fb','#0e7c93','ควรสั่งซื้อ '+need.length+' รายการ',need.slice(0,3).map(i=>esc(i.name)).join(', ')+(need.length>3?' …':''),'showStock()']);
+  const alertBlock=alerts.length?`<div style="display:grid;gap:8px">${alerts.map(([bg,fg,t,s,go])=>
+      `<div role="button" tabindex="0" onclick="${go}" style="cursor:pointer;background:${bg};border-radius:12px;padding:10px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
+        <span style="font-size:13px"><b style="color:${fg}">${t}</b><div class="muted" style="font-size:11.5px">${s}</div></span>
+        <span style="font-size:16px;color:${fg}">›</span></div>`).join('')}</div>`
+    :`<div style="background:#e1f5ee;border-radius:12px;padding:11px 13px;font-size:13px;color:#0f6e56"><b>สต๊อกปกติดี ✓</b> <span class="muted" style="font-size:11.5px">ไม่มีของใกล้หมดหรือใกล้หมดอายุ</span></div>`;
+  // 4) Best sellers + peak hour (today)
+  const top=(det.topItems||[]).slice(0,5);
+  const maxQ=Math.max(1,...top.map(t=>t.qty||0));
+  const topBlock=top.length?top.map(t=>`<div style="margin:5px 0">
+      <div class="row between" style="font-size:12.5px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.name)}</span><span class="muted" style="white-space:nowrap">${t.qty} ${unit()}</span></div>
+      <div style="height:6px;background:var(--surface);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${((t.qty||0)/maxQ*100).toFixed(0)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div></div>`).join('')
+    :'<p class="muted" style="font-size:12.5px">ยังไม่มีการขายวันนี้</p>';
+  const peak=(det.hourly||[]).slice().sort((a,b)=>(b.orders||0)-(a.orders||0))[0];
+  // 5) Shortcuts — the deep panels, one tap away
+  const jump=(fn,label,icon)=>`<button class="ghost" style="padding:10px;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:60px" onclick="${fn}">${icon}<span>${label}</span></button>`;
+  box.innerHTML=kpis
+    +`<div style="margin-top:12px">${cashBlock}</div>`
+    +`<div style="margin-top:12px">${alertBlock}</div>`
+    +`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+          <div class="row between" style="align-items:center;margin-bottom:4px"><b style="font-size:13px;color:var(--navy)">เมนูขายดีวันนี้</b>
+            <button class="ghost" style="padding:8px 12px;min-height:44px;font-size:11.5px" onclick="showReport()">รายงาน →</button></div>${topBlock}</div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+          <b style="font-size:13px;color:var(--navy)">สรุปเงินวันนี้</b>
+          <div class="row between" style="font-size:12.5px;margin-top:6px"><span class="muted">ยอดขายสุทธิ</span><b>${money(rep.revenue||0)}</b></div>
+          <div class="row between" style="font-size:12.5px"><span class="muted">ต้นทุนขาย</span><b>−${money(p.cogs||0)}</b></div>
+          <div class="row between" style="font-size:12.5px"><span class="muted">ค่าใช้จ่าย/วัน</span><b>−${money((p.opexDaily||0)+(p.drawerPayOut||0))}</b></div>
+          <div class="row between" style="font-size:13px;border-top:1px solid var(--line);margin-top:5px;padding-top:5px"><b>กำไรสุทธิ</b><b style="color:${net>=0?'#0f6e56':'var(--danger)'}">${money(net)}</b></div>
+          ${peak?`<div class="muted" style="font-size:11.5px;margin-top:6px">⏰ ช่วงพีค ${peak.hr}:00 น. (${peak.orders} ออเดอร์)</div>`:''}
+          ${(rep.voided&&(rep.voided.cancelled?.orders||rep.voided.refunded?.orders||rep.voided.waste?.cups))?`<div class="muted" style="font-size:11.5px">ยกเลิก ${rep.voided.cancelled?.orders||0} · คืนเงิน ${rep.voided.refunded?.orders||0} · ของเสีย ${rep.voided.waste?.cups||0}</div>`:''}
+        </div>
+      </div>`
+    +`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:12px">
+        ${jump('showReport()','รายงานวัน','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>')}
+        ${jump('showCharts()','แนวโน้ม','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>')}
+        ${jump('showCash()','รอบเงินสด','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>')}
+        ${jump('showStock()','สต๊อก','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>')}
+        ${jump('showCustomers()','ลูกค้า','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>')}
+      </div>`;
+  const sub=$('homeSub'); if(sub) sub.textContent='ภาพรวมวันนี้ · '+today+(prev?(' · เทียบกับ '+prev.date):'');
+}
 window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none';
   ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
   $('dash').style.display='none'; $('chartsCard').style.display='';
@@ -2517,6 +2651,9 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         (p.opexGroups||[]).filter(g=>g.monthly>0).map(g=>
           sub(g.label,g.daily)+g.lines.map(l=>pl('− '+l.label,l.daily,{neg:true,small:true})).join('')).join('')+
         ((p.opexDaily||0)>0?pl('รวมค่าใช้จ่ายดำเนินงาน',p.opexDaily,{bold:true,neg:true}):'')+
+        // Cash spent straight out of the drawer that day — a real expense, shown on its own line
+        // so it is never confused with the planned monthly costs above.
+        ((p.drawerPayOut||0)>0?pl('− จ่ายออกจากลิ้นชัก (ซื้อของหน้างาน)',p.drawerPayOut,{neg:true}):'')+
         // When anyone clocked in, the wage line above is the REAL cost, not the plan — say by how
         // much it differed so an over-staffed day is visible instead of averaged away.
         ((p.labor&&p.labor.cost>0)?`<div class="qitem" style="padding:6px 12px;background:#fff;font-size:12px">
@@ -2549,7 +2686,7 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
     $('reportCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   }catch(e){ toast(err(e)); }
 };
-window.hideReport=()=>{ $('reportCard').style.display='none'; $('financeBox').style.display='none'; const mb=$('marginsBox'); if(mb) mb.style.display='none'; $('dash').style.display=''; };
+window.hideReport=()=>{ $('reportCard').style.display='none'; const mb=$('marginsBox'); if(mb) mb.style.display='none'; $('dash').style.display=''; };
 // Customer satisfaction (star breakdown) + repeat-buyer (returning LINE customers) — appended
 // to the daily report so the owner can find the satisfaction view in one place.
 async function loadInsights(){
@@ -2604,6 +2741,36 @@ window.exportCustomers=()=>{ window.open('/api/crm/customers.xlsx'+(PIN?('?pin='
 window.exportDetail=()=>{ window.open('/api/reports/detailed.xlsx?date='+encodeURIComponent($('detailDate').value||'')+(PIN?('&pin='+encodeURIComponent(PIN)):''),'_blank'); };
 // Cost assumptions live on the Report (toggle), so editing a cost shows the new P&L.
 let FIN=null;
+// ---------- SETTINGS HUB ----------
+// One door for every setting. Rows either expand inline (the cost model, previously buried
+// inside the daily report) or jump to the panel that owns the setting. Owner-only rows are
+// hidden for managers; the APIs behind them still enforce the role server-side.
+window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.showSettings=()=>{ hideAllPanels(); closeAdmin();
+  $('settingsCard').style.display=''; $('dash').style.display='none'; renderSettingsHub(); };
+function renderSettingsHub(){
+  const own=(!ME||ME.role==='owner');
+  const row=(fn,icon,title,desc,ownerOnly)=>((ownerOnly&&!own)?'':`
+    <div role="button" tabindex="0" onclick="${fn}" style="cursor:pointer;display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px;min-height:56px">
+      <span style="flex:none;width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center">${icon}</span>
+      <span style="flex:1;min-width:0"><b style="font-size:13.5px;color:var(--navy)">${title}</b>
+        <div class="muted" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${desc}</div></span>
+      <span style="flex:none;font-size:16px;color:var(--muted)">›</span></div>`);
+  $('settingsBody').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
+    ${row('toggleFinance()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>','ต้นทุน & ค่าใช้จ่าย','ค่าเช่า ค่าแรง วัตถุดิบ % ฯลฯ — ใช้คำนวณกำไร-ขาดทุน')}
+    ${row('showBranch()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>','สาขา & เวลาเปิด-ปิด','ชื่อร้าน ที่อยู่ เวลาทำการ',true)}
+    ${row('showLoyalty()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
+    ${row('showTenders()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
+    ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
+    ${row('showMenu()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
+    ${row('showStaff()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
+  </div>
+  <p class="muted" style="font-size:11px;margin:10px 2px 0">แตะ "ต้นทุน & ค่าใช้จ่าย" เพื่อแก้ในหน้านี้ · หัวข้ออื่นเปิดหน้าของตัวเอง</p>`;
+}
+// Old habit preserved: the ต้นทุน button on the daily report now leads HERE with the form open.
+window.openSettingsCost=async()=>{ showSettings(); const box=$('financeBox');
+  if(box.style.display==='none') await toggleFinance();
+  box.scrollIntoView({behavior:'smooth',block:'start'}); };
 window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
   try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
 // Every cost line the P&L knows about, grouped exactly like the statement reads. Adding a line
@@ -2658,7 +2825,8 @@ function renderFinance(){
 }
 window.saveFinance=async()=>{ const keys=FIN_ALL;
   const body={}; keys.forEach(k=>body[k]=Number($('fin_'+k).value)||0);
-  try{ FIN=await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกต้นทุนแล้ว'); $('financeBox').style.display='none'; showReport(); }catch(e){ toast(err(e)); } };
+  try{ FIN=await api('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); renderFinance();
+    toast('บันทึกต้นทุนแล้ว ✓ ดูผลได้ที่รายงานประจำวัน'); }catch(e){ toast(err(e)); } };
 // Profit goal: how many cups/day & /month to hit a target net margin (from the last report).
 let GOAL=null;
 window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
