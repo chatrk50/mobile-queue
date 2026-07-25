@@ -1540,19 +1540,15 @@ function renderOrderBlock(v){
   // RED panel so the screen never shows a green "saved!" box that contradicts the cancelled
   // status. The full-width "กลับหน้าหลัก · สั่งใหม่" button below is the way out (goHome).
   if(v.status==='cancelled' || v.status==='skipped'){
+    // ONE cancellation message on the screen, not five. The status pill on the order row carries
+    // the fact; the payment panel below is hidden entirely (there is nothing left to pay), and the
+    // only remaining copy is the reason — which is the one thing the customer doesn't already know.
     stopQrCountdown();
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
-    show('tOrder',true); show('payChoice',true);
-    ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
-    const byReq=!!v.cancelRequested;
-    const box=$('counterConfirmedMsg');
-    box.style.background='#fef2f2'; box.style.border='1px solid #fca5a5';
-    const _reason = (!byReq && v.cancelReason) ? '<div style="font-size:13px;color:#7f1d1d;margin-top:8px;background:#fff;border:1px dashed #fca5a5;border-radius:10px;padding:8px 10px">'+esc(v.cancelReason)+'</div>' : '';
-    box.innerHTML='<div style="font-weight:800;color:var(--danger);font-size:17px">ออเดอร์ถูกยกเลิกแล้ว</div>'
-      +'<div style="font-size:13.5px;color:#b91c1c;margin-top:6px;font-weight:600">'
-      +(byReq?'ยกเลิกตามคำขอของคุณแล้ว · กรุณาทำรายการใหม่':'ออเดอร์นี้ถูกยกเลิก · กรุณาทำรายการใหม่')+'</div>'
-      +_reason;
-    show('counterConfirmedMsg',true);
+    // The whole payment panel goes — there is nothing left to pay. (counterConfirmedMsg lives
+    // INSIDE payChoice, so the reason cannot be rendered here; render() puts it in tNotifyNote,
+    // which sits outside this panel and stays visible.)
+    show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
   if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
@@ -1997,8 +1993,12 @@ function render(v){
     else { renderStars(0); show('tRateAsk',true); $('tRateThanks').style.display='none'; }
   } else {   // cancelled / skipped / unknown
     show('tAheadWrap',false); show('tCalled',false);
+    // The header label is the single statement of the cancellation; the note below carries ONLY
+    // the shop's reason — the one thing the customer doesn't already know. No reason (or they
+    // cancelled it themselves) → stay silent; the "กลับหน้าหลัก · สั่งใหม่" button says what's next.
     if(v.status==='cancelled'){ $('tCodeLabel').textContent='ออเดอร์นี้ถูกยกเลิกแล้ว';
-      $('tNotifyNote').innerHTML='<span style="color:var(--danger);font-weight:800;font-size:15px">❌ ออเดอร์ถูกยกเลิก</span><br><span class="muted" style="font-size:12.5px">กดปุ่มด้านล่างเพื่อกลับไปสั่งใหม่ได้เลยค่ะ</span>'; }
+      const why=(!v.cancelRequested && v.cancelReason) ? v.cancelReason : '';
+      $('tNotifyNote').innerHTML = why ? '<span style="color:#b91c1c;font-size:13.5px">'+esc(why)+'</span>' : ''; }
     else $('tNotifyNote').textContent='สถานะ: '+v.status;
     $('cancelBtn').style.display='none';
   }
