@@ -1287,6 +1287,23 @@ const lk = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'c
 Q.setOrderPaid(lk.ticket.id, { method: 'cash' });
 const drinkRow = Q.listMenu().find((m) => m.name === 'Drink');
 ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable customer counts as a like (got ${drinkRow && drinkRow.likes})`);
+// Organic ❤️: a tapped like merges with buyer-likes, DEDUPED per customer.
+{
+  const base = drinkRow.likes;
+  const newFan = 'U' + 'f'.repeat(32);                      // never bought anything
+  const t1 = Q.toggleMenuLike(drinkRow.id, newFan);
+  ok(t1.liked === true && t1.likes === base + 1, `INVARIANT a non-buyer's tap adds exactly 1 (${base} → ${t1.likes})`);
+  const buyer = 'Ulikes000000000000000000000001';           // already counted as a buyer
+  const t2 = Q.toggleMenuLike(drinkRow.id, buyer);
+  ok(t2.liked === true && t2.likes === base + 1, 'INVARIANT a BUYER tapping the heart does NOT double-count (still one person)');
+  const t3 = Q.toggleMenuLike(drinkRow.id, buyer);
+  ok(t3.liked === false && t3.likes === base + 1, 'INVARIANT a buyer un-tapping still counts as a buyer — purchases cannot be un-liked away');
+  const t4 = Q.toggleMenuLike(drinkRow.id, newFan);
+  ok(t4.liked === false && t4.likes === base, `INVARIANT the non-buyer un-tap returns the count to baseline (${t4.likes})`);
+  ok(Q.myMenuLikes(newFan).length === 0, 'INVARIANT myMenuLikes reflects the toggle state');
+  ok(Q.listMenu().find((m) => m.name === 'Drink').likes === base, 'INVARIANT listMenu shows the same merged count as the toggle result');
+  ok(typeof Q.publicRating().count === 'number', 'publicRating exposes only {avg,count} for the LIFF hero');
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

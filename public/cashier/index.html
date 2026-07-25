@@ -33,6 +33,16 @@
   @media (max-width:820px){ .pos-split{ grid-template-columns:1fr; } .pos-bill{ position:static; } }
   /* iPad: use more of the screen width */
   .wrap.wide{ max-width:1280px; }
+  /* Device-fit override (header 📱 button): AUTO = the responsive CSS as-is; the manual modes pin
+     the layout to a device profile — useful when e.g. a phone is casting to a big screen, or the
+     owner prefers the roomy phone layout on a small tablet. Persisted per device in localStorage. */
+  html.dev-phone .wrap.wide{ max-width:520px; }
+  html.dev-phone body{ font-size:16.5px; }
+  html.dev-phone .pos-split{ grid-template-columns:1fr; }
+  html.dev-phone .ms-split{ grid-template-columns:1fr; }
+  html.dev-tablet .wrap.wide{ max-width:900px; }
+  html.dev-desktop .wrap.wide{ max-width:1360px; }
+  html.dev-desktop body{ font-size:14.5px; }
   /* Sweetness segmented pills (mirror the customer detail sheet) */
   .sweetseg{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
   .sweetseg-b{flex:1;min-width:56px;padding:10px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:14px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;transition:.1s}
@@ -127,6 +137,8 @@
       <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
       <button id="scanBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตร</button>
       <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
+      <!-- Device-fit: tap to cycle layout อัตโนมัติ → มือถือ → แท็บเล็ต → คอม (persisted) -->
+      <button id="devBtn" class="ghost" style="padding:6px 10px;font-size:13px" onclick="cycleDevMode()" title="ปรับหน้าจอตามอุปกรณ์"></button>
       <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
       <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
@@ -1206,6 +1218,27 @@ const IC={
   cup:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 16.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8z"/><path d="M6.5 9h11"/></svg>',
   search:'<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
 };
+
+// ---------- Device-fit switcher ----------
+// อัตโนมัติ (responsive CSS decides) → มือถือ → แท็บเล็ต → คอม. A class on <html> pins the layout;
+// the choice persists per device. SVG line icons per the icon theme (no emoji).
+const DEV_MODES=[
+  ['auto','อัตโนมัติ','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
+  ['phone','มือถือ','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>'],
+  ['tablet','แท็บเล็ต','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M11 18h2"/></svg>'],
+  ['desktop','คอม','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg>'],
+];
+function applyDevMode(mode){ const h=document.documentElement;
+  h.classList.remove('dev-phone','dev-tablet','dev-desktop');
+  if(mode!=='auto') h.classList.add('dev-'+mode);
+  const m=DEV_MODES.find(x=>x[0]===mode)||DEV_MODES[0];
+  const b=$('devBtn'); if(b) b.innerHTML=m[2]+m[1];
+}
+window.cycleDevMode=()=>{ const cur=localStorage.getItem('dev_mode')||'auto';
+  const i=DEV_MODES.findIndex(x=>x[0]===cur); const next=DEV_MODES[(i+1)%DEV_MODES.length][0];
+  localStorage.setItem('dev_mode',next); applyDevMode(next);
+  toast('หน้าจอ: '+(DEV_MODES.find(x=>x[0]===next)[1])); };
+applyDevMode(localStorage.getItem('dev_mode')||'auto');
 
 // On-screen keypad: tap digits straight into the PIN field (no device keyboard wait).
 window.pinKey=(k)=>{ const el=$('pin'); $('loginErr').textContent='';

@@ -278,6 +278,12 @@ export function setFinanceSettings(patch = {}, branchId = null) {
   return getFinanceSettings(branchId);
 }
 
+/** Public star rating for the customer-facing home: all-time average of real ticket reviews.
+ *  Deliberately tiny (avg + count only) — safe to expose in /api/config as social proof. */
+export function publicRating() {
+  const r = db.prepare('SELECT AVG(rating) AS avg, COUNT(rating) AS n FROM tickets WHERE rating IS NOT NULL').get();
+  return { avg: r.n ? Math.round(r.avg * 10) / 10 : null, count: r.n || 0 };
+}
 /** Customer satisfaction (star distribution) + repeat-buyer stats (returning LINE customers). */
 export function customerInsights() {
   const stars = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; let total = 0, sum = 0;
@@ -1120,8 +1126,9 @@ export function listMenu(channelId = null, branchId = null) {
     ).all()) soldMap.set(s.base, s.q);
     rows.forEach((r) => { r.sold = soldMap.get(r.name) || 0; });
   } catch (e) { rows.forEach((r) => { r.sold = 0; }); }
-  // "Likes" = how many DISTINCT identifiable customers (LINE / phone) have bought this item on a
-  // paid order → shown on the customer card as a heart count (social proof, not raw cups sold).
+  // "Likes" = DISTINCT identifiable customers who either BOUGHT the item (paid order) or tapped
+  // the ❤️ themselves (menu_likes). UNION + COUNT DISTINCT so a buyer who also taps counts once.
+  // Honest social proof: never zero for anything that actually sells, and un-fakeable at scale.
   try {
     const likeMap = new Map();
     for (const s of db.prepare(
@@ -1130,11 +1137,39 @@ export function listMenu(channelId = null, branchId = null) {
                 COALESCE(t.line_user_id, t.customer_key) AS cust
            FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
           WHERE o.payment_status='paid'
+         UNION
+         SELECT mi.name AS base, ml.customer_key AS cust
+           FROM menu_likes ml JOIN menu_items mi ON mi.id=ml.menu_item_id
        ) WHERE cust IS NOT NULL GROUP BY base`
     ).all()) likeMap.set(s.base, s.n);
     rows.forEach((r) => { r.likes = likeMap.get(r.name) || 0; });
   } catch (e) { rows.forEach((r) => { r.likes = 0; }); }
   return rows;
+}
+/** Toggle a customer's ❤️ on a menu item. Returns the new state + the merged display count. */
+export function toggleMenuLike(menuItemId, customerKey) {
+  const id = Number(menuItemId);
+  const item = db.prepare('SELECT id, name FROM menu_items WHERE id=?').get(id);
+  if (!item) throw new Error('item_not_found');
+  const had = db.prepare('SELECT 1 FROM menu_likes WHERE menu_item_id=? AND customer_key=?').get(id, customerKey);
+  if (had) db.prepare('DELETE FROM menu_likes WHERE menu_item_id=? AND customer_key=?').run(id, customerKey);
+  else db.prepare('INSERT OR IGNORE INTO menu_likes (menu_item_id, customer_key) VALUES (?,?)').run(id, customerKey);
+  const likes = db.prepare(
+    `SELECT COUNT(DISTINCT cust) AS n FROM (
+       SELECT COALESCE(t.line_user_id, t.customer_key) AS cust
+         FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN tickets t ON t.id=o.ticket_id
+        WHERE o.payment_status='paid'
+          AND (CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END)=?
+       UNION
+       SELECT customer_key AS cust FROM menu_likes WHERE menu_item_id=?
+     ) WHERE cust IS NOT NULL`
+  ).get(item.name, id).n;
+  return { liked: !had, likes };
+}
+/** Menu-item ids this customer has hearted (to paint the ❤️ filled on their screen). */
+export function myMenuLikes(customerKey) {
+  if (!customerKey) return [];
+  return db.prepare('SELECT menu_item_id FROM menu_likes WHERE customer_key=?').all(customerKey).map((r) => r.menu_item_id);
 }
 
 // ---------- Branches (Phase 2): a tenant's shops ----------

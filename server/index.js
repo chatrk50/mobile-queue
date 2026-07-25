@@ -167,7 +167,7 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), ordering: Q.orderingPaused(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), ordering: Q.orderingPaused(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -420,6 +420,18 @@ app.get('/api/shifts', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const d = typeof req.query.date === 'string' ? req.query.date : null;
   res.json({ shifts: Q.shiftsForDay(d), total: Q.laborActual(d), mine: Q.openShiftOf(req.staff?.id || null) });
+});
+// Organic ❤️: a customer toggles their own like. Public but keyed to a REAL LINE id (same guard
+// as consent) so counts stay honest — no anonymous spamming.
+app.post('/api/menu/:id/like', (req, res) => {
+  const key = String(req.body?.lineUserId || '').trim();
+  if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
+  try { res.json(Q.toggleMenuLike(req.params.id, key)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/menu-likes', (req, res) => {
+  const key = String(req.query.u || '').trim();
+  if (!/^U[0-9a-f]{32}$/i.test(key)) return res.json({ ids: [] });
+  res.json({ ids: Q.myMenuLikes(key) });
 });
 // PDPA. The customer records their own consent (public, keyed to a real LINE id); erasure is an
 // owner-only action because it is irreversible and touches accounting records.

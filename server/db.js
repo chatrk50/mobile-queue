@@ -494,6 +494,14 @@ CREATE TABLE IF NOT EXISTS coupons (
   active       INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Organic ❤️ on menu items: a customer taps the heart once (PK dedups). The DISPLAYED count is
+-- this table UNION real paid buyers, deduped per customer — honest, no cold start, no double count.
+CREATE TABLE IF NOT EXISTS menu_likes (
+  menu_item_id INTEGER NOT NULL,
+  customer_key TEXT NOT NULL,
+  at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (menu_item_id, customer_key)
+);
 CREATE TABLE IF NOT EXISTS coupon_uses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   coupon_id INTEGER, order_id INTEGER, customer_key TEXT, discount REAL,
