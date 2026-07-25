@@ -3543,6 +3543,22 @@ function freeGiveawayDiscount(lines, total) {
   return Math.min(Math.round(d * 100) / 100, Math.max(0, total));
 }
 
+/** The catalog price a submitted line is really worth here, or null when the item cannot be
+ *  ordered on this channel/branch at all (unknown, retired, or switched off for the branch).
+ *  Drink lines carry the customer's sweetness choice as a " · หวาน X%" suffix and sweetness never
+ *  changes the price, so the lookup matches on the base name. */
+function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
+  const base = String(rawName || '').split(' · ')[0].trim();
+  if (!base) return null;
+  const item = db.prepare('SELECT id FROM menu_items WHERE name=? AND active=1').get(base);
+  if (!item) return null;
+  if (branchId) {
+    const bm = db.prepare('SELECT enabled FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, item.id);
+    if (bm && !bm.enabled) return null;
+  }
+  const p = priceFor(item.id, { channelId, branchId });
+  return p == null ? null : r2(p);
+}
 export function createOrder(zoneId, items, opts = {}) {
   const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null } = opts;
   const lines = (Array.isArray(items) ? items : [])
@@ -3576,6 +3592,18 @@ export function createOrder(zoneId, items, opts = {}) {
     }
   }
 
+  // SELF-SERVE ORDERS PRICE THEMSELVES FROM THE CATALOG. The LIFF posts the price it displayed and
+  // the endpoint is public, so a modified client could name its own price — and the recorded bill,
+  // the P&L, the stamps and the COGS all followed that number.
+  // Cashier lines keep the submitted price on purpose: a till operator legitimately overrides
+  // (staff drink, replacement cup, agreed discount) and is authenticated, PIN-gated and audited.
+  if (source === 'customer') {
+    for (const it of lines) {
+      const p = catalogPrice(it.name, { channelId, branchId: zone.store_id });
+      if (p == null) throw new Error('item_unavailable');
+      it.price = p;
+    }
+  }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
   const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
   // Classify each line as a base drink or an addon (topping) for exact addon reporting.

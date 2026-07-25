@@ -1532,6 +1532,9 @@ window.confirmBasket=async()=>{
       storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
     } else if(_err==='online_orders_off'||_err==='pos_offline'){   // channel paused mid-checkout
       storeOpen=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
+    } else if(_err==='item_unavailable'){   // the menu changed under an old cart / reorder — reload it
+      cart=[]; cartCoupon=null; toast('มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
+      try{ await loadZone(); }catch(_){} show('orderCard',true); renderBasketCount();
     } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };

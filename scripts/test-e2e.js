@@ -24,6 +24,9 @@ db.prepare("INSERT INTO stores (id, name) VALUES (1, 'Test Shop')").run();
 db.prepare("INSERT INTO zones (id, store_id, name, prefix) VALUES (1, 1, 'A', 'A')").run();
 db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('Drink', 100, 'drink')").run();
 db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('Topping', 10, 'topping')").run();
+// Customer (self-serve) orders are priced from the catalog, so a scenario that needs a ฿49/฿50/฿65
+// bill needs a real menu item at that price — passing a price in the request no longer sets it.
+for (const p of [49, 50, 65]) db.prepare('INSERT INTO menu_items (name, price, category) VALUES (?,?,?)').run('Drink' + p, p, 'drink');
 const grab = db.prepare("SELECT id FROM channels WHERE name='Grab'").get().id;
 
 function sale({ items, method = 'cash', discount = 0, channelId = null }) {
@@ -719,7 +722,7 @@ ok(!!rwCoupon && rwCoupon.code.startsWith('CCOUP:'), `INVARIANT the converted co
 ok(rwCoupon && rwCoupon.freeCap === 49, `INVARIANT the reward coupon is capped at ฿49 (got ${rwCoupon && rwCoupon.freeCap})`);
 // Selecting it (couponCode = "CCOUP:<id>") applies the free-drink discount at order time and marks
 // the coupon used — no further points are touched (they were spent at conversion).
-const rwOrder = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
+const rwOrder = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
 const rwOrderRow = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(rwOrder.ticket.id);
 ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service coupon redemption discounts the order — got ฿${rwOrderRow && rwOrderRow.discount}`);
 ok(Q.loyaltyBalance(rwCust).points === rwBal0, 'INVARIANT redeeming the coupon touches no further points');
@@ -786,7 +789,7 @@ ok(Q.issueBirthdayCoupons().issued === 0, 'INVARIANT the sweep is idempotent —
 const bdBalBefore = Q.loyaltyBalance(bdOld).points;
 const bdList = Q.availableCoupons(bdOld, 100).find((c) => c.couponKind === 'birthday');
 ok(!!bdList, 'INVARIANT the birthday coupon shows in the customer coupon list');
-const bdOrder = Q.createOrder(1, [{ name: 'Drink', price: 65, qty: 1 }], { source: 'customer', lineUserId: bdOld, couponCode: bdList.code });
+const bdOrder = Q.createOrder(1, [{ name: 'Drink65', price: 65, qty: 1 }], { source: 'customer', lineUserId: bdOld, couponCode: bdList.code });
 const bdRow = db.prepare('SELECT discount, payment_status, payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(bdOrder.ticket.id);
 ok(bdRow && Number(bdRow.discount) === 65, `INVARIANT the birthday coupon covers a ฿65 drink in full (discount ฿${bdRow && bdRow.discount})`);
 ok(Q.loyaltyBalance(bdOld).points >= bdBalBefore, 'INVARIANT using the birthday coupon never touches earned stamps');
@@ -1291,12 +1294,12 @@ ok(Q.markReady(upr.ticket.id, 5).reason === 'unpaid', 'INVARIANT an unpaid order
 
 // ---- Preliminary slip check (free): the SAME slip image reused on another order is flagged. ----
 console.log('\n== Slip preliminary check (duplicate image) ==');
-const sd1 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000001' });
-const sd2 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000002' });
+const sd1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000001' });
+const sd2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000002' });
 Q.attachSlip(sd1.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');
 Q.attachSlip(sd2.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');   // reused → duplicate
 ok(Q.slipPrelim(sd2.ticket.id).duplicate != null, 'INVARIANT a reused slip image is flagged as duplicate');
-const sd3 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000003' });
+const sd3 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000003' });
 Q.attachSlip(sd3.ticket.id, 'data:image/png;base64,UNIQUESLIPIMAGE');
 ok(Q.slipPrelim(sd3.ticket.id).duplicate == null, 'INVARIANT a unique slip is not flagged');
 ok(Q.slipPrelim(sd3.ticket.id).expectedAmount === 50, 'INVARIANT prelim hands the cashier the expected amount');
@@ -1423,6 +1426,37 @@ console.log('\n== Coupon report ==');
   const old = Q.couponReport({ from: '2020-01-01', to: '2020-01-31' });
   ok(old.issued === 0 && old.redeemed === 0, 'INVARIANT a date range outside the data returns zero, not everything');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
+}
+
+console.log('\n== Self-serve orders are priced by the server, not the client ==');
+{
+  // The order endpoint is public and the LIFF posts the price it displayed. A tampered client used
+  // to set its own price and the bill, the P&L, the stamps and the COGS all followed it.
+  const K = 'Uprice0000000000000000000000001';
+  const cheat = Q.createOrder(1, [{ name: 'Drink', price: 1, qty: 2 }], { source: 'customer', lineUserId: K });
+  ok(cheat.total === 200, `INVARIANT a customer cannot name their own price — ฿1 posted, ฿200 charged (got ฿${cheat.total})`);
+  const line = db.prepare('SELECT price FROM order_items WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(cheat.ticket.id);
+  ok(line.price === 100, `INVARIANT the stored line carries the catalog price, not the posted one (got ฿${line.price})`);
+  Q.cancelOrderTicket(cheat.ticket.id, null, { reason: 'e2e price test' });
+
+  // Sweetness is a label the customer picks, never a price change — the suffixed name must still
+  // resolve, or every self-serve drink order would be rejected.
+  const K2 = 'Uprice0000000000000000000000002';
+  const sweet = Q.createOrder(1, [{ name: 'Drink · หวาน 25%', price: 5, qty: 1 }], { source: 'customer', lineUserId: K2 });
+  ok(sweet.total === 100, `INVARIANT a sweetness suffix still prices from the base item (got ฿${sweet.total})`);
+  Q.cancelOrderTicket(sweet.ticket.id, null, { reason: 'e2e price test' });
+
+  // An item that is not on the menu at all cannot be invented by the client.
+  let badErr = null;
+  try { Q.createOrder(1, [{ name: 'ของที่ไม่มีในเมนู', price: 1, qty: 1 }], { source: 'customer', lineUserId: 'Uprice0000000000000000000000003' }); }
+  catch (e) { badErr = e.message; }
+  ok(badErr === 'item_unavailable', `INVARIANT an off-menu item is refused, not sold (got ${badErr})`);
+
+  // The cashier keeps price control on purpose: staff drinks, replacement cups and agreed
+  // discounts are legitimate, PIN-gated and audited.
+  const till = Q.createOrder(1, [{ name: 'Drink', price: 1, qty: 1 }], { source: 'cashier' });
+  ok(till.total === 1, `INVARIANT the till can still override a price (got ฿${till.total})`);
+  Q.cancelOrderTicket(till.ticket.id, null, { reason: 'e2e price test' });
 }
 
 console.log('\n== Coupon templates + outstanding + cancel ==');

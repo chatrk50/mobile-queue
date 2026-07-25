@@ -628,7 +628,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
     }
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409 };
     res.status(map[e.message] || 400).json({ error: e.message });
   }
 });
