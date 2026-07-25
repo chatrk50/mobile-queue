@@ -99,6 +99,7 @@ const SCHEMA_OR_WRITE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/
 // reused read-only with fresh args each call (single-threaded, sequential).
 const _stmtCache = new Map();
 const _wrapCache = new Map();
+let _txDepth = 0;   // nesting level, so transaction() can pick BEGIN vs SAVEPOINT
 // Compatibility wrapper: prepare(...).run/get/all, exec, transaction()
 export const db = {
   prepare(sql) {
@@ -117,11 +118,28 @@ export const db = {
   },
   exec(sql) { const r = raw.exec(sql); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
   // Mimics better-sqlite3 transaction(fn) -> function returning fn's result.
+  // RE-ENTRANT: SQLite rejects a second BEGIN, so a nested call opens a SAVEPOINT instead. That
+  // lets a function which already wraps its own writes be composed inside a larger transaction —
+  // which is what makes "burn the coupon AND apply the discount, or neither" expressible at all.
+  // Only the outermost commit schedules a Turso sync; an inner rollback undoes just its own slice.
   transaction(fn) {
     return (...args) => {
-      raw.exec('BEGIN');
-      try { const r = fn(...args); raw.exec('COMMIT'); scheduleSync(); return r; }
-      catch (e) { raw.exec('ROLLBACK'); throw e; }
+      const sp = _txDepth > 0 ? `sp${_txDepth}` : null;
+      raw.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN');
+      _txDepth++;
+      try {
+        const r = fn(...args);
+        raw.exec(sp ? `RELEASE ${sp}` : 'COMMIT');
+        _txDepth--;
+        if (!sp) scheduleSync();
+        return r;
+      } catch (e) {
+        _txDepth--;
+        // Never let a failing rollback mask the error that caused it.
+        try { raw.exec(sp ? `ROLLBACK TO ${sp}` : 'ROLLBACK'); if (sp) raw.exec(`RELEASE ${sp}`); }
+        catch { /* connection already unwound */ }
+        throw e;
+      }
     };
   },
 };

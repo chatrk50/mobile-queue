@@ -2333,12 +2333,19 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
   // Claim the redemption ATOMICALLY before touching the order. validateCoupon() read used_count a
   // moment ago; between that read and here another till could have taken the last use. The predicate
   // is evaluated inside the UPDATE, so two racers can never both take the final redemption.
-  const claimed = db.prepare(
-    'UPDATE coupons SET used_count = used_count + 1 WHERE id=? AND (usage_limit IS NULL OR usage_limit<=0 OR used_count < usage_limit)'
-  ).run(v.couponId);
-  if (!claimed.changes) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
-  db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(totalDisc, reason, order.id);
-  db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)').run(v.couponId, order.id, customerKey, couponDisc);
+  // …and all three writes commit together: taking the redemption without recording the discount
+  // charged the customer full price for a coupon they had just spent, and recording the discount
+  // without the coupon_uses row let them use a once-per-customer coupon again.
+  let claimedOK = true;
+  db.transaction(() => {
+    const claimed = db.prepare(
+      'UPDATE coupons SET used_count = used_count + 1 WHERE id=? AND (usage_limit IS NULL OR usage_limit<=0 OR used_count < usage_limit)'
+    ).run(v.couponId);
+    if (!claimed.changes) { claimedOK = false; return; }
+    db.prepare('UPDATE orders SET discount=?, discount_reason=? WHERE id=?').run(totalDisc, reason, order.id);
+    db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)').run(v.couponId, order.id, customerKey, couponDisc);
+  })();
+  if (!claimedOK) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'discount', amount: couponDisc, actor: null, meta: { coupon: v.code } });
   return { ok: true, discount: couponDisc, totalDiscount: totalDisc, code: v.code };
 }
@@ -2757,17 +2764,21 @@ export function claimLucky(ticketId, lineUserId = null) {
   const room = Math.max(0, order.total - (order.discount || 0));
   const free = r2(Math.min(t.lucky_value || getLuckyValue(), room));
   if (free <= 0) throw new Error('nothing_to_discount');
-  // Guarded UPDATE: two fast taps must not discount the order twice.
-  const won = db.prepare(`UPDATE tickets SET lucky_state='used' WHERE id=? AND lucky_state='won'`).run(ticketId);
-  if (!won.changes) throw new Error('lucky_already');
-  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason: `🎉 เลขนำโชค ${getLuckyNumber()}`, actorId: null });
-  // Mirror it into customer_coupons so ONE report covers every kind of giveaway.
-  if (t.line_user_id) {
-    const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
-    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source, used_at, used_order_id, state, used_value)
-                VALUES (?, 'lucky', ?, ?, ?, 'lucky', datetime('now'), ?, 'redeemed', ?)`)
-      .run(t.line_user_id, `เลขนำโชค ${t.code || getLuckyNumber()}`, t.lucky_value || getLuckyValue(), day, order.id, free);
-  }
+  // Burn the prize, discount the order and record it as ONE unit. The guarded UPDATE is what stops
+  // two fast taps discounting twice; the transaction is what stops a half-applied prize.
+  let res;
+  db.transaction(() => {
+    const won = db.prepare(`UPDATE tickets SET lucky_state='used' WHERE id=? AND lucky_state='won'`).run(ticketId);
+    if (!won.changes) throw new Error('lucky_already');
+    res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason: `🎉 เลขนำโชค ${getLuckyNumber()}`, actorId: null });
+    // Mirror it into customer_coupons so ONE report covers every kind of giveaway.
+    if (t.line_user_id) {
+      const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source, used_at, used_order_id, state, used_value)
+                  VALUES (?, 'lucky', ?, ?, ?, 'lucky', datetime('now'), ?, 'redeemed', ?)`)
+        .run(t.line_user_id, `เลขนำโชค ${t.code || getLuckyNumber()}`, t.lucky_value || getLuckyValue(), day, order.id, free);
+    }
+  })();
   return { ok: true, freeAmount: free, net: res.net };
 }
 /** Customer pressed ไม่รับสิทธิ — recorded, so the report can tell declines from misses. */
@@ -3770,8 +3781,12 @@ export function setOrderPaid(ticketId, opts = {}) {
     const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
     return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
   }
-  db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=?`)
+  if (order.payment_status === 'void') throw new Error('order_void');
+  // The status read above is not atomic — a void landing between the read and this write would be
+  // silently overwritten, turning a cancelled order back into a sale. The predicate settles it.
+  const paidNow = db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=? AND payment_status NOT IN ('paid','void')`)
     .run(actorId, method, order.id);
+  if (!paidNow.changes) throw new Error('order_void');
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
@@ -3856,7 +3871,9 @@ export function attachSlip(ticketId, imageData) {
   const sha = createHash('sha256').update(imageData || '').digest('hex');   // fingerprint → catch the SAME slip reused
   db.prepare(`INSERT INTO slips (order_id, ticket_id, image, sha) VALUES (?,?,?,?)
               ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, sha=excluded.sha, at=datetime('now')`).run(order.id, Number(ticketId), imageData, sha);
-  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
+  // NOT IN ('paid','void'): excluding only 'paid' let a customer's "I paid" claim resurrect an
+  // order the cashier had already voided, putting a cancelled bill back on the pay-verification list.
+  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status NOT IN ('paid','void')`).run(order.id);
   return { ok: true };
 }
 /** Preliminary (free) slip check for the cashier — this does NOT prove the slip is genuine (that
@@ -3900,7 +3917,9 @@ export function claimOrderPaid(ticketId) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') return { ok: true, already: true };
-  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status!='paid'`).run(order.id);
+  // NOT IN ('paid','void'): excluding only 'paid' let a customer's "I paid" claim resurrect an
+  // order the cashier had already voided, putting a cancelled bill back on the pay-verification list.
+  db.prepare(`UPDATE orders SET payment_status='claimed' WHERE id=? AND payment_status NOT IN ('paid','void')`).run(order.id);
   return { ok: true };
 }
 
@@ -3954,11 +3973,17 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
   const free = Math.round(Math.min(couponTemplate('reward').value, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = '🎁 แลกแต้ม: ' + reward.name;
+  // Spending the stamps and applying the discount must be one unit — the discount used to run
+  // AFTER the points transaction committed, so a failure there cost the customer their card.
+  // The balance guard lives IN the UPDATE: the read above is not atomic, so two fast taps could
+  // both pass it and drive the balance negative.
+  let res;
   db.transaction(() => {
-    db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, key);
+    const spent = db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=? AND points >= ?').run(reward.cost_points, key, reward.cost_points);
+    if (!spent.changes) throw new Error('insufficient_points');
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'redeem', ?, ?, ?)`).run(key, -reward.cost_points, order.id, reason);
+    res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   })();
-  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
   // If the reward fully covers the bill (net 0), don't make the customer pay anything more —
   // settle it as a 'reward' tender and issue the queue number right away.
@@ -4000,9 +4025,14 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   // already used, instead of the discount being applied twice.
   // used_value = what the shop actually gave away, not the coupon's ceiling — the report is only
   // honest if it adds up real discounts.
-  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed', used_value=? WHERE id=? AND used_at IS NULL AND state != 'cancelled'`).run(order.id, free, cc.id);
-  if (!burned.changes) throw new Error('coupon_used');
-  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
+  // Burn and discount are ONE transaction: a failure between them used to leave the customer with
+  // no coupon and no discount — they paid full price for something they had already earned.
+  let res;
+  db.transaction(() => {
+    const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed', used_value=? WHERE id=? AND used_at IS NULL AND state != 'cancelled'`).run(order.id, free, cc.id);
+    if (!burned.changes) throw new Error('coupon_used');
+    res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
+  })();
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
   let autoPaid = false;
   if (res.net <= 0) {
@@ -4064,16 +4094,23 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   const kind = wasPaid ? 'refund' : (kindOpt === 'waste' ? 'waste' : 'void');
   // Void/refund: mark the order void (even if it was already paid -> a refund) so it
   // drops out of the report and its revenue is deducted from sales.
-  db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE ticket_id=?`)
-    .run(kind, reason, actorId, ticketId);
+  // Scoped to the resolved order.id, not the ticket: every other path reads "the latest order on
+  // this ticket", so voiding by ticket_id silently killed earlier orders too. The 'void' guard
+  // makes a second cancel a no-op instead of overwriting voided_at/voided_by and logging the
+  // refund amount twice.
+  const voided = order
+    ? db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE id=? AND payment_status<>'void'`)
+        .run(kind, reason, actorId, order.id)
+    : { changes: 0 };
+  const alreadyVoid = !!order && !voided.changes;
   // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
   // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
-  if (order && wasPaid && restock) returnStockForOrder(order);
+  if (order && wasPaid && restock && !alreadyVoid) returnStockForOrder(order);
   // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order — BUT only
   // if the drink wasn't already served. Once served, the product cost is incurred and the free
   // drink was handed over, so points are never returned (owner rule).
-  const pointsReturned = (order && t.status !== 'served') ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
-  if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
+  const pointsReturned = (order && t.status !== 'served' && !alreadyVoid) ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
+  if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
   db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
   if (t.line_user_id) {
     const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled

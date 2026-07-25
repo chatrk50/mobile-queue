@@ -1428,6 +1428,67 @@ console.log('\n== Coupon report ==');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
 }
 
+console.log('\n== Atomicity + status guards ==');
+{
+  // A nested db.transaction() must use a SAVEPOINT, not a second BEGIN — otherwise every
+  // "burn the coupon AND apply the discount" pair below throws at runtime.
+  db.exec('CREATE TABLE IF NOT EXISTS _txprobe (v INTEGER)');
+  db.exec('DELETE FROM _txprobe');
+  db.transaction(() => {
+    db.prepare('INSERT INTO _txprobe VALUES (1)').run();
+    db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (2)').run(); })();
+  })();
+  ok(db.prepare('SELECT COUNT(*) n FROM _txprobe').get().n === 2, 'INVARIANT transactions nest (SAVEPOINT) instead of throwing on a second BEGIN');
+  db.exec('DELETE FROM _txprobe');
+  db.transaction(() => {
+    db.prepare('INSERT INTO _txprobe VALUES (10)').run();
+    try { db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (99)').run(); throw new Error('boom'); })(); } catch { /* handled */ }
+    db.prepare('INSERT INTO _txprobe VALUES (11)').run();
+  })();
+  ok(db.prepare('SELECT group_concat(v) g FROM _txprobe').get().g === '10,11',
+    'INVARIANT a failed inner transaction rolls back only its own slice');
+  db.exec('DELETE FROM _txprobe');
+  try { db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (5)').run(); throw new Error('outer'); })(); } catch { /* handled */ }
+  ok(db.prepare('SELECT COUNT(*) n FROM _txprobe').get().n === 0, 'INVARIANT an outer failure still rolls the whole thing back');
+  db.exec('DROP TABLE _txprobe');
+
+  // A voided order must never come back to life: the cashier cancelled it, so a racing payment or
+  // a customer's "I paid" claim must not put it back on the money screens.
+  const vk = 'Uvoid00000000000000000000000001';
+  const vo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: vk });
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e void guard' });
+  let payErr = null;
+  try { Q.setOrderPaid(vo.ticket.id, { method: 'cash' }); } catch (e) { payErr = e.message; }
+  ok(payErr === 'order_void', `INVARIANT a voided order cannot be paid (got ${payErr})`);
+  Q.claimOrderPaid(vo.ticket.id);
+  ok(db.prepare('SELECT payment_status s FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(vo.ticket.id).s === 'void',
+    'INVARIANT a customer "I paid" claim cannot resurrect a voided order');
+
+  // Cancelling twice must not re-log the refund or overwrite who voided it.
+  // sale_events are queued and flushed on setImmediate, so yield first — counting straight after
+  // the call compares 0 to 0 and proves nothing.
+  const evCount = async () => { await new Promise((r) => setImmediate(r));
+    return db.prepare("SELECT COUNT(*) n FROM sale_events WHERE ticket_id=? AND type IN ('void','refund','waste')").get(vo.ticket.id).n; };
+  const evBefore = await evCount();
+  ok(evBefore === 1, `INVARIANT the first cancel is recorded in the audit trail (got ${evBefore})`);
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e double cancel' });
+  const evAfter = await evCount();
+  ok(evAfter === evBefore, `INVARIANT a second cancel is a no-op, not a second refund in the audit trail (${evBefore} → ${evAfter})`);
+  ok(db.prepare('SELECT void_reason r FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(vo.ticket.id).r === 'e2e void guard',
+    'INVARIANT the original void reason survives a repeat cancel');
+
+  // Points can never go negative, even if two redemptions race past the balance read.
+  const pk = 'Upoints000000000000000000000001';
+  db.prepare('INSERT INTO customers (line_user_id, name, points) VALUES (?,?,5)').run(pk, 'แต้มน้อย');
+  const po = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: pk });
+  let lowErr = null;
+  try { Q.redeemRewardOnOrder(po.ticket.id, null, null); } catch (e) { lowErr = e.message; }
+  ok(lowErr === 'insufficient_points', `INVARIANT a reward cannot be taken without the stamps (got ${lowErr})`);
+  ok(db.prepare('SELECT points p FROM customers WHERE line_user_id=?').get(pk).p === 5,
+    'INVARIANT a refused redemption leaves the balance untouched');
+  Q.cancelOrderTicket(po.ticket.id, null, { reason: 'e2e cleanup' });
+}
+
 console.log('\n== Self-serve orders are priced by the server, not the client ==');
 {
   // The order endpoint is public and the LIFF posts the price it displayed. A tampered client used
