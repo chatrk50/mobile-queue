@@ -93,9 +93,12 @@ button.danger{background:var(--danger)}
 button:disabled{filter:grayscale(.5) opacity(.55);cursor:not-allowed}
 select,input{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:12px;font-size:15px;width:100%}
 .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
-.pill.open{background:rgba(47,194,166,.16);color:#16876f}
-.pill.closed{background:rgba(229,91,107,.16);color:#c43a4b}
-.pill.soon{background:rgba(243,203,85,.25);color:#946f00}
+/* Status pills carry "ชำระแล้ว ✓" / "ค้างชำระ" — the two words a cashier reads at a glance, at
+   12px. The old greens/ambers measured 3.9:1 and 4.2:1 against their own tint (WCAG AA wants
+   4.5:1), which is exactly the wrong place to be hard to read. */
+.pill.open{background:rgba(47,194,166,.16);color:#0f6b57}
+.pill.closed{background:rgba(229,91,107,.16);color:#b3283a}
+.pill.soon{background:rgba(243,203,85,.25);color:#7a5c00}
 .queue-list{display:flex;flex-direction:column;gap:8px}
 .qitem{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);
   border-radius:12px;padding:10px 14px}

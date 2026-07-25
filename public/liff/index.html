@@ -122,6 +122,11 @@
   .confetti{position:absolute;top:-12px;width:9px;height:14px;border-radius:2px;opacity:.9;animation:conffall linear forwards}
   @keyframes conffall{0%{transform:translateY(-10px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(620deg);opacity:.6}}
   @keyframes rpop{0%{transform:scale(.7);opacity:.3}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+  /* Basket quantity steppers. The button was 24px — the control a customer taps most, at barely
+     half the 44px minimum, on a phone. The visible circle stays compact (32px, so the basket row
+     keeps its proportions) and an invisible ::after extends the HIT AREA to a full 44px. */
+  .qstep{width:32px;height:32px;padding:0;border-radius:50%;font-size:17px;line-height:1;position:relative}
+  .qstep::after{content:'';position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -1367,9 +1372,9 @@ function renderBasket(){
         <div style="font-weight:700;color:#5c7187;font-size:14px;line-height:1.2">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
         <div style="display:inline-flex;align-items:center;gap:10px;margin-top:6px">
-          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1" onclick="decOne(${gi})" aria-label="ลด">−</button>
-          <b style="min-width:14px;text-align:center;font-size:14px;color:var(--navy)">${g.qty}</b>
-          <button class="ghost" style="width:24px;height:24px;padding:0;border-radius:50%;font-size:16px;line-height:1;color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่ม">+</button>
+          <button class="ghost qstep" onclick="decOne(${gi})" aria-label="ลดจำนวน">−</button>
+          <b style="min-width:16px;text-align:center;font-size:14px;color:var(--navy)">${g.qty}</b>
+          <button class="ghost qstep" style="color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่มจำนวน">+</button>
         </div>
       </div>
       <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
@@ -2163,7 +2168,17 @@ async function tick(){
     renderTimeline(-1);            // belt-and-braces: kill the timeline even if render() threw mid-way
   }
 }
+// Polling pauses while the page is hidden. The customer is EXPECTED to leave — the PromptPay flow
+// sends them into their banking app — and a 3s poll that keeps running there burns ~300 cellular
+// requests across a 15-minute payment window for a screen nobody is looking at. Coming back polls
+// immediately, so the queue state is fresh the instant they return.
 function startPolling(){ if(poll) clearInterval(poll); tick(); poll=setInterval(tick,3000); }
+function stopPolling(){ if(poll){ clearInterval(poll); poll=null; } }
+document.addEventListener('visibilitychange',()=>{
+  if(!ticketId) return;                       // nothing to poll for
+  if(document.hidden) stopPolling();
+  else if(!poll) startPolling();              // resumes AND refreshes at once
+});
 
 window.cancelTicket = async ()=>{
   if(!(await appConfirm({title:'ขอยกเลิกออเดอร์',message:'ขอยกเลิกออเดอร์นี้?\nทางร้านจะยืนยันให้ — ถ้ากำลังทำอยู่อาจยกเลิกไม่ได้นะคะ',okText:'ขอยกเลิก',danger:true}))) return;

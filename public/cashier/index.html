@@ -1075,7 +1075,13 @@
   .ckey:active{transform:scale(.95);background:#e4ebf3}
   #custPhone::placeholder{font-size:14px;letter-spacing:.5px;font-weight:600;color:var(--muted)}
   /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
-  .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
+  /* Bill quantity steppers: the visible circle stays compact so the bill row keeps its
+     proportions, while an invisible ::after extends the HIT AREA to the 44px minimum. */
+  .qstep{width:32px;height:32px;padding:0;border-radius:50%;font-size:18px;line-height:1;position:relative}
+  .qstep::after{content:'';position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+  /* 44px, not 36: this is the mark a cook taps for every single drink, all shift, often with wet
+     or gloved hands, next to other targets. */
+  .kmark{flex:none;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
     cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
     display:flex;align-items:center;justify-content:center;padding:0;transition:transform .06s,border-color .06s}
   .kmark:active{transform:scale(.9)}
@@ -1226,9 +1232,20 @@
   <img id="slipZoomImg" alt="สลิปเต็มจอ" style="width:100%;max-width:900px;margin:0 auto;display:block">
 </div>
 
-<!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on shop wifi). -->
-<script src="/vendor/jsQR.min.js"></script>
-<script src="/vendor/Sortable.min.js"></script>
+<!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on
+     shop wifi). Loaded ON DEMAND, not at boot: jsQR is 251 KB and Sortable 44 KB, and they are only
+     needed when someone opens the QR scanner or drags the menu into a new order — every till paid
+     for them on every cold start. loadVendor() caches the promise, so a second call is free and two
+     rapid taps share one download. -->
+<script>
+window.loadVendor=(()=>{ const cache={};
+  return (src)=>cache[src] || (cache[src]=new Promise((ok,fail)=>{
+    const s=document.createElement('script'); s.src=src; s.onload=ok;
+    s.onerror=()=>{ delete cache[src]; fail(new Error('load_failed')); };   // let a retry try again
+    document.head.appendChild(s);
+  }));
+})();
+</script>
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -1544,6 +1561,9 @@ window.login=async()=>{
 };
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   stopHeartbeat(); { const ob=$('onlineBtn'); if(ob) ob.style.display='none'; }
+  // Background timers outlived the session: a logged-out till kept polling ingredients every 3
+  // minutes and the stats strip every minute, forever.
+  for(const k of ['_lowStockTimer','_todayTimer']){ if(window[k]){ clearInterval(window[k]); window[k]=null; } }
   MY_SHIFT=null; { const cb=$('clockBtn'); if(cb) cb.style.display='none'; }   // signing out is NOT clocking out — the shift keeps running on purpose
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
@@ -3345,7 +3365,10 @@ function renderMenuMgr(){
   initMenuSort();
 }
 // Drag-and-drop reorder (fast) on top of the ▲▼ fallback — SortableJS handles touch + mouse.
-function initMenuSort(){ if(!window.Sortable) return;
+// Fetches the library the first time the menu manager opens, then re-runs itself.
+async function initMenuSort(){
+  if(!window.Sortable){ try{ await loadVendor('/vendor/Sortable.min.js'); }catch(e){ return; }   // no drag = the list still works, just not draggable
+    if(!window.Sortable) return; }
   const lockScroll=(e)=>e.preventDefault();   // stop the PAGE from scrolling while dragging (SortableJS auto-scroll still works)
   ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,
     forceFallback:true, fallbackOnBody:true, fallbackTolerance:4,   // reliable pointer-drag on iPad (native touch-drag couldn't move items up)
@@ -3612,9 +3635,9 @@ function renderBill(){
         <div style="font-weight:800;color:var(--navy);cursor:pointer" onclick="openItemDetail(${g.idx})">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
         <div style="display:inline-flex;align-items:center;gap:12px;margin-top:9px;border:1px solid var(--line);border-radius:999px;padding:2px 4px">
-          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1" onclick="billDec(${g.idx})" aria-label="ลด">−</button>
+          <button class="ghost qstep" onclick="billDec(${g.idx})" aria-label="ลดจำนวน">−</button>
           <b style="min-width:16px;text-align:center;color:var(--navy)">${g.qty}</b>
-          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1;color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่ม">+</button>
+          <button class="ghost qstep" style="color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่มจำนวน">+</button>
         </div>
       </div>
       <div style="text-align:right;flex:none">
@@ -3840,8 +3863,18 @@ async function boot(){
   if(window._zonePollTimer) clearInterval(window._zonePollTimer);
   window._zonePollTimer=setInterval(()=>{
     const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;   // not while logged out
+    if(document.hidden) return;                                        // tab/app backgrounded — SSE catches us up on return
+    if($('dash') && $('dash').style.display==='none') return;          // deep in a back-office panel; the board isn't visible
     zones.forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} });
   }, 5000);
+  // Returning to the board (from another app or a back-office page) must not wait up to 5s for the
+  // next tick — pull once immediately, which is also what covers the skipped ticks above.
+  if(!window._zoneWakeBound){ window._zoneWakeBound=true;
+    document.addEventListener('visibilitychange',()=>{ if(document.hidden) return;
+      const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;
+      (window._zones||zones||[]).forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} }); });
+  }
+  window._zones=zones;
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
 }
@@ -4593,6 +4626,8 @@ window.openScanner=async()=>{
   if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
   if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; }
   const _rb=$('scanRetryBtn'); if(_rb) _rb.style.display='none';   // retry/permission button stays hidden unless the camera actually fails
+  if(typeof jsQR==='undefined'){ _scanSay('กำลังโหลดตัวอ่าน QR…');
+    try{ await loadVendor('/vendor/jsQR.min.js'); }catch(e){ _scanSay('โหลดตัวอ่าน QR ไม่สำเร็จ — ตรวจอินเทอร์เน็ตแล้วลองใหม่'); return; } }
   if(typeof jsQR==='undefined'){ _scanSay('ตัวอ่าน QR ยังโหลดไม่เสร็จ — ปิดแล้วลองใหม่อีกครั้ง'); return; }
   if(!window.isSecureContext){ _scanSay('⚠️ ต้องเปิดผ่าน https:// เท่านั้น\nURL ปัจจุบัน: '+location.protocol+'//'+location.host); return; }
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(navigator.getUserMedia||navigator.webkitGetUserMedia)){ _scanSay('⚠️ เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง (getUserMedia)\nลองเปิดด้วย Safari หรือ Chrome เวอร์ชันล่าสุด — อย่าเปิดผ่านแอปอื่น'); return; }
