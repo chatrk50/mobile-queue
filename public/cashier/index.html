@@ -598,7 +598,10 @@
   <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showCouponRep()">รายงานการใช้</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+      </div>
     </div>
     <div id="couponList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <!-- Coupon builder. Structured the way Starbucks/Grab/Shopee merchant consoles do it: identity →
@@ -3095,7 +3098,9 @@ let FIN=null;
 // One door for every setting. Rows either expand inline (the cost model, previously buried
 // inside the daily report) or jump to the panel that owns the setting. Owner-only rows are
 // hidden for managers; the APIs behind them still enforce the role server-side.
-window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none';
+  $('settingsBody').style.display='';   // leaving from the cost page must not hide the hub next time
+  $('dash').style.display=''; };
 window.showSettings=()=>{ hideAllPanels(); closeAdmin();
   $('settingsCard').style.display=''; $('dash').style.display='none'; renderSettingsHub(); };
 function renderSettingsHub(){
@@ -3112,17 +3117,30 @@ function renderSettingsHub(){
     ${row('showLoyalty()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
     ${row('showTenders()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
     ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
+    ${row('openCampaigns()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','แคมเปญ & การตลาด','เลขนำโชค ดึงลูกค้ากลับอัตโนมัติ เพดานข้อความ',true)}
     ${row('showMenu()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
     ${row('showStaff()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
   </div>
-  <p class="muted" style="font-size:11px;margin:10px 2px 0">แตะ "ต้นทุน & ค่าใช้จ่าย" เพื่อแก้ในหน้านี้ · หัวข้ออื่นเปิดหน้าของตัวเอง</p>`;
+  `;
 }
+// The campaign controls live on the ระบบ page; the owner looked for them in ตั้งค่าทั้งหมด and found
+// nothing, because that row only advertised "คิว การพิมพ์ สรุปอัตโนมัติ". Its own row now, landing
+// straight on the block instead of somewhere in a long page.
+window.openCampaigns=async()=>{ await showFeatures();
+  setTimeout(()=>{ const el=$('luckyBox'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },250); };
 // Old habit preserved: the ต้นทุน button on the daily report now leads HERE with the form open.
-window.openSettingsCost=async()=>{ showSettings(); const box=$('financeBox');
-  if(box.style.display==='none') await toggleFinance();
-  box.scrollIntoView({behavior:'smooth',block:'start'}); };
-window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
+window.openSettingsCost=async()=>{ showSettings(); await toggleFinance(); };
+// Costs used to EXPAND under the still-visible hub while every other row navigated away — one row
+// behaving differently from the other seven, which is exactly what the owner queried ("ทำไมค่าใช้จ่าย
+// มาแสดงด้านล่าง"). It now replaces the hub like a normal sub-page, with a back link.
+window.toggleFinance=async()=>{
+  try{ FIN=await api('/api/finance'); }catch(e){ toast(err(e)); return; }
+  renderFinance();
+  $('settingsBody').style.display='none';
+  $('financeBox').style.display='';
+  $('settingsCard').scrollIntoView({behavior:'smooth',block:'start'});
+};
+window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display=''; renderSettingsHub(); };
 // Every cost line the P&L knows about, grouped exactly like the statement reads. Adding a line
 // here is all it takes for it to appear in the form, the daily P&L and the Excel export.
 const FIN_FORM=[
@@ -3165,7 +3183,8 @@ const FIN_FORM=[
 const FIN_ALL=FIN_FORM.flatMap(([,,rows])=>rows.map(r=>r[0]));
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" inputmode="decimal" step="${step||'1'}" value="${FIN[id]??0}" style="padding:8px"></div>`;
-  $('financeBox').innerHTML=`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
+  $('financeBox').innerHTML=`<button class="ghost" style="padding:6px 12px;font-size:12.5px;margin-bottom:10px" onclick="closeFinance()">‹ กลับไปตั้งค่าทั้งหมด</button>`
+    +`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
     +FIN_FORM.map(([title,hint,rows])=>`<div style="border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:10px">
         <div style="font-weight:800;color:var(--navy);font-size:13px">${title}</div>
         <div class="muted" style="font-size:11px;margin-bottom:8px">${hint}</div>
@@ -4283,7 +4302,7 @@ window.showFeatures=async()=>{
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
-    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+    `<div class="feat-row" id="luckyBox" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">🎉</span><div><b>แคมเปญเลขนำโชค</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ลูกค้าที่ได้คิวเลขนี้ (ทุกโซนที่ถึงเลข) จะเห็นป๊อบอัพยินดีด้วยบนจอตัวเอง กด "ใช้เลย" เพื่อลดกับออเดอร์นั้นทันที · เฉพาะลูกค้าที่สั่งผ่าน LINE · โอนสิทธิ์/แลกเงินสดไม่ได้</div></div></div>
       <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
