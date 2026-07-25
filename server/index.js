@@ -467,9 +467,9 @@ app.post('/api/pending/sweep', (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
-app.post('/api/admin/owner-summary', (req, res) => {
+app.post('/api/admin/owner-summary', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.pushOwnerSummary(req.body?.branchId != null ? Number(req.body.branchId) : null)); }
+  try { res.json(await Q.pushOwnerSummary(req.body?.branchId != null ? Number(req.body.branchId) : null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner "start fresh": wipe TEST transaction data (orders/sales/queue/loyalty/cash/audit) and

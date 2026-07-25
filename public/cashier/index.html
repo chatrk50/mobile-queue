@@ -4301,6 +4301,9 @@ window.testOwnerSummary=async()=>{
       no_id:'ℹ️ ยังไม่ได้ใส่ LINE userId เจ้าของ (ช่องด้านบน)',
       invalid_id:'⚠️ LINE userId ไม่ถูกต้อง — สรุปจะส่งไม่ได้ (ต้องขึ้นต้นด้วย U + 32 ตัว)',
       line_off:'ℹ️ บน UAT ส่งจริงไม่ได้ (LINE ปิด) — ดูตัวอย่างข้อความด้านล่าง',
+      // LINE accepted the request but rejected the delivery. Almost always: the owner has never
+      // added the shop's OA as a friend (LINE cannot push to a stranger), or they blocked it.
+      push_failed:'❌ LINE ปฏิเสธการส่ง — เจ้าของต้องเพิ่มบัญชี LINE ของร้านเป็นเพื่อนก่อน (หรือเคยบล็อกไว้) · รหัส U… อาจไม่ใช่ของบัญชีนี้',
       no_text:'ℹ️ ไม่มีข้อมูลให้สรุป' };
     toast(REASON[r.reason]||(r.sent?'✅ ส่งแล้ว':'ℹ️ ส่งไม่สำเร็จ'));
     await appConfirm({title:'ข้อความสรุปที่จะส่ง',message:(r.text||'(ว่าง)'),okText:'ปิด',cancelText:''}); }catch(e){ toast(err(e)); } };

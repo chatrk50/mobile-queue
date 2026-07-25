@@ -874,44 +874,59 @@ db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowi
 // ---- A: auto closing summary (dedup once/day, only when enabled) ----
 console.log('\n== Auto closing summary ==');
 Q.setAutoSummary(false);
-ok(Q.maybeAutoSummary().reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
+ok((await Q.maybeAutoSummary()).reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
 Q.setAutoSummary(true);
 Q.setOwnerLineId('');                 // no id on UAT
-const sum1 = Q.maybeAutoSummary();
+const sum1 = await Q.maybeAutoSummary();
 ok(sum1.reason === 'no_id', `INVARIANT with no owner id the summary reports no_id (not a false success) — got ${sum1.reason}`);
-ok(Q.maybeAutoSummary().reason === 'no_id', 'INVARIANT a failed summary does NOT mark the day done — it retries so fixing the id makes the next close arrive');
+ok((await Q.maybeAutoSummary()).reason === 'no_id', 'INVARIANT a failed summary does NOT mark the day done — it retries so fixing the id makes the next close arrive');
 ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
 // Once it genuinely sends (simulated), it dedups for the rest of the Bangkok day.
 db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('summary:last_sent', date('now','+7 hours'))").run();
-ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT after a real send the summary fires at most once per day');
+ok((await Q.maybeAutoSummary()).reason === 'already', 'INVARIANT after a real send the summary fires at most once per day');
 db.prepare("DELETE FROM settings WHERE key='summary:last_sent'").run();
 // The "Keys7" bug: an invalid owner id must be rejected at save, and reported honestly.
 let badId = false; try { Q.setOwnerLineId('Keys7'); } catch (e) { badId = e.message === 'owner_id_invalid'; }
 ok(badId, 'INVARIANT a non-U-id like "Keys7" is refused at save (the exact bug from the field)');
 ok(Q.getOwnerLineId() === '', 'INVARIANT the rejected id is NOT stored');
-ok(Q.notifyOwner('x').reason === 'no_id', 'notifyOwner with no id reports no_id');
+ok((await Q.notifyOwner('x')).reason === 'no_id', 'notifyOwner with no id reports no_id');
 db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('owner:line_id','Keys7')").run();   // pretend an old bad value slipped in
-ok(Q.notifyOwner('x').reason === 'invalid_id', 'INVARIANT a stored-but-invalid id reports invalid_id, never a false sent:true');
+ok((await Q.notifyOwner('x')).reason === 'invalid_id', 'INVARIANT a stored-but-invalid id reports invalid_id, never a false sent:true');
 db.prepare("DELETE FROM settings WHERE key='owner:line_id'").run();
 const goodId = 'U' + '0123456789abcdef0123456789abcdef';
 Q.setOwnerLineId(goodId);
 ok(Q.getOwnerLineId() === goodId, 'INVARIANT a real U-id is accepted');
+
+// The field bug: notifyOwner used to fire pushText() without awaiting and return sent:true no matter
+// what LINE did, so a REJECTED delivery was recorded as a success — and because maybeAutoSummary
+// only marks the day done on sent:true, that one silent rejection also killed the retry. The result
+// must now be a promise whose sent flag reflects the actual delivery.
+const notifyRes = Q.notifyOwner('probe');
+ok(typeof notifyRes.then === 'function', 'INVARIANT notifyOwner is awaitable — it reports the REAL push result, not a guess');
+const settled = await notifyRes;
+ok(settled.sent === false && settled.reason === 'line_off',
+  `INVARIANT with LINE off it reports line_off and sent:false, never a false success — got ${settled.reason}/${settled.sent}`);
+const beforeMark = db.prepare("SELECT value v FROM settings WHERE key='summary:last_sent'").get();
+await Q.maybeAutoSummary();
+const afterMark = db.prepare("SELECT value v FROM settings WHERE key='summary:last_sent'").get();
+ok(JSON.stringify(beforeMark) === JSON.stringify(afterMark),
+  'INVARIANT an undelivered summary NEVER writes the "sent today" marker — tomorrow is not silently skipped');
 Q.setOwnerLineId('');
 Q.setAutoSummary(false);
 
 // ---- D: auto-draft PO from the plan (once/day, drafts only — never auto-receives) ----
 console.log('\n== Auto reorder ==');
 Q.setAutoReorder(false);
-ok(Q.maybeAutoReorder().reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
+ok((await Q.maybeAutoReorder()).reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
 // make something clearly need reordering
 const arIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES ('วัตถุดิบสั่งซื้ออัตโนมัติ','กก.', 1, 20, 5)`).run().lastInsertRowid;
 Q.recordStockMove(arIng, { kind: 'use', qty: 40, note: 'ใช้หนักจำลอง' });   // heavy usage → plan flags it
 Q.setAutoReorder(true);
-const ar = Q.maybeAutoReorder();
+const ar = await Q.maybeAutoReorder();
 ok(ar.drafted === true && /^PO-/.test(ar.poNo), `INVARIANT auto-reorder drafts a PO when stock is low (po ${ar.poNo})`);
 const arPo = Q.getPurchaseOrder(ar.poId);
 ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (owner still confirms — no silent stock change)');
-ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
+ok((await Q.maybeAutoReorder()).reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
 // The owner asked to SEE which items to buy — the summary must name them, not just count them.
 const sumTxt = Q.composeDailySummary();
 ok(sumTxt.includes('🛒 ควรสั่งซื้อ') && sumTxt.includes('วัตถุดิบสั่งซื้ออัตโนมัติ'), 'INVARIANT the closing summary lists the actual items to reorder by name');

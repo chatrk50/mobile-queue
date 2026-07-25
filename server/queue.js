@@ -984,9 +984,13 @@ export function closeCashSession(branchId = 1, { actorId = null, countedCash = 0
     .run(actorId, counted, expected, over, note ? note.toString().slice(0, 200) : null, cur.id);
   const out = { session: db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(cur.id), openFloat: cur.open_float, ...c, expectedCash: expected, countedCash: counted, overShort: over, zreport: detailedReports({ branchId }) };
   // Closing the drawer = end of day → optionally LINE the owner a full closing summary (once/day).
-  try { const s = maybeAutoSummary(branchId); out.summarySent = !!s.sent; } catch { /* never block a close */ }
-  try { const rr = maybeAutoReorder(branchId); out.reorderDrafted = !!rr.drafted; } catch { /* never block a close */ }
-  try { Promise.resolve(maybeAutoWinback(branchId)).catch(() => {}); } catch { /* fire-and-forget; never block a close */ }
+  // All three are fire-and-forget so a slow/failing LINE call can never hold up (or fail) a cash
+  // close. They now AWAIT the push internally, which is what matters: the "already sent today"
+  // marker is only written on a real delivery, so a rejected push retries on the next close instead
+  // of being recorded as done. Nothing reads summarySent/reorderDrafted, so no result is lost here.
+  try { Promise.resolve(maybeAutoSummary(branchId)).catch(() => {}); } catch { /* never block a close */ }
+  try { Promise.resolve(maybeAutoReorder(branchId)).catch(() => {}); } catch { /* never block a close */ }
+  try { Promise.resolve(maybeAutoWinback(branchId)).catch(() => {}); } catch { /* never block a close */ }
   return out;
 }
 
@@ -1769,7 +1773,9 @@ function deductStockForOrder(order) {
           const after = recordStockMove(r.ingredient_id, { kind: 'use', qty: use, note: 'ขายอัตโนมัติ ' + code });
           // Notify the owner the moment a sale pushes an ingredient to/under its low mark.
           if (before && before.low_threshold > 0 && before.stock_qty > before.low_threshold && after.stock_qty <= before.low_threshold)
-            notifyOwner(`⚠️ วัตถุดิบใกล้หมด: ${before.name} เหลือ ${after.stock_qty} ${before.unit}`);
+            // Deliberately not awaited — a low-stock alert must never delay or fail a sale. Caught
+            // so the now-async notifyOwner can't raise an unhandled rejection.
+            Promise.resolve(notifyOwner(`⚠️ วัตถุดิบใกล้หมด: ${before.name} เหลือ ${after.stock_qty} ${before.unit}`)).catch(() => {});
         } catch { /* never block a sale on stock */ }
       }
     }
@@ -2498,14 +2504,19 @@ export function setOwnerLineId(id) {
 // whenever an id existed, so "Keys7" read as success. reason: no_id | invalid_id | line_off | sent.
 // The push itself is fire-and-forget (its own success/failure is recorded in push_log); the point
 // here is to catch the common, knowable failures — no id, or an id that could never work.
-export function notifyOwner(text) {
+// AWAIT the push and report what LINE actually did. This used to fire-and-forget pushText() and
+// return sent:true unconditionally — so a rejected push (owner never added the OA as a friend, they
+// blocked it, the channel token expired, the monthly quota ran out) was reported as a success. Worse,
+// maybeAutoSummary() marks the day done on sent:true, so one silent rejection meant that day's
+// summary was never retried. The shop saw "✅ ส่งแล้ว" and no message ever arrived.
+export async function notifyOwner(text) {
   const id = getOwnerLineId();
   if (!id) return { sent: false, reason: 'no_id' };
   if (!validOwnerLineId(id)) return { sent: false, reason: 'invalid_id' };
   if (!text) return { sent: false, reason: 'no_text' };
   if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
-  pushText(id, text);
-  return { sent: true, reason: 'sent' };
+  const ok = await pushText(id, text);
+  return { sent: !!ok, reason: ok ? 'sent' : 'push_failed' };
 }
 /** Compose a short Thai end-of-day summary from today's report. */
 export function composeDailySummary(branchId = null) {
@@ -2558,11 +2569,11 @@ export function autoSummaryEnabled() { return getSetting('summary:auto', '0') ==
 export function setAutoSummary(on) { setSetting('summary:auto', on ? '1' : '0'); return { autoSummary: !!on }; }
 /** Fire the owner summary at most once per Bangkok day (dedup key), when auto-summary is on.
  *  Called when the cash drawer is closed (the natural end-of-day moment). */
-export function maybeAutoSummary(branchId = null) {
+export async function maybeAutoSummary(branchId = null) {
   if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
   const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
-  const r = pushOwnerSummary(branchId);
+  const r = await pushOwnerSummary(branchId);
   // Only mark the day done once it actually went out. If the owner has no id / a bad id, the next
   // close will try again — so fixing "Keys7" makes the very next round's summary arrive.
   if (r.sent) setSetting('summary:last_sent', day);
@@ -2572,7 +2583,7 @@ export function autoReorderEnabled() { return getSetting('reorder:auto', '0') ==
 export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
 /** If anything needs reordering, draft ONE PO from the plan (once/day) and LINE the owner to
  *  review + confirm it. Never auto-RECEIVES — the owner still approves before stock/cost change. */
-export function maybeAutoReorder(branchId = null) {
+export async function maybeAutoReorder(branchId = null) {
   if (!autoReorderEnabled()) return { drafted: false, reason: 'off' };
   const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (getSetting('reorder:last_run', '') === day) return { drafted: false, reason: 'already' };
@@ -2584,7 +2595,7 @@ export function maybeAutoReorder(branchId = null) {
   // huge PO never blows past LINE's message length; the rest are a "+N more" tail.
   const items = (po.lines || []).slice(0, 12).map((l) => `• ${l.ingredient_name} ×${l.qty}${l.unit ? ' ' + l.unit : ''}`).join('\n');
   const more = (po.lines || []).length - 12;
-  notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\n${items}${more > 0 ? `\n…และอีก ${more} รายการ` : ''}\n\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
+  await notifyOwner(`🛒 ระบบร่างใบสั่งซื้อให้แล้ว: ${po.po_no}\n${po.lines.length} รายการ · ~฿${Math.round(est)}\n${items}${more > 0 ? `\n…และอีก ${more} รายการ` : ''}\n\nเปิดแอป → สต๊อก/จัดซื้อ → ใบสั่งซื้อ เพื่อตรวจ + กดรับของ`);
   return { drafted: true, poNo: po.po_no, poId: po.id, lines: po.lines.length };
 }
 // C: automatic win-back — customers who slipped into "at_risk" get a coupon + LINE nudge without
@@ -2629,7 +2640,7 @@ export async function maybeAutoWinback(branchId = null) {
   });
   return { sent: r.sent, targeted: r.targeted, reason: 'ok' };
 }
-export function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = notifyOwner(text); return { ...r, text }; }
+export async function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = await notifyOwner(text); return { ...r, text }; }
 /** Cups (drink stamps) needed to earn one free drink. */
 export function getStampsPerReward() { return Math.max(1, Math.round(Number(getSetting('loyalty:stamps_per_reward', '10')) || 10)); }
 export function setStampsPerReward(n) {
