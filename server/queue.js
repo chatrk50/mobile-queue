@@ -192,12 +192,90 @@ export function evaluateSoonNotifications(zoneId, threshold) {
 }
 
 /** Customer rating (1..5) for a served ticket. */
-export function setRating(ticketId, stars) {
+// Quick-reason chips shown under the stars. Two bands, because the same question has an opposite
+// meaning at 2 stars and at 5: a low score asks "what went wrong", a high one "what did we do well".
+// Slugs are stored (stable), labels are what the customer sees (translatable, editable later).
+// The LIFF renders whatever this exports via /api/config, so the customer can never submit a tag
+// the server would reject — one vocabulary, one source of truth.
+export const RATING_TAGS = {
+  low: [
+    { id: 'taste', label: 'รสชาติไม่ถูกปาก' },
+    { id: 'slow', label: 'รอนาน' },
+    { id: 'price', label: 'ราคาแพงไป' },
+    { id: 'portion', label: 'ปริมาณน้อย' },
+    { id: 'staff', label: 'พนักงานบริการไม่ดี' },
+    { id: 'wrong', label: 'ได้ไม่ตรงที่สั่ง' },
+  ],
+  high: [
+    { id: 'taste_good', label: 'อร่อย' },
+    { id: 'fast', label: 'รวดเร็ว' },
+    { id: 'worth', label: 'ราคาคุ้มค่า' },
+    { id: 'fresh', label: 'สดใหม่' },
+    { id: 'staff_good', label: 'พนักงานเอาใจใส่' },
+    { id: 'clean', label: 'สะอาด' },
+  ],
+};
+/** Which band a score belongs to. 1–3 asks what went wrong, 4–5 what went right. */
+export function ratingBand(stars) { return Number(stars) <= 3 ? 'low' : 'high'; }
+const RATING_COMMENT_MAX = 500;
+
+export function setRating(ticketId, stars, opts = {}) {
   const s = Math.max(1, Math.min(5, Math.round(Number(stars) || 0)));
   const t = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
-  db.prepare('UPDATE tickets SET rating = ? WHERE id = ?').run(s, ticketId);
-  return { ok: true, rating: s };
+  // Only tags from the band that matches the score survive — a client can't file "อร่อย" under 1 star.
+  const allowed = new Set(RATING_TAGS[ratingBand(s)].map((x) => x.id));
+  const tags = (Array.isArray(opts.tags) ? opts.tags : [])
+    .map((x) => String(x || '').trim())
+    .filter((x, i, a) => allowed.has(x) && a.indexOf(x) === i)
+    .slice(0, 6);
+  const comment = String(opts.comment || '').trim().slice(0, RATING_COMMENT_MAX);
+  db.prepare(`UPDATE tickets SET rating = ?, rating_tags = ?, rating_comment = ?, rated_at = datetime('now') WHERE id = ?`)
+    .run(s, tags.length ? tags.join(',') : null, comment || null, ticketId);
+  return { ok: true, rating: s, tags, comment };
+}
+
+/**
+ * Owner feedback report: every review in a window, with the reasons behind the score.
+ * The star distribution already exists in customerInsights(); this answers the next question —
+ * WHY. Tag counts are split by band so "รอนาน ×7" is never averaged against "รวดเร็ว ×20".
+ */
+export function ratingFeedback({ days = 30, limit = 200 } = {}) {
+  const d = Math.max(1, Math.min(365, Math.round(Number(days) || 30)));
+  const lim = Math.max(1, Math.min(500, Math.round(Number(limit) || 200)));
+  const rows = db.prepare(`
+    SELECT id, code, rating, rating_tags AS tags, rating_comment AS comment,
+           COALESCE(rated_at, created_at) AS at, customer_name AS name
+      FROM tickets
+     WHERE rating IS NOT NULL
+       AND date(COALESCE(rated_at, created_at), '+7 hours') >= date('now', '+7 hours', ?)
+     ORDER BY COALESCE(rated_at, created_at) DESC
+     LIMIT ?`).all(`-${d - 1} days`, lim);
+
+  const label = (band, id) => (RATING_TAGS[band].find((x) => x.id === id) || {}).label || id;
+  const counts = { low: {}, high: {} };
+  let sum = 0, withComment = 0;
+  const items = rows.map((r) => {
+    const band = ratingBand(r.rating);
+    const tags = (r.tags || '').split(',').filter(Boolean);
+    for (const t of tags) counts[band][t] = (counts[band][t] || 0) + 1;
+    sum += r.rating;
+    if (r.comment) withComment += 1;
+    return { id: r.id, code: r.code, rating: r.rating, at: r.at, name: r.name || null,
+             comment: r.comment || null, tags: tags.map((t) => ({ id: t, label: label(band, t) })) };
+  });
+  const top = (band) => Object.entries(counts[band])
+    .map(([id, n]) => ({ id, label: label(band, id), n }))
+    .sort((a, b) => b.n - a.n);
+  return {
+    days: d,
+    count: items.length,
+    avg: items.length ? Math.round((sum / items.length) * 10) / 10 : null,
+    withComment,
+    lowTags: top('low'),
+    highTags: top('high'),
+    items,
+  };
 }
 
 // ---------- Financial settings (for the P&L in the report + Excel export) ----------

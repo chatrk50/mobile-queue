@@ -1310,6 +1310,47 @@ ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable c
   ok(typeof Q.publicRating().count === 'number', 'publicRating exposes only {avg,count} for the LIFF hero');
 }
 
+console.log('\n== Review: reasons + comment ==');
+{
+  const mk = (code) => db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,?,'served')").run(code).lastInsertRowid;
+  const base = Q.ratingFeedback({ days: 30 });
+
+  // A low score may only carry low-band reasons; anything from the praise list is dropped, so a
+  // client can never file "อร่อย" under 1 star and poison the owner's "ต้องแก้ไข" list.
+  const tLow = mk('RV1');
+  const rLow = Q.setRating(tLow, 1, { tags: ['slow', 'taste_good', 'price', 'nope'], comment: '  รอนานมากค่ะ  ' });
+  ok(rLow.tags.join(',') === 'slow,price', `INVARIANT only same-band tags survive (got ${rLow.tags.join(',')})`);
+  ok(rLow.comment === 'รอนานมากค่ะ', 'INVARIANT the comment is trimmed and kept');
+
+  const tHigh = mk('RV2');
+  const rHigh = Q.setRating(tHigh, 5, { tags: ['fast', 'fast', 'slow'] });
+  ok(rHigh.tags.join(',') === 'fast', `INVARIANT duplicate + wrong-band tags are dropped (got ${rHigh.tags.join(',')})`);
+
+  // A 500-char cap the server enforces — the textarea's maxlength is a courtesy, not a control.
+  const tLong = mk('RV3');
+  const rLong = Q.setRating(tLong, 4, { comment: 'x'.repeat(900) });
+  ok(rLong.comment.length === 500, `INVARIANT the comment is capped at 500 server-side (got ${rLong.comment.length})`);
+
+  // Rating with no tags/comment at all must still work — the extra fields are optional.
+  const tBare = mk('RV4');
+  ok(Q.setRating(tBare, 3).rating === 3, 'INVARIANT a bare star-only rating still saves');
+
+  const f = Q.ratingFeedback({ days: 30 });
+  ok(f.count === base.count + 4, `INVARIANT all four reviews land in the report (${base.count} → ${f.count})`);
+  ok(f.withComment === base.withComment + 2, `INVARIANT only reviews with text count as commented (${f.withComment})`);
+  const slow = f.lowTags.find((t) => t.id === 'slow');
+  ok(slow && slow.n >= 1 && slow.label === 'รอนาน', 'INVARIANT low-band tags are counted with their Thai label');
+  ok(!f.highTags.some((t) => t.id === 'slow'), 'INVARIANT a low-band tag never leaks into the strengths list');
+  ok(f.items[0].tags.every((t) => t.label), 'INVARIANT every reported tag carries a label the owner can read');
+
+  // The star distribution the LIFF/report already showed must still agree with the new report.
+  ok(Q.customerInsights().satisfaction.total >= f.count, 'INVARIANT the new report never exceeds the star distribution it derives from');
+
+  for (const id of [tLow, tHigh, tLong, tBare]) {
+    db.prepare('DELETE FROM tickets WHERE id=?').run(id);
+  }
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

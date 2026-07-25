@@ -2781,10 +2781,51 @@ function renderInsightsBody(d, box){
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
       ${sat.total?starBars:'<p class="muted" style="font-size:12px">ยังไม่มีรีวิว</p>'}
       ${sat.total?'<button class="ghost" style="width:100%;margin-top:8px;padding:7px;font-size:12px" onclick="openCustomersRating(\'any\')">ดูลูกค้าที่เคยให้ดาวทั้งหมด →</button>':''}</div>
+    <div id="fbBox"></div>
     <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>ลูกค้าซื้อซ้ำ (LINE)</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
+  renderFeedback();
+}
+// ---------- เสียงจากลูกค้า (OWNER ONLY) ----------
+// Stars say the score, this says WHY: the reason chips customers picked plus anything they typed.
+// Owner-only on purpose — comments name staff and judge the shop, so they are not board material.
+// The API enforces it too (ownerOK); hiding the panel is only the second lock, never the only one.
+let _fbDays=30;
+window.setFbDays=(d)=>{ _fbDays=d; renderFeedback(); };
+async function renderFeedback(){
+  const box=$('fbBox'); if(!box) return;
+  const own=(!ME||ME.role==='owner');
+  if(!own){ box.innerHTML=''; return; }
+  box.innerHTML='<h2><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>เสียงจากลูกค้า</h2><p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let f; try{ f=await api('/api/reports/ratings?days='+_fbDays); }
+  catch(e){ box.innerHTML=''; return; }   // non-owner PIN → API says forbidden → just show nothing
+  const seg=[7,30,90].map(d=>`<button class="ghost" onclick="setFbDays(${d})" style="flex:1;padding:6px;font-size:12px;${d===_fbDays?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${d} วัน</button>`).join('');
+  const bar=(list,color)=>{ if(!list.length) return '';
+    const max=list[0].n||1;
+    return list.map(t=>`<div class="row" style="align-items:center;gap:8px;font-size:12px;margin:4px 0">
+      <span style="width:104px;flex:none">${esc(t.label)}</span>
+      <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${(t.n/max*100).toFixed(0)}%;background:${color}"></div></div>
+      <span class="muted" style="width:24px;text-align:right">${t.n}</span></div>`).join(''); };
+  const comments=(f.items||[]).filter(i=>i.comment).slice(0,25).map(i=>`
+    <div style="border-top:1px solid var(--line);padding:9px 0">
+      <div class="row between" style="font-size:11.5px"><span style="color:#d9a520;font-weight:800">${'★'.repeat(i.rating)}<span style="color:var(--line)">${'★'.repeat(5-i.rating)}</span></span><span class="muted">${esc((i.at||'').slice(0,16).replace('T',' '))} · ${esc(i.code||'')}</span></div>
+      ${i.tags.length?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${i.tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:999px">${esc(t.label)}</span>`).join('')}</div>`:''}
+      <div style="font-size:13px;margin-top:5px;line-height:1.45;color:var(--ink)">${esc(i.comment)}</div>
+    </div>`).join('');
+  box.innerHTML=`<h2><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>เสียงจากลูกค้า <span class="muted" style="font-size:11px;font-weight:500">· เจ้าของร้านเท่านั้น</span></h2>
+    <div class="card" style="margin:8px 0;padding:14px">
+      <div class="row" style="gap:6px;margin-bottom:10px">${seg}</div>
+      ${!f.count ? '<p class="muted" style="font-size:12px;text-align:center;padding:10px 0">ยังไม่มีรีวิวในช่วงนี้</p>' : `
+      <div class="row between" style="align-items:center;margin-bottom:10px">
+        <span style="font-size:22px;font-weight:800;color:var(--navy)">★ ${f.avg}</span>
+        <span class="muted" style="font-size:12px">${f.count} รีวิว · เขียนข้อความ ${f.withComment}</span></div>
+      ${f.lowTags.length?`<div style="margin-top:6px"><div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:2px">ต้องแก้ไข (1–3 ดาว)</div>${bar(f.lowTags,'var(--danger)')}</div>`:''}
+      ${f.highTags.length?`<div style="margin-top:10px"><div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:2px">จุดแข็ง (4–5 ดาว)</div>${bar(f.highTags,'linear-gradient(90deg,var(--accent),var(--accent2))')}</div>`:''}
+      ${comments?`<div style="margin-top:12px"><div class="muted" style="font-size:11.5px;font-weight:800">ความคิดเห็นล่าสุด</div>${comments}</div>`
+                :'<p class="muted" style="font-size:12px;margin-top:12px">ยังไม่มีใครเขียนข้อความเพิ่ม</p>'}`}
+    </div>`;
 }
 window.exportReport=()=>{ const q=[]; if(_reportDate) q.push('date='+encodeURIComponent(_reportDate)); if(PIN) q.push('pin='+encodeURIComponent(PIN)); window.open('/api/report.xlsx'+(q.length?('?'+q.join('&')):''),'_blank'); };
 window.exportCustomers=()=>{ window.open('/api/crm/customers.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };

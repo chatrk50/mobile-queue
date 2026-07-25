@@ -32,6 +32,14 @@
   .waitline b{color:var(--navy);font-weight:800;font-size:15px}
   .waitline.next{background:#eafaf4;border-color:#a7e8d2;color:#0f7a5f}
   .waitline.next b{color:#0f7a5f}
+  /* Served: the queue code and the order summary have done their job, so they step down to make the
+     review the loudest thing on screen. Same elements, smaller — no second markup path to maintain. */
+  #ticketCard.done .big-number{ font-size:30px; letter-spacing:1px; color:var(--muted); }
+  #ticketCard.done #tCodeLabel{ font-size:12px; margin:2px 0 0 }
+  #ticketCard.done #tStore{ font-size:13px; margin:0 }
+  #ticketCard.done #tStatusWrap{ margin:6px 0 0 }
+  #ticketCard.done #tOrderCompact{ padding:9px 12px; margin:8px 0 0 }
+  #ticketCard.done #tOrderCompact b{ font-size:13.5px }
   /* Disclosure rows (same-phone payment tip): own chevron, no native triangle on iOS. */
   #onePhoneTip summary::-webkit-details-marker{display:none}
   #onePhoneTip summary::after{content:"▾";float:right;color:var(--muted);transition:transform .15s}
@@ -350,15 +358,32 @@
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
-    <div id="tRate" style="display:none;margin-top:16px;background:linear-gradient(160deg,#fff9ec,#fff);border:1px solid #fde9b8;border-radius:16px;padding:18px 16px;text-align:center">
+    <!-- REVIEW — the whole point of the served screen, so it gets the room. Stars are the entry
+         point; picking one reveals quick-reason chips for that score band plus an optional comment.
+         Nothing is sent until ส่งรีวิว, so a mis-tap on a star is never a published 1-star. -->
+    <div id="tRate" style="display:none;margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px 16px;text-align:center">
       <div id="tRateAsk">
-        <div style="font-size:15px;font-weight:800;color:var(--navy)">แก้วนี้เป็นอย่างไรบ้าง?</div>
-        <p class="muted" style="font-size:12.5px;margin:4px 0 14px">ให้คะแนนความประทับใจ ช่วยให้ร้านพัฒนาต่อได้ค่ะ</p>
-        <div id="tStars" style="display:flex;align-items:center;justify-content:center;gap:4px"></div>
-        <div id="tRateLabel" style="font-size:12.5px;font-weight:700;color:var(--muted);margin-top:8px;min-height:16px"></div>
+        <div style="font-size:19px;font-weight:800;color:var(--navy);line-height:1.3">แก้วนี้เป็นอย่างไรบ้าง?</div>
+        <p class="muted" style="font-size:13px;margin:5px 0 16px">ให้คะแนนสั้นๆ ช่วยให้เราทำให้ดีขึ้นได้ค่ะ</p>
+        <div id="tStars" style="display:flex;align-items:center;justify-content:center;gap:6px"></div>
+        <div id="tRateLabel" style="font-size:14px;font-weight:800;color:var(--accent);margin-top:10px;min-height:20px"></div>
+        <!-- Reason chips + comment stay hidden until a star is picked: an empty form up front is
+             noise, and the chips can't even be chosen correctly before the score is known. -->
+        <div id="tRateMore" style="display:none">
+          <div id="tTagHint" class="muted" style="font-size:12.5px;margin:14px 0 8px"></div>
+          <div id="tTags" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center"></div>
+          <div style="position:relative;margin-top:14px">
+            <textarea id="tComment" maxlength="500" rows="3" placeholder="อยากบอกอะไรเพิ่มเติมไหมคะ? (ไม่บังคับ)"
+              oninput="tCommentCount()" style="width:100%;box-sizing:border-box;padding:12px 13px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;font-family:inherit;color:var(--ink);resize:vertical;line-height:1.5"></textarea>
+            <div id="tCommentN" class="muted" style="font-size:11px;text-align:right;margin-top:2px">0/500</div>
+          </div>
+        </div>
+        <button id="tRateSend" class="ok" style="width:100%;margin-top:14px;min-height:50px;font-size:16px;font-weight:800" onclick="sendReview()">ส่งรีวิว</button>
       </div>
-      <div id="tRateThanks" style="display:none;align-items:center;justify-content:center;gap:8px;color:var(--accent2);font-weight:800;font-size:14.5px">
-        <svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M20 6L9 17l-5-5"/></svg>ขอบคุณสำหรับความคิดเห็นค่ะ
+      <div id="tRateThanks" style="display:none;flex-direction:column;align-items:center;gap:6px;color:var(--accent2);font-weight:800;font-size:16px;padding:8px 0">
+        <svg class="ic" viewBox="0 0 24 24" style="width:30px;height:30px;margin:0"><path d="M20 6L9 17l-5-5"/></svg>
+        ขอบคุณสำหรับรีวิวค่ะ
+        <span class="muted" style="font-weight:500;font-size:12.5px">ร้านอ่านทุกความคิดเห็นจริงๆ นะคะ</span>
       </div>
     </div>
     <div class="row" style="gap:8px;margin-top:10px">
@@ -1978,7 +2003,10 @@ function render(v){
   // #2 change-payment button (re-choose channel while still unpaid) · #4 go-home on a cancelled order
   const _unpaid = v.order && !['paid','claimed'].includes(v.order.status) && !['cancelled','served'].includes(v.status);
   show('changePayBtn', !!(_unpaid && payMethod && !counterConfirmed));
-  show('goHomeBtn', v.status==='cancelled');
+  // Reset the served-screen shrink + the go-home button's role on every pass, so a status change
+  // never leaves the previous state's styling behind.
+  $('ticketCard').classList.remove('done');
+  show('goHomeBtn', v.status==='cancelled'); $('goHomeBtn').className='ok';
   if(isPending){
     show('tAheadWrap',false); show('tCalled',false);
     // Only show a bottom note for the claimed (waiting-on-cashier) state — the pay prompt is
@@ -2004,9 +2032,16 @@ function render(v){
     $('tCalledPill').textContent='คิว '+v.code+' · เชิญรับที่เคาน์เตอร์';
     $('tNotifyNote').textContent='';
   } else if(v.status==='served'){
+    // Order's done — the queue number and the progress bar have no job left, so they shrink out of
+    // the way (.done) and the review becomes the tallest thing on the screen. goHomeBtn doubles as
+    // the way out for anyone who doesn't want to review: nobody is trapped on this screen.
     show('tAheadWrap',false); show('tCalled',false);
-    $('tNotifyNote').textContent='ขอบคุณค่ะ 🥰';
+    $('ticketCard').classList.add('done');
+    $('tCodeLabel').textContent='รับเครื่องดื่มเรียบร้อย';
+    renderTimeline(-1);
+    $('tNotifyNote').textContent='';
     $('cancelBtn').style.display='none'; $('tRate').style.display='';
+    show('goHomeBtn', true); $('goHomeBtn').className='ghost';
     if(v.rating){ renderStars(v.rating); show('tRateAsk',false); $('tRateThanks').style.display='flex'; }
     else { renderStars(0); show('tRateAsk',true); $('tRateThanks').style.display='none'; }
   } else {   // cancelled / skipped / unknown
@@ -2023,18 +2058,50 @@ function render(v){
 }
 
 const RATE_LABELS=['แย่ไปหน่อย','พอใช้','ดี','ดีมาก','เยี่ยมมาก!'];
+let _revStars=0, _revTags=[];
+// Tapping a star no longer submits. It only opens the rest of the form — the customer still has to
+// press ส่งรีวิว. A stray tap while scrolling used to publish a permanent 1-star instantly.
 function renderStars(sel){
-  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<button type="button" onclick="rate(${n})" aria-label="${n} ดาว" style="background:none;border:none;padding:3px;cursor:pointer;line-height:1"><svg viewBox="0 0 24 24" style="width:32px;height:32px;fill:${n<=sel?'#f3cb55':'#e9edf0'};stroke:${n<=sel?'#d9a520':'#dce2e7'};stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg></button>`).join('');
+  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<button type="button" onclick="pickStar(${n})" aria-label="${n} ดาว" style="background:none;border:none;padding:4px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent"><svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:${n<=sel?'#f3cb55':'#eef2f5'};stroke:${n<=sel?'#d9a520':'#dfe5ea'};stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg></button>`).join('');
   $('tRateLabel').textContent = sel>0 ? RATE_LABELS[sel-1] : '';
 }
+// The chip vocabulary comes from the server (/api/config → ratingTags), so the customer can never
+// offer a tag the server would reject. Bands flip at 4 stars: below asks what went wrong, above
+// what went right — the same list under both would be nonsense at one end or the other.
+function ratingTagsFor(stars){
+  const t=(cfg&&cfg.ratingTags)||null; if(!t) return [];
+  return (stars<=3 ? t.low : t.high) || [];
+}
+window.pickStar=(n)=>{
+  if(_revStars!==n) _revTags=[];            // switching bands invalidates the picked reasons
+  _revStars=n; renderStars(n);
+  $('tTagHint').textContent = n<=3 ? 'เกิดอะไรขึ้นคะ? (เลือกได้มากกว่า 1)' : 'อะไรที่คุณชอบคะ? (เลือกได้มากกว่า 1)';
+  renderRateTags();
+  $('tRateMore').style.display='';
+};
+function renderRateTags(){
+  const list=ratingTagsFor(_revStars);
+  $('tTags').innerHTML=list.map(t=>{ const on=_revTags.includes(t.id);
+    return `<button type="button" onclick="toggleRateTag('${t.id}')" style="border:1.5px solid ${on?'var(--accent)':'var(--line)'};background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-family:inherit;font-size:13px;font-weight:700;padding:9px 14px;border-radius:999px;cursor:pointer;min-height:40px">${esc(t.label)}</button>`;
+  }).join('');
+}
+window.toggleRateTag=(id)=>{
+  const i=_revTags.indexOf(id);
+  if(i>=0) _revTags.splice(i,1); else _revTags.push(id);
+  renderRateTags();
+};
+window.tCommentCount=()=>{ const v=$('tComment').value||''; $('tCommentN').textContent=v.length+'/500'; };
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
 window.changePay=()=>{ openPayPicker('ticket'); };   // re-choose via the SAME clean picker the cart uses (not the old inline chooser)
-window.rate=async(n)=>{
-  renderStars(n);
-  try{ await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stars:n,lineUserId})});
+window.sendReview=async()=>{
+  if(!_revStars){ toast('กรุณาให้คะแนนอย่างน้อย 1 ดาวค่ะ'); return; }
+  const btn=$('tRateSend'); btn.disabled=true; btn.style.opacity=.6; btn.textContent='กำลังส่ง…';
+  try{
+    await api('/api/tickets/'+ticketId+'/rate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stars:_revStars, tags:_revTags, comment:($('tComment').value||'').trim(), lineUserId})});
     show('tRateAsk',false); $('tRateThanks').style.display='flex'; if(poll) clearInterval(poll);
-    setTimeout(()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} location.reload(); }, 2000);   // order done → back to home after 2s
-  }catch(e){ toast('บันทึกคะแนนไม่สำเร็จ'); }
+    setTimeout(()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} location.reload(); }, 2200);   // order done → back to home
+  }catch(e){ toast('ส่งรีวิวไม่สำเร็จ — ลองอีกครั้งค่ะ'); btn.disabled=false; btn.style.opacity=1; btn.textContent='ส่งรีวิว'; }
 };
 
 async function tick(){
