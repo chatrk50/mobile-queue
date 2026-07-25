@@ -144,7 +144,14 @@ app.get('/manifest.webmanifest', (req, res) => {
 app.use(express.static(join(__dirname, '..', 'public'), {
   // HTML must always revalidate so a redeploy reaches the LINE in-app browser / iPad immediately
   // (LIFF caching otherwise serves a stale page); other assets (css/js/img) can cache normally.
-  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate'); },
+  // Images/fonts default to max-age=0, so every repeat visit costs a revalidation round-trip per
+  // file — on a phone's mobile data that is seconds of stall before the menu paints, for bytes the
+  // device already has. A day of caching kills those round-trips; a replaced photo still refreshes
+  // within the day, and the HTML above always revalidates so code changes are never held back.
+  setHeaders: (res, p) => {
+    if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    else if (/\.(png|jpg|jpeg|webp|svg|gif|ico|woff2?)$/i.test(p)) res.setHeader('Cache-Control', 'public, max-age=86400');
+  },
 }));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.
@@ -167,7 +174,7 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), ordering: Q.orderingPaused(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), pdpaNotice: Q.pdpaNoticeEnabled(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), open: Q.isStoreOpen(), ordering: Q.orderingPaused(), hours: Q.getStoreHours(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -668,7 +675,17 @@ app.post('/api/tickets/:ticketId/dismiss-cancel', (req, res) => {
 // Customer rating (no PIN) — defined before the generic /:action route so it isn't captured.
 app.post('/api/tickets/:ticketId/rate', (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
-  try { res.json(Q.setRating(req.params.ticketId, req.body?.stars)); }
+  try {
+    res.json(Q.setRating(req.params.ticketId, req.body?.stars, {
+      tags: req.body?.tags, comment: req.body?.comment,
+    }));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Feedback report — OWNER ONLY. Free-text comments are customers talking candidly about the shop
+// and its staff; they are not board/cashier material, so this sits behind ownerOK like the backup.
+app.get('/api/reports/ratings', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.ratingFeedback({ days: req.query.days, limit: req.query.limit })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer declares they paid by PromptPay (no PIN, ownership checked) -> 'claimed',

@@ -141,7 +141,12 @@ ok(near(close.overShort, 0), `counted 680 == expected → over/short 0 (got ${cl
   const c0 = Q.currentCashSession(1);   // baseline (the shared DB already holds earlier cash sales)
   const tk = db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,'PRC1','served')").run().lastInsertRowid;
   // A cash sale whose paid_at is 10 min BEFORE this round opened → money that existed before the round.
-  db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid','cash', datetime(?, '-10 minutes'), 1)").run(tk, 697, ses.opened_at);
+  // Clamped to the start of the Bangkok day: a plain `opened_at - 10 minutes` fell onto YESTERDAY
+  // whenever the suite ran in the first 10 minutes after Bangkok midnight, and dayCash (scoped to
+  // today) then correctly excluded the ฿697 — a 10-minutes-a-day fixture flake, not a product bug.
+  const bkkDayStart = db.prepare("SELECT datetime(date('now','+7 hours') || ' 00:00:00', '-7 hours') AS v").get().v;
+  const preRoundAt = db.prepare("SELECT max(datetime(?, '-10 minutes'), ?) AS v").get(ses.opened_at, bkkDayStart).v;
+  db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid','cash', ?, 1)").run(tk, 697, preRoundAt);
   const c2 = Q.currentCashSession(1);
   ok(near(c2.cashIn, c0.cashIn), `INVARIANT cash sold BEFORE the round opened does NOT change in-round cash (${c0.cashIn} → ${c2.cashIn})`);
   ok(near(c2.dayCash, c0.dayCash + 697), `INVARIANT the pre-round ฿697 still shows in the DAY total (${c0.dayCash} → ${c2.dayCash})`);
@@ -1303,6 +1308,47 @@ ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable c
   ok(Q.myMenuLikes(newFan).length === 0, 'INVARIANT myMenuLikes reflects the toggle state');
   ok(Q.listMenu().find((m) => m.name === 'Drink').likes === base, 'INVARIANT listMenu shows the same merged count as the toggle result');
   ok(typeof Q.publicRating().count === 'number', 'publicRating exposes only {avg,count} for the LIFF hero');
+}
+
+console.log('\n== Review: reasons + comment ==');
+{
+  const mk = (code) => db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,?,'served')").run(code).lastInsertRowid;
+  const base = Q.ratingFeedback({ days: 30 });
+
+  // A low score may only carry low-band reasons; anything from the praise list is dropped, so a
+  // client can never file "อร่อย" under 1 star and poison the owner's "ต้องแก้ไข" list.
+  const tLow = mk('RV1');
+  const rLow = Q.setRating(tLow, 1, { tags: ['slow', 'taste_good', 'price', 'nope'], comment: '  รอนานมากค่ะ  ' });
+  ok(rLow.tags.join(',') === 'slow,price', `INVARIANT only same-band tags survive (got ${rLow.tags.join(',')})`);
+  ok(rLow.comment === 'รอนานมากค่ะ', 'INVARIANT the comment is trimmed and kept');
+
+  const tHigh = mk('RV2');
+  const rHigh = Q.setRating(tHigh, 5, { tags: ['fast', 'fast', 'slow'] });
+  ok(rHigh.tags.join(',') === 'fast', `INVARIANT duplicate + wrong-band tags are dropped (got ${rHigh.tags.join(',')})`);
+
+  // A 500-char cap the server enforces — the textarea's maxlength is a courtesy, not a control.
+  const tLong = mk('RV3');
+  const rLong = Q.setRating(tLong, 4, { comment: 'x'.repeat(900) });
+  ok(rLong.comment.length === 500, `INVARIANT the comment is capped at 500 server-side (got ${rLong.comment.length})`);
+
+  // Rating with no tags/comment at all must still work — the extra fields are optional.
+  const tBare = mk('RV4');
+  ok(Q.setRating(tBare, 3).rating === 3, 'INVARIANT a bare star-only rating still saves');
+
+  const f = Q.ratingFeedback({ days: 30 });
+  ok(f.count === base.count + 4, `INVARIANT all four reviews land in the report (${base.count} → ${f.count})`);
+  ok(f.withComment === base.withComment + 2, `INVARIANT only reviews with text count as commented (${f.withComment})`);
+  const slow = f.lowTags.find((t) => t.id === 'slow');
+  ok(slow && slow.n >= 1 && slow.label === 'รอนาน', 'INVARIANT low-band tags are counted with their Thai label');
+  ok(!f.highTags.some((t) => t.id === 'slow'), 'INVARIANT a low-band tag never leaks into the strengths list');
+  ok(f.items[0].tags.every((t) => t.label), 'INVARIANT every reported tag carries a label the owner can read');
+
+  // The star distribution the LIFF/report already showed must still agree with the new report.
+  ok(Q.customerInsights().satisfaction.total >= f.count, 'INVARIANT the new report never exceeds the star distribution it derives from');
+
+  for (const id of [tLow, tHigh, tLong, tBare]) {
+    db.prepare('DELETE FROM tickets WHERE id=?').run(id);
+  }
 }
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
