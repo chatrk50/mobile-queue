@@ -332,11 +332,20 @@ app.get('/api/tender-recon', (req, res) => {
   res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
 });
 
+// A customer key is either a LINE userId (32 hex LINE hands only to that customer's own LIFF, so
+// it works as a bearer token — the model the LIFF has always used) or `tel:<phone>`. A phone number
+// is guessable in seconds, so every route keyed by one is staff-only: without this, walking
+// tel:08xxxxxxxx returned strangers' order history, spend, points and birthday.
+const customerKeyOK = (req, key) => !String(key || '').startsWith('tel:') || pinOK(req);
+
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
 app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
-app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
+app.get('/api/loyalty/:key', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) });
+});
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
 app.post('/api/loyalty/:key/redeem', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -351,13 +360,18 @@ app.post('/api/customers/:key/redeem-birthday', (req, res) => {
 });
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
 app.post('/api/loyalty/:key/birthday', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Referral: this customer's own invite code + whether they can still enter a friend's code.
-app.get('/api/loyalty/:key/referral', (req, res) => res.json(Q.referralStatus(req.params.key)));
+app.get('/api/loyalty/:key/referral', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.referralStatus(req.params.key));
+});
 // A new customer enters a friend's invite code (both get stamps when this customer first orders).
 app.post('/api/loyalty/:key/refer', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.applyReferralCode(req.params.key, req.body?.code)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -513,11 +527,13 @@ app.post('/api/item-prices', (req, res) => {
 
 // ---------- Customer reorder suggestions (LIFF: "order the same as last time?") ----------
 app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
+  if (!customerKeyOK(req, req.params.lineUserId)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
   catch (e) { res.status(200).json({ known: false, error: e.message }); }
 });
 // Customer's own order history (LIFF "ประวัติการสั่ง") — keyed by their LINE id, read-only.
 app.get('/api/customers/:lineUserId/orders', (req, res) => {
+  if (!customerKeyOK(req, req.params.lineUserId)) return res.status(403).json({ error: 'forbidden' });
   try { res.json({ orders: Q.customerOrders(req.params.lineUserId, req.query.limit) }); }
   catch (e) { res.status(200).json({ orders: [], error: e.message }); }
 });
@@ -1547,6 +1563,21 @@ else if (!DURABLE) {
     catch (e) { console.error('[seed] mock sales skipped:', e.message); }
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
+
+// Terminal error handler. Without one, Express's default serialises err.stack into the RESPONSE
+// whenever NODE_ENV !== 'production' — file paths and internals handed to whoever tripped it.
+// Registered last so it only sees errors no route handled. The four args are required: that
+// signature is how Express recognises this as an error handler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(`[error] ${req.method} ${req.path}:`, err && err.stack ? err.stack : err);
+  if (res.headersSent) return;                       // mid-stream (SSE): nothing safe left to say
+  res.status(500).json({ error: 'internal' });
+});
+// A rejected promise nobody caught used to be invisible; log it rather than let the process die
+// silently mid-service. Both are last-resort nets — routes still handle their own errors.
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));
+process.on('uncaughtException', (e) => console.error('[uncaughtException]', e && e.stack ? e.stack : e));
 
 app.listen(PORT, () => {
   console.log(`Mobile Queue running on ${PUBLIC_BASE_URL}`);
