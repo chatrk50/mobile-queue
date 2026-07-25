@@ -46,12 +46,85 @@
      the layout to a device profile — useful when e.g. a phone is casting to a big screen, or the
      owner prefers the roomy phone layout on a small tablet. Persisted per device in localStorage. */
   html.dev-phone .wrap.wide{ max-width:520px; }
-  html.dev-phone body{ font-size:16.5px; }
   html.dev-phone .pos-split{ grid-template-columns:1fr; }
   html.dev-phone .ms-split{ grid-template-columns:1fr; }
   html.dev-tablet .wrap.wide{ max-width:900px; }
   html.dev-desktop .wrap.wide{ max-width:1360px; }
-  html.dev-desktop body{ font-size:14.5px; }
+
+  /* ---------- BACK-OFFICE TYPE SCALE ----------
+     The problem was never that content was too big — most of it already sits at 11–13px. It was
+     that the STRUCTURE didn't read as structure: h2 was 16px/600 in muted grey, i.e. larger and
+     softer than the text under it, so nothing looked like a heading. Headings are now navy/800 and
+     step down cleanly from h1; body, buttons and pills step down with them. Three tiers, tuned per
+     device, and only inside the cashier bundle — the customer LIFF is untouched.
+     Inputs go to 16px on purpose: iOS zooms the page whenever a focused field is under 16px. */
+  body{ font-size:13.5px; }
+  h1{ font-size:19px; font-weight:800; color:var(--navy); letter-spacing:-.2px; }
+  h2{ font-size:14px; font-weight:800; color:var(--navy); letter-spacing:.1px; margin:.6em 0 .3em; }
+  h3{ font-size:12.5px; font-weight:800; color:var(--muted); letter-spacing:.3px; }
+  button,.btn{ font-size:14px; }
+  input,select,textarea{ font-size:16px; }
+  .pill{ font-size:11.5px; }
+  .full-page-head h1{ font-size:17px; }
+
+  @media (max-width:639px){
+    body{ font-size:13px; }
+    h1{ font-size:17px; }
+    h2{ font-size:13.5px; }
+    button,.btn{ font-size:13.5px; }
+    .full-page-head h1{ font-size:16px; }
+  }
+  @media (min-width:1024px){
+    body{ font-size:14px; }
+    h1{ font-size:21px; }
+    h2{ font-size:15px; }
+    button,.btn{ font-size:14.5px; }
+  }
+  /* The device switcher must preview the same three tiers, not just clamp the container width. */
+  html.dev-phone body{ font-size:13px; }
+  html.dev-phone h1{ font-size:17px; } html.dev-phone h2{ font-size:13.5px; }
+  html.dev-phone button, html.dev-phone .btn{ font-size:13.5px; }
+  html.dev-tablet body{ font-size:13.5px; }
+  html.dev-tablet h1{ font-size:19px; } html.dev-tablet h2{ font-size:14px; }
+  html.dev-desktop body{ font-size:14px; }
+  html.dev-desktop h1{ font-size:21px; } html.dev-desktop h2{ font-size:15px; }
+
+  /* ---------- ZONE CARD ACTIONS: one row at every width ---------- */
+  /* stretch, not center: the four buttons have different padding, so centering left them at 46/48/51px
+     and visibly out of line. Stretching makes every button match the tallest. */
+  .zone-actions{ display:flex; align-items:stretch; gap:8px; flex-wrap:nowrap; }
+  .zone-actions button{ display:inline-flex; align-items:center; justify-content:center; }
+  .zone-actions .z-call{ font-size:16px; padding:13px 22px; white-space:nowrap; }
+  @media (max-width:639px){
+    .zone-head{ flex-direction:column; align-items:stretch; gap:10px; }
+    .zone-actions{ width:100%; gap:7px; }
+    /* Secondary actions shed their labels; the primary keeps its own and absorbs the slack. */
+    .zone-actions .z-ico{ flex:none; width:44px; height:44px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+    .zone-actions .z-ico svg{ margin:0; }
+    .zone-actions .z-ico .lbl{ display:none; }
+    .zone-actions .z-call{ flex:1; min-width:0; height:44px; padding:0 10px; font-size:14px;
+      display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+  }
+  /* ---------- HEADER: phone folds its tools into ⋯ ---------- */
+  #moreBtn{ display:none; }
+  @media (max-width:639px){
+    #moreBtn{ display:inline-flex; }
+    .hdr-actions{ flex-wrap:nowrap; gap:5px; }
+    /* These five live in #moreMenu on a phone — eleven controls simply do not fit 375px. */
+    .hdr-actions #historyBtn, .hdr-actions #custBtn, .hdr-actions #scanBtn,
+    .hdr-actions #soundBtn, .hdr-actions #devBtn, .hdr-actions #clockBtn{ display:none !important; }
+    .hdr-actions .hdr-sep{ display:none; }
+    .hdr-actions > button, .hdr-actions > .btn{ padding:7px 9px; font-size:12.5px; }
+    .hdr-actions .ic-btn{ width:36px; height:36px; padding:0; }
+    #adminBtn .lbl{ display:none; }
+  }
+  html.dev-phone #moreBtn{ display:inline-flex; }
+  html.dev-phone .hdr-actions #historyBtn, html.dev-phone .hdr-actions #custBtn,
+  html.dev-phone .hdr-actions #scanBtn, html.dev-phone .hdr-actions #soundBtn,
+  html.dev-phone .hdr-actions #devBtn, html.dev-phone .hdr-actions #clockBtn{ display:none !important; }
+  html.dev-phone .hdr-actions .hdr-sep{ display:none; }
+  #moreMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:13.5px; border-radius:10px; text-align:left; }
+  #moreMenu button.adm svg{ flex:none; margin:0; }
   /* Sweetness segmented pills (mirror the customer detail sheet) */
   .sweetseg{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
   .sweetseg-b{flex:1;min-width:56px;padding:10px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:14px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;transition:.1s}
@@ -151,7 +224,20 @@
       <button id="soundBtn" class="ghost ic-btn" style="display:none" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เสียงเตือนออเดอร์ใหม่จากไลน์"></button>
       <!-- Device-fit: tap to cycle layout อัตโนมัติ → มือถือ → แท็บเล็ต → คอม (persisted) -->
       <button id="devBtn" class="ghost ic-btn" onclick="cycleDevMode()"></button>
-      <button id="adminBtn" class="ghost" style="display:none" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
+      <!-- Phone overflow. Eleven controls at a 38px touch target need ~630px; a 375px phone has
+           ~343px of usable width, so on a phone the five low-frequency tools fold in here instead
+           of wrapping the bar onto a second and third row. Its own menu, not the ⚙ one, because a
+           plain cashier never sees ⚙ and still needs ประวัติ / ลูกค้า / สแกนบัตร. -->
+      <button id="moreBtn" class="ghost ic-btn" onclick="toggleMore(event)" title="เครื่องมือเพิ่มเติม" aria-label="เครื่องมือเพิ่มเติม"><svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+      <div id="moreMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:210px;flex-direction:column;gap:2px">
+        <button class="ghost adm" onclick="toggleClock()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="mmClock">เข้างาน</span></button>
+        <button class="ghost adm" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติออเดอร์</button>
+        <button class="ghost adm" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</button>
+        <button class="ghost adm" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตรลูกค้า</button>
+        <button class="ghost adm" onclick="toggleSound()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="mmSound">เสียงเตือนออเดอร์ใหม่</span></button>
+        <button class="ghost adm" onclick="cycleDevMode()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="mmDev">ปรับหน้าจอ</span></button>
+      </div>
+      <button id="adminBtn" class="ghost" style="display:none" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="lbl">จัดการ ▾</span></button>
       <!-- Stays in the bar, not in the gear menu: a plain cashier never sees the gear and still has
            to be able to end their shift. -->
       <button id="logoutBtn" class="ghost ic-btn" style="display:none" onclick="logout()" title="ออกจากระบบ" aria-label="ออกจากระบบ"><svg class="ic" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></button>
@@ -1208,6 +1294,21 @@ window.closeAdmin=()=>{ const m=$('adminMenu'); if(m) m.style.display='none'; };
 document.addEventListener('click',(e)=>{ const m=$('adminMenu'); if(!m||m.style.display!=='flex') return;
   if(e.target.closest('#adminMenu button')) { closeAdmin(); return; }              // a tool was picked
   if(!e.target.closest('#adminMenu') && !e.target.closest('#adminBtn')) closeAdmin(); // clicked outside
+});
+// Phone overflow menu — same open/close contract as ⚙, and the two are mutually exclusive so a tap
+// never leaves both dropdowns stacked on top of each other.
+window.toggleMore=(e)=>{ if(e) e.stopPropagation(); closeAdmin();
+  const m=$('moreMenu'); if(!m) return;
+  const opening=m.style.display!=='flex';
+  if(opening){ const c=$('mmClock'); if(c) c.textContent=MY_SHIFT?'ออกงาน':'เข้างาน';
+    const s=$('mmSound'); if(s) s.textContent=soundOn()?'เสียงเตือน: เปิด':'เสียงเตือน: ปิด';
+    const d=$('mmDev'); if(d){ const cur=localStorage.getItem('dev_mode')||'auto';
+      const dm=DEV_MODES.find(x=>x[0]===cur)||DEV_MODES[0]; d.textContent='หน้าจอ: '+dm[1]; } }
+  m.style.display=opening?'flex':'none'; };
+window.closeMore=()=>{ const m=$('moreMenu'); if(m) m.style.display='none'; };
+document.addEventListener('click',(e)=>{ const m=$('moreMenu'); if(!m||m.style.display!=='flex') return;
+  if(e.target.closest('#moreMenu button')) { closeMore(); return; }
+  if(!e.target.closest('#moreMenu') && !e.target.closest('#moreBtn')) closeMore();
 });
 async function api(path,opts={}){
   if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};   // legacy PIN mode only; session rides the cookie
@@ -3526,16 +3627,19 @@ async function refreshLowStock(){
 
 function zonePanel(z){
   return `<div class="card" id="zone-${z.id}">
-    <div class="row between">
+    <div class="row between zone-head">
       <div><h1 id="zt-${z.id}">${esc(z.name)}</h1>
         <span id="zs-${z.id}" class="pill open">—</span>
         <span class="muted" style="margin-left:8px">รอ <b id="zc-${z.id}">0</b> · เรียกล่าสุด <b id="zl-${z.id}">—</b></span>
       </div>
-      <div class="row">
-        <button class="btn" onclick="showOrder(${z.id})"><svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>ออเดอร์ใหม่</button>
-        <button class="ghost" onclick="addWalkin(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>หน้าร้าน</button>
-        <button class="ok" style="font-size:18px;padding:14px 24px" onclick="callNext(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>เรียกคิวถัดไป</button>
-        <button class="ghost" id="ztog-${z.id}" onclick="toggleZone(${z.id})">ปิดโซน</button>
+      <!-- One row at every width. On a phone the three secondary actions drop their labels and
+           become icon squares (title/aria keeps them named) so เรียกคิวถัดไป — the action the
+           cashier presses all day — keeps its label and takes the remaining space. -->
+      <div class="zone-actions">
+        <button class="btn z-ico" onclick="showOrder(${z.id})" title="ออเดอร์ใหม่" aria-label="ออเดอร์ใหม่"><svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span class="lbl">ออเดอร์ใหม่</span></button>
+        <button class="ghost z-ico" onclick="addWalkin(${z.id})" title="ลูกค้าหน้าร้าน" aria-label="ลูกค้าหน้าร้าน"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg><span class="lbl">หน้าร้าน</span></button>
+        <button class="ok z-call" onclick="callNext(${z.id})"><svg class="ic" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span>เรียกคิวถัดไป</span></button>
+        <button class="ghost z-ico" id="ztog-${z.id}" onclick="toggleZone(${z.id})" title="ปิดโซน" aria-label="ปิดโซน"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg><span class="lbl">ปิดโซน</span></button>
       </div>
     </div>
     <div id="zp-${z.id}"></div>
@@ -3617,7 +3721,12 @@ function renderZone(snap){
   set('zt-'+id,z.name); set('zc-'+id,snap.waitingCount);
   set('zl-'+id, z.last_called?`${z.prefix}${String(z.last_called).padStart(3,'0')}`:'—');
   const zs=$('zs-'+id); if(zs){ zs.className='pill '+(open?'open':'closed'); zs.textContent=open?'เปิด':'ปิด'; }
-  const tog=$('ztog-'+id); if(tog) tog.textContent=open?'ปิดโซน':'เปิดโซน';
+  // Label lives in .lbl now — writing textContent here would delete the icon with it.
+  const tog=$('ztog-'+id);
+  if(tog){ const t=open?'ปิดโซน':'เปิดโซน';
+    const l=tog.querySelector('.lbl'); if(l) l.textContent=t;
+    tog.title=t; tog.setAttribute('aria-label',t);
+    const ic=tog.querySelector('svg path'); if(ic) ic.setAttribute('d', open?'M15 9l-6 6M9 9l6 6':'M9 12l2 2 4-4'); }
   // Auto-recognition chip: a returning customer is greeted on the card itself (no lookup needed).
   const recoChip=(t)=> (t.cust && t.cust.visits>=2)
     ? ` <span class="pill" style="background:rgba(255,138,61,.15);color:#c2410c;font-weight:700;margin-left:6px;font-size:11px">★ มา ${t.cust.visits} ครั้ง${t.cust.fav?' · ชอบ'+esc(t.cust.fav):''}</span>` : '';
