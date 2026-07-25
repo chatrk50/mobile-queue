@@ -38,6 +38,18 @@
   /* Popups: solid WHITE (was translucent/blur from styles.css) + no scroll bleed behind them */
   .glass-ovl .card, #drinkSheet .card, #orderDetailSheet .card{ background:#fff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
   .glass-ovl, #drinkSheet, #orderDetailSheet{ overscroll-behavior:contain; }
+  /* Order-status timeline animation: the completed bar SLIDES forward on a step change, the
+     segment toward the NEXT step flows like a loading bar, the current node pulses, and the
+     กำลังทำ icon spins. All CSS-only; switched off under prefers-reduced-motion. */
+  .tl-fill{ transition:width .9s cubic-bezier(.4,0,.2,1); }
+  .tl-flow{ background:repeating-linear-gradient(90deg,var(--accent2) 0 10px,rgba(47,194,166,.22) 10px 18px);
+    background-size:36px 3px; animation:tlflow 1.1s linear infinite; }
+  @keyframes tlflow{ from{background-position:0 0} to{background-position:36px 0} }
+  .tl-cur{ animation:tlpulse 2s ease-out infinite; }
+  @keyframes tlpulse{ 0%{box-shadow:0 0 0 0 rgba(0,181,216,.45)} 70%{box-shadow:0 0 0 10px rgba(0,181,216,0)} 100%{box-shadow:0 0 0 0 rgba(0,181,216,0)} }
+  .tl-spin svg{ animation:tlspin 1.8s linear infinite; }
+  @keyframes tlspin{ to{transform:rotate(360deg)} }
+  @media (prefers-reduced-motion:reduce){ .tl-flow,.tl-cur,.tl-spin svg{ animation:none } .tl-fill{ transition:none } }
   body.noscroll{ overflow:hidden; }
   /* Customer menu thumbnails +20% for easier tapping/visibility */
   #menuButtons .menu-btn .mimg{ width:74px; height:74px; }
@@ -650,6 +662,7 @@ async function initLiff(){
 // a record of when this customer agreed. Never blocks ordering — it is a notice, not a gate.
 function maybeAskPdpa(){
   const bar=$('pdpaBar'); if(!bar||!lineUserId) return;
+  if(!cfg.pdpaNotice) return;                       // owner switch (⚙ ตั้งค่าระบบ) — default hidden
   if(localStorage.getItem('pdpa_ok')==='1') return;
   bar.style.display='';
 }
@@ -1895,19 +1908,30 @@ const TL_STEPS=[
 ];
 const TL_CHECK='<path d="M20 6L9 17l-5-5"/>';
 function ticketStep(v){ if(v.status==='served') return 3; if(v.status==='called') return 2; if(v.making) return 1; if(v.status==='waiting') return 0; return -1; }
+let _tlIdx=-9;   // last rendered step, so the fill can SLIDE from where it was
 function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
-  if(idx<0){ el.style.display='none'; return; } el.style.display='';
-  const prog=(idx/(TL_STEPS.length-1))*75;
+  if(idx<0){ el.style.display='none'; _tlIdx=-9; return; } el.style.display='';
+  if(idx===_tlIdx) return;                          // poll tick, no change → keep the animations running
+  const seg=75/(TL_STEPS.length-1);                 // one step = 25% of the track (track spans 75%)
+  const prevProg=_tlIdx>=0?_tlIdx*seg:0;
+  const prog=idx*seg; _tlIdx=idx;
+  const last=idx>=TL_STEPS.length-1;
   el.innerHTML=`<div style="position:relative;padding-top:2px">
     <div style="position:absolute;top:20px;left:12.5%;right:12.5%;height:3px;background:var(--line)"></div>
-    <div style="position:absolute;top:20px;left:12.5%;width:${prog}%;height:3px;background:var(--accent2)"></div>
+    <div class="tl-fill" style="position:absolute;top:20px;left:12.5%;width:${prevProg}%;height:3px;background:var(--accent2)"></div>
+    ${last?'':`<div class="tl-flow" style="position:absolute;top:20px;left:calc(12.5% + ${prog}%);width:${seg}%;height:3px"></div>`}
     <div style="position:relative;display:flex;justify-content:space-between">`
     +TL_STEPS.map((s,i)=>{ const done=i<idx,cur=i===idx; const bg=done?'var(--accent2)':cur?'var(--accent)':'#fff';
       const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--line)'; const icCol=(done||cur)?'#fff':'var(--muted)';
       const tcol=cur?'var(--navy)':done?'var(--accent2)':'var(--muted)';
+      // The กำลังทำ icon is a circular arrow — spinning it while current reads as "in progress".
+      const spin=cur&&i===1&&!done?' tl-spin':'';
       const svg=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="stroke:${icCol};stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${done?TL_CHECK:s.ic}</svg>`;
-      return `<div style="flex:1;text-align:center"><div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
+      return `<div style="flex:1;text-align:center"><div class="${cur?'tl-cur':''}${spin}" style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
     }).join('')+`</div></div>`;
+  // Next frame: slide the solid fill from the previous step's position to the new one.
+  const fill=el.querySelector('.tl-fill');
+  if(fill) requestAnimationFrame(()=>requestAnimationFrame(()=>{ fill.style.width=prog+'%'; }));
 }
 function render(v){
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"

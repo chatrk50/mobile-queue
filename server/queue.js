@@ -2316,6 +2316,10 @@ export function orderingPaused() {
   if (posOffline()) return { paused: true, code: 'pos_offline', reason: 'ร้านออฟไลน์อยู่ — สั่งที่หน้าร้านได้ตามปกติ' };
   return { paused: false, code: null, reason: null };
 }
+// PDPA notice bar on the LIFF: owner-switchable, default OFF (the owner wants it hidden until
+// they choose to show it). Consent already recorded stays recorded either way.
+export function pdpaNoticeEnabled() { return getSetting('pdpa:notice', '0') === '1'; }
+export function setPdpaNotice(on) { setSetting('pdpa:notice', on ? '1' : '0'); return { pdpaNotice: !!on }; }
 export function socialProofEnabled() { return getSetting('social:enabled', '0') === '1'; }
 export function setSocialProof(on) { setSetting('social:enabled', on ? '1' : '0'); return { social: !!on }; }
 // Count of drinks (base items) sold today across paid, non-void orders (Bangkok day).

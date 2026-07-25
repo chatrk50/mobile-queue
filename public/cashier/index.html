@@ -3934,6 +3934,7 @@ window.showFeatures=async()=>{
     row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
     row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
     row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
+    row('pdpaNotice', f.pdpaNotice, IC.shield, 'แถบขอความยินยอม PDPA', f.pdpaNotice?'เปิดอยู่ — ลูกค้าใหม่เห็นแถบแจ้งการเก็บข้อมูล + ปุ่มยินยอม (ครั้งเดียวต่อคน)':'ปิดอยู่ — ไม่แสดงแถบบนหน้าลูกค้า · ความยินยอมที่เคยกดไว้ยังถูกเก็บ', false)+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ที่ลูกค้าสั่งแล้วไม่ชำระ จะถูกยกเลิกเองเมื่อเกินเวลาที่ตั้ง — กันรายการค้างสะสมในจอแคชเชียร์</div></div></div>
