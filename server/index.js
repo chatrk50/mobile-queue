@@ -144,7 +144,14 @@ app.get('/manifest.webmanifest', (req, res) => {
 app.use(express.static(join(__dirname, '..', 'public'), {
   // HTML must always revalidate so a redeploy reaches the LINE in-app browser / iPad immediately
   // (LIFF caching otherwise serves a stale page); other assets (css/js/img) can cache normally.
-  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate'); },
+  // Images/fonts default to max-age=0, so every repeat visit costs a revalidation round-trip per
+  // file — on a phone's mobile data that is seconds of stall before the menu paints, for bytes the
+  // device already has. A day of caching kills those round-trips; a replaced photo still refreshes
+  // within the day, and the HTML above always revalidates so code changes are never held back.
+  setHeaders: (res, p) => {
+    if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    else if (/\.(png|jpg|jpeg|webp|svg|gif|ico|woff2?)$/i.test(p)) res.setHeader('Cache-Control', 'public, max-age=86400');
+  },
 }));
 
 // Authoritative check for protected actions — counts wrong PINs toward a lockout.

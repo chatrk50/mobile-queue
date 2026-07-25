@@ -141,7 +141,12 @@ ok(near(close.overShort, 0), `counted 680 == expected → over/short 0 (got ${cl
   const c0 = Q.currentCashSession(1);   // baseline (the shared DB already holds earlier cash sales)
   const tk = db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,'PRC1','served')").run().lastInsertRowid;
   // A cash sale whose paid_at is 10 min BEFORE this round opened → money that existed before the round.
-  db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid','cash', datetime(?, '-10 minutes'), 1)").run(tk, 697, ses.opened_at);
+  // Clamped to the start of the Bangkok day: a plain `opened_at - 10 minutes` fell onto YESTERDAY
+  // whenever the suite ran in the first 10 minutes after Bangkok midnight, and dayCash (scoped to
+  // today) then correctly excluded the ฿697 — a 10-minutes-a-day fixture flake, not a product bug.
+  const bkkDayStart = db.prepare("SELECT datetime(date('now','+7 hours') || ' 00:00:00', '-7 hours') AS v").get().v;
+  const preRoundAt = db.prepare("SELECT max(datetime(?, '-10 minutes'), ?) AS v").get(ses.opened_at, bkkDayStart).v;
+  db.prepare("INSERT INTO orders (ticket_id,total,source,payment_status,payment_method,paid_at,branch_id) VALUES (?,?, 'cashier','paid','cash', ?, 1)").run(tk, 697, preRoundAt);
   const c2 = Q.currentCashSession(1);
   ok(near(c2.cashIn, c0.cashIn), `INVARIANT cash sold BEFORE the round opened does NOT change in-round cash (${c0.cashIn} → ${c2.cashIn})`);
   ok(near(c2.dayCash, c0.dayCash + 697), `INVARIANT the pre-round ฿697 still shows in the DAY total (${c0.dayCash} → ${c2.dayCash})`);

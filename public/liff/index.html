@@ -23,14 +23,33 @@
   /* Basket: no trailing divider under the last cart line (cleaner join to the totals).
      !important overrides the per-row inline border-bottom that renderBasket writes. */
   #basketList > div:last-child{ border-bottom:0 !important }
-  /* Live queue ring on the ticket screen — fills as the customer approaches their turn. */
-  .qring{position:relative;width:132px;height:132px;margin:4px auto 2px}
-  .qring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
-  .qring .track{fill:none;stroke:var(--line);stroke-width:9}
-  .qring .prog{fill:none;stroke:var(--accent);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .6s ease,stroke .3s}
-  .qring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .qring-num{font-size:38px;font-weight:900;color:var(--navy);line-height:1}
-  .qring-lbl{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
+  /* Wait status on the ticket screen. Deliberately a SENTENCE, not a number-in-a-circle: the old
+     progress ring put a second big figure next to the queue code and customers read the ring as
+     their queue number. One display number per screen — the code — and the wait reads as text. */
+  .waitline{display:inline-flex;align-items:center;gap:7px;background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:13.5px;
+    color:var(--muted);font-weight:600;line-height:1.3}
+  .waitline b{color:var(--navy);font-weight:800;font-size:15px}
+  .waitline.next{background:#eafaf4;border-color:#a7e8d2;color:#0f7a5f}
+  .waitline.next b{color:#0f7a5f}
+  /* Disclosure rows (same-phone payment tip): own chevron, no native triangle on iOS. */
+  #onePhoneTip summary::-webkit-details-marker{display:none}
+  #onePhoneTip summary::after{content:"▾";float:right;color:var(--muted);transition:transform .15s}
+  #onePhoneTip[open] summary::after{transform:rotate(180deg);display:inline-block}
+  /* Tablet: the product sheet stops being a phone-width bottom sheet and becomes a centred dialog —
+     bigger photo, two topping columns, so a 10" screen isn't a 460px strip in a grey field.
+     !important throughout: the sheet's size and anchoring are inline attributes on the element, so
+     a plain rule here would lose to them. */
+  @media (min-width:640px){
+    #drinkSheet{ align-items:center !important; padding:24px }
+    #drinkSheet > .card{ max-width:640px !important; border-radius:22px !important; max-height:88vh !important }
+    #drinkSheet #dsImg{ height:240px !important }
+    #drinkSheet #dsName{ font-size:22px }
+    #drinkSheet #dsTops{ display:grid; grid-template-columns:1fr 1fr; column-gap:22px }
+    #drinkSheet .sweetseg-b{ font-size:14px; padding:11px 0 }
+    #orderDetailSheet{ align-items:center !important; padding:24px }
+    #orderDetailSheet > .card{ max-width:560px !important; border-radius:22px !important; max-height:80vh !important }
+  }
   @keyframes sendspin{ to{transform:rotate(360deg)} }
   @keyframes mascotBounce{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
   .mascot-bounce{ animation:mascotBounce 1.8s ease-in-out infinite }
@@ -247,13 +266,8 @@
     <h2 id="tStore" class="muted">—</h2>
     <p id="tCodeLabel" class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
-    <div id="tStatusWrap" style="margin:18px 0">
-      <div id="tAheadWrap">
-        <div class="qring">
-          <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"></circle><circle id="qringFill" class="prog" cx="60" cy="60" r="52" stroke-dasharray="326.726" stroke-dashoffset="326.726"></circle></svg>
-          <div class="qring-center"><div class="qring-num" id="tAhead">–</div><div class="qring-lbl">คิวก่อนหน้า</div></div>
-        </div>
-        <div class="pill soon" id="tEta" style="display:inline-block;margin-top:6px"></div></div>
+    <div id="tStatusWrap" style="margin:14px 0">
+      <div id="tAheadWrap"><div class="waitline" id="tWait"></div></div>
       <div id="tCalled" style="display:none">
         <div class="callcard">
           <div style="font-size:15px;font-weight:700">🎉 ถึงคิวของคุณแล้ว!</div>
@@ -273,7 +287,9 @@
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 12px">
       <!-- เลือกวิธีชำระเงิน -->
       <div id="payChoice" style="display:none;margin-top:12px">
-        <div id="payReassure" style="margin:0 0 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;text-align:center;color:#dc2626;font-weight:800;font-size:13px">⏳ ออเดอร์เริ่มทำหลังชำระเงินสำเร็จเท่านั้น</div>
+        <!-- Informational, not an error: red panels here read as "something went wrong". One quiet
+             line, stated once — the confirm screens no longer repeat it. -->
+        <div id="payReassure" class="muted" style="margin:0 0 12px;text-align:center;font-size:12.5px">ออเดอร์เริ่มทำหลังชำระเงินสำเร็จ</div>
         <div id="payChoiceLabel" class="muted" style="font-size:12px;margin-bottom:6px;text-align:center">เลือกวิธีชำระเงิน</div>
         <div id="payBtnRow">
           <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
@@ -292,8 +308,7 @@
             <div style="font-size:12px;color:var(--muted)">แจ้งพนักงานที่เคาน์เตอร์</div>
             <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:2px">ออเดอร์ #<span id="counterRefNum">-</span> · ฿<span id="counterRefAmt">0</span></div>
           </div>
-          <div style="font-size:13.5px;margin-top:8px;color:#dc2626;font-weight:700">ออเดอร์จะถูกดำเนินการหลังชำระเงินสำเร็จเท่านั้น · รับหมายเลขคิวหลังชำระ</div>
-          <div class="muted" style="font-size:11.5px;margin-top:8px">เปลี่ยนใจ? กด "ยกเลิกออเดอร์" ด้านล่างเพื่อสั่งใหม่</div>
+          <div class="muted" style="font-size:12.5px;margin-top:8px">รับหมายเลขคิวหลังชำระเงิน</div>
         </div>
         <div id="ppQrWrap" style="display:none;margin-top:10px;text-align:center">
           <div id="qrCountdown" style="display:inline-flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-weight:800;font-size:12.5px;padding:6px 12px;border-radius:999px;margin-bottom:10px"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>กรุณาชำระภายใน <span id="qrCountdownTxt">15:00</span> นาที</div>
@@ -302,20 +317,22 @@
           </div>
           <div id="ppQrNote" class="muted" style="font-size:12px;margin:4px 0 10px">สแกนด้วยแอปธนาคาร · จ่ายตามยอด แล้วกดยืนยันด้านล่าง</div>
           <button class="ghost" id="saveQrBtn" style="width:100%;margin-bottom:8px" onclick="saveQR()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>บันทึกรูป QR</button>
-          <!-- one-phone tip: how to pay with the banking app on the SAME phone -->
-          <div id="onePhoneTip" style="text-align:left;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5;margin-bottom:10px;color:#334155">
-            <b style="color:var(--navy)">จ่ายในมือถือเครื่องเดียว</b> · บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span>
-          </div>
+          <!-- Same-phone flow behind a disclosure: most customers scan from a second device and never
+               need it, so it stays one line instead of a blue panel + a hint + a chip strip.
+               The bank chips live inside because they only matter for this flow. -->
+          <details id="onePhoneTip" style="text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.5;margin-bottom:10px;color:#334155">
+            <summary style="cursor:pointer;font-weight:700;color:var(--navy);list-style:none">จ่ายในมือถือเครื่องเดียว?</summary>
+            <div style="margin-top:6px">บันทึก/แคป QR → เปิดแอปธนาคาร → สแกนจากอัลบั้ม → จ่าย → <span id="onePhoneTipStep4">กลับมาแนบสลิป</span></div>
           <!-- bank-app strip: tap opens that bank's app (best-effort deep link) — when payMethod is
                kbank, setQrFor() hides all but K PLUS since that QR only works with Kbank's app. -->
-          <div id="bankIconStrip" style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <span id="bankIconHint" class="muted" style="font-size:10.5px;width:100%;margin-bottom:2px">แตะไอคอนเพื่อเปิดแอปธนาคาร</span>
+          <div id="bankIconStrip" style="display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:wrap;margin-top:8px">
             <span data-bank="kplus" onclick="openBankApp('kplus')" style="cursor:pointer;background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">K PLUS</span>
             <span data-bank="scbeasy" onclick="openBankApp('scbeasy')" style="cursor:pointer;background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">SCB EASY</span>
             <span data-bank="ktbnext" onclick="openBankApp('ktbnext')" style="cursor:pointer;background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">KTB NEXT</span>
             <span data-bank="bualuang" onclick="openBankApp('bualuang')" style="cursor:pointer;background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">Bualuang</span>
             <span data-bank="ttbtouch" onclick="openBankApp('ttbtouch')" style="cursor:pointer;background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">ttb touch</span>
           </div>
+          </details>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
           <button class="ok" id="slipBtn" style="width:100%;display:none;background:var(--accent2);color:#06281f" onclick="document.getElementById('slipFile').click()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg><span id="slipBtnLabel">แนบสลิป</span></button>
           <button class="ghost" id="claimBtn" style="width:100%;margin-top:8px" onclick="claimPaid()"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ฉันชำระแล้ว (รอแคชเชียร์ตรวจ)</button>
@@ -325,7 +342,7 @@
       <div id="counterInfo" style="display:none;text-align:center;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div>
         <div class="muted" style="font-size:13px;margin:4px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div>
-        <img id="counterPoster" src="/assets/4060.png" alt="" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display='none'">
+        <img id="counterPoster" src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display='none'">
       </div>
       <!-- paid online but can't come — request a refund (cashier processes it) -->
       <button id="refundReqBtn" class="ghost" style="width:100%;display:none;margin-top:10px;font-size:13px;color:var(--danger);border-color:var(--danger)" onclick="requestRefund()">ขอคืนเงิน (จ่ายแล้วแต่มารับไม่ได้)</button>
@@ -478,7 +495,7 @@
     </div>
     <!-- STAMP/REWARD CARD: visual punch-card art (10 slots) — filled stars = progress toward a free redeem. -->
     <div id="memberStampCard" style="display:none;margin-top:11px;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(14,40,55,.4)">
-      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" style="width:100%;display:block">
+      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" loading="lazy" decoding="async" style="width:100%;display:block">
       <div id="stampName" style="position:absolute;top:4.5%;left:4.8%;width:28%;height:18%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9.5px;font-weight:800;color:#8a5a12;line-height:1.15;padding:0 3px;overflow:hidden"></div>
       <div id="stampGrid" style="position:absolute;top:47%;left:12%;width:76%;height:26%;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr)"></div>
       <div id="stampMsg1" style="position:absolute;bottom:3%;left:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
@@ -1098,13 +1115,16 @@ function itemIcon(m){
   return '🍦';
 }
 // Picture for a menu item: a cell of the composite photo (grid:N), a real URL, or emoji.
+// Menu thumbnails are ~70KB each and the list can run to 100+ items — on a phone's mobile data that
+// is megabytes fetched for rows nobody scrolls to. lazy+async defers them until they near the
+// viewport (and keeps sheets that are still display:none from fetching at all).
 function itemImg(m){
   const fb=itemIcon(m);
   if(m.image && m.image.slice(0,5)==='grid:'){
     const n=+m.image.slice(5)||0, col=n%4, row=(n/4)|0;
-    return `<img class="sprite" src="/assets/menu-grid.png" style="left:-${col*100}%;top:-${row*100}%" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+    return `<img class="sprite" loading="lazy" decoding="async" src="/assets/menu-grid.png" style="left:-${col*100}%;top:-${row*100}%" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   }
-  if(m.image) return `<img src="${esc(m.image)}" alt="" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
+  if(m.image) return `<img src="${esc(m.image)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   return fb;
 }
 async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; }
@@ -1603,7 +1623,7 @@ window.openPayPicker=(mode)=>{
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('')
-    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
@@ -1724,7 +1744,6 @@ function setQrFor(isKbank){
   const strip=$('bankIconStrip');
   if(strip){
     strip.querySelectorAll('[data-bank]').forEach(el=>{ el.style.display = (isKbank && el.dataset.bank!=='kplus') ? 'none' : ''; });
-    const hint=$('bankIconHint'); if(hint) hint.textContent = isKbank ? 'แตะไอคอนเพื่อเปิดแอป K PLUS' : 'แตะไอคอนเพื่อเปิดแอปธนาคาร';
   }
   startQrCountdown();
 }
@@ -1971,13 +1990,12 @@ function render(v){
   }
   if(v.status==='waiting'){
     show('tAheadWrap',true); show('tCalled',false);
-    $('tAhead').textContent = v.ahead;
-    // Ring fills as the queue ahead of them shrinks (stateless scale so it's stable across reloads);
-    // turns mint-green when they're basically next.
-    { const C=326.726, SCALE=8, a=Math.max(0,v.ahead|0), prog=Math.min(1,Math.max(0,(SCALE-Math.min(a,SCALE))/SCALE)), f=$('qringFill');
-      if(f){ f.style.strokeDashoffset=String(C*(1-prog)); f.style.stroke=a<=1?'var(--accent2)':'var(--accent)'; } }
-    const mpg = cfg.minutesPerGroup || 4;
-    $('tEta').textContent = v.ahead>0 ? `รอประมาณ ~${v.ahead*mpg} นาที` : "คุณเป็นคิวถัดไป!";
+    // One sentence, one weight: the ahead-count sits inline so it can't be mistaken for the code.
+    const mpg = cfg.minutesPerGroup || 4, a = Math.max(0, v.ahead|0), w = $('tWait');
+    w.className = 'waitline' + (a===0 ? ' next' : '');
+    w.innerHTML = a>0
+      ? `รออีก <b>${a}</b> คิว · ประมาณ <b>${a*mpg}</b> นาที`
+      : 'คุณเป็นคิวถัดไป — เตรียมตัวรับได้เลย';
     $('tNotifyNote').textContent = cfg.lineEnabled
       ? `เราจะแจ้งทาง LINE เมื่อเหลืออีก ${cfg.threshold} คิว`
       : `(โหมดทดสอบ) แจ้งเตือนเมื่อเหลือ ${cfg.threshold} คิว — ดูที่ server log`;

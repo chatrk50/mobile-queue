@@ -12,7 +12,16 @@
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) — left aligned */
-  #adminMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
+  /* Header action bar: state chips keep their labels (a cashier must READ them at a glance), tools
+     collapse to 38px icon squares — that is what stops the bar wrapping onto three rows. Every icon
+     button carries title + aria-label, so icon-only never means unlabelled. */
+  .hdr-actions{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; position:relative; }
+  .hdr-actions > button, .hdr-actions > .btn{ padding:7px 12px; font-size:13px; }
+  .hdr-actions .ic-btn{ width:38px; height:38px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+  .hdr-actions .ic-btn svg{ margin:0; width:19px; height:19px; }
+  .hdr-sep{ width:1px; align-self:stretch; min-height:26px; background:var(--line); margin:0 3px; }
+  #adminMenu a.adm{ text-decoration:none; color:inherit; }
+  #adminMenu button.adm, #adminMenu a.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
   #adminMenu button.adm svg{ flex:none; margin:0; }
   #adminMenu button.adm:hover{ background:var(--surface,#f1f5f9); }
   #adminMenu .admhdr{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#64748b); padding:8px 14px 3px; }
@@ -125,22 +134,27 @@
         <span class="muted" style="font-size:13px;font-weight:500">แคชเชียร์</span>
       </div>
     </div>
-    <div class="row" style="gap:8px;position:relative">
-      <a class="btn ghost" style="padding:6px 12px;font-size:13px" href="/">← กลับ</a>
-      <button id="storeBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleStore()"></button>
+    <!-- Header zones, left→right: STATE (what the shop is doing) · TOOLS (icon-only, learned fast by
+         daily users) · จัดการ. Everything rare — กลับหน้าลูกค้า, ออกจากระบบ — lives in the gear menu.
+         Before this the bar was 11 same-looking pills wrapping onto three rows with no grouping. -->
+    <div class="hdr-actions">
+      <button id="storeBtn" style="display:none" onclick="toggleStore()"></button>
       <!-- Stops LINE orders only; the counter keeps selling. Separate from ร้านเปิด/ปิด on purpose:
            "ปิดร้าน" is about opening hours, this is about the online channel. -->
-      <button id="onlineBtn" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleOnlineOrders()"></button>
+      <button id="onlineBtn" style="display:none" onclick="toggleOnlineOrders()"></button>
+      <span class="hdr-sep"></span>
       <!-- Time clock: every signed-in staffer clocks themselves in/out. Drives the day's REAL labour cost. -->
-      <button id="clockBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleClock()"></button>
-      <button id="historyBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="showHistory()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติ</button>
-      <button id="custBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openCustLookup()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ลูกค้า</button>
-      <button id="scanBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตร</button>
-      <button id="soundBtn" class="ghost" style="display:none;padding:6px 10px;font-size:15px" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์">🔔</button>
+      <button id="clockBtn" class="ghost ic-btn" style="display:none" onclick="toggleClock()" title="ลงเวลาเข้างาน" aria-label="ลงเวลาเข้างาน"></button>
+      <button id="historyBtn" class="ghost ic-btn" style="display:none" onclick="showHistory()" title="ประวัติออเดอร์" aria-label="ประวัติออเดอร์"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg></button>
+      <button id="custBtn" class="ghost ic-btn" style="display:none" onclick="openCustLookup()" title="ค้นหาลูกค้า" aria-label="ค้นหาลูกค้า"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></button>
+      <button id="scanBtn" class="ghost ic-btn" style="display:none" onclick="openScanner()" title="สแกนบัตรลูกค้า" aria-label="สแกนบัตรลูกค้า"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg></button>
+      <button id="soundBtn" class="ghost ic-btn" style="display:none" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เสียงเตือนออเดอร์ใหม่จากไลน์"></button>
       <!-- Device-fit: tap to cycle layout อัตโนมัติ → มือถือ → แท็บเล็ต → คอม (persisted) -->
-      <button id="devBtn" class="ghost" style="padding:6px 10px;font-size:13px" onclick="cycleDevMode()" title="ปรับหน้าจอตามอุปกรณ์"></button>
-      <button id="adminBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
-      <button id="logoutBtn" class="ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="logout()">ออกจากระบบ</button>
+      <button id="devBtn" class="ghost ic-btn" onclick="cycleDevMode()"></button>
+      <button id="adminBtn" class="ghost" style="display:none" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>จัดการ ▾</button>
+      <!-- Stays in the bar, not in the gear menu: a plain cashier never sees the gear and still has
+           to be able to end their shift. -->
+      <button id="logoutBtn" class="ghost ic-btn" style="display:none" onclick="logout()" title="ออกจากระบบ" aria-label="ออกจากระบบ"><svg class="ic" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></button>
       <!-- Owner/manager tools, collapsed under the gear. Buttons keep their own onclick + role gating. -->
       <div id="adminMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(22,49,79,.22);padding:6px;min-width:230px;max-height:min(72vh,560px);overflow-y:auto;flex-direction:column;gap:2px">
         <div class="admgrp"><div class="admhdr c1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ดูยอด</div>
@@ -166,6 +180,7 @@
           <button id="menuBtn" class="ghost adm" style="display:none" onclick="showMenu()"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</button>
           <button id="staffBtn" class="ghost adm" style="display:none" onclick="showStaff()"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</button>
           <button class="ghost adm" onclick="forceUpdate()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>อัปเดตแอป (เวอร์ชันล่าสุด)</button>
+          <a class="btn ghost adm" href="/" style="text-decoration:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>ไปหน้าร้านลูกค้า</a>
         </div>
       </div>
     </div>
@@ -1223,16 +1238,17 @@ const IC={
 // อัตโนมัติ (responsive CSS decides) → มือถือ → แท็บเล็ต → คอม. A class on <html> pins the layout;
 // the choice persists per device. SVG line icons per the icon theme (no emoji).
 const DEV_MODES=[
-  ['auto','อัตโนมัติ','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
-  ['phone','มือถือ','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>'],
-  ['tablet','แท็บเล็ต','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M11 18h2"/></svg>'],
-  ['desktop','คอม','<svg class="ic" viewBox="0 0 24 24" style="margin:0 4px 0 0"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg>'],
+  ['auto','อัตโนมัติ','<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
+  ['phone','มือถือ','<svg class="ic" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>'],
+  ['tablet','แท็บเล็ต','<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M11 18h2"/></svg>'],
+  ['desktop','คอม','<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg>'],
 ];
 function applyDevMode(mode){ const h=document.documentElement;
   h.classList.remove('dev-phone','dev-tablet','dev-desktop');
   if(mode!=='auto') h.classList.add('dev-'+mode);
   const m=DEV_MODES.find(x=>x[0]===mode)||DEV_MODES[0];
-  const b=$('devBtn'); if(b) b.innerHTML=m[2]+m[1];
+  // Icon-only in the header — the icon itself (auto/phone/tablet/desktop) says which mode is active.
+  const b=$('devBtn'); if(b){ b.innerHTML=m[2]; b.title='หน้าจอ: '+m[1]+' — แตะเพื่อเปลี่ยน'; b.setAttribute('aria-label',b.title); }
 }
 window.cycleDevMode=()=>{ const cur=localStorage.getItem('dev_mode')||'auto';
   const i=DEV_MODES.findIndex(x=>x[0]===cur); const next=DEV_MODES[(i+1)%DEV_MODES.length][0];
@@ -2453,11 +2469,12 @@ function renderClockBtn(){ const b=$('clockBtn'); if(!b) return;
   if(!ME){ b.style.display='none'; return; }
   b.style.display='';
   const on=!!MY_SHIFT;
-  b.className=on?'':'ghost';
+  // Icon-only in the header; "am I clocked in?" is carried by the filled/outline state, not a word.
+  b.className=on?'ic-btn':'ghost ic-btn';
   b.style.background=on?'var(--accent2)':'transparent'; b.style.color=on?'#06281f':'var(--navy)';
-  b.innerHTML=(on?'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>ออกงาน'
-                 :'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>เข้างาน');
-  b.title=on?('เข้างานตั้งแต่ '+fmtDT(MY_SHIFT.clock_in)):'ลงเวลาเข้างาน'; }
+  b.innerHTML='<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  b.title=on?('เข้างานตั้งแต่ '+fmtDT(MY_SHIFT.clock_in)+' — แตะเพื่อออกงาน'):'ลงเวลาเข้างาน';
+  b.setAttribute('aria-label',b.title); }
 async function loadMyShift(){ if(!ME){ MY_SHIFT=null; renderClockBtn(); return; }
   try{ const r=await api('/api/shifts'); MY_SHIFT=r.mine||null; }catch(e){ MY_SHIFT=null; }
   renderClockBtn(); }
@@ -3473,7 +3490,13 @@ function zonePanel(z){
 
 // New-order sound on/off (cashier preference, remembered). Default on.
 function soundOn(){ try{ return localStorage.getItem('yodee_sound')!=='0'; }catch(e){ return true; } }
-function applySoundBtn(){ const b=$('soundBtn'); if(b) b.textContent = soundOn()?'🔔':'🔕'; }
+// Emoji bell → the same thin SVG line set as every other header icon (shop UI rule: one icon theme).
+const IC_BELL_ON='<svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+const IC_BELL_OFF='<svg class="ic" viewBox="0 0 24 24"><path d="M2 2l20 20"/><path d="M18 8a6 6 0 0 0-9.3-5M6 8c0 7-3 9-3 9h14"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+function applySoundBtn(){ const b=$('soundBtn'); if(!b) return; const on=soundOn();
+  b.innerHTML = on?IC_BELL_ON:IC_BELL_OFF;
+  b.style.color = on?'var(--navy)':'var(--muted)';
+  b.title = on?'เสียงเตือนออเดอร์ใหม่: เปิด':'เสียงเตือนออเดอร์ใหม่: ปิด'; }
 window.toggleSound=()=>{ const next=!soundOn(); try{ localStorage.setItem('yodee_sound', next?'1':'0'); }catch(e){}
   applySoundBtn(); toast(next?'🔔 เปิดเสียงเตือนออเดอร์ใหม่':'🔕 ปิดเสียงเตือนออเดอร์ใหม่'); if(next) beep(880); };
 // Two-tone chime for a new LINE order (distinct from the single payment beep). Respects the mute toggle.
