@@ -303,10 +303,9 @@
         </div>
         <div class="admgrp"><div class="admhdr c3"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
           <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
-          <button id="couponRepBtn" class="ghost adm" style="display:none" onclick="showCouponRep()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>รายงานคูปอง</button>
+          <button id="couponRepBtn" class="ghost adm" style="display:none" onclick="showCouponHub()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</button>
           <button id="reviewBtn" class="ghost adm" style="display:none" onclick="showReviews()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</button>
           <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
-          <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         </div>
         <div class="admgrp"><div class="admhdr c4"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
@@ -922,19 +921,41 @@
 </div>
 
 <!-- รายงานคูปอง: ส่งไปกี่ใบ กลับมาใช้กี่ใบ เป็นเงินเท่าไหร่ — เลือกช่วงเวลาได้ -->
-<div id="couponRepCard" class="card" style="display:none;max-width:720px;margin:14px auto">
+<!-- คูปอง & แคมเปญ hub — ONE page for everything coupon: what campaigns exist (and their ฿ values),
+     which coupons are still out there (liability), and what came back (report). Each tab loads its
+     own data only when opened, so opening the hub costs one small request, not five. -->
+<div id="couponRepCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
-    <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>รายงานคูปอง</h1>
+    <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</h1>
     <button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()">ปิด</button>
   </div>
-  <div class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap" id="crRange"></div>
-  <div class="row" style="gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <input id="crFrom" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-    <span class="muted" style="font-size:12px">ถึง</span>
-    <input id="crTo" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-    <button class="ghost" style="padding:7px 14px" onclick="loadCouponRep(null)">ดู</button>
+  <div id="chTabs" class="row" style="gap:6px;margin:12px 0 12px"></div>
+  <div id="chTab0" style="display:none">
+    <div id="chTplList"><p class="muted" style="font-size:12.5px">กำลังโหลด…</p></div>
+    <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:12px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:13px"><b style="color:var(--navy)">คูปองรหัส & ลิงก์รับคูปอง</b>
+          <div class="muted" style="font-size:11.5px">โค้ดให้ลูกค้าพิมพ์เอง / ลิงก์แจกในไลน์ — สร้างและแก้ไขที่หน้าคูปองรหัส</div></span>
+        <button class="ghost" style="padding:7px 14px;font-size:13px" onclick="showCoupons()">เปิดหน้าคูปองรหัส ›</button>
+      </div>
+    </div>
   </div>
-  <div id="crBody"></div>
+  <div id="chTab1" style="display:none">
+    <div id="chOutSum" style="margin-bottom:8px"></div>
+    <input id="chOutQ" type="search" placeholder="🔍 ค้นหาชื่อลูกค้า / ชื่อคูปอง" oninput="chOutSearch()"
+      style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13.5px;border:1.5px solid var(--line);border-radius:11px;margin-bottom:8px">
+    <div id="chOutList"></div>
+  </div>
+  <div id="chTab2" style="display:none">
+    <div class="row" style="gap:6px;margin:0 0 8px;flex-wrap:wrap" id="crRange"></div>
+    <div class="row" style="gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <input id="crFrom" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <span class="muted" style="font-size:12px">ถึง</span>
+      <input id="crTo" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <button class="ghost" style="padding:7px 14px" onclick="loadCouponRep(null)">ดู</button>
+    </div>
+    <div id="crBody"></div>
+  </div>
 </div>
 
 <div id="custListCard" class="card" style="display:none;max-width:760px;margin:14px auto">
@@ -963,7 +984,7 @@
     <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
     <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
     <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
-      <input type="checkbox" id="clCoupOn" onchange="document.getElementById('clCoupBox').style.display=this.checked?'':'none'" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
+      <input type="checkbox" id="clCoupOn" onchange="clCoupToggle(this)" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
     </label>
     <div id="clCoupBox" style="display:none;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:10px;margin-top:6px">
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
@@ -1507,7 +1528,7 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; } { const hb=$('homeBtn'); if(hb) hb.style.display=mgr?'':'none'; }
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     // Reviews carry free-text comments about staff → owner-only, same tier as พนักงาน and คูปอง.
     { const rb=$('reviewBtn'); if(rb) rb.style.display=own?'':'none'; }
     // Coupon figures are ordinary business numbers, so a manager may read them (matches the API gate).
@@ -3014,8 +3035,86 @@ function renderInsightsBody(d, box){
 // ---------- รายงานคูปอง ----------
 let _crDays=30;
 window.hideCouponRep=()=>{ $('couponRepCard').style.display='none'; $('dash').style.display=''; };
-window.showCouponRep=()=>{ hideAllPanels(); closeAdmin();
-  $('couponRepCard').style.display=''; $('dash').style.display='none'; loadCouponRep(30); };
+// The hub: tab 0 = campaigns/templates, 1 = outstanding, 2 = report. Data loads per tab on open.
+window.showCouponHub=(tab=0)=>{ hideAllPanels(); closeAdmin();
+  $('couponRepCard').style.display=''; $('dash').style.display='none'; chTab(tab); };
+window.showCouponRep=()=>showCouponHub(2);   // old entry points land on the report tab
+window.chTab=(i)=>{
+  const names=['แคมเปญ','คูปองคงค้าง','รายงาน'];
+  $('chTabs').innerHTML=names.map((n,x)=>`<button class="ghost" onclick="chTab(${x})" style="flex:1;padding:9px 6px;font-size:13px;font-weight:700;${x===i?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${n}</button>`).join('');
+  [0,1,2].forEach(x=>{ $('chTab'+x).style.display=x===i?'':'none'; });
+  if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(30);
+};
+// -------- tab 0: campaign templates (the ONE place giveaway values live) --------
+window.chLoadTpl=async()=>{
+  const box=$('chTplList');
+  let r; try{ r=await api('/api/admin/coupon-templates'); }
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  const own=(!ME||ME.role==='owner');
+  const num=(id,v,w)=>`<input id="${id}" type="number" inputmode="numeric" value="${v}" ${own?'':'disabled'} style="width:${w||64}px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;text-align:center">`;
+  const tplRow=(t)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <b style="font-size:13.5px;color:var(--navy)">${esc(t.name)}</b>
+        ${t.toggle?`<label class="row" style="gap:6px;align-items:center;font-size:12.5px;cursor:pointer"><input type="checkbox" id="chOn_${t.key}" ${t.on?'checked':''} ${own?'':'disabled'} style="width:17px;height:17px">เปิดใช้งาน</label>`:''}
+      </div>
+      <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value)}</span>
+        <span>อายุ ${num('chDay_'+t.key,t.days,54)} วัน</span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',${t.toggle})">บันทึก</button>`:''}
+      </div>
+    </div>`;
+  const lk=r.lucky||{};
+  box.innerHTML=(r.templates||[]).map(tplRow).join('')+
+    `<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:13.5px"><b style="color:var(--navy)">🎉 เลขนำโชค ${lk.number??''}</b>
+          <span class="muted" style="font-size:12px"> · ฿${lk.value??''} · ${lk.on?(lk.ready?'<b style="color:#16876f">เปิดอยู่</b>':'<b style="color:#b45309">เปิดแต่ยังไม่พร้อม</b>'):'ปิดอยู่'}</span></span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
+      </div>
+    </div>`;
+};
+window.chSaveTpl=async(key,hasToggle)=>{
+  const body={ value:Number($('chVal_'+key).value), days:Number($('chDay_'+key).value) };
+  if(hasToggle) body.on=$('chOn_'+key).checked;
+  try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify(body)}); toast('บันทึกแล้ว ✓'); chLoadTpl(); }
+  catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+};
+// -------- tab 1: outstanding wallet coupons (who holds what + total liability) --------
+let _chOutT=null;
+window.chOutSearch=()=>{ clearTimeout(_chOutT); _chOutT=setTimeout(()=>chLoadOut(0),300); };
+window.chLoadOut=async(offset=0)=>{
+  const list=$('chOutList'), q=($('chOutQ').value||'').trim();
+  if(!offset) list.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let r; try{ r=await api('/api/admin/coupons/outstanding?limit=50&offset='+offset+(q?'&q='+encodeURIComponent(q):'')); }
+  catch(e){ list.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  $('chOutSum').innerHTML=`<div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
+      <div><div style="font-size:20px;font-weight:800;color:var(--navy)">${r.total}</div><div class="muted" style="font-size:11px">ใบที่ยังไม่ถูกใช้</div></div>
+      <div><div style="font-size:20px;font-weight:800;color:#b45309">฿${r.liability}</div><div class="muted" style="font-size:11px">ภาระรวมถ้าใช้ทั้งหมด</div></div>
+    </div>`;
+  const own=(!ME||ME.role==='owner');
+  const rows=(r.rows||[]).map(x=>`<div class="row between" style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;gap:8px;align-items:center">
+      <span style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(x.name||x.key.slice(0,10)+'…')}</b>
+        <div class="muted" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.kindTh)} · ${esc(x.label)}</div></span>
+      <span style="flex:none;text-align:right"><b>฿${x.cap}</b><div class="muted" style="font-size:11px">ถึง ${x.expires}</div></span>
+      ${own?`<button class="ghost" style="flex:none;padding:5px 10px;font-size:11.5px;color:#b91c1c;border-color:#f3caca" onclick="chCancelCoupon(${x.id},'${esc(x.label).replace(/'/g,'')}')">ยกเลิก</button>`:''}
+    </div>`).join('');
+  const more=(offset+50<r.total)?`<button id="chOutMoreBtn" class="ghost" style="width:100%;margin-top:8px;padding:9px" onclick="chLoadOut(${offset+50})">ดูเพิ่ม (${r.total-offset-50} ใบ)</button>`:'';
+  if(offset){ const b=$('chOutMoreBtn'); if(b) b.remove(); list.insertAdjacentHTML('beforeend',rows+more); }
+  else list.innerHTML=rows?rows+more:'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">ไม่มีคูปองคงค้าง 🎉</p>';
+};
+// First time the win-back coupon box opens, prefill cap/days from the winback template so the
+// number the owner set in the hub is the number the form starts with (still editable per send).
+let _clTplLoaded=false;
+window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'none';
+  if(cb.checked&&!_clTplLoaded){ _clTplLoaded=true;
+    try{ const r=await api('/api/admin/coupon-templates');
+      const t=(r.templates||[]).find(x=>x.key==='winback');
+      if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ } } };
+window.chCancelCoupon=async(id,label)=>{
+  if(!confirm(`ยกเลิกคูปอง "${label}" ?\nลูกค้าจะไม่เห็นคูปองนี้อีก (เรียกคืนไม่ได้)`)) return;
+  try{ await api('/api/admin/customer-coupons/'+id+'/cancel',{method:'POST'}); toast('ยกเลิกคูปองแล้ว'); chLoadOut(0); }
+  catch(e){ toast('ยกเลิกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+};
 window.loadCouponRep=async(days)=>{
   const body=$('crBody'); if(!body) return;
   // A preset clears the custom dates, and picking dates clears the preset — otherwise the heading
@@ -3117,7 +3216,7 @@ function renderSettingsHub(){
     ${row('showLoyalty()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
     ${row('showTenders()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
     ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
-    ${row('openCampaigns()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','แคมเปญ & การตลาด','เลขนำโชค ดึงลูกค้ากลับอัตโนมัติ เพดานข้อความ',true)}
+    ${row('showCouponHub()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','คูปอง & แคมเปญ','มูลค่าของแถมทุกแบบ เลขนำโชค คูปองคงค้าง รายงาน',true)}
     ${row('showMenu()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
     ${row('showStaff()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
   </div>

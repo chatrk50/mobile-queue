@@ -222,8 +222,10 @@ app.post('/api/staff/logout', (req, res) => {
   res.json({ ok: true });
 });
 // Who am I (frontend reads this to show the logged-in staff + role).
+// pinOK, not the silent pinValueOK: a wrong explicit PIN here must cost an attempt like everywhere
+// else, otherwise this route is an unthrottled oracle for brute-forcing the legacy admin PIN.
 app.get('/api/staff/me', (req, res) => {
-  res.json({ staff: req.staff || null, legacyAdmin: pinValueOK(req) });
+  res.json({ staff: req.staff || null, legacyAdmin: pinOK(req) });
 });
 // Owner-only staff management.
 app.get('/api/staff', (req, res) => {
@@ -706,6 +708,28 @@ app.get('/api/reports/coupons', (req, res) => {
     res.json({ coupons: Q.couponReport({ from: req.query.from, to: req.query.to, days: req.query.days }),
                lucky: Q.luckyReport({ from: req.query.from, to: req.query.to, days: req.query.days }) });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Coupon templates: the ONE place ฿ values / expiry of automatic giveaways are defined.
+// Reading is manager material; changing a giveaway's value is a pricing decision → owner only.
+app.get('/api/admin/coupon-templates', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ templates: Q.couponTemplates(), lucky: Q.luckyStatus() });
+});
+app.post('/api/admin/coupon-templates/:key', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setCouponTemplate(req.params.key, req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Outstanding wallet coupons (who holds what + total liability) and per-coupon recall.
+app.get('/api/admin/coupons/outstanding', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.outstandingCoupons({ q: req.query.q, limit: Number(req.query.limit) || 50, offset: Number(req.query.offset) || 0 })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/admin/customer-coupons/:id/cancel', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cancelCustomerCoupon(Number(req.params.id), req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Feedback report — OWNER ONLY. Free-text comments are customers talking candidly about the shop
 // and its staff; they are not board/cashier material, so this sits behind ownerOK like the backup.

@@ -1425,6 +1425,65 @@ console.log('\n== Coupon report ==');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
 }
 
+console.log('\n== Coupon templates + outstanding + cancel ==');
+{
+  // Defaults must equal the values that were hard-coded before the registry existed — migrating to
+  // templates may not change a single baht of behaviour until the owner edits something.
+  const t0 = Q.couponTemplates();
+  ok(t0.length === 3, `couponTemplates returns 3 templates (got ${t0.length})`);
+  ok(t0.find((t) => t.key === 'birthday')?.value === 100 && t0.find((t) => t.key === 'reward')?.value === 49
+     && t0.find((t) => t.key === 'winback')?.value === 49,
+    'INVARIANT template defaults equal the old hard-coded values (birthday 100, reward 49, winback 49)');
+  ok(Q.couponTemplate('birthday').days === 30, 'INVARIANT default expiry stays 30 days');
+  let tplErr = null; try { Q.setCouponTemplate('nope', { value: 1 }); } catch (e) { tplErr = e.message; }
+  ok(tplErr === 'unknown_template', 'INVARIANT unknown template keys are rejected');
+  ok(Q.setCouponTemplate('reward', { value: 999999 }).value === 2000, 'INVARIANT values are clamped to a sane ceiling (฿2000)');
+  Q.setCouponTemplate('reward', { value: 49 });
+
+  // Owner edits the birthday value → the very next birthday coupon (row, label AND LINE text) follows.
+  const wasLoy = Q.loyaltyEnabled(); Q.setLoyaltyEnabled(true);
+  Q.setCouponTemplate('birthday', { value: 80, days: 20 });
+  const K = 'U' + '9'.repeat(32);
+  const bday = db.prepare("SELECT '1990-' || strftime('%m-%d', datetime('now','+7 hours')) b").get().b;
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'วันเกิดทดสอบ', ?)`).run(K, bday);
+  Q.issueBirthdayCoupons();
+  const bcc = Q.customerCoupons(K).find((c) => c.kind === 'birthday');
+  ok(!!bcc && bcc.free_cap === 80 && bcc.label.includes('80'), `INVARIANT birthday coupon takes value from the template (cap ${bcc && bcc.free_cap})`);
+
+  // Switch the campaign off → nobody new gets one, even with a birthday today.
+  Q.setCouponTemplate('birthday', { on: false });
+  const K2 = 'U' + '8'.repeat(32);
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'วันเกิดปิด', ?)`).run(K2, bday);
+  ok(Q.issueBirthdayCoupons().issued === 0, 'INVARIANT birthday template OFF stops the automation');
+  Q.setCouponTemplate('birthday', { on: true, value: 100, days: 30 });
+
+  // Win-back sends with no explicit cap inherit the winback template's value.
+  Q.setCouponTemplate('winback', { value: 60 });
+  const K3 = 'U' + '7'.repeat(32);
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ดึงกลับทดสอบ')`).run(K3);
+  const campT = await Q.sendCampaign({ keys: [K3], message: 'ทดสอบแม่แบบ', coupon: { label: 'คูปองแม่แบบ' } });
+  ok(campT.issuedCoupons === 1, 'INVARIANT with LINE stubbed the coupon still issues (UAT stays testable)');
+  ok(Q.customerCoupons(K3).find((c) => c.label === 'คูปองแม่แบบ')?.free_cap === 60,
+    'INVARIANT winback coupon default cap comes from the template');
+  Q.setCouponTemplate('winback', { value: 49 });
+
+  // Outstanding ledger: the coupons above appear with a liability total, and cancel recalls one.
+  const out = Q.outstandingCoupons({ q: 'วันเกิดทดสอบ' });
+  ok(out.total >= 1 && out.liability >= 80, `INVARIANT outstanding shows count + ฿ liability (n=${out.total}, ฿${out.liability})`);
+  const row = out.rows.find((r) => r.key === K);
+  ok(!!row && row.kindTh === 'วันเกิด', 'INVARIANT outstanding rows name the holder and the campaign in Thai');
+  Q.cancelCustomerCoupon(row.id);
+  ok(Q.customerCoupons(K).every((c) => c.id !== row.id), 'INVARIANT a cancelled coupon vanishes from the customer wallet');
+  ok(Q.outstandingCoupons({ q: 'วันเกิดทดสอบ' }).rows.every((r) => r.id !== row.id), 'INVARIANT and from the outstanding ledger');
+  let cErr = null; try { Q.cancelCustomerCoupon(row.id); } catch (e) { cErr = e.message; }
+  ok(cErr === 'coupon_not_cancellable', 'INVARIANT cancelling twice is refused');
+  let c404 = null; try { Q.cancelCustomerCoupon(99999999); } catch (e) { c404 = e.message; }
+  ok(c404 === 'coupon_not_found', 'INVARIANT cancelling a ghost id is refused');
+
+  Q.setLoyaltyEnabled(wasLoy);
+  for (const k of [K, K2, K3]) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(k); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(k); }
+}
+
 console.log('\n== Review: reasons + comment ==');
 {
   const mk = (code) => db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,?,'served')").run(code).lastInsertRowid;

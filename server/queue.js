@@ -477,30 +477,66 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   if (!msg) throw new Error('empty_message');
   const targets = [...new Set(keys)].filter((k) => String(k || '').startsWith('U')).slice(0, 500);
   if (!targets.length) throw new Error('no_targets');
+  const tplWb = couponTemplate('winback');
   const cp = coupon && coupon.label ? {
     label: String(coupon.label).slice(0, 80),
-    cap: Math.max(1, Math.min(500, Number(coupon.cap) || 49)),
-    days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || 30))),
+    cap: Math.max(1, Math.min(500, Number(coupon.cap) || tplWb.value)),
+    days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || tplWb.days))),
   } : null;
-  let sent = 0, failed = 0;
+  const expiresAt = cp ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d : null;
+  let sent = 0, failed = 0, issuedCoupons = 0;
   for (const key of targets) {
     let text = msg;
-    if (cp) {
-      const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d;
+    if (cp) text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
+    let ok = false;
+    try { ok = (await pushQueue(key, text, shopLink(), 'สั่งเลย', 'winback')) !== false; } catch { ok = false; }
+    if (ok) sent++; else failed++;
+    // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
+    // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
+    // reports false, so we still issue there or the whole flow would be untestable.
+    if (cp && (ok || !LINE_ENABLED)) {
       db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
         .run(key, cp.label, cp.cap, expiresAt);
-      text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
+      issuedCoupons++;
     }
-    try { if ((await pushQueue(key, text, shopLink(), 'สั่งเลย', 'winback')) !== false) sent++; else failed++; }
-    catch { failed++; }
   }
   const info = db.prepare(
     `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id)
      VALUES (?,?,?,?,?,?,?,?)`
   ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
-  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp };
+  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp, issuedCoupons };
 }
-const COUPON_KIND_TH = { winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', reward: 'สะสมครบ', lucky: 'เลขนำโชค' };
+// ---------- แม่แบบคูปอง (coupon templates) ----------
+// ONE registry defines every automatic giveaway's value/expiry, so the owner edits ฿ amounts on a
+// screen instead of in code. Backed by the same settings table the lucky campaign already uses;
+// lucky keeps its lucky:* keys and is shown alongside these in the hub UI.
+// `toggle:false` templates can't be switched off here: reward follows the loyalty switch (turning
+// it off alone would strand completed stamp cards), and winback is a manual send anyway.
+const TPL_DEFS = {
+  birthday: { name: 'ของขวัญวันเกิด', value: 100, days: 30, toggle: true },
+  reward:   { name: 'สะสมครบ → เครื่องดื่มฟรี', value: 49, days: 30, toggle: false },
+  winback:  { name: 'ดึงลูกค้ากลับ (ค่าเริ่มต้น)', value: 49, days: 30, toggle: false },
+};
+export function couponTemplate(key) {
+  const d = TPL_DEFS[key];
+  if (!d) throw new Error('unknown_template');
+  return {
+    key, name: d.name, toggle: d.toggle,
+    value: Math.max(1, Math.min(2000, Math.round(Number(getSetting(`tpl:${key}:value`, String(d.value))) || d.value))),
+    days: Math.max(1, Math.min(365, Math.round(Number(getSetting(`tpl:${key}:days`, String(d.days))) || d.days))),
+    on: d.toggle ? getSetting(`tpl:${key}:on`, '1') === '1' : true,
+  };
+}
+export function couponTemplates() { return Object.keys(TPL_DEFS).map(couponTemplate); }
+export function setCouponTemplate(key, { value, days, on } = {}) {
+  const d = TPL_DEFS[key];
+  if (!d) throw new Error('unknown_template');
+  if (value != null) setSetting(`tpl:${key}:value`, String(Math.max(1, Math.min(2000, Math.round(Number(value) || d.value)))));
+  if (days != null) setSetting(`tpl:${key}:days`, String(Math.max(1, Math.min(365, Math.round(Number(days) || d.days)))));
+  if (on != null && d.toggle) setSetting(`tpl:${key}:on`, on ? '1' : '0');
+  return couponTemplate(key);
+}
+const COUPON_KIND_TH = { winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', reward: 'สะสมครบ', lucky: 'เลขนำโชค', claim: 'ลิงก์รับคูปอง' };
 /**
  * Coupon performance for a Bangkok date range: how many went out, how many came back, and what it
  * actually cost. Redemptions are counted on the day they were USED (that is when the shop paid for
@@ -528,7 +564,7 @@ export function couponReport({ from = null, to = null, days = null } = {}) {
       WHERE used_at IS NOT NULL AND ${bkk('used_at')} BETWEEN ? AND ? GROUP BY kind`).all(f, t);
   const expired = db.prepare(
     `SELECT COUNT(*) n FROM customer_coupons
-      WHERE used_at IS NULL AND expires_at BETWEEN ? AND ?`).get(f, t).n || 0;
+      WHERE used_at IS NULL AND state != 'cancelled' AND expires_at BETWEEN ? AND ?`).get(f, t).n || 0;
   // Shop-wide CODE coupons live in a different table and already record their discount.
   const code = db.prepare(
     `SELECT COUNT(*) n, COALESCE(SUM(discount),0) value FROM coupon_uses
@@ -555,6 +591,36 @@ export function couponReport({ from = null, to = null, days = null } = {}) {
     rows,
     codeCoupons: { redeemed: code.n || 0, value: r2(code.value || 0) },
   };
+}
+
+/** Every live wallet coupon the shop currently owes, with WHO holds it and the total ฿ liability.
+ *  This is the number the owner never had: how much free product is promised and still out there. */
+export function outstandingCoupons({ q = '', limit = 50, offset = 0 } = {}) {
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  const term = String(q || '').trim();
+  const filter = term ? ` AND (cc.label LIKE ? OR COALESCE(c.name,'') LIKE ? OR cc.customer_key LIKE ?)` : '';
+  const args = term ? [`%${term}%`, `%${term}%`, `%${term}%`] : [];
+  const base = `FROM customer_coupons cc LEFT JOIN customers c ON c.line_user_id = cc.customer_key
+                WHERE cc.used_at IS NULL AND cc.state != 'cancelled' AND cc.expires_at >= ?${filter}`;
+  const tot = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(cc.free_cap),0) liability ${base}`).get(today, ...args);
+  const rows = db.prepare(
+    `SELECT cc.id, cc.customer_key AS key, COALESCE(c.name,'') AS name, cc.kind, cc.label,
+            cc.free_cap AS cap, date(cc.issued_at,'+7 hours') AS issued, cc.expires_at AS expires
+       ${base} ORDER BY cc.expires_at, cc.id LIMIT ? OFFSET ?`
+  ).all(today, ...args, Math.max(1, Math.min(200, limit)), Math.max(0, offset));
+  return { total: tot.n || 0, liability: r2(tot.liability || 0), today,
+           rows: rows.map((r) => ({ ...r, kindTh: COUPON_KIND_TH[r.kind] || r.kind })) };
+}
+/** Owner recalls a mis-issued coupon. Only unused coupons can be cancelled; the customer simply
+ *  stops seeing it. Issued-count history is kept — the report still shows it went out. */
+export function cancelCustomerCoupon(ccId, actorId = null) {
+  const cc = db.prepare('SELECT id, label, customer_key FROM customer_coupons WHERE id=?').get(ccId);
+  if (!cc) throw new Error('coupon_not_found');
+  const r = db.prepare(`UPDATE customer_coupons SET state='cancelled' WHERE id=? AND used_at IS NULL AND state != 'cancelled'`).run(ccId);
+  if (!r.changes) throw new Error('coupon_not_cancellable');
+  logSaleEvent({ branchId: null, ticketId: null, orderId: null, type: 'coupon_cancel', amount: 0, actor: actorId,
+                 meta: { couponId: Number(ccId), label: cc.label, customer: cc.customer_key } });
+  return { ok: true, id: Number(ccId) };
 }
 
 export function listCampaigns(limit = 20) {
@@ -872,7 +938,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
   // Paid cup + topping unit counts for the day (header summary). Drinks = kind 'base'.
   const unitRow = db.prepare(
     `SELECT COALESCE(SUM(CASE WHEN oi.kind = 'base' THEN oi.qty END), 0) AS cups,
-            COALESCE(SUM(CASE WHEN oi.kind = 'topping' THEN oi.qty END), 0) AS toppings
+            COALESCE(SUM(CASE WHEN oi.kind = 'addon' THEN oi.qty END), 0) AS toppings
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
       WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}`
   ).get(D, ...b);
@@ -2201,7 +2267,6 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
  *  only (never claws back other stamps). Runs lazily and idempotently: loops while the balance
  *  still covers a card, so multi-card balances convert fully and pre-existing balances convert
  *  the first time the customer's coupons are looked at. */
-const REWARD_COUPON_DAYS = 30;
 export function convertReadyRewards(customerKey) {
   if (!customerKey || !loyaltyEnabled()) return [];
   const issued = [];
@@ -2209,14 +2274,15 @@ export function convertReadyRewards(customerKey) {
     const bal = loyaltyBalance(customerKey).points;
     const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
     if (!reward) break;
-    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
+    const tpl = couponTemplate('reward');
+    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
     let ccId = null;
     db.transaction(() => {
       db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
       db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
         .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
-      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, 49, ?, 'reward')`)
-        .run(customerKey, reward.name, expiresAt).lastInsertRowid;
+      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, ?, ?, 'reward')`)
+        .run(customerKey, reward.name, tpl.value, expiresAt).lastInsertRowid;
     })();
     issued.push({ id: Number(ccId), label: reward.name, expiresAt });
   }
@@ -2227,7 +2293,7 @@ export function customerCoupons(customerKey) {
   if (!customerKey) return [];
   return db.prepare(
     `SELECT * FROM customer_coupons
-      WHERE customer_key=? AND used_at IS NULL AND expires_at >= date('now','+7 hours')
+      WHERE customer_key=? AND used_at IS NULL AND state != 'cancelled' AND expires_at >= date('now','+7 hours')
       ORDER BY expires_at, id`
   ).all(customerKey);
 }
@@ -3178,11 +3244,12 @@ export function awardPoints(orderId) {
   return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points, coupons };
 }
 
-/** Issue this year's birthday coupon (free drink, capped ฿100, good 30 days) to every customer
- *  whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic sweep;
- *  idempotent per customer per calendar year. */
+/** Issue this year's birthday coupon (free drink, value/expiry from the birthday template) to every
+ *  customer whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic
+ *  sweep; idempotent per customer per calendar year. */
 export function issueBirthdayCoupons() {
-  if (!loyaltyEnabled()) return { issued: 0 };
+  const tpl = couponTemplate('birthday');
+  if (!loyaltyEnabled() || !tpl.on) return { issued: 0 };
   const md = bkkMonthDay(), yr = bkkYear();
   const rows = db.prepare(
     `SELECT c.line_user_id AS key FROM customers c
@@ -3191,11 +3258,11 @@ export function issueBirthdayCoupons() {
                          WHERE cc.customer_key = c.line_user_id AND cc.kind='birthday'
                            AND strftime('%Y', datetime(cc.issued_at, '+7 hours')) = ?)`
   ).all(md, yr);
-  const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+${REWARD_COUPON_DAYS} days') d`).get().d;
+  const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
   for (const r of rows) {
-    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, 100, ?, 'birthday')`)
-      .run(r.key, 'ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿100)', expiresAt);
-    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿100) — กดใช้ได้เองในเมนูคูปอง ภายใน ${REWARD_COUPON_DAYS} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, ?, ?, 'birthday')`)
+      .run(r.key, `ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿${tpl.value})`, tpl.value, expiresAt);
+    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿${tpl.value}) — กดใช้ได้เองในเมนูคูปอง ภายใน ${tpl.days} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };
 }
@@ -3825,7 +3892,8 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
 }
 
 /** Redeem a stamp reward against a specific UNPAID LINE order: deduct the reward's stamps and
- *  apply a free-drink discount (cheapest drink in the cart, capped 49฿) to that order. The order
+ *  apply a free-drink discount (cheapest drink in the cart, capped at the reward template's value)
+ *  to that order. The order
  *  already carries the customer's line_user_id, so no QR/id handshake is needed at the counter —
  *  the cashier just taps "แลกฟรี" on the customer's order. One redemption per order. */
 export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
@@ -3855,7 +3923,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
   ).get(order.id)?.p;
   const room = Math.max(0, order.total - (order.discount || 0));
-  const free = Math.round(Math.min(49, cheapest || room, room) * 100) / 100;
+  const free = Math.round(Math.min(couponTemplate('reward').value, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = '🎁 แลกแต้ม: ' + reward.name;
   db.transaction(() => {
@@ -3884,6 +3952,7 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   if (!key) throw new Error('no_customer');
   const cc = db.prepare('SELECT * FROM customer_coupons WHERE id=?').get(ccId);
   if (!cc || cc.customer_key !== key) throw new Error('coupon_not_found');
+  if (cc.state === 'cancelled') throw new Error('coupon_cancelled');
   if (cc.used_at) throw new Error('coupon_used');
   if (db.prepare("SELECT date('now','+7 hours') > ? x").get(cc.expires_at).x === 1) throw new Error('coupon_expired');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -3903,7 +3972,7 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   // already used, instead of the discount being applied twice.
   // used_value = what the shop actually gave away, not the coupon's ceiling — the report is only
   // honest if it adds up real discounts.
-  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed', used_value=? WHERE id=? AND used_at IS NULL`).run(order.id, free, cc.id);
+  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed', used_value=? WHERE id=? AND used_at IS NULL AND state != 'cancelled'`).run(order.id, free, cc.id);
   if (!burned.changes) throw new Error('coupon_used');
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
