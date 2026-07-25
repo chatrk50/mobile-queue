@@ -701,6 +701,26 @@ try {
 } catch { /* older SQLite without partial indexes — app-level guard still applies */ }
 // Claim tokens must be unique — SQLite can't add a UNIQUE column via ALTER, so index it after.
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_coupons_claim_token ON coupons(claim_token) WHERE claim_token IS NOT NULL'); } catch { /* ignore */ }
+// ---- Hot-path indexes on the tables that grow forever ----
+// Each of these backs a query that runs on every order, payment or customer lookup and was doing a
+// full table scan — invisible on a fresh shop, linearly worse every month the shop trades.
+for (const stmt of [
+  // orderForTicket (runs per ticket inside every zone snapshot) + every stock/coupon/report path
+  'CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)',
+  // the "already earned for this order?" guard on EVERY payment, over an append-only ledger
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_moves_order ON loyalty_moves(order_id)',
+  // customer profile / CRM / coupon-audience lookups, all keyed on who owns the ticket
+  'CREATE INDEX IF NOT EXISTS idx_tickets_line_user ON tickets(line_user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_tickets_customer_key ON tickets(customer_key)',
+  // re-opening wallet coupons when an order is voided
+  'CREATE INDEX IF NOT EXISTS idx_customer_coupons_order ON customer_coupons(used_order_id)',
+  // coupon report + monthly win-back cap, both grouped by kind over a date range
+  'CREATE INDEX IF NOT EXISTS idx_customer_coupons_kind ON customer_coupons(kind, issued_at)',
+  // date-ranged SUM(discount) for code coupons in the same report
+  'CREATE INDEX IF NOT EXISTS idx_coupon_uses_at ON coupon_uses(at)',
+  // order history: filtered by status, sorted by close time
+  'CREATE INDEX IF NOT EXISTS idx_tickets_status_closed ON tickets(status, closed_at)',
+]) { try { db.exec(stmt); } catch { /* index already exists / older SQLite */ } }
 // Backfill the new state column from the old used_at truth, once.
 try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
 
