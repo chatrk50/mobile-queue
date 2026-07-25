@@ -125,6 +125,52 @@
   html.dev-phone .hdr-actions .hdr-sep{ display:none; }
   #moreMenu button.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:13.5px; border-radius:10px; text-align:left; }
   #moreMenu button.adm svg{ flex:none; margin:0; }
+
+  /* ---------- KPI STRIPS ----------
+     These were flex rows with min-width per item, so on a phone five metrics fought over one line
+     and the labels broke mid-word ("กำไรขั้น ต้น"). A grid gives every metric an equal box and
+     drops to two-up on a phone instead of squeezing. */
+  .kgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; }
+  .kgrid > *{ text-align:center; min-width:0; }
+  .kgrid .kspan{ grid-column:1 / -1; }
+  @media (max-width:639px){ .kgrid{ grid-template-columns:repeat(2,1fr); } }
+
+  /* ---------- MASTER–DETAIL ON A PHONE ----------
+     .ms-split stacks at ≤760px, which put the edit form BELOW the whole list — with 125 menu items
+     the owner tapped a row, the row highlighted, and the form was thousands of pixels down, so it
+     looked like editing simply didn't exist. On a phone the detail pane becomes a bottom sheet. */
+  @media (max-width:760px){
+    .ms-split.picked .ms-edit{ position:fixed; left:0; right:0; bottom:0; top:auto; z-index:70;
+      max-height:86vh; overflow:auto; border-radius:18px 18px 0 0; background:#fff;
+      box-shadow:0 -10px 40px rgba(22,49,79,.28); padding:14px 14px 20px; overscroll-behavior:contain; }
+    .ms-split.picked::after{ content:""; position:fixed; inset:0; background:rgba(22,49,79,.4); z-index:69; }
+    .ms-split.picked .ms-close{ display:flex; }
+  }
+  .ms-close{ display:none; position:sticky; top:0; z-index:2; background:#fff; padding:2px 0 8px;
+    align-items:center; justify-content:flex-end; }
+
+  /* ---------- CUSTOMERS LIST ----------
+     Six columns behind a min-width:520px meant a 375px phone had to be dragged sideways to read a
+     row. On a phone the row becomes two lines and every number carries its own label, so nothing is
+     hidden and nothing scrolls horizontally. */
+  .cl-row{ display:grid; grid-template-columns:minmax(150px,2fr) 52px 76px 76px 46px 70px; gap:6px;
+    align-items:center; padding:8px 12px; }
+  .cl-num{ text-align:right; }
+  @media (max-width:639px){
+    #clList{ overflow-x:hidden !important; }
+    .cl-wrap{ min-width:0 !important; }
+    /* Three even columns, name spanning the top: free-flowing wrap left the five stats ragged over
+       three lines (112px a row). A 3-up grid lands them as an aligned 2×3 block instead — same
+       information, straight edges, shorter row. No wrapper element, so the desktop grid is intact. */
+    /* center, not baseline: baseline alignment reserved space above the name cell for its lower
+       baseline and silently added 27px to every row. */
+    .cl-row{ grid-template-columns:repeat(3,1fr); gap:4px 10px; align-items:center; padding:9px 12px; }
+    .cl-row .cl-head{ grid-column:1 / -1; }
+    /* label inline, not stacked: stacking doubled every cell and pushed a row to 160px. */
+    .cl-num{ text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cl-num::before{ content:attr(data-l) " "; font-size:10px; color:var(--muted); font-weight:600; }
+    .cl-head-row, .cl-filt{ display:none !important; }   /* header + per-column filters are desktop tools */
+  }
   /* Sweetness segmented pills (mirror the customer detail sheet) */
   .sweetseg{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
   .sweetseg-b{flex:1;min-width:56px;padding:10px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:14px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;transition:.1s}
@@ -1306,6 +1352,37 @@ window.toggleMore=(e)=>{ if(e) e.stopPropagation(); closeAdmin();
       const dm=DEV_MODES.find(x=>x[0]===cur)||DEV_MODES[0]; d.textContent='หน้าจอ: '+dm[1]; } }
   m.style.display=opening?'flex':'none'; };
 window.closeMore=()=>{ const m=$('moreMenu'); if(m) m.style.display='none'; };
+// ---------- MASTER–DETAIL: make the phone's detail pane a real sheet ----------
+// menu / staff / branch / stock all use .ms-split, and every one of them writes its edit form into
+// .ms-edit. On a phone that pane sits after the list, so with 125 menu items the form was miles
+// below the fold — tapping a row looked like it did nothing. One observer marks the split as
+// "picked" the moment the pane actually holds a form (a placeholder has no fields), and the CSS
+// turns it into a bottom sheet. Doing it here, once, keeps every renderer untouched.
+function msSync(pane){
+  const split=pane.closest('.ms-split'); if(!split) return;
+  const hasForm=!!pane.querySelector('input,select,textarea');
+  split.classList.toggle('picked', hasForm);
+  let close=pane.querySelector(':scope > .ms-close');
+  if(hasForm && !close){
+    close=document.createElement('div'); close.className='ms-close';
+    close.innerHTML='<button class="ghost" style="padding:6px 14px;font-size:13px">ปิด</button>';
+    close.querySelector('button').onclick=()=>msClose(pane);
+    pane.insertBefore(close, pane.firstChild);
+  } else if(!hasForm && close){ close.remove(); }
+}
+function msClose(pane){
+  const split=pane.closest('.ms-split'); if(split) split.classList.remove('picked');
+  // Drop the form too, so re-selecting the SAME row still re-renders and re-opens the sheet.
+  const inner=pane.querySelector(':scope > div:not(.ms-close)');
+  if(inner) inner.innerHTML='<p class="muted" style="text-align:center;padding:34px 8px">เลือกรายการเพื่อแก้ไข</p>';
+  const c=pane.querySelector(':scope > .ms-close'); if(c) c.remove();
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('.ms-edit').forEach(pane=>{
+    msSync(pane);
+    new MutationObserver(()=>msSync(pane)).observe(pane,{childList:true,subtree:true});
+  });
+});
 document.addEventListener('click',(e)=>{ const m=$('moreMenu'); if(!m||m.style.display!=='flex') return;
   if(e.target.closest('#moreMenu button')) { closeMore(); return; }
   if(!e.target.closest('#moreMenu') && !e.target.closest('#moreBtn')) closeMore();
@@ -1651,9 +1728,9 @@ function renderDetailSummary(){
   const cups=DET.cups||0, rev=DET.paidTotal||0;
   const top=(DET.topItems||[])[0];
   const cancelRate=tx.length?Math.round((cancelN/tx.length)*1000)/10:0;
-  const kpi=(v,l,c)=>`<div style="flex:1;min-width:78px;text-align:center"><div style="font-size:20px;font-weight:800;color:${c||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
+  const kpi=(v,l,c)=>`<div><div style="font-size:20px;font-weight:800;color:${c||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
   box.innerHTML=`<div style="background:var(--surface,#f1f5f9);border-radius:14px;padding:12px 10px">
-    <div class="row" style="gap:6px;flex-wrap:wrap">
+    <div class="kgrid">
       ${kpi(tx.length,'ออเดอร์')}
       ${kpi(cups+' แก้ว','ขายได้')}
       ${kpi(baht2(rev),'ยอดขาย','#16876f')}
@@ -2277,12 +2354,19 @@ window.ctlDay=(delta)=>{ const p=(CTLDATE||'').split('-'); let b=(p.length===3)?
 const _ctlHM=(at)=>{ try{ return new Date((at||'').replace(' ','T')+'Z').toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch{ return ''; } };
 const _ctlType={ void:{t:'ยกเลิก',c:'var(--danger)'}, waste:{t:'ของเสีย',c:'#b45309'}, discount:{t:'ลดราคา',c:'#7c3aed'}, cash_delete:{t:'ลบเงินสด',c:'#0e7490'} };
 function renderControl(d){ $('ctlDate').textContent=d.date||'—'; const tt=_ctlType;
-  const tiles=`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
-    <div style="flex:1;min-width:120px;background:var(--surface,#f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div class="muted" style="font-size:11px">ลดยอดรวมวันนี้</div><div style="font-size:20px;font-weight:800;color:var(--danger)">฿${d.total||0}</div><div class="muted" style="font-size:11px">${d.count||0} รายการ</div></div>
-    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.void.c}">ยกเลิก</div><div style="font-weight:800">฿${d.byType.void||0}</div></div>
-    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.waste.c}">ของเสีย</div><div style="font-weight:800">฿${d.byType.waste||0}</div></div>
-    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.discount.c}">ลดราคา</div><div style="font-weight:800">฿${d.byType.discount||0}</div></div>
-    <div style="flex:1;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:${tt.cash_delete.c}">ลบเงินสด</div><div style="font-weight:800">฿${d.byType.cash_delete||0}</div></div>
+  // The total is the headline and spans the full width; the four causes sit under it as one even
+  // grid. Previously flex + min-width produced a ragged 1+2 / 2 arrangement that read as random.
+  const cause=(label,color,val)=>`<div style="border:1px solid var(--line);border-radius:12px;padding:9px 10px;text-align:left">
+      <div style="font-size:11px;color:${color}">${label}</div><div style="font-weight:800">฿${val||0}</div></div>`;
+  const tiles=`<div class="kgrid" style="margin-bottom:12px">
+    <div class="kspan" style="background:var(--surface,#f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:left">
+      <div class="muted" style="font-size:11px">ลดยอดรวมวันนี้</div>
+      <div style="font-size:22px;font-weight:800;color:var(--danger)">฿${d.total||0}</div>
+      <div class="muted" style="font-size:11px">${d.count||0} รายการ</div></div>
+    ${cause('ยกเลิก',tt.void.c,d.byType.void)}
+    ${cause('ของเสีย',tt.waste.c,d.byType.waste)}
+    ${cause('ลดราคา',tt.discount.c,d.byType.discount)}
+    ${cause('ลบเงินสด',tt.cash_delete.c,d.byType.cash_delete)}
   </div>`;
   const staff=(d.byStaff&&d.byStaff.length)?`<div style="margin-bottom:14px"><h2 style="margin:0 0 6px;font-size:14px"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>แยกตามพนักงาน</h2>${d.byStaff.map(s=>`<div class="row between" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>${esc(s.staff)}</b><span style="font-weight:800">฿${s.amount}</span></div>`).join('')}</div>`:'';
   const ev=(d.events&&d.events.length)?d.events.map(e=>{const m=tt[e.type]||{t:e.type,c:'var(--muted)'}; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);min-width:42px">${_ctlHM(e.at)}</span><span class="pill" style="font-size:10px;background:${m.c};color:#fff;flex:none">${m.t}</span><div style="flex:1;min-width:0"><div style="font-size:13px"><b>฿${e.amount}</b>${e.ticketNo?(' · คิว '+e.ticketNo):''}${e.customer?(' · '+esc(e.customer)):''}</div>${e.reason?('<div class="muted" style="font-size:11px">'+esc(e.reason)+'</div>'):''}</div><span style="font-size:11px;color:var(--muted);flex:none">${esc(e.staff)}</span></div>`;}).join(''):'<p class="muted" style="font-size:13px;padding:10px">ไม่มีการลดยอดในวันนี้ ✓</p>';
@@ -2773,7 +2857,7 @@ window.setReportDate=(d)=>{ _reportDate=(d&&d!==bkkToday())?d:''; showReport(); 
 window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb) mb.style.display='none'; }   // margins are per-date; re-open after switching
   try{ const r=await api('/api/report'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); const p=r.pnl||{};
     const di=$('reportDateInp'); if(di) di.value=_reportDate||bkkToday();
-    const kpi=(label,val,big)=>`<div style="text-align:center;flex:1"><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
+    const kpi=(label,val,big)=>`<div><div style="font-size:${big?22:18}px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
     const pl=(label,val,o={})=>`<div class="qitem" style="${o.navy?'background:var(--navy);':o.accent?'background:#e9f8fb;':''}padding:${o.small?'5px 12px 5px 26px':'8px 12px'};${o.small?'background:#fff;font-size:12.5px;':''}">
       <span style="${o.bold?'font-weight:800;':''}${o.navy?'color:#fff':''}${o.small?'color:var(--muted)':''}">${label}</span>
       <span style="${o.bold?'font-weight:800;':''}${o.navy?'color:#fff':''}">${o.neg?'−':''}${money(val)}${o.pct!=null?` <span style="font-size:11px;color:${o.navy?'#bfe3ec':'var(--muted)'}">${pctf(o.pct)}</span>`:''}</span></div>`;
@@ -2788,7 +2872,7 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         <div style="height:8px;background:var(--surface);border-radius:6px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${(i.revenue/maxRev*100).toFixed(1)}%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
       </div>`).join('');
     $('reportBody').innerHTML =
-      `<div class="row" style="gap:8px;background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
+      `<div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px;margin-bottom:14px">`+
         kpi('ยอดขาย',money(r.revenue),true)+kpi('กำไรขั้นต้น',money(p.grossProfit))+kpi('กำไรสุทธิ',money(p.netProfit))+kpi('อัตรากำไร',pctf(p.netMargin))+kpi(unit(),(p.cups||0))+
       `</div>`+
       `<div class="row between" style="font-size:13px;margin:-4px 0 12px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap;gap:6px">
@@ -2840,7 +2924,7 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
           <span style="font-size:13px">อัตรากำไร <input id="goalMargin" type="number" value="50" min="0" max="95" step="5" style="width:64px;padding:6px;display:inline-block" oninput="calcGoal()">%</span></div>
         <div id="goalOut" style="margin-top:8px;font-size:13px"></div></div>`+
       `<h2 style="margin-top:16px">สัดส่วนยอดขาย</h2>${bars||'<p class="muted">ยังไม่มีการขายวันนี้</p>'}`+
-      `<div class="row" style="justify-content:space-around;margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+
+      `<div class="kgrid" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">`+
         kpi('ออกคิว',r.issued)+kpi('ไม่มารับ',r.noShows)+kpi('รอเฉลี่ย',r.avgWaitMin!=null?r.avgWaitMin+' น.':'—')+kpi('คะแนน',r.avgRating!=null?('★'+r.avgRating+' ('+r.ratingCount+')'):'—')+
       `</div>`+
       `<div id="insightsBox" style="margin-top:16px"></div>`;
@@ -2898,7 +2982,7 @@ function renderInsightsBody(d, box){
       ${(!ME||ME.role==='owner')?'<button class="ghost" style="width:100%;margin-top:6px;padding:7px;font-size:12px" onclick="showReviews()">อ่านรีวิว + ความคิดเห็นของลูกค้า →</button>':''}</div>
     <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>ลูกค้าซื้อซ้ำ (LINE)</h2>
     <div class="card" style="margin:8px 0;padding:14px">
-      <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
+      <div class="kgrid" style="margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
 }
 // ---------- รีวิวจากลูกค้า (OWNER ONLY) ----------
@@ -4419,7 +4503,8 @@ function clRows(){ let rows=_clSeg==='all' ? CL : CL.filter(c=>c.segment===_clSe
 const SEG_TH={new:['ใหม่','#e6f1fb','#185fa5'],regular:['ประจำ','#e1f5ee','#0f6e56'],at_risk:['เสี่ยงหาย','#faeeda','#854f0b'],lost:['หายไป','#fcebeb','#a32d2d']};
 window.clMore=()=>{ _clShown+=CL_PAGE; renderCustList(); };
 // Column layout (owner UX): scannable data columns per customer, header row pinned on top.
-const CL_GRID='display:grid;grid-template-columns:minmax(150px,2fr) 52px 76px 76px 46px 70px;gap:6px;align-items:center;padding:8px 12px';
+// Columns live in the .cl-row class now, so a media query can reflow them for a phone — an inline
+// grid string could never be overridden.
 function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   // The filter controls live inside the block we're about to replace, so typing would blow away
   // focus after every keystroke. Remember which control was active (and where the caret was)
@@ -4429,13 +4514,13 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   const more=all.length-rows.length;
   const tail=more>0?`<div style="padding:10px;text-align:center"><button class="ghost" style="padding:8px 18px;font-size:13px" onclick="clMore()">แสดงเพิ่มอีก ${Math.min(CL_PAGE,more)} (เหลือ ${more})</button></div>`:'';
   const th=(key,label,right)=>`<span style="text-align:${right?'right':'left'};cursor:pointer;user-select:none;white-space:nowrap" onclick="clSort('${key}')" title="เรียงตาม${label}">${label}${_clSortKey===key?(_clSortDir>0?' ▲':' ▼'):''}</span>`;
-  const head=`<div style="${CL_GRID};position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--line);font-size:11px;font-weight:800;color:var(--muted)">
+  const head=`<div class="cl-row cl-head-row" style="position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--line);font-size:11px;font-weight:800;color:var(--muted)">
       ${th('name','ลูกค้า',false)}${th('visits','มา',true)}${th('spend','ใช้จ่าย',true)}${th('recent','ล่าสุด',true)}${th('points','แต้ม',true)}${th('rating','ให้ดาว',true)}</div>`;
   // Filter row, one control per column, pinned under the header.
   const fst='width:100%;box-sizing:border-box;padding:4px 6px;font-size:11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);text-align:right';
   const fnum=(k,ph)=>`<input data-f="${k}" type="number" inputmode="numeric" placeholder="${ph}" value="${_clF[k]}" oninput="clSetF('${k}',this.value)" style="${fst}">`;
   const RSTARS=[['all','ดาว: ทั้งหมด'],['any','เคยให้ดาว'],['5','★ 5'],['4','★ 4'],['3','★ 3'],['2','★ 2'],['1','★ 1'],['none','ยังไม่รีวิว']];
-  const filt=`<div style="${CL_GRID};position:sticky;top:31px;background:#fbfdff;z-index:1;border-bottom:1px solid var(--line);padding-top:5px;padding-bottom:5px">
+  const filt=`<div class="cl-row cl-filt" style="position:sticky;top:31px;background:#fbfdff;z-index:1;border-bottom:1px solid var(--line);padding-top:5px;padding-bottom:5px">
       <input data-f="name" type="search" placeholder="กรองชื่อ / เบอร์" value="${esc(_clF.name)}" oninput="clSetF('name',this.value)" style="${fst};text-align:left">
       ${fnum('visits','≥')}${fnum('spend','≥ ฿')}${fnum('recent','≤ วัน')}${fnum('points','≥')}
       <select data-f="rating" onchange="clSetF('rating',this.value)" style="${fst};padding:4px 2px">${RSTARS.map(([v,l])=>`<option value="${v}"${_clF.rating===v?' selected':''}>${l}</option>`).join('')}</select>
@@ -4443,22 +4528,24 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
   const fbar=_clFOn()?`<div style="padding:6px 12px;background:#fffbea;border-bottom:1px solid var(--line);font-size:11.5px;display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span style="color:#946f00">กรองอยู่ · พบ <b>${all.length}</b> คน</span>
       <button class="ghost" style="padding:3px 10px;font-size:11px" onclick="clClearF()">ล้างตัวกรอง</button></div>`:'';
-  $('clList').innerHTML = '<div style="min-width:520px">'+head+filt+fbar+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
+  // .cl-num carries data-l so the phone layout can print each number's label next to it — the
+  // column header it used to rely on is hidden down there.
+  $('clList').innerHTML = '<div class="cl-wrap" style="min-width:520px">'+head+filt+fbar+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
     const last=c.daysSince==null?'—':(c.daysSince===0?'วันนี้':(c.daysSince+' วัน'));
     const rating=c.ratingAvg!=null?`<b style="color:#b8860b">★${c.ratingAvg}</b><span class="muted" style="font-size:9.5px"> (${c.ratingCount})</span>`:'<span class="muted">—</span>';
-    return `<div style="${CL_GRID};border-bottom:1px solid var(--line)">
-      <label class="row" style="gap:8px;align-items:center;min-width:0;cursor:${c.canPush?'pointer':'default'};flex-wrap:nowrap">
+    return `<div class="cl-row" style="border-bottom:1px solid var(--line)">
+      <label class="row cl-head" style="gap:8px;align-items:center;min-width:0;cursor:${c.canPush?'pointer':'default'};flex-wrap:nowrap">
         <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
         <span style="min-width:0;overflow:hidden">
           <div style="font-weight:700;color:var(--navy);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))}</div>
           <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}
         </span>
       </label>
-      <span style="text-align:right;font-size:12.5px">${c.visits}</span>
-      <span style="text-align:right;font-size:12.5px;font-weight:700">฿${c.spend}</span>
-      <span style="text-align:right;font-size:11.5px" class="muted">${last}</span>
-      <span style="text-align:right;font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
-      <span style="text-align:right;font-size:12px">${rating}${ME&&ME.role!=='owner'?'':`<button class="ghost" title="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" onclick="clForget('${c.key}','${esc((c.name||'').replace(/'/g,''))}')" style="padding:0 5px;font-size:11px;margin-left:6px;color:var(--muted);border:0;background:transparent">🗑</button>`}</span>
+      <span class="cl-num" data-l="มา" style="font-size:12.5px">${c.visits}</span>
+      <span class="cl-num" data-l="ใช้จ่าย" style="font-size:12.5px;font-weight:700">฿${c.spend}</span>
+      <span class="cl-num muted" data-l="ล่าสุด" style="font-size:11.5px">${last}</span>
+      <span class="cl-num" data-l="แต้ม" style="font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
+      <span class="cl-num" data-l="ให้ดาว" style="font-size:12px">${rating}${ME&&ME.role!=='owner'?'':`<button class="ghost" title="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" onclick="clForget('${c.key}','${esc((c.name||'').replace(/'/g,''))}')" style="padding:0 5px;font-size:11px;margin-left:6px;color:var(--muted);border:0;background:transparent">🗑</button>`}</span>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+((_clQ||_clFOn())?'ไม่พบลูกค้าที่ตรงกับตัวกรอง':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>';
   if(fkey){ const el=$('clList').querySelector('[data-f="'+fkey+'"]'); if(el){ el.focus(); if(fpos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(fpos,fpos); }catch(e){} } } } }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
