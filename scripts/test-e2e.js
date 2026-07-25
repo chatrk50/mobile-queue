@@ -1428,6 +1428,35 @@ console.log('\n== Coupon report ==');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
 }
 
+console.log('\n== Retention: old rows pruned, evidence and recent data kept ==');
+{
+  const rk = 'Uretain00000000000000000000001';
+  db.prepare(`INSERT INTO push_log (user_id, kind, ok, at) VALUES (?, 'winback', 1, datetime('now','-200 days'))`).run(rk);
+  db.prepare(`INSERT INTO push_log (user_id, kind, ok, at) VALUES (?, 'winback', 1, datetime('now','-5 days'))`).run(rk);
+  db.prepare(`INSERT INTO sale_events (branch_id, type, amount, at) VALUES (1, 'paid', 10, datetime('now','-500 days'))`).run();
+
+  // A slip on a SETTLED order is prunable once old; a slip on an unresolved payment never is —
+  // that is precisely the case someone will need to look at.
+  const settled = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.attachSlip(settled.ticket.id, 'data:image/png;base64,OLDSETTLEDSLIP');
+  Q.setOrderPaid(settled.ticket.id, { method: 'promptpay' });
+  const unresolved = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.attachSlip(unresolved.ticket.id, 'data:image/png;base64,OLDUNRESOLVEDSLIP');
+  db.prepare(`UPDATE slips SET at=datetime('now','-90 days')`).run();   // age BOTH slips
+
+  const pruned = Q.pruneOldData();
+  ok(pruned.pushLog === 1, `INVARIANT only push_log rows past the window are pruned (got ${pruned.pushLog})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM push_log WHERE user_id=?').get(rk).n === 1, 'INVARIANT the recent push_log row survives');
+  ok(pruned.saleEvents >= 1, `INVARIANT audit events beyond the reporting horizon are pruned (got ${pruned.saleEvents})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM slips WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(settled.ticket.id).n === 0,
+    'INVARIANT an old slip on a settled order is pruned');
+  ok(db.prepare('SELECT COUNT(*) n FROM slips WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(unresolved.ticket.id).n === 1,
+    'INVARIANT an old slip on an UNRESOLVED payment is kept — it is the evidence');
+  ok(Q.pruneOldData().pushLog === 0, 'INVARIANT running retention twice removes nothing more');
+  db.prepare('DELETE FROM push_log WHERE user_id=?').run(rk);
+  Q.cancelOrderTicket(unresolved.ticket.id, null, { reason: 'e2e retention cleanup' });
+}
+
 console.log('\n== Atomicity + status guards ==');
 {
   // A nested db.transaction() must use a SAVEPOINT, not a second BEGIN — otherwise every

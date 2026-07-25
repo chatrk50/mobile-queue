@@ -1506,6 +1506,12 @@ function doDailyReset() {
     // Never let a reset failure crash the process or stop the next night from being scheduled.
     console.error('[reset] failed:', e && e.message);
   }
+  // Retention runs after the reset, in its own try: pruning is housekeeping and must never be able
+  // to stop the queue from being reset for the new trading day.
+  try {
+    const p = Q.pruneOldData();
+    if (p.pushLog || p.slips || p.saleEvents) console.log(`[retention] pruned push_log ${p.pushLog}, slips ${p.slips}, sale_events ${p.saleEvents}`);
+  } catch (e) { console.error('[retention] failed:', e && e.message); }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();

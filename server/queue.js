@@ -2805,6 +2805,33 @@ export function luckyReport({ from = null, to = null, days = 30 } = {}) {
   return { from: f, to: t, won: g('won') + g('used') + g('skipped'), used: g('used'), skipped: g('skipped'), pending: g('won'), value: r2(value) };
 }
 
+// ---------- Retention ----------
+// Three tables grow with every order and nothing ever removed a row: push_log (one per LINE
+// message), slips (a full base64 image per PromptPay order) and sale_events (the audit trail).
+// On Turso that is row-size pressure plus a bigger replica pull on every sync, forever.
+// Deliberately generous windows — the shop's own reports only ever look back a year, and the slip
+// image is only evidence until the order is settled.
+const RETAIN = { pushLogDays: 90, slipDays: 30, saleEventDays: 400 };
+export function pruneOldData() {
+  const out = { pushLog: 0, slips: 0, saleEvents: 0 };
+  // LINE send log: the monthly cost report reads the rollup, not individual rows.
+  try {
+    out.pushLog = db.prepare(`DELETE FROM push_log WHERE at < datetime('now','-${RETAIN.pushLogDays} days')`).run().changes || 0;
+  } catch { /* table may predate the feature */ }
+  // Slip images: only for orders that are settled (paid or void) — an unresolved payment keeps its
+  // evidence no matter how old, because that is exactly the case someone will need to look at.
+  try {
+    out.slips = db.prepare(
+      `DELETE FROM slips WHERE at < datetime('now','-${RETAIN.slipDays} days')
+         AND order_id IN (SELECT id FROM orders WHERE payment_status IN ('paid','void'))`).run().changes || 0;
+  } catch { /* ignore */ }
+  // Audit events beyond the reporting horizon (>13 months, so a full year-on-year still works).
+  try {
+    out.saleEvents = db.prepare(`DELETE FROM sale_events WHERE at < datetime('now','-${RETAIN.saleEventDays} days')`).run().changes || 0;
+  } catch { /* ignore */ }
+  return out;
+}
+
 export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
 export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
 /** If anything needs reordering, draft ONE PO from the plan (once/day) and LINE the owner to
