@@ -171,6 +171,7 @@
         </div>
         <div class="admgrp"><div class="admhdr c3"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
           <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
+          <button id="reviewBtn" class="ghost adm" style="display:none" onclick="showReviews()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</button>
           <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
           <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
@@ -774,6 +775,16 @@
 </div>
 
 <!-- CRM: customers page — list + lifecycle segments + targeted win-back (+ coupon) + campaign history -->
+<!-- รีวิวจากลูกค้า — its own panel with its own door. It used to sit at the bottom of the daily
+     report, which meant scrolling past every sales figure to read it; the owner couldn't find it. -->
+<div id="reviewCard" class="card" style="display:none;max-width:720px;margin:14px auto">
+  <div class="row between" style="align-items:center">
+    <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</h1>
+    <button class="ghost" style="padding:6px 12px" onclick="hideReviews()">ปิด</button>
+  </div>
+  <div id="fbBox" style="margin-top:10px"></div>
+</div>
+
 <div id="custListCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
@@ -1299,6 +1310,8 @@ window.login=async()=>{
     $('reportBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; } { const hb=$('homeBtn'); if(hb) hb.style.display=mgr?'':'none'; }
     $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    // Reviews carry free-text comments about staff → owner-only, same tier as พนักงาน and คูปอง.
+    { const rb=$('reviewBtn'); if(rb) rb.style.display=own?'':'none'; }
     { const sb=$('settingsBtn'); if(sb) sb.style.display=mgr?'':'none'; }   // the hub; owner-only rows inside gate themselves
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
@@ -1333,7 +1346,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard'];
+const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -2780,27 +2793,31 @@ function renderInsightsBody(d, box){
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row between" style="align-items:center;margin-bottom:8px"><span style="font-size:24px;font-weight:800;color:var(--navy)">${sat.avg!=null?'★ '+sat.avg:'—'}</span><span class="muted" style="font-size:12px">${sat.total||0} รีวิว</span></div>
       ${sat.total?starBars:'<p class="muted" style="font-size:12px">ยังไม่มีรีวิว</p>'}
-      ${sat.total?'<button class="ghost" style="width:100%;margin-top:8px;padding:7px;font-size:12px" onclick="openCustomersRating(\'any\')">ดูลูกค้าที่เคยให้ดาวทั้งหมด →</button>':''}</div>
-    <div id="fbBox"></div>
+      ${sat.total?'<button class="ghost" style="width:100%;margin-top:8px;padding:7px;font-size:12px" onclick="openCustomersRating(\'any\')">ดูลูกค้าที่เคยให้ดาวทั้งหมด →</button>':''}
+      ${(!ME||ME.role==='owner')?'<button class="ghost" style="width:100%;margin-top:6px;padding:7px;font-size:12px" onclick="showReviews()">อ่านรีวิว + ความคิดเห็นของลูกค้า →</button>':''}</div>
     <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>ลูกค้าซื้อซ้ำ (LINE)</h2>
     <div class="card" style="margin:8px 0;padding:14px">
       <div class="row" style="justify-content:space-around;margin-bottom:8px">${kpi('ลูกค้าทั้งหมด',cu.total||0)}${kpi('ซื้อซ้ำ',cu.repeat||0)}${kpi('สัดส่วน',(cu.repeatPct||0)+'%')}</div>
       <div style="border-top:1px solid var(--line);padding-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">ลูกค้าประจำ (มาบ่อยสุด)</div>${topRows}</div></div>`;
-  renderFeedback();
 }
-// ---------- เสียงจากลูกค้า (OWNER ONLY) ----------
+// ---------- รีวิวจากลูกค้า (OWNER ONLY) ----------
 // Stars say the score, this says WHY: the reason chips customers picked plus anything they typed.
 // Owner-only on purpose — comments name staff and judge the shop, so they are not board material.
 // The API enforces it too (ownerOK); hiding the panel is only the second lock, never the only one.
 let _fbDays=30;
+window.hideReviews=()=>{ $('reviewCard').style.display='none'; $('dash').style.display=''; };
+window.showReviews=()=>{ hideAllPanels(); closeAdmin();
+  $('reviewCard').style.display=''; $('dash').style.display='none'; renderFeedback(); };
 window.setFbDays=(d)=>{ _fbDays=d; renderFeedback(); };
 async function renderFeedback(){
   const box=$('fbBox'); if(!box) return;
   const own=(!ME||ME.role==='owner');
-  if(!own){ box.innerHTML=''; return; }
-  box.innerHTML='<h2><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>เสียงจากลูกค้า</h2><p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  if(!own){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">เฉพาะเจ้าของร้านเท่านั้นที่อ่านรีวิวและความคิดเห็นได้</p>'; return; }
+  box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  // This is now a panel the owner deliberately opened, so a failure has to say so. Blanking out was
+  // acceptable when it sat inside the daily report; here it reads as "the feature is broken".
   let f; try{ f=await api('/api/reports/ratings?days='+_fbDays); }
-  catch(e){ box.innerHTML=''; return; }   // non-owner PIN → API says forbidden → just show nothing
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">อ่านรีวิวได้เฉพาะเจ้าของร้าน — เข้าสู่ระบบด้วย PIN ของเจ้าของร้านแล้วลองใหม่</p>'; return; }
   const seg=[7,30,90].map(d=>`<button class="ghost" onclick="setFbDays(${d})" style="flex:1;padding:6px;font-size:12px;${d===_fbDays?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${d} วัน</button>`).join('');
   const bar=(list,color)=>{ if(!list.length) return '';
     const max=list[0].n||1;
@@ -2814,8 +2831,8 @@ async function renderFeedback(){
       ${i.tags.length?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${i.tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:999px">${esc(t.label)}</span>`).join('')}</div>`:''}
       <div style="font-size:13px;margin-top:5px;line-height:1.45;color:var(--ink)">${esc(i.comment)}</div>
     </div>`).join('');
-  box.innerHTML=`<h2><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>เสียงจากลูกค้า <span class="muted" style="font-size:11px;font-weight:500">· เจ้าของร้านเท่านั้น</span></h2>
-    <div class="card" style="margin:8px 0;padding:14px">
+  box.innerHTML=`<p class="muted" style="font-size:11.5px;margin:0 0 8px">เห็นได้เฉพาะเจ้าของร้าน · ลูกค้าให้คะแนนหลังรับเครื่องดื่ม</p>
+    <div style="margin:0">
       <div class="row" style="gap:6px;margin-bottom:10px">${seg}</div>
       ${!f.count ? '<p class="muted" style="font-size:12px;text-align:center;padding:10px 0">ยังไม่มีรีวิวในช่วงนี้</p>' : `
       <div class="row between" style="align-items:center;margin-bottom:10px">
