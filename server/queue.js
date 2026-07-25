@@ -36,6 +36,15 @@ for (const sig of ['SIGTERM', 'SIGINT', 'beforeExit']) { try { process.on(sig, f
 const LIFF_ID = process.env.LIFF_ID || '';
 const queueLink = (zoneId) =>
   LIFF_ID ? `https://liff.line.me/${LIFF_ID}?zone=${zoneId}` : null;
+/** Link for a message that isn't about one specific ticket (win-back, promos): the first open zone,
+ *  falling back to the first zone at all. Without this a campaign went out as PLAIN TEXT — the
+ *  'สั่งเลย' label was passed to pushQueue but buildQueueMessage drops the button when the URL is
+ *  null, so the customer was told to order with no way back into the app. */
+export function shopLink() {
+  const z = db.prepare('SELECT id FROM zones WHERE is_open=1 ORDER BY id LIMIT 1').get()
+         || db.prepare('SELECT id FROM zones ORDER BY id LIMIT 1').get();
+  return z ? queueLink(z.id) : null;
+}
 
 export function getZone(zoneId) {
   return db.prepare('SELECT * FROM zones WHERE id = ?').get(zoneId);
@@ -482,7 +491,7 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
         .run(key, cp.label, cp.cap, expiresAt);
       text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
     }
-    try { if ((await pushQueue(key, text, null, 'สั่งเลย', 'winback')) !== false) sent++; else failed++; }
+    try { if ((await pushQueue(key, text, shopLink(), 'สั่งเลย', 'winback')) !== false) sent++; else failed++; }
     catch { failed++; }
   }
   const info = db.prepare(
@@ -491,6 +500,63 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
   return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp };
 }
+const COUPON_KIND_TH = { winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', reward: 'สะสมครบ', lucky: 'เลขนำโชค' };
+/**
+ * Coupon performance for a Bangkok date range: how many went out, how many came back, and what it
+ * actually cost. Redemptions are counted on the day they were USED (that is when the shop paid for
+ * it), issues on the day they were issued — so the two columns answer different questions on
+ * purpose and should not be read as a same-cohort rate.
+ * Value comes from used_value, which is the discount really given; rows redeemed before that column
+ * existed have no value and are reported separately rather than guessed at from free_cap.
+ */
+export function couponReport({ from = null, to = null, days = null } = {}) {
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  let f = from, t = to;
+  if (!f || !t) {
+    const n = Math.max(1, Math.min(3650, Math.round(Number(days) || 30)));
+    t = today;
+    f = db.prepare("SELECT date('now','+7 hours','-' || ? || ' days') d").get(n - 1).d;
+  }
+  const bkk = (col) => `date(${col},'+7 hours')`;
+  const issued = db.prepare(
+    `SELECT kind, COUNT(*) n, COALESCE(SUM(free_cap),0) face
+       FROM customer_coupons WHERE ${bkk('issued_at')} BETWEEN ? AND ? GROUP BY kind`).all(f, t);
+  const redeemed = db.prepare(
+    `SELECT kind, COUNT(*) n, COALESCE(SUM(used_value),0) value,
+            SUM(CASE WHEN used_value IS NULL THEN 1 ELSE 0 END) unpriced
+       FROM customer_coupons
+      WHERE used_at IS NOT NULL AND ${bkk('used_at')} BETWEEN ? AND ? GROUP BY kind`).all(f, t);
+  const expired = db.prepare(
+    `SELECT COUNT(*) n FROM customer_coupons
+      WHERE used_at IS NULL AND expires_at BETWEEN ? AND ?`).get(f, t).n || 0;
+  // Shop-wide CODE coupons live in a different table and already record their discount.
+  const code = db.prepare(
+    `SELECT COUNT(*) n, COALESCE(SUM(discount),0) value FROM coupon_uses
+      WHERE ${bkk('at')} BETWEEN ? AND ?`).get(f, t);
+
+  const kinds = [...new Set([...issued.map((r) => r.kind), ...redeemed.map((r) => r.kind)])];
+  const rows = kinds.map((k) => {
+    const i = issued.find((x) => x.kind === k) || { n: 0, face: 0 };
+    const u = redeemed.find((x) => x.kind === k) || { n: 0, value: 0, unpriced: 0 };
+    return { kind: k, label: COUPON_KIND_TH[k] || k, issued: i.n, faceValue: r2(i.face),
+             redeemed: u.n, value: r2(u.value), unpriced: u.unpriced || 0 };
+  }).sort((a, b) => b.issued - a.issued);
+
+  const totIssued = rows.reduce((s, r) => s + r.issued, 0);
+  const totRedeemed = rows.reduce((s, r) => s + r.redeemed, 0);
+  return {
+    from: f, to: t,
+    issued: totIssued,
+    redeemed: totRedeemed,
+    value: r2(rows.reduce((s, r) => s + r.value, 0)),
+    unpriced: rows.reduce((s, r) => s + r.unpriced, 0),
+    expired,
+    redeemRate: totIssued ? Math.round((totRedeemed / totIssued) * 1000) / 10 : 0,
+    rows,
+    codeCoupons: { redeemed: code.n || 0, value: r2(code.value || 0) },
+  };
+}
+
 export function listCampaigns(limit = 20) {
   return db.prepare(
     `SELECT cc.*, s.name AS actor_name FROM crm_campaigns cc LEFT JOIN staff s ON s.id = cc.actor_id
@@ -2579,6 +2645,89 @@ export async function maybeAutoSummary(branchId = null) {
   if (r.sent) setSetting('summary:last_sent', day);
   return r;
 }
+// ---------- แคมเปญเลขนำโชค (default OFF) ----------
+// Whoever draws the lucky queue number that day wins a drink on the house. EVERY zone that reaches
+// the number produces a winner (owner's choice), so a 3-zone day can have 3 winners.
+// LINE customers only: the prize is shown and claimed inside the customer's own ticket screen, and a
+// walk-in has no screen to show it on.
+// It also REQUIRES queue-first. With pay-first the number is only issued after payment, so there is
+// no unpaid order left to discount — the campaign would win and have nothing to apply to.
+export function luckyEnabled() { return getSetting('lucky:on', '0') === '1'; }
+export function setLucky(on) { setSetting('lucky:on', on ? '1' : '0'); return { luckyOn: !!on }; }
+export function getLuckyNumber() { return Math.max(1, Math.round(Number(getSetting('lucky:number', '67')) || 67)); }
+export function setLuckyNumber(n) {
+  const v = Math.max(1, Math.min(9999, Math.round(Number(n) || 67)));
+  setSetting('lucky:number', String(v)); return { luckyNumber: v };
+}
+export function getLuckyValue() { return Math.max(1, Number(getSetting('lucky:value', '40')) || 40); }
+export function setLuckyValue(v) {
+  const n = Math.max(1, Math.min(2000, Math.round(Number(v) || 40)));
+  setSetting('lucky:value', String(n)); return { luckyValue: n };
+}
+/** Campaign health for the settings screen — says WHY it can't fire, instead of silently not firing. */
+export function luckyStatus() {
+  const on = luckyEnabled();
+  return { on, number: getLuckyNumber(), value: getLuckyValue(), queueFirst: getQueueFirst(),
+           ready: on && getQueueFirst(),
+           reason: !on ? 'off' : (!getQueueFirst() ? 'needs_queue_first' : 'ready') };
+}
+/** Called right after a ticket is numbered. Marks the ticket a winner; awards nothing yet. */
+function markLuckyIfWon(ticketId, number, lineUserId) {
+  if (!luckyEnabled() || !lineUserId) return;
+  if (Number(number) !== getLuckyNumber()) return;
+  db.prepare(`UPDATE tickets SET lucky_state='won', lucky_value=?, lucky_at=datetime('now') WHERE id=? AND lucky_state IS NULL`)
+    .run(getLuckyValue(), ticketId);
+}
+/** Customer pressed ใช้เลย. Applies the prize to THIS order (the one that won) and burns it. */
+export function claimLucky(ticketId, lineUserId = null) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.lucky_state !== 'won') throw new Error(t.lucky_state ? 'lucky_already' : 'lucky_none');
+  if (t.line_user_id && lineUserId && t.line_user_id !== lineUserId) throw new Error('not_owner');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status === 'paid') throw new Error('order_already_paid');
+  if (order.payment_status === 'void') throw new Error('order_void');
+  const room = Math.max(0, order.total - (order.discount || 0));
+  const free = r2(Math.min(t.lucky_value || getLuckyValue(), room));
+  if (free <= 0) throw new Error('nothing_to_discount');
+  // Guarded UPDATE: two fast taps must not discount the order twice.
+  const won = db.prepare(`UPDATE tickets SET lucky_state='used' WHERE id=? AND lucky_state='won'`).run(ticketId);
+  if (!won.changes) throw new Error('lucky_already');
+  const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason: `🎉 เลขนำโชค ${getLuckyNumber()}`, actorId: null });
+  // Mirror it into customer_coupons so ONE report covers every kind of giveaway.
+  if (t.line_user_id) {
+    const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source, used_at, used_order_id, state, used_value)
+                VALUES (?, 'lucky', ?, ?, ?, 'lucky', datetime('now'), ?, 'redeemed', ?)`)
+      .run(t.line_user_id, `เลขนำโชค ${t.code || getLuckyNumber()}`, t.lucky_value || getLuckyValue(), day, order.id, free);
+  }
+  return { ok: true, freeAmount: free, net: res.net };
+}
+/** Customer pressed ไม่รับสิทธิ — recorded, so the report can tell declines from misses. */
+export function skipLucky(ticketId, lineUserId = null) {
+  const t = db.prepare('SELECT line_user_id, lucky_state FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.line_user_id && lineUserId && t.line_user_id !== lineUserId) throw new Error('not_owner');
+  db.prepare(`UPDATE tickets SET lucky_state='skipped' WHERE id=? AND lucky_state='won'`).run(ticketId);
+  return { ok: true };
+}
+/** Winners in a Bangkok date range, for the owner's report. */
+export function luckyReport({ from = null, to = null, days = 30 } = {}) {
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  let f = from, t = to;
+  if (!f || !t) { const n = Math.max(1, Math.min(3650, Math.round(Number(days) || 30)));
+    t = today; f = db.prepare("SELECT date('now','+7 hours','-' || ? || ' days') d").get(n - 1).d; }
+  const rows = db.prepare(
+    `SELECT lucky_state state, COUNT(*) n FROM tickets
+      WHERE lucky_state IS NOT NULL AND date(lucky_at,'+7 hours') BETWEEN ? AND ? GROUP BY lucky_state`).all(f, t);
+  const g = (s) => (rows.find((r) => r.state === s) || { n: 0 }).n;
+  const value = db.prepare(
+    `SELECT COALESCE(SUM(used_value),0) v FROM customer_coupons
+      WHERE kind='lucky' AND used_at IS NOT NULL AND date(used_at,'+7 hours') BETWEEN ? AND ?`).get(f, t).v || 0;
+  return { from: f, to: t, won: g('won') + g('used') + g('skipped'), used: g('used'), skipped: g('skipped'), pending: g('won'), value: r2(value) };
+}
+
 export function autoReorderEnabled() { return getSetting('reorder:auto', '0') === '1'; }
 export function setAutoReorder(on) { setSetting('reorder:auto', on ? '1' : '0'); return { autoReorder: !!on }; }
 /** If anything needs reordering, draft ONE PO from the plan (once/day) and LINE the owner to
@@ -3423,6 +3572,9 @@ export function createOrder(zoneId, items, opts = {}) {
       db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
       db.prepare("UPDATE tickets SET number=?, code=?, status='waiting', numbered_at=datetime('now') WHERE id=? AND number=0")
         .run(next, code(zr.prefix, next), tinfo.lastInsertRowid);
+      // Inside the same transaction as the numbering: a ticket can never exist with the lucky
+      // number but no prize, and the prize can never be attached to a number that rolled back.
+      markLuckyIfWon(tinfo.lastInsertRowid, next, lineUserId);
     }
     logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });
     return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
@@ -3749,7 +3901,9 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
   // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
   // already used, instead of the discount being applied twice.
-  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed' WHERE id=? AND used_at IS NULL`).run(order.id, cc.id);
+  // used_value = what the shop actually gave away, not the coupon's ceiling — the report is only
+  // honest if it adds up real discounts.
+  const burned = db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=?, state='redeemed', used_value=? WHERE id=? AND used_at IS NULL`).run(order.id, free, cc.id);
   if (!burned.changes) throw new Error('coupon_used');
   const res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
@@ -3909,7 +4063,10 @@ export function orderForTicket(ticketId) {
   let paidLines = [];
   try { paidLines = order.paid_lines ? JSON.parse(order.paid_lines) : []; } catch { paidLines = []; }
   lines.forEach((l, i) => { l.paid = paidLines.includes(i); });
-  return { total: order.total, discount: order.discount || 0, paid_amount: order.paid_amount || 0, paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  // discount_reason was missing from this hand-built object, so every reason the code carefully sets
+  // (คูปอง / วันเกิด / เลขนำโชค) reached the customer's ticket as null. The DB and the audit log were
+  // always right — only the label the customer reads was being dropped here.
+  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 /** Server-side subtotal of one grouped order line (drink + its toppings) — the authoritative amount
@@ -4077,5 +4234,8 @@ export function ticketView(ticketId) {
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
     loyalty,
+    // Lucky-number prize. Only present on a winning ticket; the LIFF shows the congratulations
+    // sheet while state is 'won' and the order is still unpaid (a paid order can't be discounted).
+    lucky: t.lucky_state ? { state: t.lucky_state, value: t.lucky_value || 0, number: getLuckyNumber() } : null,
   };
 }

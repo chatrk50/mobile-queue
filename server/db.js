@@ -669,6 +669,15 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN rating_tags TEXT`,
   `ALTER TABLE tickets ADD COLUMN rating_comment TEXT`,
   `ALTER TABLE tickets ADD COLUMN rated_at TEXT`,
+  // Coupon reporting: free_cap is only the CEILING. The discount actually given is
+  // min(cap, cheapest drink, bill left), so a report built on free_cap overstates every redemption.
+  // Record what was really taken off, so "กี่บาท" is a fact rather than an estimate.
+  `ALTER TABLE customer_coupons ADD COLUMN used_value REAL`,
+  // แคมเปญเลขนำโชค: the winning ticket carries its own prize state so the customer's screen and the
+  // owner's report read from one place. NULL on every ordinary ticket.
+  `ALTER TABLE tickets ADD COLUMN lucky_state TEXT`,
+  `ALTER TABLE tickets ADD COLUMN lucky_value REAL`,
+  `ALTER TABLE tickets ADD COLUMN lucky_at TEXT`,
   // Historical P&L: snapshot the cost breakdown per archived day so past-day / monthly / yearly
   // P&L is exact (not reconstructed from today's settings, which may have changed since).
   `ALTER TABLE sales_history ADD COLUMN drink_sales REAL`,

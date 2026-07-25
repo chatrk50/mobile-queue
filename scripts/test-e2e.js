@@ -1325,6 +1325,106 @@ ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable c
   ok(typeof Q.publicRating().count === 'number', 'publicRating exposes only {avg,count} for the LIFF hero');
 }
 
+console.log('\n== แคมเปญเลขนำโชค ==');
+{
+  // A customer may hold only ONE open ticket per zone (already_in_queue), so every case below gets
+  // its own LINE id — reusing one made the fixture, not the feature, fail.
+  const mkZone = (name, prefix, last) =>
+    db.prepare('INSERT INTO zones (store_id,name,prefix,is_open,last_number) VALUES (1,?,?,1,?)').run(name, prefix, last).lastInsertRowid;
+  const uid = (c) => 'U' + c.repeat(32);
+  const drink = [{ name: 'Drink', price: 60, qty: 1 }];
+  const wasQF = Q.getQueueFirst();
+  Q.setQueueFirst(true);                       // the campaign needs a number BEFORE payment
+  Q.setLuckyNumber(3); Q.setLuckyValue(40);
+
+  Q.setLucky(false);
+  const zOff = mkZone('นำโชค-ปิด', 'L', 2);
+  const off = Q.createOrder(zOff, drink, { source: 'customer', lineUserId: uid('a') });   // number 3
+  ok(Q.ticketView(off.ticket.id).lucky === null, 'INVARIANT no prize is issued while the campaign is off');
+
+  Q.setLucky(true);
+  const zMiss = mkZone('นำโชค-พลาด', 'M', 0);
+  const miss = Q.createOrder(zMiss, drink, { source: 'customer', lineUserId: uid('b') });  // number 1
+  ok(Q.ticketView(miss.ticket.id).lucky === null, 'INVARIANT a non-matching queue number wins nothing');
+
+  const zWin = mkZone('นำโชค-ชนะ', 'N', 2);
+  const win = Q.createOrder(zWin, drink, { source: 'customer', lineUserId: uid('c') });    // number 3 = lucky
+  const wv = Q.ticketView(win.ticket.id);
+  ok(wv.lucky && wv.lucky.state === 'won' && wv.lucky.value === 40,
+    `INVARIANT the lucky number wins, and the ticket carries the prize (${JSON.stringify(wv.lucky)})`);
+
+  // Every zone that reaches the number produces a winner — the owner's explicit choice.
+  const zWin2 = mkZone('นำโชค-ชนะ2', 'P', 2);
+  const win2 = Q.createOrder(zWin2, drink, { source: 'customer', lineUserId: uid('d') });  // also number 3
+  ok(Q.ticketView(win2.ticket.id).lucky?.state === 'won', 'INVARIANT a second zone reaching the number ALSO wins (per-zone draw)');
+
+  // Walk-ins have no LINE id, so there is no screen to show the prize on — they must not win silently.
+  const zWalk = mkZone('นำโชค-หน้าร้าน', 'Q', 2);
+  const walk = Q.createOrder(zWalk, drink, { source: 'cashier' });
+  ok(Q.ticketView(walk.ticket.id).lucky === null, 'INVARIANT a walk-in with no LINE id never wins a prize it could not be shown');
+
+  // Claiming applies it to THE ORDER THAT WON and is idempotent under a double tap.
+  const before = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(win.ticket.id);
+  const cl = Q.claimLucky(win.ticket.id, uid('c'));
+  ok(near(cl.freeAmount, 40), `INVARIANT the prize discounts this order by its value (got ${cl.freeAmount})`);
+  const after = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(win.ticket.id);
+  ok(near(after.discount, (before.discount || 0) + 40) && near(after.total, before.total),
+    'INVARIANT it moves the DISCOUNT, never the order total — the sale is still recorded in full');
+  let twice = false; try { Q.claimLucky(win.ticket.id, uid('c')); } catch (e) { twice = e.message === 'lucky_already'; }
+  ok(twice, 'INVARIANT a second tap cannot claim the same prize twice');
+
+  // Someone else's LINE id must not be able to burn your prize.
+  let stolen = false; try { Q.claimLucky(win2.ticket.id, uid('c')); } catch (e) { stolen = e.message === 'not_owner'; }
+  ok(stolen, 'INVARIANT another customer cannot claim your prize — it is not transferable');
+
+  Q.skipLucky(win2.ticket.id, uid('d'));
+  ok(Q.ticketView(win2.ticket.id).lucky.state === 'skipped', 'INVARIANT declining is recorded, so the report can tell declines from misses');
+
+  const lr = Q.luckyReport({ days: 2 });
+  ok(lr.won === 2 && lr.used === 1 && lr.skipped === 1, `INVARIANT the lucky report counts won/used/skipped (${JSON.stringify(lr)})`);
+  ok(near(lr.value, 40), `INVARIANT it reports the REAL baht given away (${lr.value})`);
+
+  // A paid order has nothing left to discount — the prize must refuse rather than corrupt the sale.
+  const zPaid = mkZone('นำโชค-จ่ายแล้ว', 'R', 2);
+  const paidWin = Q.createOrder(zPaid, drink, { source: 'customer', lineUserId: uid('e') });
+  db.prepare("UPDATE orders SET payment_status='paid', paid_at=datetime('now') WHERE ticket_id=?").run(paidWin.ticket.id);
+  let tooLate = false; try { Q.claimLucky(paidWin.ticket.id, uid('e')); } catch (e) { tooLate = e.message === 'order_already_paid'; }
+  ok(tooLate, 'INVARIANT a prize cannot be applied to an order that is already paid');
+
+  ok(Q.luckyStatus().ready === true, 'INVARIANT status reports ready when the campaign is on and queue-first is set');
+  Q.setQueueFirst(false);
+  ok(Q.luckyStatus().reason === 'needs_queue_first',
+    'INVARIANT with pay-first the campaign says WHY it cannot run (the number arrives after payment)');
+
+  Q.setQueueFirst(wasQF); Q.setLucky(false);
+}
+
+console.log('\n== Coupon report ==');
+{
+  const base = Q.couponReport({ days: 30 });
+  // A key no earlier block has used: 'c' belongs to the lucky winner, whose claim already wrote a
+  // coupon row — updating by customer_key then rewrote THAT row too and the delta came out wrong.
+  const K = 'U' + 'f'.repeat(32);
+  const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  const ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', 'ทดสอบ', 49, ?, 'campaign')`).run(K, day).lastInsertRowid;
+  const r1 = Q.couponReport({ days: 30 });
+  ok(r1.issued === base.issued + 1, `INVARIANT an issued coupon shows up in the report (${base.issued} → ${r1.issued})`);
+  ok(r1.redeemed === base.redeemed, 'INVARIANT issuing one does NOT count as a redemption');
+
+  // The value column must come from what was really given, not the coupon's ceiling.
+  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), state='redeemed', used_value=31 WHERE id=?`).run(ccId);
+  const r2r = Q.couponReport({ days: 30 });
+  ok(r2r.redeemed === base.redeemed + 1, 'INVARIANT redeeming it moves the redeemed count');
+  ok(near(r2r.value, base.value + 31), `INVARIANT value uses the ACTUAL discount (฿31), not the ฿49 cap — got ${r2r.value - base.value}`);
+  const wb = r2r.rows.find((x) => x.kind === 'winback');
+  ok(wb && wb.label === 'ดึงลูกค้ากลับ', 'INVARIANT each row carries a Thai label the owner can read');
+
+  // A window that ends before the coupon existed must not include it.
+  const old = Q.couponReport({ from: '2020-01-01', to: '2020-01-31' });
+  ok(old.issued === 0 && old.redeemed === 0, 'INVARIANT a date range outside the data returns zero, not everything');
+  db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
+}
+
 console.log('\n== Review: reasons + comment ==');
 {
   const mk = (code) => db.prepare("INSERT INTO tickets (store_id,zone_id,number,code,status) VALUES (1,1,0,?,'served')").run(code).lastInsertRowid;

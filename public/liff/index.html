@@ -406,6 +406,24 @@
   </div>
 </div>
 
+<!-- แคมเปญเลขนำโชค: shown once, on the ticket that drew the winning number, while the order is still
+     unpaid. Deliberately a decision — ใช้เลย applies it to THIS order, ไม่รับสิทธิ declines — so the
+     customer is never left holding a prize they can't spend. -->
+<div id="luckyPop" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:140;align-items:center;justify-content:center;padding:18px">
+  <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center;padding:26px 20px">
+    <div style="font-size:46px;line-height:1">🎉</div>
+    <h1 style="margin:8px 0 2px;font-size:22px">ยินดีด้วย!</h1>
+    <p class="muted" style="margin:0;font-size:13.5px">คุณได้คิวเลข <b id="lkNum" style="color:var(--accent)">67</b> — เลขนำโชคของวันนี้</p>
+    <div style="margin:16px 0;background:linear-gradient(160deg,#eafaf4,#fff);border:1px solid #a7e8d2;border-radius:16px;padding:16px">
+      <div style="font-size:30px;font-weight:800;color:#0f7a5f">รับฟรี ฿<span id="lkVal">40</span></div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">เลือกเมนูไหนก็ได้ · ถ้าราคาเกิน ฿<span id="lkVal2">40</span> จ่ายเพิ่มเฉพาะส่วนต่าง</div>
+    </div>
+    <p class="muted" style="font-size:11.5px;line-height:1.5;margin:0 0 14px">ใช้ได้กับออเดอร์นี้เท่านั้น · เฉพาะเจ้าของสิทธิ์ · โอนสิทธิ์ให้ผู้อื่นหรือแลกเป็นเงินสดไม่ได้</p>
+    <button class="ok" style="width:100%;min-height:52px;font-size:17px;font-weight:800" onclick="luckyClaim()">ใช้เลย</button>
+    <button class="ghost" style="width:100%;margin-top:8px;font-size:13px;color:var(--muted)" onclick="luckySkip()">ไม่รับสิทธิ</button>
+  </div>
+</div>
+
 <!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
 <div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0">
@@ -1993,6 +2011,7 @@ function render(v){
   $('tStore').textContent = v.zone;
   renderOrderBlock(v);
   renderTimeline(ticketStep(v));   // status timeline (hidden for pending/cancelled)
+  try{ renderLucky(v); }catch(e){}   // a prize must never be able to break the ticket screen
   $('tLastCalled').textContent = (!isPending && v.last_called) ? ('กำลังเรียกคิว: '+v.last_called) : '';
   $('tRate').style.display='none';
   const cb=$('cancelBtn');
@@ -2093,6 +2112,32 @@ window.toggleRateTag=(id)=>{
 window.tCommentCount=()=>{ const v=$('tComment').value||''; $('tCommentN').textContent=v.length+'/500'; };
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
 window.changePay=()=>{ openPayPicker('ticket'); };   // re-choose via the SAME clean picker the cart uses (not the old inline chooser)
+// ---------- แคมเปญเลขนำโชค ----------
+// Only offered while the prize is still claimable AND the order is unpaid — once it's paid there is
+// nothing left to discount, so showing the sheet would be a promise the app can't keep.
+let _lkShown=false;
+function renderLucky(v){
+  const L=v.lucky;
+  const claimable = L && L.state==='won' && v.order && !['paid','void'].includes(v.order.status)
+                    && !['cancelled','served','no_show','skipped'].includes(v.status);
+  if(!claimable){ if(!_lkShown) $('luckyPop').style.display='none'; return; }
+  if(_lkShown) return;
+  _lkShown=true;
+  $('lkNum').textContent=L.number; $('lkVal').textContent=L.value; $('lkVal2').textContent=L.value;
+  $('luckyPop').style.display='flex';
+}
+window.luckyClaim=async()=>{
+  try{
+    const r=await api('/api/tickets/'+ticketId+'/lucky/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})});
+    $('luckyPop').style.display='none';
+    toast(`🎉 รับสิทธิ์แล้ว — ลด ฿${r.freeAmount}`);
+    tick();
+  }catch(e){ $('luckyPop').style.display='none'; toast('รับสิทธิ์ไม่สำเร็จ — ติดต่อพนักงานที่เคาน์เตอร์ค่ะ'); }
+};
+window.luckySkip=async()=>{
+  try{ await api('/api/tickets/'+ticketId+'/lucky/skip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})}); }catch(e){}
+  $('luckyPop').style.display='none';
+};
 window.sendReview=async()=>{
   if(!_revStars){ toast('กรุณาให้คะแนนอย่างน้อย 1 ดาวค่ะ'); return; }
   const btn=$('tRateSend'); btn.disabled=true; btn.style.opacity=.6; btn.textContent='กำลังส่ง…';

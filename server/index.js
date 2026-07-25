@@ -371,7 +371,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -392,6 +392,11 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
+    // on or move the prize amount.
+    if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }
+    if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
+    if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -679,6 +684,27 @@ app.post('/api/tickets/:ticketId/rate', (req, res) => {
     res.json(Q.setRating(req.params.ticketId, req.body?.stars, {
       tags: req.body?.tags, comment: req.body?.comment,
     }));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// แคมเปญเลขนำโชค: the winner claims (or declines) the prize from their own ticket. Ownership is
+// checked the same way as cancel/rate — the LINE id on the ticket must match the caller's.
+app.post('/api/tickets/:ticketId/lucky/claim', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  try { res.json(Q.claimLucky(req.params.ticketId, req.body?.lineUserId || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/tickets/:ticketId/lucky/skip', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  try { res.json(Q.skipLucky(req.params.ticketId, req.body?.lineUserId || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Coupon + campaign performance. Manager-gated like the other money reports (these are business
+// figures, not the free-text customer comments that made the review report owner-only).
+app.get('/api/reports/coupons', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    res.json({ coupons: Q.couponReport({ from: req.query.from, to: req.query.to, days: req.query.days }),
+               lucky: Q.luckyReport({ from: req.query.from, to: req.query.to, days: req.query.days }) });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Feedback report — OWNER ONLY. Free-text comments are customers talking candidly about the shop
