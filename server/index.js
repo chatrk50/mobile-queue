@@ -9,6 +9,7 @@ import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
+import compression from 'compression';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
@@ -141,6 +142,12 @@ app.get('/manifest.webmanifest', (req, res) => {
     ],
   });
 });
+// gzip everything compressible. The two single-file bundles are the whole app (cashier 541 KB,
+// LIFF 206 KB) and customers load them over cellular — compression cuts them ~74%.
+// The SSE stream is excluded: gzip buffers writes, so live queue events would never flush.
+app.use(compression({
+  filter: (req, res) => (req.path.endsWith('/stream') ? false : compression.filter(req, res)),
+}));
 app.use(express.static(join(__dirname, '..', 'public'), {
   // HTML must always revalidate so a redeploy reaches the LINE in-app browser / iPad immediately
   // (LIFF caching otherwise serves a stale page); other assets (css/js/img) can cache normally.

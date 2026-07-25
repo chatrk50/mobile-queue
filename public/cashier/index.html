@@ -1146,7 +1146,9 @@
 </div>
 <!-- "เพิ่มเติม" overflow menu: occasional per-order actions. Centered card with a FIXED header and a
      SCROLLABLE body so every button is reachable even on a short (landscape) screen. -->
-<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
+<!-- Renamed from "moreMenu": the phone-header dropdown later claimed that id, and getElementById
+     returns the FIRST match — so this modal filled its body but the header menu opened instead. -->
+<div id="orderMoreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
   <div class="card" style="max-width:440px;width:100%;margin:0;max-height:88vh;display:flex;flex-direction:column;padding:16px">
     <div class="row between" style="margin:0 0 10px;flex:none"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
     <div id="moreMenuBody" style="overflow-y:auto;flex:1;min-height:0" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
@@ -1367,8 +1369,8 @@ window.appPrompt=({title='',message='',value='',placeholder='',type='text',input
 window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
   _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
 // "เพิ่มเติม" overflow menu: show the secondary actions stashed for this ticket (built in renderZone).
-window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('moreMenu').style.display='flex'; };
-window.closeMoreMenu=()=>{ $('moreMenu').style.display='none'; };
+window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('orderMoreMenu').style.display='flex'; };
+window.closeMoreMenu=()=>{ $('orderMoreMenu').style.display='none'; };
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
