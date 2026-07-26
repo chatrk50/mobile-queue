@@ -1215,15 +1215,21 @@ window.dsToggleLike=async()=>{ const d=pendingDrink; if(!d) return;
     d.likes=r.likes; if(r.liked) MY_LIKES.add(d.id); else MY_LIKES.delete(d.id); dsPaintLike(); paintMenu();
     if(r.liked) toast('❤️ ขอบคุณที่ถูกใจเมนูนี้ค่ะ'); }
   catch(e){ if(was) MY_LIKES.add(d.id); else MY_LIKES.delete(d.id); d.likes=Math.max(0,(d.likes||0)+(was?1:-1)); dsPaintLike(); paintMenu(); } };
-window.showOrderUI=async()=>{
-  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+// The ONE way into the menu. Every caller goes through here, because getting there means four
+// things together — load the menu, paint it, hide the queue card, show the order card — and doing
+// three of the four leaves a half-built screen.
+// opts.keepCart: arriving from the coupon wallet must not throw away what's already in the basket.
+// Returns false when the shop is closed, so callers can stop instead of continuing blindly.
+window.showOrderUI=async(opts={})=>{
+  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return false; }   // single gate — covers member card / reorder / deep link
   closeAllPopups();
   // cartCoupon deliberately SURVIVES re-opening the menu: the customer just armed it from the
   // wallet or a claim link; it is only cleared when the order is actually placed.
-  await loadMenu(); cart=[]; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+  await loadMenu(); if(!opts.keepCart) cart=[];
+  counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
   renderBasketCount(); show('getCard',false); show('orderCard',true);
-  armPendingCoupon(); };
+  armPendingCoupon(); return true; };
 // A claim link ends in a page RELOAD (สั่งเลย → /liff/?zone=…), so the freshly claimed coupon is
 // carried across it in sessionStorage and armed the first time the menu opens.
 async function armPendingCoupon(){
@@ -1755,9 +1761,14 @@ window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
 // Browse mode "ใช้": arm the coupon and take the customer STRAIGHT to the menu (owner rule) —
 // the discount then applies itself the moment the cart meets the coupon's conditions, and the
 // basket says exactly what is still missing until it does.
-window.useCouponNow=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
+window.useCouponNow=async(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
   cartCoupon=c; closeCoupon(); closeAllPopups();
-  const oc=$('orderCard'); if(oc && oc.style.display==='none' && !ticketId) show('orderCard',true);
+  // An open ticket blocks a second order in this zone, so walking them into the menu would dead-end
+  // at "already_in_queue" — keep the coupon armed for the next order and say so instead.
+  if(ticketId){ toast('เก็บคูปอง "'+(c.label||c.code)+'" ไว้ใช้กับออเดอร์ถัดไปแล้วค่ะ'); return; }
+  const oc=$('orderCard');
+  const onMenu = oc && oc.style.display!=='none';
+  if(!onMenu && !(await showOrderUI({keepCart:true}))) return;   // closed → showOrderUI already explained
   renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} }
   toast('ใช้คูปอง "'+(c.label||c.code)+'" — ระบบจะลดให้อัตโนมัติเมื่อยอดเข้าเงื่อนไขค่ะ'); };
 let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar "my coupons" list (no active order yet)
@@ -1833,7 +1844,7 @@ window.openCoupon=async(mode)=>{
     const bd = sel ? 'var(--accent)' : 'var(--line)';
     const notch = (pos)=>`<div style="position:absolute;left:-8px;${pos}:-9.5px;width:15px;height:15px;border-radius:50%;background:#fff;border:1.5px solid ${bd}"></div>`;
     const action = _couponMode==='browse'
-      ? (c.usable?`<div style="flex:none;display:flex;align-items:center;padding-right:11px"><button class="ok" style="padding:8px 16px;font-size:13px;border-radius:999px;min-height:0" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
+      ? (c.usable?`<div style="flex:none;display:flex;align-items:center;padding-right:11px"><button class="ok" style="padding:0 20px;font-size:13.5px;border-radius:999px;min-height:44px" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
       : `<div style="flex:none;display:flex;align-items:center;padding-right:11px"><svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg></div>`;
     return `<div style="position:relative;display:flex;background:${sel?'#e9f8fb':'#fff'};border:1.5px solid ${bd};border-radius:16px;margin-bottom:12px;${c.usable?'':'opacity:.55'}${_couponMode==='cart'&&c.usable?';cursor:pointer':''}" ${_couponMode==='cart'&&c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
       <div style="flex:none;width:92px;border-radius:14.5px 0 0 14.5px;background:${kindTile[0]};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:14px 6px">
