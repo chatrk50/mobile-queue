@@ -4644,7 +4644,11 @@ window.showFeatures=async()=>{
           ${d.hint?esc(d.hint):'LINE ปฏิเสธการส่ง'}${d.lastError?`<div style="font-weight:400;font-size:11px;margin-top:3px;color:#7a2530">LINE ตอบ: ${d.lastError.status?('HTTP '+d.lastError.status+' · '):''}${esc(String(d.lastError.detail||''))}</div>`:''}</div>`:''}
         <div class="muted" style="font-size:11px;margin-top:3px">ส่งเมื่อ "ปิดรอบเงินสด" (วันละครั้ง) · ถ้าวันไหนไม่ได้ปิดรอบ ระบบส่งของเมื่อวานให้ตอนเที่ยงคืนแทน</div>
       </div>`})(f.summaryDiag||{})}
-      <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
+      <div id="lineCheckBox" style="width:100%"></div>
+      <div class="row" style="gap:6px;width:100%">
+        <button class="ghost" style="flex:1;padding:9px" onclick="checkLine()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ตรวจการเชื่อมต่อ LINE</button>
+        <button class="ghost" style="flex:1;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปทดสอบ</button>
+      </div>
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
@@ -4723,6 +4727,22 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
+// ถาม LINE ตรงๆ ว่า "token ของเซิร์ฟเวอร์นี้เป็นของ OA ไหน" และ "รหัส U… ที่บันทึกไว้เป็นคนของ OA นั้นไหม"
+// — userId ของ LINE ผูกกับ OA เดียว รหัสที่ก๊อปมาจาก OA ทดสอบจึงส่งไม่ได้ตลอดกาล ทั้งที่เพิ่มเพื่อนแล้ว
+window.checkLine=async()=>{
+  const box=$('lineCheckBox'); if(box) box.innerHTML='<p class="muted" style="font-size:12px;margin:4px 0">กำลังถาม LINE…</p>';
+  let r; try{ r=await api('/api/admin/line-check'); }
+  catch(e){ if(box) box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">ตรวจได้เฉพาะเจ้าของร้าน</p>'; return; }
+  const okc=(b)=>b?'#0f6e56':'#a32d2d';
+  const ln=(l,v,c)=>`<div class="row between" style="font-size:12px;padding:2px 0;gap:10px"><span class="muted" style="flex:none">${l}</span><b style="color:${c||'var(--navy)'};text-align:right">${v}</b></div>`;
+  const good=!!(r.friend&&r.friend.ok&&r.friend.friend);
+  box.innerHTML=`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:6px">
+    <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:4px">ผลตรวจกับ LINE</div>
+    ${ln('OA ที่ระบบใช้อยู่', r.bot&&r.bot.ok?(esc(r.bot.basicId||'-')+(r.bot.displayName?(' · '+esc(r.bot.displayName)):'')):'ตรวจไม่ได้ (token ใช้ไม่ได้)', okc(!!(r.bot&&r.bot.ok)))}
+    ${ln('รหัสเจ้าของที่บันทึกไว้', r.ownerId?(esc(String(r.ownerId).slice(0,10))+'…'):'ยังไม่ได้ตั้ง', okc(!!r.ownerId))}
+    ${ln('เป็นเพื่อนกับ OA นี้', good?('ใช่'+(r.friend.displayName?(' · '+esc(r.friend.displayName)):'')):'ไม่ใช่', okc(good))}
+    ${r.verdict?`<div style="background:${good?'#e1f5ee':'#fcebeb'};color:${good?'#0f6b57':'#a32d2d'};border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.verdict)}</div>`:''}
+  </div>`; };
 // พักสิทธิ์ no-show: toggle มีผลทันที (กติกา design system) · เกณฑ์ครั้ง/วัน บันทึกด้วยปุ่ม
 window.toggleNoshow=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noshowOn:!!on})});
   toast(on?'เปิดพักสิทธิ์ no-show แล้ว':'ปิดพักสิทธิ์ no-show แล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };

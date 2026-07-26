@@ -537,6 +537,12 @@ app.post('/api/pending/sweep', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// "ตรวจการเชื่อมต่อ LINE": which OA the server's token belongs to + whether the saved owner id is
+// a user of that same OA. Owner-only, read-only, and the token itself never leaves the server.
+app.get('/api/admin/line-check', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.lineCheck()); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
 app.post('/api/admin/owner-summary', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

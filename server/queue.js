@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, lastPushError, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, lastPushError, botInfo, friendCheck, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -2785,6 +2785,25 @@ export async function notifyOwner(text, kind = 'owner') {
     setSetting('owner:last_push_error', e ? JSON.stringify(e) : '');
   } catch { /* never block on diagnostics */ }
   return { sent: !!ok, reason: ok ? 'sent' : 'push_failed', error: ok ? null : lastPushError() };
+}
+/** Ask LINE two questions the owner cannot answer from the outside:
+ *  1) which OA does the token on THIS server belong to (real @138dccus vs a test OA)?
+ *  2) is the saved owner id a user of that same OA, and a friend?
+ *  A userId is per-channel, so an id captured from a different OA's webhook fails forever even
+ *  though "add friend" was done and the id looks valid — this is the check that shows it. */
+export async function lineCheck() {
+  const id = getOwnerLineId();
+  const bot = await botInfo();
+  const friend = id ? await friendCheck(id) : { ok: false, reason: 'no_id' };
+  let verdict = null;
+  if (!LINE_ENABLED) verdict = 'ระบบ LINE ปิดอยู่บนเซิร์ฟเวอร์นี้ (ไม่ได้ตั้ง token) — ส่งจริงไม่ได้';
+  else if (!bot.ok) verdict = 'Token ของ LINE ใช้ไม่ได้ — ต้องออก Channel access token ใหม่ใน LINE Developers';
+  else if (!id) verdict = 'ยังไม่ได้ตั้ง LINE userId ของเจ้าของ';
+  else if (friend.ok && friend.friend) verdict = 'พร้อมส่ง — id นี้เป็นเพื่อนกับ OA ที่ระบบใช้อยู่';
+  else if (friend.ok && !friend.friend)
+    verdict = `LINE ไม่รู้จัก id นี้ในบัญชี ${bot.basicId || 'OA ที่ระบบใช้อยู่'} — แปลว่ารหัส U… ถูกคัดลอกมาจาก OA อื่น (เช่นตัวทดสอบ) `
+      + `หรือยังไม่ได้ทักแชทกับ OA นี้ · วิธีแก้: ทักแชท ${bot.basicId || 'OA ของร้าน'} แล้วพิมพ์ "id" เพื่อรับรหัสของ OA นี้โดยตรง`;
+  return { lineOn: LINE_ENABLED, bot, ownerId: id || null, friend, verdict };
 }
 /** Turn a raw LINE failure into the single sentence that tells the owner what to DO. */
 export function pushErrorHint(err) {
