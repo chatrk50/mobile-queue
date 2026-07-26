@@ -948,13 +948,7 @@
     <div id="chOutList"></div>
   </div>
   <div id="chTab2" style="display:none">
-    <div class="row" style="gap:6px;margin:0 0 8px;flex-wrap:wrap" id="crRange"></div>
-    <div class="row" style="gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <input id="crFrom" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-      <span class="muted" style="font-size:12px">ถึง</span>
-      <input id="crTo" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-      <button class="ghost" style="padding:7px 14px" onclick="loadCouponRep(null)">ดู</button>
-    </div>
+    <div id="crRange" style="margin:0 0 10px"></div>
     <div id="crBody"></div>
   </div>
 </div>
@@ -1106,6 +1100,11 @@
      Buttons: .ok = primary (one per view), .ghost = secondary, .danger = destructive. */
   .seg{flex:1;min-width:64px;padding:8px 6px;font-size:12.5px;font-weight:700}
   .seg.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* .rpop = ป๊อปเลือกช่วงเวลาแบบกะทัดรัด: ปุ่มเดียวแทนแถวชิป + ช่องวันที่ (ดู openRangePop) */
+  .rpop{position:fixed;z-index:120;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px -8px rgba(22,49,79,.28);padding:8px;width:252px;box-sizing:border-box}
+  .rpop-i{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:9px;font-size:13px;font-family:inherit;color:var(--navy);cursor:pointer;min-height:36px}
+  .rpop-i:hover{background:var(--surface)}
+  .rpop-i.on{background:var(--accent);color:#fff;font-weight:700}
   /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
      over months (520–1000px), so each page opened at a different width — the owner read that as
      the app jumping around. !important because each card carries its historical inline value.
@@ -3106,7 +3105,47 @@ function renderInsightsBody(d, box){
 // Owner-only on purpose — comments name staff and judge the shop, so they are not board material.
 // The API enforces it too (ownerOK); hiding the panel is only the second lock, never the only one.
 // ---------- รายงานคูปอง ----------
-let _crDays=30;
+// ---- ช่วงเวลาแบบกะทัดรัด (เจ้าของชอบ pattern "Select date range ▾"): ปุ่มเดียวบอกช่วงที่เลือก
+// เปิดป๊อปเล็กมี preset + กำหนดเอง — แทนแถวชิป + ช่องวันที่สองช่องที่กินพื้นที่หน้ารายงาน
+// DESIGN-SYSTEM §4 ยังคุมอยู่: เลือก preset ล้าง custom และกลับกัน เพราะทั้งคู่จบที่ from/to ชุดเดียว
+function bkkDate(off){ const d=new Date(Date.now()+7*3600e3); d.setUTCDate(d.getUTCDate()+(off||0)); return d.toISOString().slice(0,10); }
+const RP_ICON='<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+const RP_PRESETS=()=>[['วันนี้',bkkDate(0),bkkDate(0)],['เมื่อวาน',bkkDate(-1),bkkDate(-1)],
+  ['7 วันล่าสุด',bkkDate(-6),bkkDate(0)],['30 วันล่าสุด',bkkDate(-29),bkkDate(0)],
+  ['เดือนนี้',bkkDate(0).slice(0,8)+'01',bkkDate(0)],['1 ปีล่าสุด',bkkDate(-364),bkkDate(0)]];
+const _rpReg={};   // id → {label, fn(from,to,label)} — ปุ่มถูก render ใหม่ได้ registry อยู่ยาว
+window.rangeBtn=(id,label,fn)=>{ _rpReg[id]={label,fn};
+  return `<button id="${id}" class="ghost" style="padding:7px 12px;font-size:12.5px;font-weight:700" aria-haspopup="true" onclick="openRangePop('${id}')">${RP_ICON}${label} <span style="font-size:10px">▾</span></button>`; };
+window.openRangePop=(id)=>{
+  const reg=_rpReg[id], btn=$(id); if(!reg||!btn) return;
+  closeRangePop();
+  const pop=document.createElement('div'); pop.id='rangePop'; pop.className='rpop';
+  pop.innerHTML=RP_PRESETS().map(([l,f,t])=>`<button class="rpop-i${l===reg.label?' on':''}" onclick="rpPick('${id}','${f}','${t}','${l}')">${l}</button>`).join('')
+    +`<div style="border-top:1px solid var(--line);margin:6px 0 0;padding-top:8px">
+      <div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:5px">กำหนดเอง</div>
+      <div class="row" style="gap:5px;align-items:center">
+        <input id="rpFrom" type="date" aria-label="วันที่เริ่ม" style="flex:1;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+        <span class="muted" style="font-size:11px">ถึง</span>
+        <input id="rpTo" type="date" aria-label="วันที่สิ้นสุด" style="flex:1;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+      </div>
+      <button class="ok" style="width:100%;padding:9px;margin-top:7px;font-size:12.5px" onclick="rpCustom('${id}')">ใช้ช่วงนี้</button>
+    </div>`;
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(), w=252;
+  pop.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+'px';
+  pop.style.top=Math.max(8,Math.min(r.bottom+6,innerHeight-pop.offsetHeight-8))+'px';
+  setTimeout(()=>document.addEventListener('pointerdown',rpOutside,true),0);
+};
+function rpOutside(e){ const p=$('rangePop'); if(p&&!p.contains(e.target)) closeRangePop(); }
+window.closeRangePop=()=>{ const p=$('rangePop'); if(p) p.remove(); document.removeEventListener('pointerdown',rpOutside,true); };
+window.rpPick=(id,f,t,l)=>{ closeRangePop(); const reg=_rpReg[id]; if(!reg) return;
+  reg.label=l; const btn=$(id); if(btn) btn.innerHTML=RP_ICON+l+' <span style="font-size:10px">▾</span>';
+  reg.fn(f,t,l); };
+window.rpCustom=(id)=>{ const f=$('rpFrom').value, t=$('rpTo').value;
+  if(!f||!t){ toast('เลือกวันที่เริ่มและวันที่สิ้นสุด'); return; }
+  if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
+  rpPick(id,f,t,f+' → '+t); };
+let _crSel=null;   // {from,to,label} — ช่วงที่รายงานคูปองแสดงอยู่
 window.hideCouponRep=()=>{ $('couponRepCard').style.display='none'; $('dash').style.display=''; };
 // The hub: tab 0 = campaigns/templates, 1 = outstanding, 2 = report. Data loads per tab on open.
 window.showCouponHub=(tab=0)=>{ hideAllPanels(); closeAdmin();
@@ -3245,18 +3284,15 @@ window.chCancelCoupon=async(id,label)=>{
   try{ await api('/api/admin/customer-coupons/'+id+'/cancel',{method:'POST'}); toast('ยกเลิกคูปองแล้ว'); chLoadOut(0); }
   catch(e){ toast('ยกเลิกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
 };
-window.loadCouponRep=async(days)=>{
+window.crRangeApply=(f,t,l)=>loadCouponRep(f,t,l);
+window.loadCouponRep=async(a,b,l)=>{
   const body=$('crBody'); if(!body) return;
-  // A preset clears the custom dates, and picking dates clears the preset — otherwise the heading
-  // could say "30 วัน" while showing a hand-picked range.
-  let qs;
-  if(days){ _crDays=days; $('crFrom').value=''; $('crTo').value=''; qs='days='+days; }
-  else { const f=$('crFrom').value, t=$('crTo').value;
-    if(!f||!t){ toast('เลือกวันที่เริ่มและวันที่สิ้นสุด'); return; }
-    if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
-    _crDays=0; qs='from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t); }
-  $('crRange').innerHTML=[[1,'วันนี้'],[7,'7 วัน'],[30,'30 วัน'],[365,'1 ปี']].map(([d,l])=>
-    `<button class="ghost seg${d===_crDays?' on':''}" onclick="loadCouponRep(${d})">${l}</button>`).join('');
+  // ปุ่มช่วงเวลาเดียว (rangeBtn) แทนชิป + ช่องวันที่เดิม — รับได้ทั้งเลขวัน (ผู้เรียกเก่า) และ from/to
+  if(typeof a==='number'&&!b){ _crSel={from:bkkDate(-(a-1)),to:bkkDate(0),label:a===1?'วันนี้':(a===365?'1 ปีล่าสุด':a+' วันล่าสุด')}; }
+  else if(a&&b){ _crSel={from:a,to:b,label:l||(a+' → '+b)}; }
+  else if(!_crSel){ _crSel={from:bkkDate(-29),to:bkkDate(0),label:'30 วันล่าสุด'}; }
+  const qs='from='+encodeURIComponent(_crSel.from)+'&to='+encodeURIComponent(_crSel.to);
+  $('crRange').innerHTML=rangeBtn('crRangeBtn',_crSel.label,crRangeApply);
   body.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   let r; try{ r=await api('/api/reports/coupons?'+qs); }
   catch(e){ body.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">ดูรายงานนี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
@@ -4500,9 +4536,9 @@ window.printKitchen=async(tid)=>{
 };
 // Owner: toggle prepared-but-dormant features (receipt printing, SlipOK auto-verify).
 // LINE-push cost report: per-day counts for any date range (default = last 31 days).
-window.loadPushRange=async()=>{ const box=$('pushRangeBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
-  const f=$('pushFrom').value, t=$('pushTo').value;
-  let d; try{ d=await api('/api/push-stats/range'+((f||t)?('?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)):'')); }
+window.pushRangeApply=(f,t)=>loadPushRange(f,t);
+window.loadPushRange=async(f,t)=>{ const box=$('pushRangeBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let d; try{ d=await api('/api/push-stats/range'+((f||t)?('?from='+encodeURIComponent(f||'')+'&to='+encodeURIComponent(t||'')):'')); }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
   const rows=d.daily||[];
   box.innerHTML=`<div style="background:var(--surface,#f1f5f9);border-radius:10px;padding:9px 12px;margin-top:4px">
@@ -4566,11 +4602,9 @@ window.showFeatures=async()=>{
       ${ps.byKind.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${ps.byKind.map(k=>`<span style="background:var(--surface,#f1f5f9);border-radius:999px;padding:3px 10px;font-size:11.5px;color:var(--navy)">${esc(k.label)} <b>${k.n}</b></span>`).join('')}</div>`:''}
       ${ps.monthly.length>1?`<div class="muted" style="font-size:11.5px">รายเดือน: ${ps.monthly.slice(0,6).map(m=>`${m.ym} = ${m.n}`).join(' · ')}</div>`:''}
       ${ps.monthly.length===0?'<div class="muted" style="font-size:11.5px">ยังไม่มีการส่งจริง (เริ่มนับจากนี้ · ระบบทดสอบไม่ถูกนับ)</div>':''}
-      <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;width:100%">
-        <input id="pushFrom" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-        <span class="muted" style="font-size:12px">ถึง</span>
-        <input id="pushTo" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-        <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="loadPushRange()">ดูรายวันตามช่วง</button>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;width:100%">
+        <span class="muted" style="font-size:12px;font-weight:700">ดูรายวัน:</span>
+        ${rangeBtn('pushRangeBtn','เลือกช่วงเวลา',window.pushRangeApply)}
       </div>
       <div id="pushRangeBox" style="width:100%"></div>
     </div>`:'')+
