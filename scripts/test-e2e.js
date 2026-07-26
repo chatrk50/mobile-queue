@@ -1016,6 +1016,14 @@ console.log('\n== Coupon claim links ==');
   const want = db.prepare("SELECT date(datetime('now','+7 hours'),'+7 days') d").get().d;
   ok(exp === want, `INVARIANT valid_days sets expiry relative to the claim (${exp} vs ${want})`);
   ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
+  // Quota integrity: the raw code path must be CLOSED for claim-link coupons. Otherwise anyone who
+  // saw the code bypasses the quota, and a claimer double-dips (wallet voucher + code discount).
+  const vClaim = Q.validateCoupon('CLAIM50', k(1), 100);
+  ok(!vClaim.ok && /กดรับผ่านลิงก์/.test(vClaim.reason || ''), `INVARIANT a claim-link coupon is refused via the raw code path (${vClaim.reason})`);
+  ok(!Q.availableCoupons('Ustranger00000000000000000000001', 100).some((x) => x.code === 'CLAIM50'),
+    'INVARIANT a claim-link coupon is not advertised to customers who have not claimed it');
+  ok(Q.availableCoupons(k(1), 100).some((x) => x.couponKind === 'claim'),
+    'INVARIANT the claimer still sees the claimed voucher in their own coupon list');
 }
 
 // ---- Coupon scoping (specific menu items) + audience (new customers only) ----

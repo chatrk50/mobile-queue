@@ -638,8 +638,9 @@
           <label class="ff" style="width:140px">ยอดขั้นต่ำ ฿
             <input id="cpMin" type="number" inputmode="decimal" placeholder="0"></label>
           <label class="ff" style="min-width:150px">ใครใช้ได้
-            <select id="cpAud"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option></select></label>
+            <select id="cpAud" onchange="cpSyncAud()"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option><option value="claim">เฉพาะคนที่กดรับผ่านลิงก์ (จำกัดโควตา)</option></select></label>
         </div>
+        <div class="cphint" id="cpAudHint" style="display:none">บันทึกแล้วระบบจะให้ตั้งโควตา + สร้างลิงก์รับ — ลูกค้าต้องกดรับเข้า “คูปองของฉัน” ก่อนถึงจะใช้ได้ พิมพ์โค้ดตรงๆ ใช้ไม่ได้</div>
         <div class="cprow">
           <label class="ff" style="min-width:150px">เริ่มใช้ได้ <span class="muted">(ว่าง = ทันที)</span>
             <input id="cpFrom" type="date"></label>
@@ -661,7 +662,7 @@
       </div>
 
       <button class="ok" id="cpSaveBtn" style="width:100%;padding:12px;margin-top:12px" onclick="addCoupon()">สร้างคูปอง</button>
-      <div class="muted" style="font-size:11.5px;margin-top:6px">สร้างแล้วกด “ทำลิงก์รับ” เพื่อแจกแบบจำกัดสิทธิ์ (ลูกค้ากดรับเข้า “คูปองของฉัน”)</div>
+      <div class="muted" style="font-size:11.5px;margin-top:6px">แจกแบบจำกัดสิทธิ์: เลือก “เฉพาะคนที่กดรับผ่านลิงก์” ด้านบน หรือกด “ทำลิงก์รับ” ที่คูปองในรายการ</div>
     </div>
   </div>
 
@@ -2376,17 +2377,20 @@ function cpCard(c){
     </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
 window.cpSyncType=()=>{ const w=$('cpMaxWrap'); if(w) w.style.display=($('cpType').value==='percent')?'':'none'; };
+// "ใครใช้ได้" ก็คุมช่องทางแจกด้วย: เลือกลิงก์ = ต้องกดรับก่อนใช้ — โชว์คำอธิบายทันทีที่เลือก
+window.cpSyncAud=()=>{ const h=$('cpAudHint'); if(h) h.style.display=($('cpAud').value==='claim')?'':'none'; };
 let _cpEditId=null;
 window.cpResetForm=()=>{ _cpEditId=null;
   ['cpCode','cpLabel','cpValue','cpMax','cpMin','cpFrom','cpExp','cpLimit'].forEach(id=>{const e=$(id); if(e) e.value='';});
   $('cpPer').value='1'; $('cpType').value='baht'; $('cpAud').value='all'; $('cpStack').checked=false; $('cpCode').disabled=false;
-  $('cpFormTitle').textContent='สร้างคูปองใหม่'; $('cpSaveBtn').textContent='สร้างคูปอง'; $('cpCancelBtn').style.display='none'; cpSyncType(); };
+  $('cpFormTitle').textContent='สร้างคูปองใหม่'; $('cpSaveBtn').textContent='สร้างคูปอง'; $('cpCancelBtn').style.display='none'; cpSyncType(); cpSyncAud(); };
 window.cpEdit=(id)=>{ const c=COUPONS.find(x=>x.id===id); if(!c) return; _cpEditId=id;
   $('cpCode').value=c.code; $('cpCode').disabled=true;   // the code is the customer-facing key — changing it would orphan printed campaigns
   $('cpLabel').value=c.label||''; $('cpType').value=c.disc_type; $('cpValue').value=c.disc_value;
   $('cpMax').value=c.max_disc||''; $('cpMin').value=c.min_spend||''; $('cpFrom').value=c.valid_from||''; $('cpExp').value=c.expires_at||'';
-  $('cpLimit').value=c.usage_limit||''; $('cpPer').value=c.per_customer; $('cpAud').value=c.audience||'all'; $('cpStack').checked=!!c.stackable;
-  $('cpFormTitle').textContent='แก้ไข: '+c.label; $('cpSaveBtn').textContent='บันทึกการแก้ไข'; $('cpCancelBtn').style.display=''; cpSyncType();
+  $('cpLimit').value=c.usage_limit||''; $('cpPer').value=c.per_customer;
+  $('cpAud').value=(c.distribution==='claim')?'claim':(c.audience||'all'); $('cpStack').checked=!!c.stackable;
+  $('cpFormTitle').textContent='แก้ไข: '+c.label; $('cpSaveBtn').textContent='บันทึกการแก้ไข'; $('cpCancelBtn').style.display=''; cpSyncType(); cpSyncAud();
   $('cpFormTitle').scrollIntoView({behavior:'smooth',block:'center'}); };
 // Claim campaign: quota is taken when the customer TAPS the link, so "50 สิทธิ์" is honest.
 window.setupClaim=async(id,isClaim,curLimit,curDays)=>{
@@ -2424,21 +2428,30 @@ window.copyClaimLink=(tok)=>{ if(!tok){ toast('ยังไม่มีลิง
 window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
 // One save path for both create and edit — same validation, same payload shape.
 window.addCoupon=async()=>{
+  // ใครใช้ได้ = ช่องทางแจกด้วย: 'claim' ไม่ใช่ audience จริง — แปลงเป็น all + เปิด/ปิดลิงก์รับหลังบันทึก
+  const aud=$('cpAud').value||'all';
+  const cur=_cpEditId?(COUPONS.find(x=>x.id===_cpEditId)||{}):{};
   const body={ code:$('cpCode').value.trim(), label:$('cpLabel').value.trim(),
     disc_type:$('cpType').value, disc_value:Number($('cpValue').value)||0,
     max_disc:($('cpType').value==='percent'?(Number($('cpMax').value)||0):0),
     min_spend:Number($('cpMin').value)||0,
     valid_from:$('cpFrom').value||null, expires_at:$('cpExp').value||null,
     usage_limit:Number($('cpLimit').value)||0, per_customer:Number($('cpPer').value)||0,
-    stackable:$('cpStack').checked?1:0, audience:$('cpAud').value||'all' };
+    stackable:$('cpStack').checked?1:0, audience:aud==='new'?'new':(aud==='claim'?(cur.audience||'all'):'all') };
   if(!body.code){ toast('ใส่โค้ดคูปอง'); return; }
   if(!(body.disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
   if(body.disc_type==='percent'&&body.disc_value>100){ toast('ส่วนลด % ต้องไม่เกิน 100'); return; }
   if(body.valid_from&&body.expires_at&&body.valid_from>body.expires_at){ toast('วันเริ่มต้องมาก่อนวันหมดอายุ'); return; }
   try{
-    if(_cpEditId){ await api('/api/coupons/'+_cpEditId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการแก้ไขแล้ว ✓'); }
-    else { await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('สร้างคูปองแล้ว ✓'); }
+    let saved;
+    if(_cpEditId){ saved=await api('/api/coupons/'+_cpEditId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการแก้ไขแล้ว ✓'); }
+    else { saved=await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('สร้างคูปองแล้ว ✓'); }
+    const id=(saved&&saved.id)||_cpEditId, wasClaim=cur.distribution==='claim';
     cpResetForm(); loadCoupons();
+    if(aud==='claim'&&id&&!wasClaim) setupClaim(id,0,cur.issue_limit||0,cur.valid_days||0);           // ตั้งโควตา + สร้างลิงก์ต่อทันที
+    else if(aud!=='claim'&&wasClaim){                                                                  // เลิกใช้ลิงก์ → กลับเป็นโค้ดธรรมดา
+      await api('/api/coupons/'+id+'/claim-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enable:false})});
+      toast('ปิดลิงก์รับแล้ว — คูปองกลับมาใช้ด้วยโค้ดปกติ'); loadCoupons(); }
   }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };

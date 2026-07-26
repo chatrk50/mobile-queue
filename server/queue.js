@@ -2307,6 +2307,10 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  // A claim-link coupon is quota-controlled: it may ONLY be spent from the wallet of a customer who
+  // collected it via the link. Honouring the raw code here would let anyone who saw the code bypass
+  // the quota — and let a claimer double-dip (wallet voucher + this code discount on top).
+  if (c.distribution === 'claim') return { ok: false, reason: 'คูปองนี้ต้องกดรับผ่านลิงก์ก่อน แล้วใช้จาก "คูปองของฉัน"' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
   if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
@@ -2364,7 +2368,9 @@ export function customerCoupons(customerKey) {
   ).all(customerKey);
 }
 export function availableCoupons(customerKey, orderNet, lines = null) {
-  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
+  // Claim-link coupons never appear in the public code list: the quota lives at the link, and a
+  // customer who claimed already sees their voucher via the wallet rows unshifted below.
+  const list = listCoupons(false).filter((c) => c.distribution !== 'claim').map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
