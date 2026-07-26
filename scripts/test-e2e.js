@@ -1428,6 +1428,77 @@ console.log('\n== Coupon report ==');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
 }
 
+console.log('\n== Win-back attaches a coupon BUILT ON THE COUPON PAGE (define once, use everywhere) ==');
+{
+  const cid = Q.createCoupon({ code: 'WBGIFT', label: 'ของขวัญคิดถึง', disc_type: 'baht', disc_value: 35 }).id;
+  // quota + per-claim life belong to the claim-link setup, not createCoupon — set them directly
+  db.prepare('UPDATE coupons SET issue_limit=2, valid_days=10 WHERE id=?').run(cid);
+  const K1 = 'U' + '6a'.repeat(16), K2 = 'U' + '6b'.repeat(16), K3 = 'U' + '6c'.repeat(16);
+  for (const k of [K1, K2, K3]) db.prepare('INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?,?)').run(k, 'ทดสอบ' + k.slice(-2));
+  const r1 = await Q.sendCampaign({ keys: [K1], message: 'ทดสอบผูกคูปอง', coupon: { couponId: cid } });
+  ok(r1.issuedCoupons === 1, 'INVARIANT a picked coupon issues into the wallet');
+  const w1 = Q.customerCoupons(K1).find((c) => c.coupon_id === cid);
+  ok(!!w1 && w1.free_cap === 35 && w1.label === 'ของขวัญคิดถึง', `INVARIANT value + label come from the coupon definition (cap ${w1 && w1.free_cap})`);
+  // Sending to the same customer again must NOT stack a second gift; quota is handed back.
+  const r2 = await Q.sendCampaign({ keys: [K1], message: 'ส่งซ้ำ', coupon: { couponId: cid } });
+  ok(r2.issuedCoupons === 0, 'INVARIANT re-sending to the same customer issues nothing new');
+  ok(db.prepare('SELECT issued_count n FROM coupons WHERE id=?').get(cid).n === 1, 'INVARIANT the handed-back quota is not consumed by the duplicate');
+  // issue_limit is respected across a blast: 2-coupon quota, 1 already gone, 2 more recipients.
+  const r3 = await Q.sendCampaign({ keys: [K2, K3], message: 'โควตา', coupon: { couponId: cid } });
+  ok(r3.issuedCoupons === 1, `INVARIANT the campaign stops issuing when the coupon's quota runs out (got ${r3.issuedCoupons})`);
+  let ghostErr = null; try { await Q.sendCampaign({ keys: [K1], message: 'x', coupon: { couponId: 999999 } }); } catch (e) { ghostErr = e.message; }
+  ok(ghostErr === 'coupon_not_found', 'INVARIANT a deleted/unknown coupon id is refused up front');
+  for (const k of [K1, K2, K3]) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(k); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(k); }
+  Q.deleteCoupon(cid);
+}
+
+console.log('\n== Denormalization: void hands back code-coupon quota; ledger heals the cache ==');
+{
+  // Void returns the coupon redemption: quota AND the customer's per-person allowance.
+  Q.createCoupon({ code: 'VOIDBACK', label: 'ทดสอบคืนโควตา', disc_type: 'baht', disc_value: 20, usage_limit: 5, per_customer: 1 });
+  const K = 'U' + '5d'.repeat(16);
+  const vo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: K, couponCode: 'VOIDBACK' });
+  const cidRow = db.prepare("SELECT id, used_count FROM coupons WHERE code='VOIDBACK'").get();
+  ok(cidRow.used_count === 1, 'INVARIANT applying the coupon consumed one use');
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e quota return' });
+  ok(db.prepare("SELECT used_count n FROM coupons WHERE code='VOIDBACK'").get().n === 0, 'INVARIANT voiding the order hands the use back');
+  ok(Q.validateCoupon('VOIDBACK', K, 100).ok === true, 'INVARIANT the customer can use the coupon again after the void');
+  Q.deleteCoupon(cidRow.id);
+
+  // paid_amount records what was actually collected.
+  const po = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.setOrderDiscount(po.ticket.id, { amount: 30 });
+  Q.setOrderPaid(po.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT paid_amount p FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(po.ticket.id).p === 70,
+    'INVARIANT paid_amount = total − discount on a normal full payment');
+
+  // The nightly reconcile re-derives a drifted cached balance from the ledger.
+  const RK = 'U' + '4e'.repeat(16);
+  db.prepare('INSERT INTO customers (line_user_id, name, points) VALUES (?, ?, 99)').run(RK, 'ดริฟท์');
+  db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points) VALUES (?, 'earn', 7)`).run(RK);
+  const rec = Q.reconcileLoyaltyBalances();
+  ok(rec.fixed >= 1 && db.prepare('SELECT points p FROM customers WHERE line_user_id=?').get(RK).p === 7,
+    `INVARIANT a drifted balance is healed to the ledger's truth (99 → 7)`);
+  ok(Q.reconcileLoyaltyBalances().fixed === 0, 'INVARIANT reconciling twice changes nothing (converged)');
+  db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(RK);
+  db.prepare('DELETE FROM customers WHERE line_user_id=?').run(RK);
+
+  // Rename-proofing: order lines carry the catalog id, and stock deduction follows the id even
+  // after the menu item is renamed.
+  const rn = db.prepare(`INSERT INTO menu_items (name, price, category) VALUES ('เมนูก่อนเปลี่ยนชื่อ', 55, 'drink')`).run().lastInsertRowid;
+  const rIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบrename','กก.', 50, 10)`).run().lastInsertRowid;
+  db.prepare('INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,2)').run(rn, rIng);
+  const ro = Q.createOrder(1, [{ name: 'เมนูก่อนเปลี่ยนชื่อ', price: 55, qty: 1 }], { source: 'cashier' });
+  ok(db.prepare('SELECT menu_item_id m FROM order_items WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(ro.ticket.id).m === rn,
+    'INVARIANT a new order line stores the catalog id');
+  db.prepare('UPDATE menu_items SET name=? WHERE id=?').run('เมนูหลังเปลี่ยนชื่อ', rn);
+  Q.setOrderPaid(ro.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT stock_qty s FROM ingredients WHERE id=?').get(rIng).s === 48,
+    'INVARIANT stock still deducts after a menu RENAME (followed the id, not the name)');
+  db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(rn);
+  db.prepare('DELETE FROM menu_items WHERE id=?').run(rn);
+}
+
 console.log('\n== Retention: old rows pruned, evidence and recent data kept ==');
 {
   const rk = 'Uretain00000000000000000000001';

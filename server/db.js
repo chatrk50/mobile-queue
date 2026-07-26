@@ -705,6 +705,9 @@ for (const stmt of [
   `ALTER TABLE sales_history ADD COLUMN waste_cost REAL`,
   // Preliminary slip check: hash of the attached slip image → detect the SAME slip reused across orders.
   `ALTER TABLE slips ADD COLUMN sha TEXT`,
+  // Stable link to the catalog. order_items joined menu_items BY NAME, so renaming a menu item
+  // silently detached every past line from its recipe/stock/history. New lines store the id.
+  `ALTER TABLE order_items ADD COLUMN menu_item_id INTEGER`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -741,6 +744,20 @@ for (const stmt of [
 ]) { try { db.exec(stmt); } catch { /* index already exists / older SQLite */ } }
 // Backfill the new state column from the old used_at truth, once.
 try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
+// Backfill order_items.menu_item_id from today's names, ONCE (settings marker — matching by name is
+// exactly the fragile join this column replaces, so re-running it after a rename would mis-link).
+try {
+  const done = db.prepare(`SELECT value FROM settings WHERE key='mig:oi_menu_item_id'`).get();
+  if (!done) {
+    db.exec(`UPDATE order_items SET menu_item_id = (
+               SELECT mi.id FROM menu_items mi
+                WHERE mi.name = CASE WHEN instr(order_items.name,' · ')>0
+                                     THEN substr(order_items.name, 1, instr(order_items.name,' · ')-1)
+                                     ELSE order_items.name END)
+             WHERE menu_item_id IS NULL`);
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('mig:oi_menu_item_id','1')`).run();
+  }
+} catch { /* pre-migration DB */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check

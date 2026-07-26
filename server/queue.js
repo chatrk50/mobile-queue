@@ -477,13 +477,25 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   if (!msg) throw new Error('empty_message');
   const targets = [...new Set(keys)].filter((k) => String(k || '').startsWith('U')).slice(0, 500);
   if (!targets.length) throw new Error('no_targets');
+  // Two ways to attach a gift: pick a coupon already built on the coupon page (couponId — value,
+  // expiry, per-customer limit and quota all come from that ONE definition), or type a one-off
+  // (label/cap/days). The owner asked for the first to be the norm: define once, reference everywhere.
   const tplWb = couponTemplate('winback');
-  const cp = coupon && coupon.label ? {
-    label: String(coupon.label).slice(0, 80),
-    cap: Math.max(1, Math.min(500, Number(coupon.cap) || tplWb.value)),
-    days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || tplWb.days))),
-  } : null;
-  const expiresAt = cp ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d : null;
+  let cp = null;
+  if (coupon && coupon.couponId) {
+    const c = db.prepare('SELECT * FROM coupons WHERE id=? AND active=1').get(Number(coupon.couponId));
+    if (!c) throw new Error('coupon_not_found');
+    cp = { couponId: c.id, label: c.label,
+           cap: Math.max(1, c.disc_type === 'percent' ? (c.max_disc || 0) : c.disc_value),
+           days: c.valid_days > 0 ? c.valid_days : null, fixedExpiry: c.expires_at || null };
+  } else if (coupon && coupon.label) {
+    cp = { label: String(coupon.label).slice(0, 80),
+           cap: Math.max(1, Math.min(500, Number(coupon.cap) || tplWb.value)),
+           days: Math.max(1, Math.min(90, Math.round(Number(coupon.days) || tplWb.days))) };
+  }
+  const expiresAt = !cp ? null
+    : cp.days ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d
+    : (cp.fixedExpiry || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
   let sent = 0, failed = 0, issuedCoupons = 0;
   for (const key of targets) {
     let text = msg;
@@ -495,9 +507,25 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
     // reports false, so we still issue there or the whole flow would be untestable.
     if (cp && (ok || !LINE_ENABLED)) {
-      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
-        .run(key, cp.label, cp.cap, expiresAt);
-      issuedCoupons++;
+      if (cp.couponId) {
+        // Same discipline as claimCoupon: take quota atomically, and the unique
+        // (coupon_id, customer_key) index makes re-sending to the same customer a no-op instead of
+        // stacking duplicate gifts — quota is handed back when that happens.
+        const took = db.prepare(
+          'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
+        ).run(cp.couponId);
+        if (took.changes) {
+          try {
+            db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source) VALUES (?, ?, 'winback', ?, ?, ?, 'campaign')`)
+              .run(key, cp.couponId, cp.label, cp.cap, expiresAt);
+            issuedCoupons++;
+          } catch { db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(cp.couponId); }
+        }
+      } else {
+        db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
+          .run(key, cp.label, cp.cap, expiresAt);
+        issuedCoupons++;
+      }
     }
   }
   const info = db.prepare(
@@ -1891,13 +1919,18 @@ export function cogsForDay(date = null) {
  *  No-op for any line whose menu item has no recipe → safe/dormant until recipes are set. */
 function deductStockForOrder(order) {
   try {
-    const items = db.prepare('SELECT name, qty FROM order_items WHERE order_id=?').all(order.id);
+    const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
     const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
     for (const it of items) {
-      const base = String(it.name).split(' · ')[0];   // strip the " · หวาน X%" suffix
-      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
-      if (!mi) continue;
-      const recipe = db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id);
+      // The stored menu_item_id survives a menu RENAME (the name-match below silently stops
+      // deducting stock the day an item is renamed); name is only the fallback for legacy rows.
+      let miId = it.menu_item_id;
+      if (!miId) {
+        const base = String(it.name).split(' · ')[0];   // strip the " · หวาน X%" suffix
+        miId = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base)?.id;
+      }
+      if (!miId) continue;
+      const recipe = db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(miId);
       for (const r of recipe) {
         const use = (Number(r.qty) || 0) * (Number(it.qty) || 1);
         if (use > 0) try {
@@ -2811,6 +2844,23 @@ export function luckyReport({ from = null, to = null, days = 30 } = {}) {
 // On Turso that is row-size pressure plus a bigger replica pull on every sync, forever.
 // Deliberately generous windows — the shop's own reports only ever look back a year, and the slip
 // image is only evidence until the order is settled.
+/** The loyalty LEDGER is the truth; customers.points is a cached balance that can drift (a crash
+ *  between the two writes, or the old MAX(0,…) reversal clamp). Nightly self-heal: recompute every
+ *  cached balance from the ledger and fix the ones that disagree. Lifetime points are left alone —
+ *  the ledger's 'adjust' rows don't split earn-vs-redeem, so lifetime cannot be derived from it. */
+export function reconcileLoyaltyBalances() {
+  const rows = db.prepare(
+    `SELECT c.line_user_id AS key, c.points,
+            COALESCE((SELECT SUM(m.points) FROM loyalty_moves m WHERE m.customer_key = c.line_user_id), 0) AS bal
+       FROM customers c`).all();
+  let fixed = 0;
+  for (const r of rows) {
+    const bal = Math.max(0, Math.round(Number(r.bal) || 0));
+    if (r.points !== bal) { db.prepare('UPDATE customers SET points=? WHERE line_user_id=?').run(bal, r.key); fixed++; }
+  }
+  return { checked: rows.length, fixed };
+}
+
 const RETAIN = { pushLogDays: 90, slipDays: 30, saleEventDays: 400 };
 export function pruneOldData() {
   const out = { pushLog: 0, slips: 0, saleEvents: 0 };
@@ -3644,10 +3694,13 @@ export function createOrder(zoneId, items, opts = {}) {
   }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
   const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
-  // Classify each line as a base drink or an addon (topping) for exact addon reporting.
+  // Classify each line as a base drink or an addon (topping) for exact addon reporting, and pin
+  // each line to its catalog id so a later menu RENAME can't detach it from recipe/stock/history.
   const toppingNames = new Set(
     db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name)
   );
+  const idByName = new Map(db.prepare('SELECT id, name FROM menu_items').all().map((r) => [r.name, r.id]));
+  const catalogIdOf = (nm) => idByName.get(String(nm).split(' · ')[0].trim()) ?? null;
   // Pay-first model: create the ticket in 'pending' state with NO queue number yet.
   // The real queue number is issued only once payment is confirmed (assignQueueNumber),
   // so abandoned/unpaid orders never consume a number and the kitchen only sees paid work.
@@ -3693,8 +3746,8 @@ export function createOrder(zoneId, items, opts = {}) {
     const freeDisc = freeGiveawayDiscount(lines, total);
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id, discount, discount_reason) VALUES (?,?,?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId, freeDisc, freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
-    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
-    for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
+    const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind, menu_item_id) VALUES (?,?,?,?,?,?)');
+    for (const it of lines) ins.run(oinfo.lastInsertRowid, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base', catalogIdOf(it.name));
     // Queue-first: assign the queue number IN THE SAME TRANSACTION as the order. Previously this ran
     // in a SEPARATE transaction after the order committed — on prod (Turso) a stale write-stream could
     // make that second tx fail while the order tx had already committed, stranding the order in
@@ -3811,7 +3864,9 @@ export function setOrderPaid(ticketId, opts = {}) {
   if (order.payment_status === 'void') throw new Error('order_void');
   // The status read above is not atomic — a void landing between the read and this write would be
   // silently overwritten, turning a cancelled order back into a sale. The predicate settles it.
-  const paidNow = db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method) WHERE id=? AND payment_status NOT IN ('paid','void')`)
+  // paid_amount = what was actually collected. It was never set on a normal full payment, so a
+  // fully-paid bill reported 0 (or a stale partial) to anything reading the column.
+  const paidNow = db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method), paid_amount=ROUND(total - COALESCE(discount,0), 2) WHERE id=? AND payment_status NOT IN ('paid','void')`)
     .run(actorId, method, order.id);
   if (!paidNow.changes) throw new Error('order_void');
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
@@ -4078,13 +4133,16 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
 // reason says the drink was never made (e.g. customer cancelled / wrong order / can't make).
 function returnStockForOrder(order) {
   try {
-    const items = db.prepare('SELECT name, qty FROM order_items WHERE order_id=?').all(order.id);
+    const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
     const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
     for (const it of items) {
-      const base = String(it.name).split(' · ')[0];
-      const mi = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base);
-      if (!mi) continue;
-      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(mi.id)) {
+      let miId = it.menu_item_id;   // rename-proof, same as the deduction side
+      if (!miId) {
+        const base = String(it.name).split(' · ')[0];
+        miId = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base)?.id;
+      }
+      if (!miId) continue;
+      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(miId)) {
         const back = (Number(r.qty) || 0) * (Number(it.qty) || 1);
         if (back > 0) try { recordStockMove(r.ingredient_id, { kind: 'return', qty: back, note: 'คืนสต๊อก (ยกเลิก) ' + code }); } catch { /* never block a void */ }
       }
@@ -4097,6 +4155,15 @@ function returnStockForOrder(order) {
 function reverseLoyaltyForOrder(orderId, ownerKey) {
   // A coupon spent on this order comes back to the customer when the order is voided.
   try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
+  // CODE coupons too: the redemption never used to be handed back, so every voided order
+  // permanently shrank the coupon's quota AND burned the customer's per-person allowance.
+  // Deleting the coupon_uses row is what restores the per-customer limit — validateCoupon counts rows.
+  try {
+    for (const u of db.prepare('SELECT id, coupon_id FROM coupon_uses WHERE order_id=?').all(orderId)) {
+      db.prepare('UPDATE coupons SET used_count = MAX(0, used_count - 1) WHERE id=?').run(u.coupon_id);
+      db.prepare('DELETE FROM coupon_uses WHERE id=?').run(u.id);
+    }
+  } catch { /* table may predate feature */ }
   const moves = db.prepare("SELECT customer_key, kind, points FROM loyalty_moves WHERE order_id=? AND kind IN ('earn','redeem')").all(orderId);
   if (!moves.length) return 0;
   const byKey = {};

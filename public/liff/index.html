@@ -913,7 +913,10 @@ async function doCouponClaim(){
 }
 window.doCouponClaimGo=async()=>{
   const b=$('cpClaimBtn'); if(b){ b.disabled=true; b.textContent='กำลังรับ…'; }
-  let r=null; try{ r=await (await fetch('/api/claim/'+encodeURIComponent(couponTok),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId})})).json(); }catch(e){}
+  // The access token is the PROOF this is a real LINE user: the server asks LINE who the token
+  // belongs to before granting the claim (prod only — UAT has no LINE and skips the check).
+  let accessToken=null; try{ if(inLine && window.liff) accessToken=liff.getAccessToken(); }catch(e){}
+  let r=null; try{ r=await (await fetch('/api/claim/'+encodeURIComponent(couponTok),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,accessToken})})).json(); }catch(e){}
   if(r && r.ok){
     couponScreen('<div style="font-size:52px">🎉</div><h1 style="margin:8px 0;color:var(--navy)">รับคูปองแล้ว!</h1>'
       +'<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
@@ -921,6 +924,12 @@ window.doCouponClaimGo=async()=>{
       +'<p class="muted" style="font-size:12.5px">เก็บไว้ในเมนู "คูปองของฉัน" แล้ว</p>'
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">สั่งเลย</button>');
     try{ if(window.confetti) confetti(); }catch(e){}
+    return;
+  }
+  if(r && r.error==='line_verify_failed'){
+    couponScreen('<div style="font-size:44px">🔐</div><h1 style="margin:8px 0;color:var(--navy)">ยืนยันตัวตนไม่สำเร็จ</h1>'
+      +'<p class="muted" style="font-size:13px">กรุณาเปิดลิงก์นี้จากแอป LINE แล้วลองอีกครั้งนะคะ</p>'
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="location.reload()">ลองอีกครั้ง</button>');
     return;
   }
   await doCouponClaim();   // re-render with the honest state (already / sold_out / ended)

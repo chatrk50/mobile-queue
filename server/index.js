@@ -10,7 +10,7 @@ import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import compression from 'compression';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -321,9 +321,16 @@ app.post('/api/coupons/:id/claim-link', (req, res) => {
 app.get('/api/claim/:token', (req, res) => {
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
 });
-app.post('/api/claim/:token', (req, res) => {
+app.post('/api/claim/:token', async (req, res) => {
   const key = String(req.body?.lineUserId || '').trim();
   if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
+  // The id format alone is fabricable — with LINE live, the claimer must present a LIFF access
+  // token that LINE says belongs to that very userId, or a script could drain the campaign's
+  // quota with synthetic customers. With LINE stubbed (UAT/dev) there is no LINE to ask; skip.
+  if (LINE_ENABLED) {
+    const verified = await verifyLiffToken(String(req.body?.accessToken || ''));
+    if (!verified || verified !== key) return res.status(403).json({ error: 'line_verify_failed' });
+  }
   try { res.json(Q.claimCoupon(req.params.token, key)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Per-tender daily settlement totals (reconcile each app/bank payout).
@@ -1512,6 +1519,11 @@ function doDailyReset() {
     const p = Q.pruneOldData();
     if (p.pushLog || p.slips || p.saleEvents) console.log(`[retention] pruned push_log ${p.pushLog}, slips ${p.slips}, sale_events ${p.saleEvents}`);
   } catch (e) { console.error('[retention] failed:', e && e.message); }
+  // Loyalty self-heal: cached balances re-derived from the ledger (see reconcileLoyaltyBalances).
+  try {
+    const l = Q.reconcileLoyaltyBalances();
+    if (l.fixed) console.log(`[loyalty] repaired ${l.fixed}/${l.checked} cached balances from the ledger`);
+  } catch (e) { console.error('[loyalty] reconcile failed:', e && e.message); }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();

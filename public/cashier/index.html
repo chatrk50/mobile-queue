@@ -987,10 +987,18 @@
       <input type="checkbox" id="clCoupOn" onchange="clCoupToggle(this)" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
     </label>
     <div id="clCoupBox" style="display:none;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:10px;margin-top:6px">
-      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
-        <span style="font-size:12.5px">ไม่เกิน ฿<input id="clCoupCap" type="number" value="49" min="1" max="500" style="width:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"></span>
-        <span style="font-size:12.5px">อายุ <input id="clCoupDays" type="number" value="14" min="1" max="90" style="width:52px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"> วัน</span>
+      <!-- Pick a coupon built once on the coupon page (its value/expiry/quota travel with it), or
+           กำหนดเอง for a one-off. Owner rule: define a coupon in ONE place, reference it everywhere. -->
+      <select id="clCoupPick" onchange="clCoupPickChange()" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;background:#fff">
+        <option value="">กำลังโหลดคูปอง…</option>
+      </select>
+      <div id="clCoupInfo" class="muted" style="font-size:11.5px;margin-top:6px;display:none"></div>
+      <div id="clCoupCustom" style="display:none;margin-top:8px">
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+          <span style="font-size:12.5px">ไม่เกิน ฿<input id="clCoupCap" type="number" value="49" min="1" max="500" style="width:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"></span>
+          <span style="font-size:12.5px">อายุ <input id="clCoupDays" type="number" value="14" min="1" max="90" style="width:52px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"> วัน</span>
+        </div>
       </div>
       <div class="muted" style="font-size:11px;margin-top:5px">คูปองจะเข้า "คูปองของฉัน" ของลูกค้าทันที และข้อความจะบอกวันหมดอายุให้เอง</div>
     </div>
@@ -1092,6 +1100,14 @@
   #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
   #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
   #moreMenuBody .ic{width:19px;height:19px}
+  /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
+     over months (520–1000px), so each page opened at a different width — the owner read that as
+     the app jumping around. !important because each card carries its historical inline value. */
+  @media (min-width:640px){
+    #homeCard,#settingsCard,#reportCard,#historyCard,#salesCard,#staffCard,#branchCard,#stockCard,
+    #loyaltyCard,#tenderCard,#couponCard,#promoCard,#controlCard,#cashCard,#chartsCard,#detailCard,
+    #menuCard,#custListCard,#reviewCard,#couponRepCard{max-width:940px!important}
+  }
   /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
   .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   .tgl.on{background:var(--accent2,#2fc2a6)}
@@ -2309,7 +2325,23 @@ function cpStatus(c){ const t=bkkToday();
   if(c.distribution==='claim'&&c.issue_limit>0&&c.issued_count>=c.issue_limit) return ['แจกครบแล้ว','#faeeda','#854f0b'];
   return ['กำลังใช้งาน','#e1f5ee','#0f6e56'];
 }
-function renderCoupons(list){ COUPONS=list||[]; $('couponList').innerHTML=(list&&list.length)?list.map(c=>{
+// Which of the four life stages a coupon is in — drives the SECTION it renders under, so the page
+// reads as "running / not started / finished / off" instead of one long mixed list (owner ask).
+function cpGroup(c){ const t=bkkToday();
+  if(!c.active) return 3;
+  if(c.valid_from&&c.valid_from>t) return 1;
+  if((c.expires_at&&c.expires_at<t)||(c.usage_limit>0&&c.used_count>=c.usage_limit)) return 2;
+  return 0;
+}
+function renderCoupons(list){ COUPONS=list||[];
+  const names=['🟢 กำลังใช้งาน','🕐 ยังไม่เริ่ม','⏹ หมดอายุ / ใช้ครบแล้ว','⚪ ปิดอยู่'];
+  const groups=[[],[],[],[]];
+  (list||[]).forEach(c=>groups[cpGroup(c)].push(c));
+  $('couponList').innerHTML=(list&&list.length)?groups.map((g,gi)=>g.length?`
+    <div style="font-size:12px;font-weight:800;color:var(--navy);margin:${gi?'14px':'0'} 2px 7px;padding-bottom:4px;border-bottom:1px solid var(--line)">${names[gi]} · ${g.length} ใบ</div>`
+    +g.map(c=>cpCard(c)).join(''):'').join('')
+    :'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง</p>'; }
+function cpCard(c){
     const disc=c.disc_type==='percent'?(c.disc_value+'%'+(c.max_disc>0?' สูงสุด ฿'+c.max_disc:'')):('฿'+c.disc_value);
     const st=cpStatus(c);
     const win=(c.valid_from||c.expires_at)?((c.valid_from||'วันนี้')+' → '+(c.expires_at||'ไม่มีกำหนด')):'ไม่มีกำหนดเวลา';
@@ -2335,7 +2367,7 @@ function renderCoupons(list){ COUPONS=list||[]; $('couponList').innerHTML=(list&
         ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
         <button class="ghost danger" style="padding:5px 10px;font-size:12px;margin-left:auto" onclick="delCoupon(${c.id})">ลบ</button>
       </div>
-    </div>`;}).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง</p>'; }
+    </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
 window.cpSyncType=()=>{ const w=$('cpMaxWrap'); if(w) w.style.display=($('cpType').value==='percent')?'':'none'; };
 let _cpEditId=null;
@@ -3124,14 +3156,28 @@ window.chLoadOut=async(offset=0)=>{
   if(offset){ const b=$('chOutMoreBtn'); if(b) b.remove(); list.insertAdjacentHTML('beforeend',rows+more); }
   else list.innerHTML=rows?rows+more:'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">ไม่มีคูปองคงค้าง 🎉</p>';
 };
-// First time the win-back coupon box opens, prefill cap/days from the winback template so the
-// number the owner set in the hub is the number the form starts with (still editable per send).
-let _clTplLoaded=false;
+// First open of the coupon box: load the coupons built on the coupon page into the dropdown and
+// prefill the custom fields from the winback template. Both cached — opening again costs nothing.
+let _clTplLoaded=false, _clCoupons=[];
 window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'none';
   if(cb.checked&&!_clTplLoaded){ _clTplLoaded=true;
     try{ const r=await api('/api/admin/coupon-templates');
       const t=(r.templates||[]).find(x=>x.key==='winback');
-      if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ } } };
+      if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ }
+    try{ _clCoupons=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _clCoupons=[]; }
+    const opts=_clCoupons.map(c=>`<option value="${c.id}">${esc(c.label)} (${esc(c.code)})</option>`).join('');
+    $('clCoupPick').innerHTML=(opts?`<option value="">— เลือกคูปองที่สร้างไว้ —</option>${opts}`:'')
+      +`<option value="custom" ${opts?'':'selected'}>✏️ กำหนดเอง (พิมพ์ใหม่)</option>`;
+    clCoupPickChange(); } };
+window.clCoupPickChange=()=>{
+  const v=$('clCoupPick').value, info=$('clCoupInfo');
+  $('clCoupCustom').style.display=(v==='custom')?'':'none';
+  const c=_clCoupons.find(x=>String(x.id)===v);
+  info.style.display=c?'':'none';
+  if(c){ const val=c.disc_type==='percent'?(c.max_disc?('สูงสุด ฿'+c.max_disc):('ลด '+c.disc_value+'%')):('฿'+c.disc_value);
+    const life=c.valid_days>0?('อายุ '+c.valid_days+' วันหลังได้รับ'):(c.expires_at?('ใช้ได้ถึง '+c.expires_at):'อายุ 30 วัน');
+    const quota=(c.issue_limit>0)?(' · โควตาเหลือ '+Math.max(0,c.issue_limit-(c.issued_count||0))+' ใบ'):'';
+    info.textContent='มูลค่า '+val+' · '+life+quota+' · ลูกค้าที่เคยได้ใบนี้แล้วจะไม่ได้ซ้ำ'; } };
 window.chCancelCoupon=async(id,label)=>{
   if(!confirm(`ยกเลิกคูปอง "${label}" ?\nลูกค้าจะไม่เห็นคูปองนี้อีก (เรียกคืนไม่ได้)`)) return;
   try{ await api('/api/admin/customer-coupons/'+id+'/cancel',{method:'POST'}); toast('ยกเลิกคูปองแล้ว'); chLoadOut(0); }
@@ -4802,8 +4848,17 @@ window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all
 window.clSendCampaign=async()=>{
   const msg=($('clMsg').value||'').trim(); if(!msg){ toast('ใส่ข้อความก่อนนะ'); return; }
   if(!_clSel.size){ toast('ติ๊กเลือกลูกค้าก่อนค่ะ'); return; }
-  const coupon = $('clCoupOn').checked ? { label:($('clCoupLabel').value||'').trim()||'คูปองของขวัญ', cap:Number($('clCoupCap').value)||49, days:Number($('clCoupDays').value)||14 } : null;
-  if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:(coupon?('พร้อมแนบคูปอง "'+coupon.label+'" (฿'+coupon.cap+' · '+coupon.days+' วัน)\n'):'')+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
+  let coupon=null, coupDesc='';
+  if($('clCoupOn').checked){
+    const v=$('clCoupPick').value;
+    if(v && v!=='custom'){ const c=_clCoupons.find(x=>String(x.id)===v);
+      if(!c){ toast('เลือกคูปองก่อนค่ะ'); return; }
+      coupon={ couponId:c.id }; coupDesc='พร้อมแนบคูปอง "'+c.label+'"\n'; }
+    else if(v==='custom'){ coupon={ label:($('clCoupLabel').value||'').trim()||'คูปองของขวัญ', cap:Number($('clCoupCap').value)||49, days:Number($('clCoupDays').value)||14 };
+      coupDesc='พร้อมแนบคูปอง "'+coupon.label+'" (฿'+coupon.cap+' · '+coupon.days+' วัน)\n'; }
+    else { toast('เลือกคูปองที่จะแนบก่อนค่ะ'); return; }
+  }
+  if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:coupDesc+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
   const btn=$('clSend'); btn.disabled=true;
   try{ const r=await api('/api/crm/campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[..._clSel],message:msg,coupon})});
     toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉') : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
