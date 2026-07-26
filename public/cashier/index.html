@@ -375,7 +375,7 @@
           <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setReportDate('')">วันนี้</button>
         </div></div>
       <div class="row" style="gap:6px">
-        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="openSettingsCost()" title="แก้ต้นทุน/ค่าใช้จ่าย (อยู่ในตั้งค่าทั้งหมด)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>ต้นทุน</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleMargins()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไร/เมนู</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">ปิด</button>
@@ -407,14 +407,14 @@
     </div>
     <!-- Same switcher as chartsCard — the two panels present as ONE destination. -->
     <div class="row" style="gap:6px;margin-top:12px">
-      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showCharts()">กราฟ</button>
-      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">ตาราง P&amp;L</button>
+      <button class="ghost seg" onclick="showCharts()">กราฟ</button>
+      <button class="ghost seg on">ตาราง P&amp;L</button>
     </div>
     <div class="row" style="gap:6px;margin-top:10px">
-      <button id="salesTabDaily" class="ok" style="padding:6px 14px;font-size:13px" onclick="salesTab('daily')">รายวัน</button>
-      <button id="salesTabWeekly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('weekly')">รายสัปดาห์</button>
-      <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
-      <button id="salesTabYearly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('yearly')">รายปี</button>
+      <button id="salesTabDaily" class="ghost seg on" onclick="salesTab('daily')">รายวัน</button>
+      <button id="salesTabWeekly" class="ghost seg" onclick="salesTab('weekly')">รายสัปดาห์</button>
+      <button id="salesTabMonthly" class="ghost seg" onclick="salesTab('monthly')">รายเดือน</button>
+      <button id="salesTabYearly" class="ghost seg" onclick="salesTab('yearly')">รายปี</button>
     </div>
     <div id="salesBody" style="margin-top:14px"></div>
   </div>
@@ -458,10 +458,10 @@
     </div>
     <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
     <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
-      <button id="stkTabWh" class="ok" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('wh')"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>คลัง</button>
-      <button id="stkTabPo" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('po')"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>ใบสั่งซื้อ</button>
-      <button id="stkTabSup" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('sup')"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
-      <button id="stkTabPlan" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('plan')"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผน</button>
+      <button id="stkTabWh" class="ghost seg on" onclick="stkTab('wh')"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>คลัง</button>
+      <button id="stkTabPo" class="ghost seg" onclick="stkTab('po')"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>ใบสั่งซื้อ</button>
+      <button id="stkTabSup" class="ghost seg" onclick="stkTab('sup')"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
+      <button id="stkTabPlan" class="ghost seg" onclick="stkTab('plan')"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผน</button>
     </div>
     <!-- TAB: คลัง -->
     <div id="stkPaneWh">
@@ -720,8 +720,8 @@
       <div class="row between" style="align-items:center">
         <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>รอบเงินสดย้อนหลัง</h2>
         <div class="row" style="gap:6px">
-          <button id="chTabDay" class="ok" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('day')">รายวัน</button>
-          <button id="chTabMonth" class="ghost" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('month')">รายเดือน</button>
+          <button id="chTabDay" class="ghost seg on" style="flex:none" onclick="chSetTab('day')">รายวัน</button>
+          <button id="chTabMonth" class="ghost seg" style="flex:none" onclick="chSetTab('month')">รายเดือน</button>
         </div>
       </div>
       <div id="cashHistList" style="margin-top:10px"><p class="muted" style="font-size:12px">กำลังโหลด…</p></div>
@@ -737,8 +737,8 @@
     <!-- Shared view switcher: กราฟ (this panel) ↔ ตาราง P&L (salesCard). One destination, two
          renderings of the same /api/sales-history data — merged per the IA audit. -->
     <div class="row" style="gap:6px;margin-top:12px">
-      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">กราฟ</button>
-      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showSales()">ตาราง P&amp;L</button>
+      <button class="ghost seg on">กราฟ</button>
+      <button class="ghost seg" onclick="showSales()">ตาราง P&amp;L</button>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
   </div>
@@ -749,18 +749,18 @@
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
         <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
-        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()">ปิด</button>
       </div>
     </div>
     <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
-      <button class="detTab ok" data-t="tx" style="padding:6px 12px;font-size:13px" onclick="detailTab('tx')">ธุรกรรม</button>
-      <button class="detTab ghost" data-t="pay" style="padding:6px 12px;font-size:13px" onclick="detailTab('pay')">ชำระเงิน</button>
-      <button class="detTab ghost" data-t="void" style="padding:6px 12px;font-size:13px" onclick="detailTab('void')">ยกเลิก/คืน</button>
-      <button class="detTab ghost" data-t="disc" style="padding:6px 12px;font-size:13px" onclick="detailTab('disc')">ส่วนลด</button>
-      <button class="detTab ghost" data-t="chan" style="padding:6px 12px;font-size:13px" onclick="detailTab('chan')">ช่องทาง</button>
-      <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
-      <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
+      <button class="detTab ghost seg on" data-t="tx" style="flex:none" onclick="detailTab('tx')">ธุรกรรม</button>
+      <button class="detTab ghost seg" data-t="pay" style="flex:none" onclick="detailTab('pay')">ชำระเงิน</button>
+      <button class="detTab ghost seg" data-t="void" style="flex:none" onclick="detailTab('void')">ยกเลิก/คืน</button>
+      <button class="detTab ghost seg" data-t="disc" style="flex:none" onclick="detailTab('disc')">ส่วนลด</button>
+      <button class="detTab ghost seg" data-t="chan" style="flex:none" onclick="detailTab('chan')">ช่องทาง</button>
+      <button class="detTab ghost seg" data-t="addon" style="flex:none" onclick="detailTab('addon')">ท็อปปิ้ง</button>
+      <button class="detTab ghost seg" data-t="hour" style="flex:none" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
     <div id="detailSummary" style="margin-top:14px"></div>
     <div id="detailBody" style="margin-top:14px"></div>
@@ -1651,10 +1651,10 @@ window.showSales=async()=>{ hideAllPanels(); try{ SALES=await api('/api/sales-hi
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
 window.salesTab=(v)=>{ salesView=v;
-  $('salesTabDaily').className=v==='daily'?'ok':'ghost';
-  $('salesTabWeekly').className=v==='weekly'?'ok':'ghost';
-  $('salesTabMonthly').className=v==='monthly'?'ok':'ghost';
-  $('salesTabYearly').className=v==='yearly'?'ok':'ghost';
+  $('salesTabDaily').className=v==='daily'?'ghost seg on':'ghost seg';
+  $('salesTabWeekly').className=v==='weekly'?'ghost seg on':'ghost seg';
+  $('salesTabMonthly').className=v==='monthly'?'ghost seg on':'ghost seg';
+  $('salesTabYearly').className=v==='yearly'?'ghost seg on':'ghost seg';
   renderSales(); };
 window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'POST'});
   toast(r.saved?'บันทึกยอดวันนี้แล้ว':'วันนี้ยังไม่มียอดขาย');
@@ -1800,7 +1800,7 @@ window.showDetail=async()=>{ hideAllPanels(); if(!$('detailDate').value){ const 
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
   renderDetailSummary(); renderDetail(); }catch(e){ toast(err(e)); } };
-window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab '+(b.dataset.t===v?'ok':'ghost')); renderDetail(); };
+window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab ghost seg'+(b.dataset.t===v?' on':'')); renderDetail(); };
 // Date-scoped header summary (varies with the selected date) — the day at a glance above the tabs.
 function renderDetailSummary(){
   const box=$('detailSummary'); if(!box) return;
@@ -1995,7 +1995,7 @@ async function loadExpiryBanner(){ const b=$('stkExpBanner'); if(!b) return;
 window.stkTab=(t)=>{ _stkTab=t;
   const panes={wh:'stkPaneWh',po:'stkPanePo',sup:'supBox',plan:'planBox'};
   const tabs={wh:'stkTabWh',po:'stkTabPo',sup:'stkTabSup',plan:'stkTabPlan'};
-  for(const k in panes){ const p=$(panes[k]); if(p) p.style.display=(k===t)?'':'none'; $(tabs[k]).className=(k===t)?'ok':'ghost'; }
+  for(const k in panes){ const p=$(panes[k]); if(p) p.style.display=(k===t)?'':'none'; $(tabs[k]).className=(k===t)?'ghost seg on':'ghost seg'; }
   if(t==='po') renderPoTab(); else if(t==='sup') renderSuppliers(); else if(t==='plan') loadPlan(); };
 // ---------- Stock count (นับสต๊อกเทียบของจริงก่อนสั่งซื้อ) ----------
 window.toggleCount=async()=>{ const box=$('countBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
@@ -2106,12 +2106,13 @@ window.renderPoTab=async()=>{ const box=$('stkPanePo'); box.innerHTML='<p class=
           ${o.status==='draft'?`<button class="ok" style="padding:5px 11px;font-size:12px" onclick="poReceive(${o.id})">รับของ</button>`:''}
         </div></div>`;}).join(''):'<p class="muted" style="text-align:center;padding:18px 0;font-size:12.5px">ยังไม่มีใบสั่งซื้อ — กด "สร้างใบสั่งซื้อ"</p>'}`; };
 // Purchasing report: how much was bought per month, per item, per supplier (date-range filtered).
-let _prTab='item';
+let _prTab='item', _prSel=null;   // _prSel = {from,to,label} จาก rangeBtn (null = ทั้งหมด)
 window.togglePoReport=()=>{ const box=$('poReport'); if(box.style.display!=='none'){ box.style.display='none'; return; } box.style.display=''; loadPoReport(); };
+window.prRangeApply=(f,t,l)=>{ _prSel={from:f,to:t,label:l}; loadPoReport(); };
 window.loadPoReport=async()=>{ const box=$('poReport'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังรวมยอด…</p>';
-  const f=$('pr_from')?$('pr_from').value:'', t=$('pr_to')?$('pr_to').value:'';
+  const f=_prSel?_prSel.from:'', t=_prSel?_prSel.to:'';
   let d; try{ d=await api('/api/purchase-report'+((f||t)?('?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)):'')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
-  const tabBtn=(k,l)=>`<button class="${_prTab===k?'ok':'ghost'}" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="_prTab='${k}';loadPoReport()">${l}</button>`;
+  const tabBtn=(k,l)=>`<button class="ghost seg${_prTab===k?' on':''}" style="flex:none" onclick="_prTab='${k}';loadPoReport()">${l}</button>`;
   let rows='';
   if(_prTab==='item') rows=(d.byItem||[]).length?d.byItem.map(r=>`<div class="row between" style="font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <span class="muted">${r.qty} ${esc(r.unit)} · ${r.times} ครั้ง</span></span><b>฿${r.spent}</b></div>`).join(''):'<p class="muted" style="font-size:12px">ไม่มีการซื้อในช่วงนี้</p>';
   else if(_prTab==='sup') rows=(d.bySupplier||[]).length?d.bySupplier.map(r=>`<div class="row between" style="font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(r.supplier)} <span class="muted">· ${r.times} ครั้ง</span></span><b>฿${r.spent}</b></div>`).join(''):'<p class="muted" style="font-size:12px">ไม่มีการซื้อในช่วงนี้</p>';
@@ -2120,11 +2121,8 @@ window.loadPoReport=async()=>{ const box=$('poReport'); box.innerHTML='<p class=
     <div class="row between" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
       <b style="color:var(--navy)">รายงานจัดซื้อ · รวม ฿${d.total}</b>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poReport').style.display='none'">ปิด</button></div>
-    <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <input id="pr_from" type="date" value="${f}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-      <span class="muted" style="font-size:12px">ถึง</span>
-      <input id="pr_to" type="date" value="${t}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-      <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="loadPoReport()">ดู</button>
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      ${rangeBtn('prRangeBtn',(_prSel&&_prSel.label)||'ทั้งหมด',prRangeApply)}
       <span class="muted" style="font-size:11px">${d.from} → ${d.to}</span>
     </div>
     <div class="row" style="gap:6px;margin-bottom:8px">${tabBtn('item','ต่อรายการ')}${tabBtn('sup','ต่อผู้ขาย')}${tabBtn('month','ต่อเดือน')}</div>
@@ -2495,8 +2493,7 @@ window.loadCash=async()=>{
   renderCash(); renderCashHist(true); };   // auto-open the latest round so reconciliation is visible
 // ---------- Cash-round history: daily Z-report list + monthly rollup ----------
 let CASHHIST=null, _chTab='day';
-window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ok':'ghost'; $('chTabMonth').className=t==='month'?'ok':'ghost';
-  $('chTabDay').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; $('chTabMonth').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; renderCashHist(); };
+window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ghost seg on':'ghost seg'; $('chTabMonth').className=t==='month'?'ghost seg on':'ghost seg'; renderCashHist(); };
 const osFmt=(os)=> os===0?'<b style="color:#16a34a">พอดี ✓</b>':(os>0?`<b style="color:#16a34a">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
 function renderCashHist(autoExpand){ const box=$('cashHistList'); if(!box) return;
   if(!CASHHIST){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดไม่สำเร็จ</p>'; return; }
@@ -4837,7 +4834,7 @@ window.showCustomers=async()=>{ closeAdmin(); hideAllPanels(); $('custListCard')
 window.hideCustomers=()=>{ $('custListCard').style.display='none'; $('dash').style.display=''; };
 function clCount(seg){ return seg==='all' ? CL.length : CL.filter(c=>c.segment===seg).length; }
 function renderCustSegs(){ $('clSegTabs').innerHTML=CL_SEGS.map(([k,label])=>
-  `<button class="${_clSeg===k?'ok':'ghost'}" style="padding:7px 12px;font-size:12.5px;border-radius:999px" onclick="clSetSeg('${k}')">${label} <b>${clCount(k)}</b></button>`).join(''); }
+  `<button class="ghost seg${_clSeg===k?' on':''}" style="flex:none" onclick="clSetSeg('${k}')">${label} <b>${clCount(k)}</b></button>`).join(''); }
 window.clSetSeg=(k)=>{ _clSeg=k; _clShown=CL_PAGE; renderCustSegs(); renderCustList(); };
 // Search + windowed rendering: thousands of customers stay smooth — filter first,
 // render CL_PAGE rows at a time with a "แสดงเพิ่ม" tail. Selection is key-based so it
