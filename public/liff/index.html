@@ -1581,6 +1581,8 @@ window.confirmBasket=async()=>{
     } else if(_err==='item_unavailable'){   // the menu changed under an old cart / reorder — reload it
       cart=[]; cartCoupon=null; toast('มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
       try{ await loadZone(); }catch(_){} show('orderCard',true); renderBasketCount();
+    } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine
+      toast('ขออภัยค่ะ ระบบพักการสั่งผ่าน LINE ชั่วคราว เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏');
     } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };

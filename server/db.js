@@ -644,6 +644,9 @@ for (const stmt of [
   // live on a future date; without this the only way to schedule was to create it inactive and
   // remember to flip the switch by hand. null = live immediately (all existing coupons).
   `ALTER TABLE coupons ADD COLUMN valid_from TEXT`,        // 'YYYY-MM-DD' Bangkok-local
+  // No-show strikes: strikes are DERIVED from tickets (status='no_show'), never stored — this
+  // column only marks the moment a cashier forgave the customer, so counting restarts from there.
+  `ALTER TABLE customers ADD COLUMN noshow_forgiven_at TEXT`,
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,

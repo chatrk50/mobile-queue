@@ -1769,6 +1769,51 @@ console.log('\n== Review: reasons + comment ==');
   }
 }
 
+// ---- No-show strikes: repeat no-shows lose LINE self-service until forgiven / aged out ----
+console.log('\n== No-show strikes ==');
+{
+  const nk = 'Unoshow00000000000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าไม่มารับ')`).run(nk);
+  for (let i = 0; i < 3; i++)
+    db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, closed_at) VALUES (1,1,0,'NS${i}',?, 'no_show', datetime('now'))`).run(nk);
+  ok(Q.noshowStrikes(nk).strikes === 3, 'INVARIANT strikes are derived live from no_show tickets');
+  ok(Q.noshowStrikes(nk).blocked === false, 'INVARIANT with the feature OFF nobody is blocked');
+  Q.setNoshowEnabled(true);
+  ok(Q.noshowStrikes(nk).blocked === true, 'INVARIANT reaching the limit inside the window blocks LINE self-service');
+  let err1 = null; try { Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk }); } catch (e) { err1 = e.message; }
+  ok(err1 === 'noshow_blocked', `INVARIANT taking a queue number is refused (${err1})`);
+  const nsDrink = db.prepare("SELECT name, price FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1").get();
+  let err2 = null; try { Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'customer', lineUserId: nk }); } catch (e) { err2 = e.message; }
+  ok(err2 === 'noshow_blocked', `INVARIANT self-ordering is refused (${err2})`);
+  const co = Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'cashier' });
+  ok(!!co.ticket, 'INVARIANT the counter still sells — cashier orders are never blocked');
+  db.prepare('DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE ticket_id=?)').run(co.ticket.id);
+  db.prepare('DELETE FROM orders WHERE ticket_id=?').run(co.ticket.id);
+  db.prepare('DELETE FROM tickets WHERE id=?').run(co.ticket.id);
+  const fg = Q.forgiveNoshow(nk);
+  ok(fg.strikes === 0 && fg.blocked === false, 'INVARIANT forgiveness restarts the count');
+  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE line_user_id=? AND status='no_show'").get(nk).n === 3,
+    'INVARIANT forgiveness deletes NOTHING — only the counting restarts');
+  const t2 = Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk });
+  ok(!!t2.ticket, 'INVARIANT a forgiven customer can take a queue number again');
+  db.prepare('DELETE FROM tickets WHERE id=?').run(t2.ticket.id);
+  ok((Q.customersList().find((c) => c.key === nk) || {}).noshows === 0, 'INVARIANT the CRM list reflects the restarted count');
+  Q.setNoshowEnabled(false);
+}
+
+// ---- Owner-summary: past-day anchoring (midnight fallback) + diagnosis payload ----
+console.log('\n== Owner summary fallback + diag ==');
+{
+  const yd = db.prepare("SELECT date(datetime('now','+7 hours'),'-1 day') d").get().d;
+  const txt = Q.composeDailySummary(null, yd);
+  const bud = Number(yd.slice(0, 4)) + 543;
+  ok(txt.includes(String(bud)) && txt.includes(` ${Number(yd.slice(8, 10))} `),
+    'INVARIANT a backfilled summary is anchored to the requested Bangkok day, not today');
+  const sd = Q.summaryDiag();
+  ok(typeof sd.autoOn === 'boolean' && 'hasId' in sd && 'idValid' in sd && 'lineOn' in sd && 'lastSentDay' in sd,
+    'INVARIANT summaryDiag exposes every gate in the delivery chain');
+}
+
 // ---- Finance cross-check: the report must tie out against INDEPENDENT sums over the raw tables ----
 console.log('\n== Finance report ties out ==');
 {

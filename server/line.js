@@ -18,8 +18,10 @@ export const lineMiddleware = LINE_ENABLED
   ? line.middleware({ channelSecret: secret })
   : (req, res, next) => next(); // no-op when not configured
 
-/** Send a text push to a LINE user. Returns true if actually sent. */
-export async function pushText(userId, text) {
+/** Send a text push to a LINE user. Returns true if actually sent.
+ *  `kind` tags the attempt in push_log (e.g. 'summary') so a silent failure is diagnosable
+ *  later — before this, a failed owner summary left no trace anywhere the UI could show. */
+export async function pushText(userId, text, kind = 'other') {
   if (!userId) return false;
   if (!LINE_ENABLED) {
     console.log(`\n[LINE-STUB] -> ${userId}\n${text}\n`);
@@ -27,9 +29,11 @@ export async function pushText(userId, text) {
   }
   try {
     await client.pushMessage({ to: userId, messages: [{ type: 'text', text }] });
+    logPush(userId, kind, true);
     return true;
   } catch (err) {
     console.error('[LINE] push failed:', err?.statusMessage || err?.message || err);
+    logPush(userId, kind, false);
     return false;
   }
 }

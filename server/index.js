@@ -435,7 +435,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() } });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -461,6 +461,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }
     if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
     if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
+    if (req.body?.noshowOn != null) Object.assign(out, Q.setNoshowEnabled(!!req.body.noshowOn));
+    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null) Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, windowDays: req.body?.noshowWindow }));
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -655,8 +657,10 @@ app.post('/api/zones/:zoneId/tickets', rateLimit('ticket', 30, 60e3), (req, res)
     emit(zone.id, 'update', (reveal) => Q.zoneSnapshot(zone.id, { reveal }));
     res.json({ ticketId: ticket.id, code: ticket.code, ahead });
   } catch (e) {
-    const map = { zone_closed: 423, zone_not_found: 404 };
-    res.status(map[e.message] || 400).json({ error: e.message });
+    const map = { zone_closed: 423, zone_not_found: 404, noshow_blocked: 403 };
+    const body = { error: e.message };
+    if (e.message === 'noshow_blocked') { body.strikes = e.strikes; body.limit = e.limit; }
+    res.status(map[e.message] || 400).json(body);
   }
 });
 
@@ -685,8 +689,10 @@ app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) =>
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
     }
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409 };
-    res.status(map[e.message] || 400).json({ error: e.message });
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409, noshow_blocked: 403 };
+    const body = { error: e.message };
+    if (e.message === 'noshow_blocked') { body.strikes = e.strikes; body.limit = e.limit; }
+    res.status(map[e.message] || 400).json(body);
   }
 });
 
@@ -980,6 +986,12 @@ app.get('/api/push-stats/range', (req, res) => {
 app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ customers: Q.customersList() });
+});
+// No-show forgiveness: restarts the customer's strike count (nothing is deleted — see forgiveNoshow).
+app.post('/api/crm/customers/forgive', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.forgiveNoshow((req.body?.key || '').toString())); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer list → Excel (all customers + segment + rating they gave).
 app.get('/api/crm/customers.xlsx', async (req, res) => {
@@ -1560,6 +1572,17 @@ function doDailyReset() {
     const l = Q.reconcileLoyaltyBalances();
     if (l.fixed) console.log(`[loyalty] repaired ${l.fixed}/${l.checked} cached balances from the ledger`);
   } catch (e) { console.error('[loyalty] reconcile failed:', e && e.message); }
+  // Owner-summary fallback: the primary trigger is closing the cash drawer, but on days the staff
+  // never closes a round the summary would silently not exist. At the midnight reset we are on the
+  // NEW day already, so summarize YESTERDAY; maybeAutoSummary's per-day dedup makes this a no-op
+  // when the drawer-close already sent it. (Caveat: a free-tier instance asleep at midnight never
+  // runs this — drawer close remains the reliable path.)
+  try {
+    const yd = db.prepare("SELECT date(datetime('now','+7 hours'),'-1 day') d").get().d;
+    Promise.resolve(Q.maybeAutoSummary(null, yd)).then((r) => {
+      if (r.sent) console.log(`[summary] midnight fallback sent for ${yd}`);
+    }).catch(() => {});
+  } catch { /* best-effort */ }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();
