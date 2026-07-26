@@ -1102,11 +1102,12 @@
   #moreMenuBody .ic{width:19px;height:19px}
   /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
      over months (520–1000px), so each page opened at a different width — the owner read that as
-     the app jumping around. !important because each card carries its historical inline value. */
+     the app jumping around. !important because each card carries its historical inline value.
+     1100px: the owner's screens are 1366×768, so the frame can breathe wider than the old 940. */
   @media (min-width:640px){
     #homeCard,#settingsCard,#reportCard,#historyCard,#salesCard,#staffCard,#branchCard,#stockCard,
     #loyaltyCard,#tenderCard,#couponCard,#promoCard,#controlCard,#cashCard,#chartsCard,#detailCard,
-    #menuCard,#custListCard,#reviewCard,#couponRepCard{max-width:940px!important}
+    #menuCard,#custListCard,#reviewCard,#couponRepCard{max-width:1100px!important}
   }
   /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
   .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -3100,20 +3101,31 @@ window.chTab=(i)=>{
   if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(30);
 };
 // -------- tab 0: campaign templates (the ONE place giveaway values live) --------
+let _chCoupList=[];
 window.chLoadTpl=async()=>{
   const box=$('chTplList');
   let r; try{ r=await api('/api/admin/coupon-templates'); }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  try{ _chCoupList=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _chCoupList=[]; }
   const own=(!ME||ME.role==='owner');
-  const num=(id,v,w)=>`<input id="${id}" type="number" inputmode="numeric" value="${v}" ${own?'':'disabled'} style="width:${w||64}px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;text-align:center">`;
+  const num=(id,v,w,dis)=>`<input id="${id}" type="number" inputmode="numeric" value="${v}" ${(own&&!dis)?'':'disabled'} style="width:${w||64}px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;text-align:center${dis?';background:var(--surface);color:var(--muted)':''}">`;
+  // "ผูกกับคูปอง" — the owner rule: a coupon is DEFINED once on the coupon page and every campaign
+  // references it. Bound → the number fields just display what the coupon dictates.
+  const bindSel=(key,cid)=>`<select id="chBind_${key}" ${own?'':'disabled'} onchange="chBindChange('${key}')" style="flex:1;min-width:170px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff">
+      <option value="">ไม่ผูก — กำหนดตัวเลขเอง</option>
+      ${_chCoupList.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.label)} (${esc(c.code)})</option>`).join('')}
+    </select>`;
   const tplRow=(t)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px">
       <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
         <b style="font-size:13.5px;color:var(--navy)">${esc(t.name)}</b>
         ${t.toggle?`<label class="row" style="gap:6px;align-items:center;font-size:12.5px;cursor:pointer"><input type="checkbox" id="chOn_${t.key}" ${t.on?'checked':''} ${own?'':'disabled'} style="width:17px;height:17px">เปิดใช้งาน</label>`:''}
       </div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span style="flex:none">ผูกกับคูปอง</span>${bindSel(t.key,t.couponId)}
+      </div>
       <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
-        <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value)}</span>
-        <span>อายุ ${num('chDay_'+t.key,t.days,54)} วัน</span>
+        <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value,64,!!t.couponId)}</span>
+        <span>อายุ ${num('chDay_'+t.key,t.days,54,!!t.couponId)} วัน</span>
         ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',${t.toggle})">บันทึก</button>`:''}
       </div>
     </div>`;
@@ -3125,10 +3137,21 @@ window.chLoadTpl=async()=>{
           <span class="muted" style="font-size:12px"> · ฿${lk.value??''} · ${lk.on?(lk.ready?'<b style="color:#16876f">เปิดอยู่</b>':'<b style="color:#b45309">เปิดแต่ยังไม่พร้อม</b>'):'ปิดอยู่'}</span></span>
         ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
       </div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('lucky',false)">บันทึก</button>`:''}
+      </div>
     </div>`;
 };
+window.chBindChange=(key)=>{ const bound=!!$('chBind_'+key).value;
+  for(const p of ['chVal_','chDay_']){ const el=$(p+key); if(el){ el.disabled=bound;
+    el.style.background=bound?'var(--surface)':''; el.style.color=bound?'var(--muted)':''; } } };
 window.chSaveTpl=async(key,hasToggle)=>{
-  const body={ value:Number($('chVal_'+key).value), days:Number($('chDay_'+key).value) };
+  const body={};
+  const sel=$('chBind_'+key); if(sel) body.couponId=sel.value?Number(sel.value):null;
+  const vEl=$('chVal_'+key), dEl=$('chDay_'+key);
+  if(vEl&&!body.couponId) body.value=Number(vEl.value);
+  if(dEl&&!body.couponId) body.days=Number(dEl.value);
   if(hasToggle) body.on=$('chOn_'+key).checked;
   try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify(body)}); toast('บันทึกแล้ว ✓'); chLoadTpl(); }
   catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }

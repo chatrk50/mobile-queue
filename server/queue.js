@@ -545,20 +545,53 @@ const TPL_DEFS = {
   reward:   { name: 'สะสมครบ → เครื่องดื่มฟรี', value: 49, days: 30, toggle: false },
   winback:  { name: 'ดึงลูกค้ากลับ (ค่าเริ่มต้น)', value: 49, days: 30, toggle: false },
 };
+/** The ฿ worth of a coupons-row when used as a GIFT template: a baht coupon gives its value, a
+ *  percent coupon gives its cap (that is the most it can ever be worth). */
+function couponGiftValue(c, fallback) {
+  return Math.max(1, (c.disc_type === 'percent' ? (c.max_disc || fallback) : c.disc_value) || fallback);
+}
 export function couponTemplate(key) {
   const d = TPL_DEFS[key];
   if (!d) throw new Error('unknown_template');
-  return {
+  const t = {
     key, name: d.name, toggle: d.toggle,
     value: Math.max(1, Math.min(2000, Math.round(Number(getSetting(`tpl:${key}:value`, String(d.value))) || d.value))),
     days: Math.max(1, Math.min(365, Math.round(Number(getSetting(`tpl:${key}:days`, String(d.days))) || d.days))),
     on: d.toggle ? getSetting(`tpl:${key}:on`, '1') === '1' : true,
+    couponId: null, couponLabel: null,
   };
+  // Bound to a coupon built on the coupon page (owner rule: every coupon is defined in ONE place
+  // and campaigns reference it). The coupon's value/expiry/label override the hand-typed numbers;
+  // if the coupon is later deleted or switched off, the campaign falls back to those numbers
+  // instead of dying.
+  const cid = Math.round(Number(getSetting(`tpl:${key}:coupon_id`, '')) || 0) || null;
+  if (cid) {
+    const c = db.prepare('SELECT * FROM coupons WHERE id=? AND active=1').get(cid);
+    if (c) {
+      t.couponId = c.id; t.couponLabel = c.label;
+      t.value = couponGiftValue(c, t.value);
+      if (c.valid_days > 0) t.days = c.valid_days;
+    }
+  }
+  return t;
 }
 export function couponTemplates() { return Object.keys(TPL_DEFS).map(couponTemplate); }
-export function setCouponTemplate(key, { value, days, on } = {}) {
+export function setCouponTemplate(key, { value, days, on, couponId } = {}) {
+  // 'lucky' rides the same endpoint so the hub has ONE save path, but its numbers live in the
+  // campaign's own lucky:* settings — only the coupon binding is stored here.
+  if (key === 'lucky') {
+    if (couponId !== undefined) setLuckyCoupon(couponId);
+    return luckyStatus();
+  }
   const d = TPL_DEFS[key];
   if (!d) throw new Error('unknown_template');
+  if (couponId !== undefined) {
+    if (couponId === null || couponId === '' || Number(couponId) === 0) setSetting(`tpl:${key}:coupon_id`, '');
+    else {
+      if (!db.prepare('SELECT id FROM coupons WHERE id=? AND active=1').get(Number(couponId))) throw new Error('coupon_not_found');
+      setSetting(`tpl:${key}:coupon_id`, String(Math.round(Number(couponId))));
+    }
+  }
   if (value != null) setSetting(`tpl:${key}:value`, String(Math.max(1, Math.min(2000, Math.round(Number(value) || d.value)))));
   if (days != null) setSetting(`tpl:${key}:days`, String(Math.max(1, Math.min(365, Math.round(Number(days) || d.days)))));
   if (on != null && d.toggle) setSetting(`tpl:${key}:on`, on ? '1' : '0');
@@ -2765,7 +2798,23 @@ export function setLuckyNumber(n) {
   const v = Math.max(1, Math.min(9999, Math.round(Number(n) || 67)));
   setSetting('lucky:number', String(v)); return { luckyNumber: v };
 }
-export function getLuckyValue() { return Math.max(1, Number(getSetting('lucky:value', '40')) || 40); }
+// Bound coupon (owner rule: define coupons in one place). When set, the prize value follows the
+// coupon; the hand-typed lucky:value is the fallback if it is later deleted or switched off.
+function luckyCoupon() {
+  const cid = Math.round(Number(getSetting('lucky:coupon_id', '')) || 0) || null;
+  return cid ? db.prepare('SELECT * FROM coupons WHERE id=? AND active=1').get(cid) : null;
+}
+export function setLuckyCoupon(couponId) {
+  if (couponId === null || couponId === '' || Number(couponId) === 0) { setSetting('lucky:coupon_id', ''); return luckyStatus(); }
+  if (!db.prepare('SELECT id FROM coupons WHERE id=? AND active=1').get(Number(couponId))) throw new Error('coupon_not_found');
+  setSetting('lucky:coupon_id', String(Math.round(Number(couponId))));
+  return luckyStatus();
+}
+export function getLuckyValue() {
+  const c = luckyCoupon();
+  const fallback = Math.max(1, Number(getSetting('lucky:value', '40')) || 40);
+  return c ? couponGiftValue(c, fallback) : fallback;
+}
 export function setLuckyValue(v) {
   const n = Math.max(1, Math.min(2000, Math.round(Number(v) || 40)));
   setSetting('lucky:value', String(n)); return { luckyValue: n };
@@ -2773,7 +2822,9 @@ export function setLuckyValue(v) {
 /** Campaign health for the settings screen — says WHY it can't fire, instead of silently not firing. */
 export function luckyStatus() {
   const on = luckyEnabled();
+  const c = luckyCoupon();
   return { on, number: getLuckyNumber(), value: getLuckyValue(), queueFirst: getQueueFirst(),
+           couponId: c ? c.id : null, couponLabel: c ? c.label : null,
            ready: on && getQueueFirst(),
            reason: !on ? 'off' : (!getQueueFirst() ? 'needs_queue_first' : 'ready') };
 }
@@ -3347,9 +3398,13 @@ export function issueBirthdayCoupons() {
                            AND strftime('%Y', datetime(cc.issued_at, '+7 hours')) = ?)`
   ).all(md, yr);
   const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
+  // When bound, the wallet shows the coupon's own name (rename it on the coupon page → every future
+  // gift follows). coupon_id itself is deliberately NOT stored on these rows: the one-claim-per-
+  // customer unique index would then block the SAME customer's gift next year.
+  const bdayLabel = tpl.couponLabel || `ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿${tpl.value})`;
   for (const r of rows) {
     db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, ?, ?, 'birthday')`)
-      .run(r.key, `ของขวัญวันเกิด — ฟรี 1 แก้ว (ไม่เกิน ฿${tpl.value})`, tpl.value, expiresAt);
+      .run(r.key, bdayLabel, tpl.value, expiresAt);
     try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿${tpl.value}) — กดใช้ได้เองในเมนูคูปอง ภายใน ${tpl.days} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };

@@ -1452,6 +1452,43 @@ console.log('\n== Win-back attaches a coupon BUILT ON THE COUPON PAGE (define on
   Q.deleteCoupon(cid);
 }
 
+console.log('\n== Campaigns BIND to a coupon-page coupon (one definition, referenced everywhere) ==');
+{
+  const bid = Q.createCoupon({ code: 'BDAYGIFT', label: 'ของขวัญวันเกิดพิเศษ', disc_type: 'baht', disc_value: 60 }).id;
+  db.prepare('UPDATE coupons SET valid_days=12 WHERE id=?').run(bid);
+  // Bind birthday → value/expiry/label all follow the coupon.
+  const t1 = Q.setCouponTemplate('birthday', { couponId: bid });
+  ok(t1.couponId === bid && t1.value === 60 && t1.days === 12 && t1.couponLabel === 'ของขวัญวันเกิดพิเศษ',
+    `INVARIANT a bound template resolves value/expiry/label from the coupon (฿${t1.value}, ${t1.days}วัน)`);
+  const wasLoy2 = Q.loyaltyEnabled(); Q.setLoyaltyEnabled(true);
+  const BK = 'U' + '3f'.repeat(16);
+  const bday2 = db.prepare("SELECT '1992-' || strftime('%m-%d', datetime('now','+7 hours')) b").get().b;
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'เกิดผูกคูปอง', ?)`).run(BK, bday2);
+  Q.issueBirthdayCoupons();
+  const bcc2 = Q.customerCoupons(BK).find((c) => c.kind === 'birthday');
+  ok(!!bcc2 && bcc2.free_cap === 60 && bcc2.label === 'ของขวัญวันเกิดพิเศษ',
+    `INVARIANT the birthday gift carries the bound coupon's value + name (cap ${bcc2 && bcc2.free_cap})`);
+  ok(bcc2.coupon_id == null,
+    'INVARIANT automation gifts do NOT store coupon_id — the one-claim unique index would block the SAME customer next year');
+  // Switch the coupon off → the campaign falls back to its own numbers instead of dying.
+  db.prepare('UPDATE coupons SET active=0 WHERE id=?').run(bid);
+  const t2 = Q.couponTemplate('birthday');
+  ok(t2.couponId === null && t2.value === 100, `INVARIANT a dead bound coupon falls back to the template's own numbers (฿${t2.value})`);
+  Q.setCouponTemplate('birthday', { couponId: null });
+  let bindErr = null; try { Q.setCouponTemplate('reward', { couponId: 987654 }); } catch (e) { bindErr = e.message; }
+  ok(bindErr === 'coupon_not_found', 'INVARIANT binding to a ghost coupon is refused');
+  // Lucky binds through the same save path; its prize value follows the coupon.
+  db.prepare('UPDATE coupons SET active=1 WHERE id=?').run(bid);
+  const lk1 = Q.setCouponTemplate('lucky', { couponId: bid });
+  ok(lk1.couponId === bid && Q.getLuckyValue() === 60, `INVARIANT the lucky prize follows the bound coupon (฿${Q.getLuckyValue()})`);
+  Q.setCouponTemplate('lucky', { couponId: null });
+  ok(Q.getLuckyValue() === Math.max(1, Number('40')), 'INVARIANT unbinding lucky returns to its own ฿ setting');
+  Q.setLoyaltyEnabled(wasLoy2);
+  db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(BK);
+  db.prepare('DELETE FROM customers WHERE line_user_id=?').run(BK);
+  Q.deleteCoupon(bid);
+}
+
 console.log('\n== Denormalization: void hands back code-coupon quota; ledger heals the cache ==');
 {
   // Void returns the coupon redemption: quota AND the customer's per-person allowance.
