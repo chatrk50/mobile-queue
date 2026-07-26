@@ -303,9 +303,9 @@
         </div>
         <div class="admgrp"><div class="admhdr c3"><svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>ลูกค้า / การตลาด</div>
           <button id="winbackBtn" class="ghost adm" style="display:none" onclick="showCustomers()"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า / ดึงลูกค้ากลับ</button>
+          <button id="couponRepBtn" class="ghost adm" style="display:none" onclick="showCouponHub()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</button>
           <button id="reviewBtn" class="ghost adm" style="display:none" onclick="showReviews()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</button>
           <button id="loyaltyBtn" class="ghost adm" style="display:none" onclick="showLoyalty()"><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม/ของรางวัล</button>
-          <button id="couponBtn" class="ghost adm" style="display:none" onclick="showCoupons()"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</button>
           <button id="promoBtn" class="ghost adm" style="display:none" onclick="showPromo()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</button>
         </div>
         <div class="admgrp"><div class="admhdr c4"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าร้าน</div>
@@ -597,7 +597,10 @@
   <div id="couponCard" class="card" style="display:none;max-width:600px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+      <div class="row" style="gap:6px">
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showCouponRep()">รายงานการใช้</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+      </div>
     </div>
     <div id="couponList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <!-- Coupon builder. Structured the way Starbucks/Grab/Shopee merchant consoles do it: identity →
@@ -917,6 +920,44 @@
   <div id="fbBox" style="margin-top:10px"></div>
 </div>
 
+<!-- รายงานคูปอง: ส่งไปกี่ใบ กลับมาใช้กี่ใบ เป็นเงินเท่าไหร่ — เลือกช่วงเวลาได้ -->
+<!-- คูปอง & แคมเปญ hub — ONE page for everything coupon: what campaigns exist (and their ฿ values),
+     which coupons are still out there (liability), and what came back (report). Each tab loads its
+     own data only when opened, so opening the hub costs one small request, not five. -->
+<div id="couponRepCard" class="card" style="display:none;max-width:760px;margin:14px auto">
+  <div class="row between" style="align-items:center">
+    <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</h1>
+    <button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()">ปิด</button>
+  </div>
+  <div id="chTabs" class="row" style="gap:6px;margin:12px 0 12px"></div>
+  <div id="chTab0" style="display:none">
+    <div id="chTplList"><p class="muted" style="font-size:12.5px">กำลังโหลด…</p></div>
+    <div style="border-top:1px dashed var(--line);margin-top:14px;padding-top:12px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:13px"><b style="color:var(--navy)">คูปองรหัส & ลิงก์รับคูปอง</b>
+          <div class="muted" style="font-size:11.5px">โค้ดให้ลูกค้าพิมพ์เอง / ลิงก์แจกในไลน์ — สร้างและแก้ไขที่หน้าคูปองรหัส</div></span>
+        <button class="ghost" style="padding:7px 14px;font-size:13px" onclick="showCoupons()">เปิดหน้าคูปองรหัส ›</button>
+      </div>
+    </div>
+  </div>
+  <div id="chTab1" style="display:none">
+    <div id="chOutSum" style="margin-bottom:8px"></div>
+    <input id="chOutQ" type="search" placeholder="🔍 ค้นหาชื่อลูกค้า / ชื่อคูปอง" oninput="chOutSearch()"
+      style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13.5px;border:1.5px solid var(--line);border-radius:11px;margin-bottom:8px">
+    <div id="chOutList"></div>
+  </div>
+  <div id="chTab2" style="display:none">
+    <div class="row" style="gap:6px;margin:0 0 8px;flex-wrap:wrap" id="crRange"></div>
+    <div class="row" style="gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <input id="crFrom" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <span class="muted" style="font-size:12px">ถึง</span>
+      <input id="crTo" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <button class="ghost" style="padding:7px 14px" onclick="loadCouponRep(null)">ดู</button>
+    </div>
+    <div id="crBody"></div>
+  </div>
+</div>
+
 <div id="custListCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
@@ -943,13 +984,21 @@
     <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
     <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
     <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
-      <input type="checkbox" id="clCoupOn" onchange="document.getElementById('clCoupBox').style.display=this.checked?'':'none'" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
+      <input type="checkbox" id="clCoupOn" onchange="clCoupToggle(this)" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
     </label>
     <div id="clCoupBox" style="display:none;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:10px;margin-top:6px">
-      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
-        <span style="font-size:12.5px">ไม่เกิน ฿<input id="clCoupCap" type="number" value="49" min="1" max="500" style="width:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"></span>
-        <span style="font-size:12.5px">อายุ <input id="clCoupDays" type="number" value="14" min="1" max="90" style="width:52px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"> วัน</span>
+      <!-- Pick a coupon built once on the coupon page (its value/expiry/quota travel with it), or
+           กำหนดเอง for a one-off. Owner rule: define a coupon in ONE place, reference it everywhere. -->
+      <select id="clCoupPick" onchange="clCoupPickChange()" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;background:#fff">
+        <option value="">กำลังโหลดคูปอง…</option>
+      </select>
+      <div id="clCoupInfo" class="muted" style="font-size:11.5px;margin-top:6px;display:none"></div>
+      <div id="clCoupCustom" style="display:none;margin-top:8px">
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+          <span style="font-size:12.5px">ไม่เกิน ฿<input id="clCoupCap" type="number" value="49" min="1" max="500" style="width:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"></span>
+          <span style="font-size:12.5px">อายุ <input id="clCoupDays" type="number" value="14" min="1" max="90" style="width:52px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"> วัน</span>
+        </div>
       </div>
       <div class="muted" style="font-size:11px;margin-top:5px">คูปองจะเข้า "คูปองของฉัน" ของลูกค้าทันที และข้อความจะบอกวันหมดอายุให้เอง</div>
     </div>
@@ -1034,7 +1083,13 @@
   .ckey:active{transform:scale(.95);background:#e4ebf3}
   #custPhone::placeholder{font-size:14px;letter-spacing:.5px;font-weight:600;color:var(--muted)}
   /* Per-line kitchen mark chip (cook taps each drink as ○→🔥→✅). Big tap target, no double-tap zoom delay. */
-  .kmark{flex:none;width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
+  /* Bill quantity steppers: the visible circle stays compact so the bill row keeps its
+     proportions, while an invisible ::after extends the HIT AREA to the 44px minimum. */
+  .qstep{width:32px;height:32px;padding:0;border-radius:50%;font-size:18px;line-height:1;position:relative}
+  .qstep::after{content:'';position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+  /* 44px, not 36: this is the mark a cook taps for every single drink, all shift, often with wet
+     or gloved hands, next to other targets. */
+  .kmark{flex:none;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-size:18px;line-height:1;
     cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
     display:flex;align-items:center;justify-content:center;padding:0;transition:transform .06s,border-color .06s}
   .kmark:active{transform:scale(.9)}
@@ -1045,6 +1100,15 @@
   #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
   #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
   #moreMenuBody .ic{width:19px;height:19px}
+  /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
+     over months (520–1000px), so each page opened at a different width — the owner read that as
+     the app jumping around. !important because each card carries its historical inline value.
+     1100px: the owner's screens are 1366×768, so the frame can breathe wider than the old 940. */
+  @media (min-width:640px){
+    #homeCard,#settingsCard,#reportCard,#historyCard,#salesCard,#staffCard,#branchCard,#stockCard,
+    #loyaltyCard,#tenderCard,#couponCard,#promoCard,#controlCard,#cashCard,#chartsCard,#detailCard,
+    #menuCard,#custListCard,#reviewCard,#couponRepCard{max-width:1100px!important}
+  }
   /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
   .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   .tgl.on{background:var(--accent2,#2fc2a6)}
@@ -1105,7 +1169,9 @@
 </div>
 <!-- "เพิ่มเติม" overflow menu: occasional per-order actions. Centered card with a FIXED header and a
      SCROLLABLE body so every button is reachable even on a short (landscape) screen. -->
-<div id="moreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
+<!-- Renamed from "moreMenu": the phone-header dropdown later claimed that id, and getElementById
+     returns the FIRST match — so this modal filled its body but the header menu opened instead. -->
+<div id="orderMoreMenu" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeMoreMenu()">
   <div class="card" style="max-width:440px;width:100%;margin:0;max-height:88vh;display:flex;flex-direction:column;padding:16px">
     <div class="row between" style="margin:0 0 10px;flex:none"><h2 style="margin:0">ตัวเลือกเพิ่มเติม</h2><button class="ghost" style="padding:6px 12px" onclick="closeMoreMenu()">✕</button></div>
     <div id="moreMenuBody" style="overflow-y:auto;flex:1;min-height:0" onclick="if(event.target.closest('button'))setTimeout(closeMoreMenu,0)"></div>
@@ -1183,9 +1249,20 @@
   <img id="slipZoomImg" alt="สลิปเต็มจอ" style="width:100%;max-width:900px;margin:0 auto;display:block">
 </div>
 
-<!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on shop wifi). -->
-<script src="/vendor/jsQR.min.js"></script>
-<script src="/vendor/Sortable.min.js"></script>
+<!-- Self-hosted (the cdnjs jsQR path was 404 → scanner never loaded; CDNs can also be blocked on
+     shop wifi). Loaded ON DEMAND, not at boot: jsQR is 251 KB and Sortable 44 KB, and they are only
+     needed when someone opens the QR scanner or drags the menu into a new order — every till paid
+     for them on every cold start. loadVendor() caches the promise, so a second call is free and two
+     rapid taps share one download. -->
+<script>
+window.loadVendor=(()=>{ const cache={};
+  return (src)=>cache[src] || (cache[src]=new Promise((ok,fail)=>{
+    const s=document.createElement('script'); s.src=src; s.onload=ok;
+    s.onerror=()=>{ delete cache[src]; fail(new Error('load_failed')); };   // let a retry try again
+    document.head.appendChild(s);
+  }));
+})();
+</script>
 <script type="module">
 const $=(id)=>document.getElementById(id);
 let PIN=null, zones=[], streams=[], CFG={}, ME=null, TENDERS=[];
@@ -1326,8 +1403,8 @@ window.appPrompt=({title='',message='',value='',placeholder='',type='text',input
 window.appConfirm=({title='ยืนยัน',message='',okText='ตกลง',cancelText='ยกเลิก',danger=false}={})=>
   _appModal({title,message,okText,cancelText,danger,input:null}).then(v=> v===true);
 // "เพิ่มเติม" overflow menu: show the secondary actions stashed for this ticket (built in renderZone).
-window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('moreMenu').style.display='flex'; };
-window.closeMoreMenu=()=>{ $('moreMenu').style.display='none'; };
+window.openMoreMenu=(tid)=>{ const html=(window._moreCache||{})[tid]||''; $('moreMenuBody').innerHTML=html||'<p class="muted" style="text-align:center;padding:12px">ไม่มีตัวเลือกเพิ่มเติม</p>'; $('orderMoreMenu').style.display='flex'; };
+window.closeMoreMenu=()=>{ $('orderMoreMenu').style.display='none'; };
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
@@ -1487,9 +1564,11 @@ window.login=async()=>{
     $('historyBtn').style.display=''; $('custBtn').style.display=''; $('scanBtn').style.display=''; $('soundBtn').style.display=''; applySoundBtn(); $('adminBtn').style.display=mgr?'':'none';
     $('reportBtn').style.display=mgr?'':'none';
     $('detailBtn').style.display=mgr?'':'none'; $('cashBtn').style.display=mgr?'':'none'; $('storeBtn').style.display=mgr?'':'none'; $('stockBtn').style.display=mgr?'':'none'; $('loyaltyBtn').style.display=mgr?'':'none'; $('winbackBtn').style.display=mgr?'':'none'; { const cb=$('chartsBtn'); if(cb) cb.style.display=mgr?'':'none'; } { const hb=$('homeBtn'); if(hb) hb.style.display=mgr?'':'none'; }
-    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('couponBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
+    $('menuBtn').style.display=own?'':'none'; $('staffBtn').style.display=own?'':'none'; $('controlBtn').style.display=own?'':'none'; $('tenderBtn').style.display=own?'':'none'; $('promoBtn').style.display=own?'':'none';
     // Reviews carry free-text comments about staff → owner-only, same tier as พนักงาน and คูปอง.
     { const rb=$('reviewBtn'); if(rb) rb.style.display=own?'':'none'; }
+    // Coupon figures are ordinary business numbers, so a manager may read them (matches the API gate).
+    { const cb=$('couponRepBtn'); if(cb) cb.style.display=mgr?'':'none'; }
     { const sb=$('settingsBtn'); if(sb) sb.style.display=mgr?'':'none'; }   // the hub; owner-only rows inside gate themselves
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
@@ -1499,6 +1578,9 @@ window.login=async()=>{
 };
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   stopHeartbeat(); { const ob=$('onlineBtn'); if(ob) ob.style.display='none'; }
+  // Background timers outlived the session: a logged-out till kept polling ingredients every 3
+  // minutes and the stats strip every minute, forever.
+  for(const k of ['_lowStockTimer','_todayTimer']){ if(window[k]){ clearInterval(window[k]); window[k]=null; } }
   MY_SHIFT=null; { const cb=$('clockBtn'); if(cb) cb.style.display='none'; }   // signing out is NOT clocking out — the shift keeps running on purpose
   $('staffBtn').style.display='none'; $('staffCard').style.display='none';
   $('detailBtn').style.display='none'; $('detailCard').style.display='none';
@@ -1524,7 +1606,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard'];
+const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard','couponRepCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
@@ -2244,7 +2326,23 @@ function cpStatus(c){ const t=bkkToday();
   if(c.distribution==='claim'&&c.issue_limit>0&&c.issued_count>=c.issue_limit) return ['แจกครบแล้ว','#faeeda','#854f0b'];
   return ['กำลังใช้งาน','#e1f5ee','#0f6e56'];
 }
-function renderCoupons(list){ COUPONS=list||[]; $('couponList').innerHTML=(list&&list.length)?list.map(c=>{
+// Which of the four life stages a coupon is in — drives the SECTION it renders under, so the page
+// reads as "running / not started / finished / off" instead of one long mixed list (owner ask).
+function cpGroup(c){ const t=bkkToday();
+  if(!c.active) return 3;
+  if(c.valid_from&&c.valid_from>t) return 1;
+  if((c.expires_at&&c.expires_at<t)||(c.usage_limit>0&&c.used_count>=c.usage_limit)) return 2;
+  return 0;
+}
+function renderCoupons(list){ COUPONS=list||[];
+  const names=['🟢 กำลังใช้งาน','🕐 ยังไม่เริ่ม','⏹ หมดอายุ / ใช้ครบแล้ว','⚪ ปิดอยู่'];
+  const groups=[[],[],[],[]];
+  (list||[]).forEach(c=>groups[cpGroup(c)].push(c));
+  $('couponList').innerHTML=(list&&list.length)?groups.map((g,gi)=>g.length?`
+    <div style="font-size:12px;font-weight:800;color:var(--navy);margin:${gi?'14px':'0'} 2px 7px;padding-bottom:4px;border-bottom:1px solid var(--line)">${names[gi]} · ${g.length} ใบ</div>`
+    +g.map(c=>cpCard(c)).join(''):'').join('')
+    :'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง</p>'; }
+function cpCard(c){
     const disc=c.disc_type==='percent'?(c.disc_value+'%'+(c.max_disc>0?' สูงสุด ฿'+c.max_disc:'')):('฿'+c.disc_value);
     const st=cpStatus(c);
     const win=(c.valid_from||c.expires_at)?((c.valid_from||'วันนี้')+' → '+(c.expires_at||'ไม่มีกำหนด')):'ไม่มีกำหนดเวลา';
@@ -2270,7 +2368,7 @@ function renderCoupons(list){ COUPONS=list||[]; $('couponList').innerHTML=(list&
         ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
         <button class="ghost danger" style="padding:5px 10px;font-size:12px;margin-left:auto" onclick="delCoupon(${c.id})">ลบ</button>
       </div>
-    </div>`;}).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีคูปอง — สร้างด้านล่าง</p>'; }
+    </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
 window.cpSyncType=()=>{ const w=$('cpMaxWrap'); if(w) w.style.display=($('cpType').value==='percent')?'':'none'; };
 let _cpEditId=null;
@@ -2989,6 +3087,158 @@ function renderInsightsBody(d, box){
 // Stars say the score, this says WHY: the reason chips customers picked plus anything they typed.
 // Owner-only on purpose — comments name staff and judge the shop, so they are not board material.
 // The API enforces it too (ownerOK); hiding the panel is only the second lock, never the only one.
+// ---------- รายงานคูปอง ----------
+let _crDays=30;
+window.hideCouponRep=()=>{ $('couponRepCard').style.display='none'; $('dash').style.display=''; };
+// The hub: tab 0 = campaigns/templates, 1 = outstanding, 2 = report. Data loads per tab on open.
+window.showCouponHub=(tab=0)=>{ hideAllPanels(); closeAdmin();
+  $('couponRepCard').style.display=''; $('dash').style.display='none'; chTab(tab); };
+window.showCouponRep=()=>showCouponHub(2);   // old entry points land on the report tab
+window.chTab=(i)=>{
+  const names=['แคมเปญ','คูปองคงค้าง','รายงาน'];
+  $('chTabs').innerHTML=names.map((n,x)=>`<button class="ghost" onclick="chTab(${x})" style="flex:1;padding:9px 6px;font-size:13px;font-weight:700;${x===i?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${n}</button>`).join('');
+  [0,1,2].forEach(x=>{ $('chTab'+x).style.display=x===i?'':'none'; });
+  if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(30);
+};
+// -------- tab 0: campaign templates (the ONE place giveaway values live) --------
+let _chCoupList=[];
+window.chLoadTpl=async()=>{
+  const box=$('chTplList');
+  let r; try{ r=await api('/api/admin/coupon-templates'); }
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  try{ _chCoupList=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _chCoupList=[]; }
+  const own=(!ME||ME.role==='owner');
+  const num=(id,v,w,dis)=>`<input id="${id}" type="number" inputmode="numeric" value="${v}" ${(own&&!dis)?'':'disabled'} style="width:${w||64}px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;text-align:center${dis?';background:var(--surface);color:var(--muted)':''}">`;
+  // "ผูกกับคูปอง" — the owner rule: a coupon is DEFINED once on the coupon page and every campaign
+  // references it. Bound → the number fields just display what the coupon dictates.
+  const bindSel=(key,cid)=>`<select id="chBind_${key}" ${own?'':'disabled'} onchange="chBindChange('${key}')" style="flex:1;min-width:170px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff">
+      <option value="">ไม่ผูก — กำหนดตัวเลขเอง</option>
+      ${_chCoupList.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.label)} (${esc(c.code)})</option>`).join('')}
+    </select>`;
+  const tplRow=(t)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <b style="font-size:13.5px;color:var(--navy)">${esc(t.name)}</b>
+        ${t.toggle?`<label class="row" style="gap:6px;align-items:center;font-size:12.5px;cursor:pointer"><input type="checkbox" id="chOn_${t.key}" ${t.on?'checked':''} ${own?'':'disabled'} style="width:17px;height:17px">เปิดใช้งาน</label>`:''}
+      </div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span style="flex:none">ผูกกับคูปอง</span>${bindSel(t.key,t.couponId)}
+      </div>
+      <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value,64,!!t.couponId)}</span>
+        <span>อายุ ${num('chDay_'+t.key,t.days,54,!!t.couponId)} วัน</span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',${t.toggle})">บันทึก</button>`:''}
+      </div>
+    </div>`;
+  const lk=r.lucky||{};
+  box.innerHTML=(r.templates||[]).map(tplRow).join('')+
+    `<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px">
+      <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:13.5px"><b style="color:var(--navy)">🎉 เลขนำโชค ${lk.number??''}</b>
+          <span class="muted" style="font-size:12px"> · ฿${lk.value??''} · ${lk.on?(lk.ready?'<b style="color:#16876f">เปิดอยู่</b>':'<b style="color:#b45309">เปิดแต่ยังไม่พร้อม</b>'):'ปิดอยู่'}</span></span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
+      </div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('lucky',false)">บันทึก</button>`:''}
+      </div>
+    </div>`;
+};
+window.chBindChange=(key)=>{ const bound=!!$('chBind_'+key).value;
+  for(const p of ['chVal_','chDay_']){ const el=$(p+key); if(el){ el.disabled=bound;
+    el.style.background=bound?'var(--surface)':''; el.style.color=bound?'var(--muted)':''; } } };
+window.chSaveTpl=async(key,hasToggle)=>{
+  const body={};
+  const sel=$('chBind_'+key); if(sel) body.couponId=sel.value?Number(sel.value):null;
+  const vEl=$('chVal_'+key), dEl=$('chDay_'+key);
+  if(vEl&&!body.couponId) body.value=Number(vEl.value);
+  if(dEl&&!body.couponId) body.days=Number(dEl.value);
+  if(hasToggle) body.on=$('chOn_'+key).checked;
+  try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify(body)}); toast('บันทึกแล้ว ✓'); chLoadTpl(); }
+  catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+};
+// -------- tab 1: outstanding wallet coupons (who holds what + total liability) --------
+let _chOutT=null;
+window.chOutSearch=()=>{ clearTimeout(_chOutT); _chOutT=setTimeout(()=>chLoadOut(0),300); };
+window.chLoadOut=async(offset=0)=>{
+  const list=$('chOutList'), q=($('chOutQ').value||'').trim();
+  if(!offset) list.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let r; try{ r=await api('/api/admin/coupons/outstanding?limit=50&offset='+offset+(q?'&q='+encodeURIComponent(q):'')); }
+  catch(e){ list.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  $('chOutSum').innerHTML=`<div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
+      <div><div style="font-size:20px;font-weight:800;color:var(--navy)">${r.total}</div><div class="muted" style="font-size:11px">ใบที่ยังไม่ถูกใช้</div></div>
+      <div><div style="font-size:20px;font-weight:800;color:#b45309">฿${r.liability}</div><div class="muted" style="font-size:11px">ภาระรวมถ้าใช้ทั้งหมด</div></div>
+    </div>`;
+  const own=(!ME||ME.role==='owner');
+  const rows=(r.rows||[]).map(x=>`<div class="row between" style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;gap:8px;align-items:center">
+      <span style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(x.name||x.key.slice(0,10)+'…')}</b>
+        <div class="muted" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.kindTh)} · ${esc(x.label)}</div></span>
+      <span style="flex:none;text-align:right"><b>฿${x.cap}</b><div class="muted" style="font-size:11px">ถึง ${x.expires}</div></span>
+      ${own?`<button class="ghost" style="flex:none;padding:5px 10px;font-size:11.5px;color:#b91c1c;border-color:#f3caca" onclick="chCancelCoupon(${x.id},'${esc(x.label).replace(/'/g,'')}')">ยกเลิก</button>`:''}
+    </div>`).join('');
+  const more=(offset+50<r.total)?`<button id="chOutMoreBtn" class="ghost" style="width:100%;margin-top:8px;padding:9px" onclick="chLoadOut(${offset+50})">ดูเพิ่ม (${r.total-offset-50} ใบ)</button>`:'';
+  if(offset){ const b=$('chOutMoreBtn'); if(b) b.remove(); list.insertAdjacentHTML('beforeend',rows+more); }
+  else list.innerHTML=rows?rows+more:'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">ไม่มีคูปองคงค้าง 🎉</p>';
+};
+// First open of the coupon box: load the coupons built on the coupon page into the dropdown and
+// prefill the custom fields from the winback template. Both cached — opening again costs nothing.
+let _clTplLoaded=false, _clCoupons=[];
+window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'none';
+  if(cb.checked&&!_clTplLoaded){ _clTplLoaded=true;
+    try{ const r=await api('/api/admin/coupon-templates');
+      const t=(r.templates||[]).find(x=>x.key==='winback');
+      if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ }
+    try{ _clCoupons=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _clCoupons=[]; }
+    const opts=_clCoupons.map(c=>`<option value="${c.id}">${esc(c.label)} (${esc(c.code)})</option>`).join('');
+    $('clCoupPick').innerHTML=(opts?`<option value="">— เลือกคูปองที่สร้างไว้ —</option>${opts}`:'')
+      +`<option value="custom" ${opts?'':'selected'}>✏️ กำหนดเอง (พิมพ์ใหม่)</option>`;
+    clCoupPickChange(); } };
+window.clCoupPickChange=()=>{
+  const v=$('clCoupPick').value, info=$('clCoupInfo');
+  $('clCoupCustom').style.display=(v==='custom')?'':'none';
+  const c=_clCoupons.find(x=>String(x.id)===v);
+  info.style.display=c?'':'none';
+  if(c){ const val=c.disc_type==='percent'?(c.max_disc?('สูงสุด ฿'+c.max_disc):('ลด '+c.disc_value+'%')):('฿'+c.disc_value);
+    const life=c.valid_days>0?('อายุ '+c.valid_days+' วันหลังได้รับ'):(c.expires_at?('ใช้ได้ถึง '+c.expires_at):'อายุ 30 วัน');
+    const quota=(c.issue_limit>0)?(' · โควตาเหลือ '+Math.max(0,c.issue_limit-(c.issued_count||0))+' ใบ'):'';
+    info.textContent='มูลค่า '+val+' · '+life+quota+' · ลูกค้าที่เคยได้ใบนี้แล้วจะไม่ได้ซ้ำ'; } };
+window.chCancelCoupon=async(id,label)=>{
+  if(!confirm(`ยกเลิกคูปอง "${label}" ?\nลูกค้าจะไม่เห็นคูปองนี้อีก (เรียกคืนไม่ได้)`)) return;
+  try{ await api('/api/admin/customer-coupons/'+id+'/cancel',{method:'POST'}); toast('ยกเลิกคูปองแล้ว'); chLoadOut(0); }
+  catch(e){ toast('ยกเลิกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+};
+window.loadCouponRep=async(days)=>{
+  const body=$('crBody'); if(!body) return;
+  // A preset clears the custom dates, and picking dates clears the preset — otherwise the heading
+  // could say "30 วัน" while showing a hand-picked range.
+  let qs;
+  if(days){ _crDays=days; $('crFrom').value=''; $('crTo').value=''; qs='days='+days; }
+  else { const f=$('crFrom').value, t=$('crTo').value;
+    if(!f||!t){ toast('เลือกวันที่เริ่มและวันที่สิ้นสุด'); return; }
+    if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
+    _crDays=0; qs='from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t); }
+  $('crRange').innerHTML=[[1,'วันนี้'],[7,'7 วัน'],[30,'30 วัน'],[365,'1 ปี']].map(([d,l])=>
+    `<button class="ghost" onclick="loadCouponRep(${d})" style="flex:1;min-width:66px;padding:7px;font-size:12.5px;${d===_crDays?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${l}</button>`).join('');
+  body.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let r; try{ r=await api('/api/reports/coupons?'+qs); }
+  catch(e){ body.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">ดูรายงานนี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  const c=r.coupons, lk=r.lucky;
+  const kpi=(v,l,col)=>`<div><div style="font-size:20px;font-weight:800;color:${col||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
+  const rows=(c.rows||[]).map(x=>`<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+      <span><b>${esc(x.label)}</b></span>
+      <span class="muted">ออก ${x.issued} · ใช้ <b style="color:var(--navy)">${x.redeemed}</b> · ฿${x.value}</span></div>`).join('')
+    ||'<p class="muted" style="font-size:12px;padding:8px 0">ยังไม่มีคูปองในช่วงนี้</p>';
+  body.innerHTML=`<div class="muted" style="font-size:11.5px;margin-bottom:8px">${c.from} ถึง ${c.to}</div>
+    <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px;margin-bottom:12px">
+      ${kpi(c.issued,'ออกให้ (ใบ)')}${kpi(c.redeemed,'กลับมาใช้','#16876f')}${kpi('฿'+c.value,'เป็นเงิน','#16876f')}${kpi(c.redeemRate+'%','อัตราใช้')}
+    </div>
+    <div class="muted" style="font-size:11.5px;margin-bottom:6px">หมดอายุโดยไม่ได้ใช้ในช่วงนี้ <b>${c.expired}</b> ใบ${c.unpriced?` · <span style="color:#946f00">${c.unpriced} ใบใช้ก่อนระบบเริ่มเก็บมูลค่าจริง จึงไม่นับเป็นเงิน</span>`:''}</div>
+    <h2>แยกตามประเภท</h2>${rows}
+    <h2 style="margin-top:14px">แคมเปญเลขนำโชค</h2>
+    <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
+      ${kpi(lk.won,'ผู้ได้รับ')}${kpi(lk.used,'ใช้สิทธิ์','#16876f')}${kpi(lk.skipped,'ไม่รับสิทธิ์','var(--muted)')}${kpi('฿'+lk.value,'เป็นเงิน','#16876f')}
+    </div>
+    ${c.codeCoupons&&c.codeCoupons.redeemed?`<div class="muted" style="font-size:11.5px;margin-top:10px">คูปองรหัส (ใส่โค้ดเอง) ใช้ไป ${c.codeCoupons.redeemed} ครั้ง · ฿${c.codeCoupons.value}</div>`:''}`;
+};
 let _fbDays=30;
 window.hideReviews=()=>{ $('reviewCard').style.display='none'; $('dash').style.display=''; };
 window.showReviews=()=>{ hideAllPanels(); closeAdmin();
@@ -3038,7 +3288,9 @@ let FIN=null;
 // One door for every setting. Rows either expand inline (the cost model, previously buried
 // inside the daily report) or jump to the panel that owns the setting. Owner-only rows are
 // hidden for managers; the APIs behind them still enforce the role server-side.
-window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none'; $('dash').style.display=''; };
+window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none';
+  $('settingsBody').style.display='';   // leaving from the cost page must not hide the hub next time
+  $('dash').style.display=''; };
 window.showSettings=()=>{ hideAllPanels(); closeAdmin();
   $('settingsCard').style.display=''; $('dash').style.display='none'; renderSettingsHub(); };
 function renderSettingsHub(){
@@ -3055,17 +3307,30 @@ function renderSettingsHub(){
     ${row('showLoyalty()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
     ${row('showTenders()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
     ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
+    ${row('showCouponHub()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','คูปอง & แคมเปญ','มูลค่าของแถมทุกแบบ เลขนำโชค คูปองคงค้าง รายงาน',true)}
     ${row('showMenu()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
     ${row('showStaff()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
   </div>
-  <p class="muted" style="font-size:11px;margin:10px 2px 0">แตะ "ต้นทุน & ค่าใช้จ่าย" เพื่อแก้ในหน้านี้ · หัวข้ออื่นเปิดหน้าของตัวเอง</p>`;
+  `;
 }
+// The campaign controls live on the ระบบ page; the owner looked for them in ตั้งค่าทั้งหมด and found
+// nothing, because that row only advertised "คิว การพิมพ์ สรุปอัตโนมัติ". Its own row now, landing
+// straight on the block instead of somewhere in a long page.
+window.openCampaigns=async()=>{ await showFeatures();
+  setTimeout(()=>{ const el=$('luckyBox'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },250); };
 // Old habit preserved: the ต้นทุน button on the daily report now leads HERE with the form open.
-window.openSettingsCost=async()=>{ showSettings(); const box=$('financeBox');
-  if(box.style.display==='none') await toggleFinance();
-  box.scrollIntoView({behavior:'smooth',block:'start'}); };
-window.toggleFinance=async()=>{ const box=$('financeBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
-  try{ FIN=await api('/api/finance'); renderFinance(); box.style.display=''; }catch(e){ toast(err(e)); } };
+window.openSettingsCost=async()=>{ showSettings(); await toggleFinance(); };
+// Costs used to EXPAND under the still-visible hub while every other row navigated away — one row
+// behaving differently from the other seven, which is exactly what the owner queried ("ทำไมค่าใช้จ่าย
+// มาแสดงด้านล่าง"). It now replaces the hub like a normal sub-page, with a back link.
+window.toggleFinance=async()=>{
+  try{ FIN=await api('/api/finance'); }catch(e){ toast(err(e)); return; }
+  renderFinance();
+  $('settingsBody').style.display='none';
+  $('financeBox').style.display='';
+  $('settingsCard').scrollIntoView({behavior:'smooth',block:'start'});
+};
+window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display=''; renderSettingsHub(); };
 // Every cost line the P&L knows about, grouped exactly like the statement reads. Adding a line
 // here is all it takes for it to appear in the form, the daily P&L and the Excel export.
 const FIN_FORM=[
@@ -3108,7 +3373,8 @@ const FIN_FORM=[
 const FIN_ALL=FIN_FORM.flatMap(([,,rows])=>rows.map(r=>r[0]));
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" inputmode="decimal" step="${step||'1'}" value="${FIN[id]??0}" style="padding:8px"></div>`;
-  $('financeBox').innerHTML=`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
+  $('financeBox').innerHTML=`<button class="ghost" style="padding:6px 12px;font-size:12.5px;margin-bottom:10px" onclick="closeFinance()">‹ กลับไปตั้งค่าทั้งหมด</button>`
+    +`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
     +FIN_FORM.map(([title,hint,rows])=>`<div style="border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:10px">
         <div style="font-weight:800;color:var(--navy);font-size:13px">${title}</div>
         <div class="muted" style="font-size:11px;margin-bottom:8px">${hint}</div>
@@ -3168,7 +3434,10 @@ function renderMenuMgr(){
   initMenuSort();
 }
 // Drag-and-drop reorder (fast) on top of the ▲▼ fallback — SortableJS handles touch + mouse.
-function initMenuSort(){ if(!window.Sortable) return;
+// Fetches the library the first time the menu manager opens, then re-runs itself.
+async function initMenuSort(){
+  if(!window.Sortable){ try{ await loadVendor('/vendor/Sortable.min.js'); }catch(e){ return; }   // no drag = the list still works, just not draggable
+    if(!window.Sortable) return; }
   const lockScroll=(e)=>e.preventDefault();   // stop the PAGE from scrolling while dragging (SortableJS auto-scroll still works)
   ['mgrDrinks','mgrTops'].forEach(id=>{ const el=$(id); if(el && !el._sortable){ el._sortable=Sortable.create(el,{handle:'.dgrip',animation:150,
     forceFallback:true, fallbackOnBody:true, fallbackTolerance:4,   // reliable pointer-drag on iPad (native touch-drag couldn't move items up)
@@ -3435,9 +3704,9 @@ function renderBill(){
         <div style="font-weight:800;color:var(--navy);cursor:pointer" onclick="openItemDetail(${g.idx})">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
         <div style="display:inline-flex;align-items:center;gap:12px;margin-top:9px;border:1px solid var(--line);border-radius:999px;padding:2px 4px">
-          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1" onclick="billDec(${g.idx})" aria-label="ลด">−</button>
+          <button class="ghost qstep" onclick="billDec(${g.idx})" aria-label="ลดจำนวน">−</button>
           <b style="min-width:16px;text-align:center;color:var(--navy)">${g.qty}</b>
-          <button class="ghost" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:18px;line-height:1;color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่ม">+</button>
+          <button class="ghost qstep" style="color:var(--accent)" onclick="billInc(${g.idx})" aria-label="เพิ่มจำนวน">+</button>
         </div>
       </div>
       <div style="text-align:right;flex:none">
@@ -3663,8 +3932,18 @@ async function boot(){
   if(window._zonePollTimer) clearInterval(window._zonePollTimer);
   window._zonePollTimer=setInterval(()=>{
     const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;   // not while logged out
+    if(document.hidden) return;                                        // tab/app backgrounded — SSE catches us up on return
+    if($('dash') && $('dash').style.display==='none') return;          // deep in a back-office panel; the board isn't visible
     zones.forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} });
   }, 5000);
+  // Returning to the board (from another app or a back-office page) must not wait up to 5s for the
+  // next tick — pull once immediately, which is also what covers the skipped ticks above.
+  if(!window._zoneWakeBound){ window._zoneWakeBound=true;
+    document.addEventListener('visibilitychange',()=>{ if(document.hidden) return;
+      const lc=$('loginCard'); if(lc && lc.offsetParent!==null) return;
+      (window._zones||zones||[]).forEach(async z=>{ try{ renderZone(await api('/api/zones/'+z.id+'/snapshot')); }catch(e){} }); });
+  }
+  window._zones=zones;
   refreshLowStock();
   if(!window._lowStockTimer) window._lowStockTimer=setInterval(refreshLowStock,180000); // re-check every 3 min
 }
@@ -4226,6 +4505,18 @@ window.showFeatures=async()=>{
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
+    `<div class="feat-row" id="luckyBox" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">🎉</span><div><b>แคมเปญเลขนำโชค</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ลูกค้าที่ได้คิวเลขนี้ (ทุกโซนที่ถึงเลข) จะเห็นป๊อบอัพยินดีด้วยบนจอตัวเอง กด "ใช้เลย" เพื่อลดกับออเดอร์นั้นทันที · เฉพาะลูกค้าที่สั่งผ่าน LINE · โอนสิทธิ์/แลกเงินสดไม่ได้</div></div></div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">เลข <input id="lkNumInp" type="number" min="1" value="${(f.lucky&&f.lucky.number)||67}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
+        <label class="muted" style="font-size:12.5px">มูลค่า ฿ <input id="lkValInp" type="number" min="1" value="${(f.lucky&&f.lucky.value)||40}" style="width:82px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveLucky()">บันทึก</button>
+        <button class="${(f.lucky&&f.lucky.on)?'danger':'ok'}" style="padding:8px 14px" onclick="toggleLucky(${(f.lucky&&f.lucky.on)?'false':'true'})">${(f.lucky&&f.lucky.on)?'ปิดแคมเปญ':'เปิดแคมเปญ'}</button>
+      </div>
+      ${f.lucky&&f.lucky.reason==='needs_queue_first'?`<div style="width:100%;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ แคมเปญยังทำงานไม่ได้ — ต้องเปิด "เข้าคิวทันที (Queue-first)" ก่อน มิฉะนั้นเลขคิวจะออกหลังจ่ายเงินแล้ว จึงไม่เหลือยอดให้ลด</div>`:''}
+      ${f.lucky&&f.lucky.ready?`<div style="width:100%;background:#eafaf4;color:#0f7a5f;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">✅ แคมเปญทำงานอยู่ — คิวเลข ${f.lucky.number} รับฟรี ฿${f.lucky.value}</div>`:''}
+    </div>`+
     row('autoWinback', f.autoWinback, '<svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>', 'ดึงลูกค้ากลับอัตโนมัติ', f.autoWinback?'เปิดอยู่ — ลูกค้าที่เริ่มห่างหาย (กลุ่มเสี่ยงหาย) จะได้คูปอง + ข้อความทาง LINE เองวันละครั้ง (ไม่ส่งซ้ำคนเดิมภายใน 45 วัน)':'ปิดอยู่ — เปิดเพื่อส่งคูปองดึงลูกค้ากลับให้อัตโนมัติ', false)+
     `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
       <div style="flex:1"><b>เพดานข้อความดึงลูกค้ากลับ/เดือน</b><div class="muted" style="font-size:12px;margin-top:2px">คุมต้นทุน LINE — ส่งได้ไม่เกินนี้ต่อเดือน (นับคูปองที่ออกให้)</div></div>
@@ -4301,9 +4592,21 @@ window.testOwnerSummary=async()=>{
       no_id:'ℹ️ ยังไม่ได้ใส่ LINE userId เจ้าของ (ช่องด้านบน)',
       invalid_id:'⚠️ LINE userId ไม่ถูกต้อง — สรุปจะส่งไม่ได้ (ต้องขึ้นต้นด้วย U + 32 ตัว)',
       line_off:'ℹ️ บน UAT ส่งจริงไม่ได้ (LINE ปิด) — ดูตัวอย่างข้อความด้านล่าง',
+      // LINE accepted the request but rejected the delivery. Almost always: the owner has never
+      // added the shop's OA as a friend (LINE cannot push to a stranger), or they blocked it.
+      push_failed:'❌ LINE ปฏิเสธการส่ง — เจ้าของต้องเพิ่มบัญชี LINE ของร้านเป็นเพื่อนก่อน (หรือเคยบล็อกไว้) · รหัส U… อาจไม่ใช่ของบัญชีนี้',
       no_text:'ℹ️ ไม่มีข้อมูลให้สรุป' };
     toast(REASON[r.reason]||(r.sent?'✅ ส่งแล้ว':'ℹ️ ส่งไม่สำเร็จ'));
     await appConfirm({title:'ข้อความสรุปที่จะส่ง',message:(r.text||'(ว่าง)'),okText:'ปิด',cancelText:''}); }catch(e){ toast(err(e)); } };
+window.saveLucky=async()=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({luckyNumber:+$('lkNumInp').value||67, luckyValue:+$('lkValInp').value||40})});
+    toast('บันทึกแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.toggleLucky=async(on)=>{
+  if(on && !(await appConfirm({title:'เปิดแคมเปญเลขนำโชค',
+    message:'ลูกค้าที่ได้คิวเลข '+($('lkNumInp').value||67)+' จะได้ส่วนลด ฿'+($('lkValInp').value||40)+' ทันที\nทุกโซนที่ถึงเลขนี้จะมีผู้ได้รับ 1 คนต่อวัน\n\nเปิดใช้งานเลยไหม?',okText:'เปิดแคมเปญ'}))) return;
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})});
+    toast(on?'🎉 เปิดแคมเปญเลขนำโชคแล้ว':'ปิดแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
 window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
@@ -4392,6 +4695,8 @@ window.openScanner=async()=>{
   if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
   if(_scanWatch){ clearTimeout(_scanWatch); _scanWatch=null; }
   const _rb=$('scanRetryBtn'); if(_rb) _rb.style.display='none';   // retry/permission button stays hidden unless the camera actually fails
+  if(typeof jsQR==='undefined'){ _scanSay('กำลังโหลดตัวอ่าน QR…');
+    try{ await loadVendor('/vendor/jsQR.min.js'); }catch(e){ _scanSay('โหลดตัวอ่าน QR ไม่สำเร็จ — ตรวจอินเทอร์เน็ตแล้วลองใหม่'); return; } }
   if(typeof jsQR==='undefined'){ _scanSay('ตัวอ่าน QR ยังโหลดไม่เสร็จ — ปิดแล้วลองใหม่อีกครั้ง'); return; }
   if(!window.isSecureContext){ _scanSay('⚠️ ต้องเปิดผ่าน https:// เท่านั้น\nURL ปัจจุบัน: '+location.protocol+'//'+location.host); return; }
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(navigator.getUserMedia||navigator.webkitGetUserMedia)){ _scanSay('⚠️ เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง (getUserMedia)\nลองเปิดด้วย Safari หรือ Chrome เวอร์ชันล่าสุด — อย่าเปิดผ่านแอปอื่น'); return; }
@@ -4566,8 +4871,17 @@ window.clSelectSegment=()=>{ const rows=clRows().filter(c=>c.canPush); const all
 window.clSendCampaign=async()=>{
   const msg=($('clMsg').value||'').trim(); if(!msg){ toast('ใส่ข้อความก่อนนะ'); return; }
   if(!_clSel.size){ toast('ติ๊กเลือกลูกค้าก่อนค่ะ'); return; }
-  const coupon = $('clCoupOn').checked ? { label:($('clCoupLabel').value||'').trim()||'คูปองของขวัญ', cap:Number($('clCoupCap').value)||49, days:Number($('clCoupDays').value)||14 } : null;
-  if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:(coupon?('พร้อมแนบคูปอง "'+coupon.label+'" (฿'+coupon.cap+' · '+coupon.days+' วัน)\n'):'')+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
+  let coupon=null, coupDesc='';
+  if($('clCoupOn').checked){
+    const v=$('clCoupPick').value;
+    if(v && v!=='custom'){ const c=_clCoupons.find(x=>String(x.id)===v);
+      if(!c){ toast('เลือกคูปองก่อนค่ะ'); return; }
+      coupon={ couponId:c.id }; coupDesc='พร้อมแนบคูปอง "'+c.label+'"\n'; }
+    else if(v==='custom'){ coupon={ label:($('clCoupLabel').value||'').trim()||'คูปองของขวัญ', cap:Number($('clCoupCap').value)||49, days:Number($('clCoupDays').value)||14 };
+      coupDesc='พร้อมแนบคูปอง "'+coupon.label+'" (฿'+coupon.cap+' · '+coupon.days+' วัน)\n'; }
+    else { toast('เลือกคูปองที่จะแนบก่อนค่ะ'); return; }
+  }
+  if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:coupDesc+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
   const btn=$('clSend'); btn.disabled=true;
   try{ const r=await api('/api/crm/campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[..._clSel],message:msg,coupon})});
     toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉') : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));

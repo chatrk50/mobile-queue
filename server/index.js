@@ -9,7 +9,8 @@ import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText } from './line.js';
+import compression from 'compression';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -141,6 +142,12 @@ app.get('/manifest.webmanifest', (req, res) => {
     ],
   });
 });
+// gzip everything compressible. The two single-file bundles are the whole app (cashier 541 KB,
+// LIFF 206 KB) and customers load them over cellular — compression cuts them ~74%.
+// The SSE stream is excluded: gzip buffers writes, so live queue events would never flush.
+app.use(compression({
+  filter: (req, res) => (req.path.endsWith('/stream') ? false : compression.filter(req, res)),
+}));
 app.use(express.static(join(__dirname, '..', 'public'), {
   // HTML must always revalidate so a redeploy reaches the LINE in-app browser / iPad immediately
   // (LIFF caching otherwise serves a stale page); other assets (css/js/img) can cache normally.
@@ -222,8 +229,10 @@ app.post('/api/staff/logout', (req, res) => {
   res.json({ ok: true });
 });
 // Who am I (frontend reads this to show the logged-in staff + role).
+// pinOK, not the silent pinValueOK: a wrong explicit PIN here must cost an attempt like everywhere
+// else, otherwise this route is an unthrottled oracle for brute-forcing the legacy admin PIN.
 app.get('/api/staff/me', (req, res) => {
-  res.json({ staff: req.staff || null, legacyAdmin: pinValueOK(req) });
+  res.json({ staff: req.staff || null, legacyAdmin: pinOK(req) });
 });
 // Owner-only staff management.
 app.get('/api/staff', (req, res) => {
@@ -312,9 +321,16 @@ app.post('/api/coupons/:id/claim-link', (req, res) => {
 app.get('/api/claim/:token', (req, res) => {
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
 });
-app.post('/api/claim/:token', (req, res) => {
+app.post('/api/claim/:token', async (req, res) => {
   const key = String(req.body?.lineUserId || '').trim();
   if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
+  // The id format alone is fabricable — with LINE live, the claimer must present a LIFF access
+  // token that LINE says belongs to that very userId, or a script could drain the campaign's
+  // quota with synthetic customers. With LINE stubbed (UAT/dev) there is no LINE to ask; skip.
+  if (LINE_ENABLED) {
+    const verified = await verifyLiffToken(String(req.body?.accessToken || ''));
+    if (!verified || verified !== key) return res.status(403).json({ error: 'line_verify_failed' });
+  }
   try { res.json(Q.claimCoupon(req.params.token, key)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Per-tender daily settlement totals (reconcile each app/bank payout).
@@ -323,11 +339,20 @@ app.get('/api/tender-recon', (req, res) => {
   res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
 });
 
+// A customer key is either a LINE userId (32 hex LINE hands only to that customer's own LIFF, so
+// it works as a bearer token — the model the LIFF has always used) or `tel:<phone>`. A phone number
+// is guessable in seconds, so every route keyed by one is staff-only: without this, walking
+// tel:08xxxxxxxx returned strangers' order history, spend, points and birthday.
+const customerKeyOK = (req, key) => !String(key || '').startsWith('tel:') || pinOK(req);
+
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
 app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
-app.get('/api/loyalty/:key', (req, res) => res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) }));
+app.get('/api/loyalty/:key', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ ...Q.loyaltyBalance(req.params.key), history: Q.loyaltyHistory(req.params.key) });
+});
 // Redeem a reward. Cashier-driven (PIN) so a staff member hands over the reward at the counter.
 app.post('/api/loyalty/:key/redeem', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -342,13 +367,18 @@ app.post('/api/customers/:key/redeem-birthday', (req, res) => {
 });
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
 app.post('/api/loyalty/:key/birthday', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Referral: this customer's own invite code + whether they can still enter a friend's code.
-app.get('/api/loyalty/:key/referral', (req, res) => res.json(Q.referralStatus(req.params.key)));
+app.get('/api/loyalty/:key/referral', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.referralStatus(req.params.key));
+});
 // A new customer enters a friend's invite code (both get stamps when this customer first orders).
 app.post('/api/loyalty/:key/refer', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.applyReferralCode(req.params.key, req.body?.code)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -371,7 +401,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -392,6 +422,11 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
+    // on or move the prize amount.
+    if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }
+    if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
+    if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -467,9 +502,9 @@ app.post('/api/pending/sweep', (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
-app.post('/api/admin/owner-summary', (req, res) => {
+app.post('/api/admin/owner-summary', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.pushOwnerSummary(req.body?.branchId != null ? Number(req.body.branchId) : null)); }
+  try { res.json(await Q.pushOwnerSummary(req.body?.branchId != null ? Number(req.body.branchId) : null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner "start fresh": wipe TEST transaction data (orders/sales/queue/loyalty/cash/audit) and
@@ -499,11 +534,13 @@ app.post('/api/item-prices', (req, res) => {
 
 // ---------- Customer reorder suggestions (LIFF: "order the same as last time?") ----------
 app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
+  if (!customerKeyOK(req, req.params.lineUserId)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
   catch (e) { res.status(200).json({ known: false, error: e.message }); }
 });
 // Customer's own order history (LIFF "ประวัติการสั่ง") — keyed by their LINE id, read-only.
 app.get('/api/customers/:lineUserId/orders', (req, res) => {
+  if (!customerKeyOK(req, req.params.lineUserId)) return res.status(403).json({ error: 'forbidden' });
   try { res.json({ orders: Q.customerOrders(req.params.lineUserId, req.query.limit) }); }
   catch (e) { res.status(200).json({ orders: [], error: e.message }); }
 });
@@ -614,7 +651,7 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
     }
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409 };
     res.status(map[e.message] || 400).json({ error: e.message });
   }
 });
@@ -680,6 +717,49 @@ app.post('/api/tickets/:ticketId/rate', (req, res) => {
       tags: req.body?.tags, comment: req.body?.comment,
     }));
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// แคมเปญเลขนำโชค: the winner claims (or declines) the prize from their own ticket. Ownership is
+// checked the same way as cancel/rate — the LINE id on the ticket must match the caller's.
+app.post('/api/tickets/:ticketId/lucky/claim', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  try { res.json(Q.claimLucky(req.params.ticketId, req.body?.lineUserId || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/tickets/:ticketId/lucky/skip', (req, res) => {
+  if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
+  try { res.json(Q.skipLucky(req.params.ticketId, req.body?.lineUserId || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Coupon + campaign performance. Manager-gated like the other money reports (these are business
+// figures, not the free-text customer comments that made the review report owner-only).
+app.get('/api/reports/coupons', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    res.json({ coupons: Q.couponReport({ from: req.query.from, to: req.query.to, days: req.query.days }),
+               lucky: Q.luckyReport({ from: req.query.from, to: req.query.to, days: req.query.days }) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Coupon templates: the ONE place ฿ values / expiry of automatic giveaways are defined.
+// Reading is manager material; changing a giveaway's value is a pricing decision → owner only.
+app.get('/api/admin/coupon-templates', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ templates: Q.couponTemplates(), lucky: Q.luckyStatus() });
+});
+app.post('/api/admin/coupon-templates/:key', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setCouponTemplate(req.params.key, req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Outstanding wallet coupons (who holds what + total liability) and per-coupon recall.
+app.get('/api/admin/coupons/outstanding', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.outstandingCoupons({ q: req.query.q, limit: Number(req.query.limit) || 50, offset: Number(req.query.offset) || 0 })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/admin/customer-coupons/:id/cancel', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.cancelCustomerCoupon(Number(req.params.id), req.staff?.id || null)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Feedback report — OWNER ONLY. Free-text comments are customers talking candidly about the shop
 // and its staff; they are not board/cashier material, so this sits behind ownerOK like the backup.
@@ -1433,6 +1513,17 @@ function doDailyReset() {
     // Never let a reset failure crash the process or stop the next night from being scheduled.
     console.error('[reset] failed:', e && e.message);
   }
+  // Retention runs after the reset, in its own try: pruning is housekeeping and must never be able
+  // to stop the queue from being reset for the new trading day.
+  try {
+    const p = Q.pruneOldData();
+    if (p.pushLog || p.slips || p.saleEvents) console.log(`[retention] pruned push_log ${p.pushLog}, slips ${p.slips}, sale_events ${p.saleEvents}`);
+  } catch (e) { console.error('[retention] failed:', e && e.message); }
+  // Loyalty self-heal: cached balances re-derived from the ledger (see reconcileLoyaltyBalances).
+  try {
+    const l = Q.reconcileLoyaltyBalances();
+    if (l.fixed) console.log(`[loyalty] repaired ${l.fixed}/${l.checked} cached balances from the ledger`);
+  } catch (e) { console.error('[loyalty] reconcile failed:', e && e.message); }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();
@@ -1490,6 +1581,21 @@ else if (!DURABLE) {
     catch (e) { console.error('[seed] mock sales skipped:', e.message); }
   } catch (e) { console.error('[seed] auto-seed skipped:', e.message); }
 }
+
+// Terminal error handler. Without one, Express's default serialises err.stack into the RESPONSE
+// whenever NODE_ENV !== 'production' — file paths and internals handed to whoever tripped it.
+// Registered last so it only sees errors no route handled. The four args are required: that
+// signature is how Express recognises this as an error handler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(`[error] ${req.method} ${req.path}:`, err && err.stack ? err.stack : err);
+  if (res.headersSent) return;                       // mid-stream (SSE): nothing safe left to say
+  res.status(500).json({ error: 'internal' });
+});
+// A rejected promise nobody caught used to be invisible; log it rather than let the process die
+// silently mid-service. Both are last-resort nets — routes still handle their own errors.
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));
+process.on('uncaughtException', (e) => console.error('[uncaughtException]', e && e.stack ? e.stack : e));
 
 app.listen(PORT, () => {
   console.log(`Mobile Queue running on ${PUBLIC_BASE_URL}`);

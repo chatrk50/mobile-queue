@@ -99,6 +99,7 @@ const SCHEMA_OR_WRITE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/
 // reused read-only with fresh args each call (single-threaded, sequential).
 const _stmtCache = new Map();
 const _wrapCache = new Map();
+let _txDepth = 0;   // nesting level, so transaction() can pick BEGIN vs SAVEPOINT
 // Compatibility wrapper: prepare(...).run/get/all, exec, transaction()
 export const db = {
   prepare(sql) {
@@ -117,11 +118,28 @@ export const db = {
   },
   exec(sql) { const r = raw.exec(sql); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
   // Mimics better-sqlite3 transaction(fn) -> function returning fn's result.
+  // RE-ENTRANT: SQLite rejects a second BEGIN, so a nested call opens a SAVEPOINT instead. That
+  // lets a function which already wraps its own writes be composed inside a larger transaction —
+  // which is what makes "burn the coupon AND apply the discount, or neither" expressible at all.
+  // Only the outermost commit schedules a Turso sync; an inner rollback undoes just its own slice.
   transaction(fn) {
     return (...args) => {
-      raw.exec('BEGIN');
-      try { const r = fn(...args); raw.exec('COMMIT'); scheduleSync(); return r; }
-      catch (e) { raw.exec('ROLLBACK'); throw e; }
+      const sp = _txDepth > 0 ? `sp${_txDepth}` : null;
+      raw.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN');
+      _txDepth++;
+      try {
+        const r = fn(...args);
+        raw.exec(sp ? `RELEASE ${sp}` : 'COMMIT');
+        _txDepth--;
+        if (!sp) scheduleSync();
+        return r;
+      } catch (e) {
+        _txDepth--;
+        // Never let a failing rollback mask the error that caused it.
+        try { raw.exec(sp ? `ROLLBACK TO ${sp}` : 'ROLLBACK'); if (sp) raw.exec(`RELEASE ${sp}`); }
+        catch { /* connection already unwound */ }
+        throw e;
+      }
     };
   },
 };
@@ -669,6 +687,15 @@ for (const stmt of [
   `ALTER TABLE tickets ADD COLUMN rating_tags TEXT`,
   `ALTER TABLE tickets ADD COLUMN rating_comment TEXT`,
   `ALTER TABLE tickets ADD COLUMN rated_at TEXT`,
+  // Coupon reporting: free_cap is only the CEILING. The discount actually given is
+  // min(cap, cheapest drink, bill left), so a report built on free_cap overstates every redemption.
+  // Record what was really taken off, so "กี่บาท" is a fact rather than an estimate.
+  `ALTER TABLE customer_coupons ADD COLUMN used_value REAL`,
+  // แคมเปญเลขนำโชค: the winning ticket carries its own prize state so the customer's screen and the
+  // owner's report read from one place. NULL on every ordinary ticket.
+  `ALTER TABLE tickets ADD COLUMN lucky_state TEXT`,
+  `ALTER TABLE tickets ADD COLUMN lucky_value REAL`,
+  `ALTER TABLE tickets ADD COLUMN lucky_at TEXT`,
   // Historical P&L: snapshot the cost breakdown per archived day so past-day / monthly / yearly
   // P&L is exact (not reconstructed from today's settings, which may have changed since).
   `ALTER TABLE sales_history ADD COLUMN drink_sales REAL`,
@@ -678,6 +705,9 @@ for (const stmt of [
   `ALTER TABLE sales_history ADD COLUMN waste_cost REAL`,
   // Preliminary slip check: hash of the attached slip image → detect the SAME slip reused across orders.
   `ALTER TABLE slips ADD COLUMN sha TEXT`,
+  // Stable link to the catalog. order_items joined menu_items BY NAME, so renaming a menu item
+  // silently detached every past line from its recipe/stock/history. New lines store the id.
+  `ALTER TABLE order_items ADD COLUMN menu_item_id INTEGER`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -692,8 +722,42 @@ try {
 } catch { /* older SQLite without partial indexes — app-level guard still applies */ }
 // Claim tokens must be unique — SQLite can't add a UNIQUE column via ALTER, so index it after.
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_coupons_claim_token ON coupons(claim_token) WHERE claim_token IS NOT NULL'); } catch { /* ignore */ }
+// ---- Hot-path indexes on the tables that grow forever ----
+// Each of these backs a query that runs on every order, payment or customer lookup and was doing a
+// full table scan — invisible on a fresh shop, linearly worse every month the shop trades.
+for (const stmt of [
+  // orderForTicket (runs per ticket inside every zone snapshot) + every stock/coupon/report path
+  'CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)',
+  // the "already earned for this order?" guard on EVERY payment, over an append-only ledger
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_moves_order ON loyalty_moves(order_id)',
+  // customer profile / CRM / coupon-audience lookups, all keyed on who owns the ticket
+  'CREATE INDEX IF NOT EXISTS idx_tickets_line_user ON tickets(line_user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_tickets_customer_key ON tickets(customer_key)',
+  // re-opening wallet coupons when an order is voided
+  'CREATE INDEX IF NOT EXISTS idx_customer_coupons_order ON customer_coupons(used_order_id)',
+  // coupon report + monthly win-back cap, both grouped by kind over a date range
+  'CREATE INDEX IF NOT EXISTS idx_customer_coupons_kind ON customer_coupons(kind, issued_at)',
+  // date-ranged SUM(discount) for code coupons in the same report
+  'CREATE INDEX IF NOT EXISTS idx_coupon_uses_at ON coupon_uses(at)',
+  // order history: filtered by status, sorted by close time
+  'CREATE INDEX IF NOT EXISTS idx_tickets_status_closed ON tickets(status, closed_at)',
+]) { try { db.exec(stmt); } catch { /* index already exists / older SQLite */ } }
 // Backfill the new state column from the old used_at truth, once.
 try { db.exec(`UPDATE customer_coupons SET state='redeemed' WHERE used_at IS NOT NULL AND state<>'redeemed'`); } catch { /* pre-migration DB */ }
+// Backfill order_items.menu_item_id from today's names, ONCE (settings marker — matching by name is
+// exactly the fragile join this column replaces, so re-running it after a rename would mis-link).
+try {
+  const done = db.prepare(`SELECT value FROM settings WHERE key='mig:oi_menu_item_id'`).get();
+  if (!done) {
+    db.exec(`UPDATE order_items SET menu_item_id = (
+               SELECT mi.id FROM menu_items mi
+                WHERE mi.name = CASE WHEN instr(order_items.name,' · ')>0
+                                     THEN substr(order_items.name, 1, instr(order_items.name,' · ')-1)
+                                     ELSE order_items.name END)
+             WHERE menu_item_id IS NULL`);
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('mig:oi_menu_item_id','1')`).run();
+  }
+} catch { /* pre-migration DB */ }
 
 // ---- One-time rebuild: give old single-branch sales_history a composite (date,branch_id)
 // PK. SQLite can't alter a PK in place, so copy → drop → rename. Guarded by a column check

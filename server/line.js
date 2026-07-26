@@ -166,6 +166,21 @@ export async function pushQueue(userId, text, link = null, label = 'ดูคิ
   }
 }
 
+/** Ask LINE who a LIFF access token really belongs to. Returns the userId, or null when the token
+ *  is missing/expired/forged. This is the only proof of identity a claim can trust: the LINE id
+ *  format itself is trivially fabricated, so a script could otherwise drain a campaign's quota
+ *  with synthetic "customers". With LINE stubbed (UAT/dev) there is no LINE to ask — callers skip
+ *  the check there, which also keeps local testing possible. */
+export async function verifyLiffToken(accessToken) {
+  if (!accessToken) return null;
+  try {
+    const r = await fetch('https://api.line.me/v2/profile', { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) return null;
+    const p = await r.json();
+    return p && p.userId ? p.userId : null;
+  } catch { return null; }
+}
+
 /** Reply to a webhook event (used for follow / message events). */
 export async function replyText(replyToken, text) {
   if (!LINE_ENABLED || !replyToken) return false;

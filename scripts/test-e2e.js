@@ -24,6 +24,9 @@ db.prepare("INSERT INTO stores (id, name) VALUES (1, 'Test Shop')").run();
 db.prepare("INSERT INTO zones (id, store_id, name, prefix) VALUES (1, 1, 'A', 'A')").run();
 db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('Drink', 100, 'drink')").run();
 db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('Topping', 10, 'topping')").run();
+// Customer (self-serve) orders are priced from the catalog, so a scenario that needs a ฿49/฿50/฿65
+// bill needs a real menu item at that price — passing a price in the request no longer sets it.
+for (const p of [49, 50, 65]) db.prepare('INSERT INTO menu_items (name, price, category) VALUES (?,?,?)').run('Drink' + p, p, 'drink');
 const grab = db.prepare("SELECT id FROM channels WHERE name='Grab'").get().id;
 
 function sale({ items, method = 'cash', discount = 0, channelId = null }) {
@@ -719,7 +722,7 @@ ok(!!rwCoupon && rwCoupon.code.startsWith('CCOUP:'), `INVARIANT the converted co
 ok(rwCoupon && rwCoupon.freeCap === 49, `INVARIANT the reward coupon is capped at ฿49 (got ${rwCoupon && rwCoupon.freeCap})`);
 // Selecting it (couponCode = "CCOUP:<id>") applies the free-drink discount at order time and marks
 // the coupon used — no further points are touched (they were spent at conversion).
-const rwOrder = Q.createOrder(1, [{ name: 'Drink', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
+const rwOrder = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'customer', lineUserId: rwCust, couponCode: rwCoupon.code });
 const rwOrderRow = db.prepare('SELECT discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(rwOrder.ticket.id);
 ok(rwOrderRow && Number(rwOrderRow.discount) > 0, `INVARIANT self-service coupon redemption discounts the order — got ฿${rwOrderRow && rwOrderRow.discount}`);
 ok(Q.loyaltyBalance(rwCust).points === rwBal0, 'INVARIANT redeeming the coupon touches no further points');
@@ -786,7 +789,7 @@ ok(Q.issueBirthdayCoupons().issued === 0, 'INVARIANT the sweep is idempotent —
 const bdBalBefore = Q.loyaltyBalance(bdOld).points;
 const bdList = Q.availableCoupons(bdOld, 100).find((c) => c.couponKind === 'birthday');
 ok(!!bdList, 'INVARIANT the birthday coupon shows in the customer coupon list');
-const bdOrder = Q.createOrder(1, [{ name: 'Drink', price: 65, qty: 1 }], { source: 'customer', lineUserId: bdOld, couponCode: bdList.code });
+const bdOrder = Q.createOrder(1, [{ name: 'Drink65', price: 65, qty: 1 }], { source: 'customer', lineUserId: bdOld, couponCode: bdList.code });
 const bdRow = db.prepare('SELECT discount, payment_status, payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(bdOrder.ticket.id);
 ok(bdRow && Number(bdRow.discount) === 65, `INVARIANT the birthday coupon covers a ฿65 drink in full (discount ฿${bdRow && bdRow.discount})`);
 ok(Q.loyaltyBalance(bdOld).points >= bdBalBefore, 'INVARIANT using the birthday coupon never touches earned stamps');
@@ -874,44 +877,59 @@ db.prepare('DELETE FROM recipes WHERE ingredient_id=?').run(mmIng.lastInsertRowi
 // ---- A: auto closing summary (dedup once/day, only when enabled) ----
 console.log('\n== Auto closing summary ==');
 Q.setAutoSummary(false);
-ok(Q.maybeAutoSummary().reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
+ok((await Q.maybeAutoSummary()).reason === 'off', 'INVARIANT auto-summary stays silent when disabled');
 Q.setAutoSummary(true);
 Q.setOwnerLineId('');                 // no id on UAT
-const sum1 = Q.maybeAutoSummary();
+const sum1 = await Q.maybeAutoSummary();
 ok(sum1.reason === 'no_id', `INVARIANT with no owner id the summary reports no_id (not a false success) — got ${sum1.reason}`);
-ok(Q.maybeAutoSummary().reason === 'no_id', 'INVARIANT a failed summary does NOT mark the day done — it retries so fixing the id makes the next close arrive');
+ok((await Q.maybeAutoSummary()).reason === 'no_id', 'INVARIANT a failed summary does NOT mark the day done — it retries so fixing the id makes the next close arrive');
 ok(typeof Q.composeDailySummary() === 'string' && Q.composeDailySummary().includes('สรุปยอดวันนี้'), 'INVARIANT the summary text composes');
 // Once it genuinely sends (simulated), it dedups for the rest of the Bangkok day.
 db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('summary:last_sent', date('now','+7 hours'))").run();
-ok(Q.maybeAutoSummary().reason === 'already', 'INVARIANT after a real send the summary fires at most once per day');
+ok((await Q.maybeAutoSummary()).reason === 'already', 'INVARIANT after a real send the summary fires at most once per day');
 db.prepare("DELETE FROM settings WHERE key='summary:last_sent'").run();
 // The "Keys7" bug: an invalid owner id must be rejected at save, and reported honestly.
 let badId = false; try { Q.setOwnerLineId('Keys7'); } catch (e) { badId = e.message === 'owner_id_invalid'; }
 ok(badId, 'INVARIANT a non-U-id like "Keys7" is refused at save (the exact bug from the field)');
 ok(Q.getOwnerLineId() === '', 'INVARIANT the rejected id is NOT stored');
-ok(Q.notifyOwner('x').reason === 'no_id', 'notifyOwner with no id reports no_id');
+ok((await Q.notifyOwner('x')).reason === 'no_id', 'notifyOwner with no id reports no_id');
 db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('owner:line_id','Keys7')").run();   // pretend an old bad value slipped in
-ok(Q.notifyOwner('x').reason === 'invalid_id', 'INVARIANT a stored-but-invalid id reports invalid_id, never a false sent:true');
+ok((await Q.notifyOwner('x')).reason === 'invalid_id', 'INVARIANT a stored-but-invalid id reports invalid_id, never a false sent:true');
 db.prepare("DELETE FROM settings WHERE key='owner:line_id'").run();
 const goodId = 'U' + '0123456789abcdef0123456789abcdef';
 Q.setOwnerLineId(goodId);
 ok(Q.getOwnerLineId() === goodId, 'INVARIANT a real U-id is accepted');
+
+// The field bug: notifyOwner used to fire pushText() without awaiting and return sent:true no matter
+// what LINE did, so a REJECTED delivery was recorded as a success — and because maybeAutoSummary
+// only marks the day done on sent:true, that one silent rejection also killed the retry. The result
+// must now be a promise whose sent flag reflects the actual delivery.
+const notifyRes = Q.notifyOwner('probe');
+ok(typeof notifyRes.then === 'function', 'INVARIANT notifyOwner is awaitable — it reports the REAL push result, not a guess');
+const settled = await notifyRes;
+ok(settled.sent === false && settled.reason === 'line_off',
+  `INVARIANT with LINE off it reports line_off and sent:false, never a false success — got ${settled.reason}/${settled.sent}`);
+const beforeMark = db.prepare("SELECT value v FROM settings WHERE key='summary:last_sent'").get();
+await Q.maybeAutoSummary();
+const afterMark = db.prepare("SELECT value v FROM settings WHERE key='summary:last_sent'").get();
+ok(JSON.stringify(beforeMark) === JSON.stringify(afterMark),
+  'INVARIANT an undelivered summary NEVER writes the "sent today" marker — tomorrow is not silently skipped');
 Q.setOwnerLineId('');
 Q.setAutoSummary(false);
 
 // ---- D: auto-draft PO from the plan (once/day, drafts only — never auto-receives) ----
 console.log('\n== Auto reorder ==');
 Q.setAutoReorder(false);
-ok(Q.maybeAutoReorder().reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
+ok((await Q.maybeAutoReorder()).reason === 'off', 'INVARIANT auto-reorder stays silent when disabled');
 // make something clearly need reordering
 const arIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES ('วัตถุดิบสั่งซื้ออัตโนมัติ','กก.', 1, 20, 5)`).run().lastInsertRowid;
 Q.recordStockMove(arIng, { kind: 'use', qty: 40, note: 'ใช้หนักจำลอง' });   // heavy usage → plan flags it
 Q.setAutoReorder(true);
-const ar = Q.maybeAutoReorder();
+const ar = await Q.maybeAutoReorder();
 ok(ar.drafted === true && /^PO-/.test(ar.poNo), `INVARIANT auto-reorder drafts a PO when stock is low (po ${ar.poNo})`);
 const arPo = Q.getPurchaseOrder(ar.poId);
 ok(arPo && arPo.status === 'draft', 'INVARIANT the auto-drafted PO is a DRAFT (owner still confirms — no silent stock change)');
-ok(Q.maybeAutoReorder().reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
+ok((await Q.maybeAutoReorder()).reason === 'already', 'INVARIANT auto-reorder drafts at most once per day');
 // The owner asked to SEE which items to buy — the summary must name them, not just count them.
 const sumTxt = Q.composeDailySummary();
 ok(sumTxt.includes('🛒 ควรสั่งซื้อ') && sumTxt.includes('วัตถุดิบสั่งซื้ออัตโนมัติ'), 'INVARIANT the closing summary lists the actual items to reorder by name');
@@ -1276,12 +1294,12 @@ ok(Q.markReady(upr.ticket.id, 5).reason === 'unpaid', 'INVARIANT an unpaid order
 
 // ---- Preliminary slip check (free): the SAME slip image reused on another order is flagged. ----
 console.log('\n== Slip preliminary check (duplicate image) ==');
-const sd1 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000001' });
-const sd2 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000002' });
+const sd1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000001' });
+const sd2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000002' });
 Q.attachSlip(sd1.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');
 Q.attachSlip(sd2.ticket.id, 'data:image/png;base64,SAMESLIPIMAGE');   // reused → duplicate
 ok(Q.slipPrelim(sd2.ticket.id).duplicate != null, 'INVARIANT a reused slip image is flagged as duplicate');
-const sd3 = Q.createOrder(1, [{ name: 'Drink', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000003' });
+const sd3 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'customer', lineUserId: 'Uslip00000000000000000000000003' });
 Q.attachSlip(sd3.ticket.id, 'data:image/png;base64,UNIQUESLIPIMAGE');
 ok(Q.slipPrelim(sd3.ticket.id).duplicate == null, 'INVARIANT a unique slip is not flagged');
 ok(Q.slipPrelim(sd3.ticket.id).expectedAmount === 50, 'INVARIANT prelim hands the cashier the expected amount');
@@ -1308,6 +1326,394 @@ ok(drinkRow && drinkRow.likes >= 1, `INVARIANT a paid order by an identifiable c
   ok(Q.myMenuLikes(newFan).length === 0, 'INVARIANT myMenuLikes reflects the toggle state');
   ok(Q.listMenu().find((m) => m.name === 'Drink').likes === base, 'INVARIANT listMenu shows the same merged count as the toggle result');
   ok(typeof Q.publicRating().count === 'number', 'publicRating exposes only {avg,count} for the LIFF hero');
+}
+
+console.log('\n== แคมเปญเลขนำโชค ==');
+{
+  // A customer may hold only ONE open ticket per zone (already_in_queue), so every case below gets
+  // its own LINE id — reusing one made the fixture, not the feature, fail.
+  const mkZone = (name, prefix, last) =>
+    db.prepare('INSERT INTO zones (store_id,name,prefix,is_open,last_number) VALUES (1,?,?,1,?)').run(name, prefix, last).lastInsertRowid;
+  const uid = (c) => 'U' + c.repeat(32);
+  const drink = [{ name: 'Drink', price: 60, qty: 1 }];
+  const wasQF = Q.getQueueFirst();
+  Q.setQueueFirst(true);                       // the campaign needs a number BEFORE payment
+  Q.setLuckyNumber(3); Q.setLuckyValue(40);
+
+  Q.setLucky(false);
+  const zOff = mkZone('นำโชค-ปิด', 'L', 2);
+  const off = Q.createOrder(zOff, drink, { source: 'customer', lineUserId: uid('a') });   // number 3
+  ok(Q.ticketView(off.ticket.id).lucky === null, 'INVARIANT no prize is issued while the campaign is off');
+
+  Q.setLucky(true);
+  const zMiss = mkZone('นำโชค-พลาด', 'M', 0);
+  const miss = Q.createOrder(zMiss, drink, { source: 'customer', lineUserId: uid('b') });  // number 1
+  ok(Q.ticketView(miss.ticket.id).lucky === null, 'INVARIANT a non-matching queue number wins nothing');
+
+  const zWin = mkZone('นำโชค-ชนะ', 'N', 2);
+  const win = Q.createOrder(zWin, drink, { source: 'customer', lineUserId: uid('c') });    // number 3 = lucky
+  const wv = Q.ticketView(win.ticket.id);
+  ok(wv.lucky && wv.lucky.state === 'won' && wv.lucky.value === 40,
+    `INVARIANT the lucky number wins, and the ticket carries the prize (${JSON.stringify(wv.lucky)})`);
+
+  // Every zone that reaches the number produces a winner — the owner's explicit choice.
+  const zWin2 = mkZone('นำโชค-ชนะ2', 'P', 2);
+  const win2 = Q.createOrder(zWin2, drink, { source: 'customer', lineUserId: uid('d') });  // also number 3
+  ok(Q.ticketView(win2.ticket.id).lucky?.state === 'won', 'INVARIANT a second zone reaching the number ALSO wins (per-zone draw)');
+
+  // Walk-ins have no LINE id, so there is no screen to show the prize on — they must not win silently.
+  const zWalk = mkZone('นำโชค-หน้าร้าน', 'Q', 2);
+  const walk = Q.createOrder(zWalk, drink, { source: 'cashier' });
+  ok(Q.ticketView(walk.ticket.id).lucky === null, 'INVARIANT a walk-in with no LINE id never wins a prize it could not be shown');
+
+  // Claiming applies it to THE ORDER THAT WON and is idempotent under a double tap.
+  const before = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(win.ticket.id);
+  const cl = Q.claimLucky(win.ticket.id, uid('c'));
+  ok(near(cl.freeAmount, 40), `INVARIANT the prize discounts this order by its value (got ${cl.freeAmount})`);
+  const after = db.prepare('SELECT total, discount FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(win.ticket.id);
+  ok(near(after.discount, (before.discount || 0) + 40) && near(after.total, before.total),
+    'INVARIANT it moves the DISCOUNT, never the order total — the sale is still recorded in full');
+  let twice = false; try { Q.claimLucky(win.ticket.id, uid('c')); } catch (e) { twice = e.message === 'lucky_already'; }
+  ok(twice, 'INVARIANT a second tap cannot claim the same prize twice');
+
+  // Someone else's LINE id must not be able to burn your prize.
+  let stolen = false; try { Q.claimLucky(win2.ticket.id, uid('c')); } catch (e) { stolen = e.message === 'not_owner'; }
+  ok(stolen, 'INVARIANT another customer cannot claim your prize — it is not transferable');
+
+  Q.skipLucky(win2.ticket.id, uid('d'));
+  ok(Q.ticketView(win2.ticket.id).lucky.state === 'skipped', 'INVARIANT declining is recorded, so the report can tell declines from misses');
+
+  const lr = Q.luckyReport({ days: 2 });
+  ok(lr.won === 2 && lr.used === 1 && lr.skipped === 1, `INVARIANT the lucky report counts won/used/skipped (${JSON.stringify(lr)})`);
+  ok(near(lr.value, 40), `INVARIANT it reports the REAL baht given away (${lr.value})`);
+
+  // A paid order has nothing left to discount — the prize must refuse rather than corrupt the sale.
+  const zPaid = mkZone('นำโชค-จ่ายแล้ว', 'R', 2);
+  const paidWin = Q.createOrder(zPaid, drink, { source: 'customer', lineUserId: uid('e') });
+  db.prepare("UPDATE orders SET payment_status='paid', paid_at=datetime('now') WHERE ticket_id=?").run(paidWin.ticket.id);
+  let tooLate = false; try { Q.claimLucky(paidWin.ticket.id, uid('e')); } catch (e) { tooLate = e.message === 'order_already_paid'; }
+  ok(tooLate, 'INVARIANT a prize cannot be applied to an order that is already paid');
+
+  ok(Q.luckyStatus().ready === true, 'INVARIANT status reports ready when the campaign is on and queue-first is set');
+  Q.setQueueFirst(false);
+  ok(Q.luckyStatus().reason === 'needs_queue_first',
+    'INVARIANT with pay-first the campaign says WHY it cannot run (the number arrives after payment)');
+
+  Q.setQueueFirst(wasQF); Q.setLucky(false);
+}
+
+console.log('\n== Coupon report ==');
+{
+  const base = Q.couponReport({ days: 30 });
+  // A key no earlier block has used: 'c' belongs to the lucky winner, whose claim already wrote a
+  // coupon row — updating by customer_key then rewrote THAT row too and the delta came out wrong.
+  const K = 'U' + 'f'.repeat(32);
+  const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  const ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', 'ทดสอบ', 49, ?, 'campaign')`).run(K, day).lastInsertRowid;
+  const r1 = Q.couponReport({ days: 30 });
+  ok(r1.issued === base.issued + 1, `INVARIANT an issued coupon shows up in the report (${base.issued} → ${r1.issued})`);
+  ok(r1.redeemed === base.redeemed, 'INVARIANT issuing one does NOT count as a redemption');
+
+  // The value column must come from what was really given, not the coupon's ceiling.
+  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), state='redeemed', used_value=31 WHERE id=?`).run(ccId);
+  const r2r = Q.couponReport({ days: 30 });
+  ok(r2r.redeemed === base.redeemed + 1, 'INVARIANT redeeming it moves the redeemed count');
+  ok(near(r2r.value, base.value + 31), `INVARIANT value uses the ACTUAL discount (฿31), not the ฿49 cap — got ${r2r.value - base.value}`);
+  const wb = r2r.rows.find((x) => x.kind === 'winback');
+  ok(wb && wb.label === 'ดึงลูกค้ากลับ', 'INVARIANT each row carries a Thai label the owner can read');
+
+  // A window that ends before the coupon existed must not include it.
+  const old = Q.couponReport({ from: '2020-01-01', to: '2020-01-31' });
+  ok(old.issued === 0 && old.redeemed === 0, 'INVARIANT a date range outside the data returns zero, not everything');
+  db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
+}
+
+console.log('\n== Win-back attaches a coupon BUILT ON THE COUPON PAGE (define once, use everywhere) ==');
+{
+  const cid = Q.createCoupon({ code: 'WBGIFT', label: 'ของขวัญคิดถึง', disc_type: 'baht', disc_value: 35 }).id;
+  // quota + per-claim life belong to the claim-link setup, not createCoupon — set them directly
+  db.prepare('UPDATE coupons SET issue_limit=2, valid_days=10 WHERE id=?').run(cid);
+  const K1 = 'U' + '6a'.repeat(16), K2 = 'U' + '6b'.repeat(16), K3 = 'U' + '6c'.repeat(16);
+  for (const k of [K1, K2, K3]) db.prepare('INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?,?)').run(k, 'ทดสอบ' + k.slice(-2));
+  const r1 = await Q.sendCampaign({ keys: [K1], message: 'ทดสอบผูกคูปอง', coupon: { couponId: cid } });
+  ok(r1.issuedCoupons === 1, 'INVARIANT a picked coupon issues into the wallet');
+  const w1 = Q.customerCoupons(K1).find((c) => c.coupon_id === cid);
+  ok(!!w1 && w1.free_cap === 35 && w1.label === 'ของขวัญคิดถึง', `INVARIANT value + label come from the coupon definition (cap ${w1 && w1.free_cap})`);
+  // Sending to the same customer again must NOT stack a second gift; quota is handed back.
+  const r2 = await Q.sendCampaign({ keys: [K1], message: 'ส่งซ้ำ', coupon: { couponId: cid } });
+  ok(r2.issuedCoupons === 0, 'INVARIANT re-sending to the same customer issues nothing new');
+  ok(db.prepare('SELECT issued_count n FROM coupons WHERE id=?').get(cid).n === 1, 'INVARIANT the handed-back quota is not consumed by the duplicate');
+  // issue_limit is respected across a blast: 2-coupon quota, 1 already gone, 2 more recipients.
+  const r3 = await Q.sendCampaign({ keys: [K2, K3], message: 'โควตา', coupon: { couponId: cid } });
+  ok(r3.issuedCoupons === 1, `INVARIANT the campaign stops issuing when the coupon's quota runs out (got ${r3.issuedCoupons})`);
+  let ghostErr = null; try { await Q.sendCampaign({ keys: [K1], message: 'x', coupon: { couponId: 999999 } }); } catch (e) { ghostErr = e.message; }
+  ok(ghostErr === 'coupon_not_found', 'INVARIANT a deleted/unknown coupon id is refused up front');
+  for (const k of [K1, K2, K3]) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(k); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(k); }
+  Q.deleteCoupon(cid);
+}
+
+console.log('\n== Campaigns BIND to a coupon-page coupon (one definition, referenced everywhere) ==');
+{
+  const bid = Q.createCoupon({ code: 'BDAYGIFT', label: 'ของขวัญวันเกิดพิเศษ', disc_type: 'baht', disc_value: 60 }).id;
+  db.prepare('UPDATE coupons SET valid_days=12 WHERE id=?').run(bid);
+  // Bind birthday → value/expiry/label all follow the coupon.
+  const t1 = Q.setCouponTemplate('birthday', { couponId: bid });
+  ok(t1.couponId === bid && t1.value === 60 && t1.days === 12 && t1.couponLabel === 'ของขวัญวันเกิดพิเศษ',
+    `INVARIANT a bound template resolves value/expiry/label from the coupon (฿${t1.value}, ${t1.days}วัน)`);
+  const wasLoy2 = Q.loyaltyEnabled(); Q.setLoyaltyEnabled(true);
+  const BK = 'U' + '3f'.repeat(16);
+  const bday2 = db.prepare("SELECT '1992-' || strftime('%m-%d', datetime('now','+7 hours')) b").get().b;
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'เกิดผูกคูปอง', ?)`).run(BK, bday2);
+  Q.issueBirthdayCoupons();
+  const bcc2 = Q.customerCoupons(BK).find((c) => c.kind === 'birthday');
+  ok(!!bcc2 && bcc2.free_cap === 60 && bcc2.label === 'ของขวัญวันเกิดพิเศษ',
+    `INVARIANT the birthday gift carries the bound coupon's value + name (cap ${bcc2 && bcc2.free_cap})`);
+  ok(bcc2.coupon_id == null,
+    'INVARIANT automation gifts do NOT store coupon_id — the one-claim unique index would block the SAME customer next year');
+  // Switch the coupon off → the campaign falls back to its own numbers instead of dying.
+  db.prepare('UPDATE coupons SET active=0 WHERE id=?').run(bid);
+  const t2 = Q.couponTemplate('birthday');
+  ok(t2.couponId === null && t2.value === 100, `INVARIANT a dead bound coupon falls back to the template's own numbers (฿${t2.value})`);
+  Q.setCouponTemplate('birthday', { couponId: null });
+  let bindErr = null; try { Q.setCouponTemplate('reward', { couponId: 987654 }); } catch (e) { bindErr = e.message; }
+  ok(bindErr === 'coupon_not_found', 'INVARIANT binding to a ghost coupon is refused');
+  // Lucky binds through the same save path; its prize value follows the coupon.
+  db.prepare('UPDATE coupons SET active=1 WHERE id=?').run(bid);
+  const lk1 = Q.setCouponTemplate('lucky', { couponId: bid });
+  ok(lk1.couponId === bid && Q.getLuckyValue() === 60, `INVARIANT the lucky prize follows the bound coupon (฿${Q.getLuckyValue()})`);
+  Q.setCouponTemplate('lucky', { couponId: null });
+  ok(Q.getLuckyValue() === Math.max(1, Number('40')), 'INVARIANT unbinding lucky returns to its own ฿ setting');
+  Q.setLoyaltyEnabled(wasLoy2);
+  db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(BK);
+  db.prepare('DELETE FROM customers WHERE line_user_id=?').run(BK);
+  Q.deleteCoupon(bid);
+}
+
+console.log('\n== Denormalization: void hands back code-coupon quota; ledger heals the cache ==');
+{
+  // Void returns the coupon redemption: quota AND the customer's per-person allowance.
+  Q.createCoupon({ code: 'VOIDBACK', label: 'ทดสอบคืนโควตา', disc_type: 'baht', disc_value: 20, usage_limit: 5, per_customer: 1 });
+  const K = 'U' + '5d'.repeat(16);
+  const vo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: K, couponCode: 'VOIDBACK' });
+  const cidRow = db.prepare("SELECT id, used_count FROM coupons WHERE code='VOIDBACK'").get();
+  ok(cidRow.used_count === 1, 'INVARIANT applying the coupon consumed one use');
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e quota return' });
+  ok(db.prepare("SELECT used_count n FROM coupons WHERE code='VOIDBACK'").get().n === 0, 'INVARIANT voiding the order hands the use back');
+  ok(Q.validateCoupon('VOIDBACK', K, 100).ok === true, 'INVARIANT the customer can use the coupon again after the void');
+  Q.deleteCoupon(cidRow.id);
+
+  // paid_amount records what was actually collected.
+  const po = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.setOrderDiscount(po.ticket.id, { amount: 30 });
+  Q.setOrderPaid(po.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT paid_amount p FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(po.ticket.id).p === 70,
+    'INVARIANT paid_amount = total − discount on a normal full payment');
+
+  // The nightly reconcile re-derives a drifted cached balance from the ledger.
+  const RK = 'U' + '4e'.repeat(16);
+  db.prepare('INSERT INTO customers (line_user_id, name, points) VALUES (?, ?, 99)').run(RK, 'ดริฟท์');
+  db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points) VALUES (?, 'earn', 7)`).run(RK);
+  const rec = Q.reconcileLoyaltyBalances();
+  ok(rec.fixed >= 1 && db.prepare('SELECT points p FROM customers WHERE line_user_id=?').get(RK).p === 7,
+    `INVARIANT a drifted balance is healed to the ledger's truth (99 → 7)`);
+  ok(Q.reconcileLoyaltyBalances().fixed === 0, 'INVARIANT reconciling twice changes nothing (converged)');
+  db.prepare('DELETE FROM loyalty_moves WHERE customer_key=?').run(RK);
+  db.prepare('DELETE FROM customers WHERE line_user_id=?').run(RK);
+
+  // Rename-proofing: order lines carry the catalog id, and stock deduction follows the id even
+  // after the menu item is renamed.
+  const rn = db.prepare(`INSERT INTO menu_items (name, price, category) VALUES ('เมนูก่อนเปลี่ยนชื่อ', 55, 'drink')`).run().lastInsertRowid;
+  const rIng = db.prepare(`INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบrename','กก.', 50, 10)`).run().lastInsertRowid;
+  db.prepare('INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,2)').run(rn, rIng);
+  const ro = Q.createOrder(1, [{ name: 'เมนูก่อนเปลี่ยนชื่อ', price: 55, qty: 1 }], { source: 'cashier' });
+  ok(db.prepare('SELECT menu_item_id m FROM order_items WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(ro.ticket.id).m === rn,
+    'INVARIANT a new order line stores the catalog id');
+  db.prepare('UPDATE menu_items SET name=? WHERE id=?').run('เมนูหลังเปลี่ยนชื่อ', rn);
+  Q.setOrderPaid(ro.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT stock_qty s FROM ingredients WHERE id=?').get(rIng).s === 48,
+    'INVARIANT stock still deducts after a menu RENAME (followed the id, not the name)');
+  db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(rn);
+  db.prepare('DELETE FROM menu_items WHERE id=?').run(rn);
+}
+
+console.log('\n== Retention: old rows pruned, evidence and recent data kept ==');
+{
+  const rk = 'Uretain00000000000000000000001';
+  db.prepare(`INSERT INTO push_log (user_id, kind, ok, at) VALUES (?, 'winback', 1, datetime('now','-200 days'))`).run(rk);
+  db.prepare(`INSERT INTO push_log (user_id, kind, ok, at) VALUES (?, 'winback', 1, datetime('now','-5 days'))`).run(rk);
+  db.prepare(`INSERT INTO sale_events (branch_id, type, amount, at) VALUES (1, 'paid', 10, datetime('now','-500 days'))`).run();
+
+  // A slip on a SETTLED order is prunable once old; a slip on an unresolved payment never is —
+  // that is precisely the case someone will need to look at.
+  const settled = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.attachSlip(settled.ticket.id, 'data:image/png;base64,OLDSETTLEDSLIP');
+  Q.setOrderPaid(settled.ticket.id, { method: 'promptpay' });
+  const unresolved = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'cashier' });
+  Q.attachSlip(unresolved.ticket.id, 'data:image/png;base64,OLDUNRESOLVEDSLIP');
+  db.prepare(`UPDATE slips SET at=datetime('now','-90 days')`).run();   // age BOTH slips
+
+  const pruned = Q.pruneOldData();
+  ok(pruned.pushLog === 1, `INVARIANT only push_log rows past the window are pruned (got ${pruned.pushLog})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM push_log WHERE user_id=?').get(rk).n === 1, 'INVARIANT the recent push_log row survives');
+  ok(pruned.saleEvents >= 1, `INVARIANT audit events beyond the reporting horizon are pruned (got ${pruned.saleEvents})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM slips WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(settled.ticket.id).n === 0,
+    'INVARIANT an old slip on a settled order is pruned');
+  ok(db.prepare('SELECT COUNT(*) n FROM slips WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(unresolved.ticket.id).n === 1,
+    'INVARIANT an old slip on an UNRESOLVED payment is kept — it is the evidence');
+  ok(Q.pruneOldData().pushLog === 0, 'INVARIANT running retention twice removes nothing more');
+  db.prepare('DELETE FROM push_log WHERE user_id=?').run(rk);
+  Q.cancelOrderTicket(unresolved.ticket.id, null, { reason: 'e2e retention cleanup' });
+}
+
+console.log('\n== Atomicity + status guards ==');
+{
+  // A nested db.transaction() must use a SAVEPOINT, not a second BEGIN — otherwise every
+  // "burn the coupon AND apply the discount" pair below throws at runtime.
+  db.exec('CREATE TABLE IF NOT EXISTS _txprobe (v INTEGER)');
+  db.exec('DELETE FROM _txprobe');
+  db.transaction(() => {
+    db.prepare('INSERT INTO _txprobe VALUES (1)').run();
+    db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (2)').run(); })();
+  })();
+  ok(db.prepare('SELECT COUNT(*) n FROM _txprobe').get().n === 2, 'INVARIANT transactions nest (SAVEPOINT) instead of throwing on a second BEGIN');
+  db.exec('DELETE FROM _txprobe');
+  db.transaction(() => {
+    db.prepare('INSERT INTO _txprobe VALUES (10)').run();
+    try { db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (99)').run(); throw new Error('boom'); })(); } catch { /* handled */ }
+    db.prepare('INSERT INTO _txprobe VALUES (11)').run();
+  })();
+  ok(db.prepare('SELECT group_concat(v) g FROM _txprobe').get().g === '10,11',
+    'INVARIANT a failed inner transaction rolls back only its own slice');
+  db.exec('DELETE FROM _txprobe');
+  try { db.transaction(() => { db.prepare('INSERT INTO _txprobe VALUES (5)').run(); throw new Error('outer'); })(); } catch { /* handled */ }
+  ok(db.prepare('SELECT COUNT(*) n FROM _txprobe').get().n === 0, 'INVARIANT an outer failure still rolls the whole thing back');
+  db.exec('DROP TABLE _txprobe');
+
+  // A voided order must never come back to life: the cashier cancelled it, so a racing payment or
+  // a customer's "I paid" claim must not put it back on the money screens.
+  const vk = 'Uvoid00000000000000000000000001';
+  const vo = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: vk });
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e void guard' });
+  let payErr = null;
+  try { Q.setOrderPaid(vo.ticket.id, { method: 'cash' }); } catch (e) { payErr = e.message; }
+  ok(payErr === 'order_void', `INVARIANT a voided order cannot be paid (got ${payErr})`);
+  Q.claimOrderPaid(vo.ticket.id);
+  ok(db.prepare('SELECT payment_status s FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(vo.ticket.id).s === 'void',
+    'INVARIANT a customer "I paid" claim cannot resurrect a voided order');
+
+  // Cancelling twice must not re-log the refund or overwrite who voided it.
+  // sale_events are queued and flushed on setImmediate, so yield first — counting straight after
+  // the call compares 0 to 0 and proves nothing.
+  const evCount = async () => { await new Promise((r) => setImmediate(r));
+    return db.prepare("SELECT COUNT(*) n FROM sale_events WHERE ticket_id=? AND type IN ('void','refund','waste')").get(vo.ticket.id).n; };
+  const evBefore = await evCount();
+  ok(evBefore === 1, `INVARIANT the first cancel is recorded in the audit trail (got ${evBefore})`);
+  Q.cancelOrderTicket(vo.ticket.id, null, { reason: 'e2e double cancel' });
+  const evAfter = await evCount();
+  ok(evAfter === evBefore, `INVARIANT a second cancel is a no-op, not a second refund in the audit trail (${evBefore} → ${evAfter})`);
+  ok(db.prepare('SELECT void_reason r FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(vo.ticket.id).r === 'e2e void guard',
+    'INVARIANT the original void reason survives a repeat cancel');
+
+  // Points can never go negative, even if two redemptions race past the balance read.
+  const pk = 'Upoints000000000000000000000001';
+  db.prepare('INSERT INTO customers (line_user_id, name, points) VALUES (?,?,5)').run(pk, 'แต้มน้อย');
+  const po = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: pk });
+  let lowErr = null;
+  try { Q.redeemRewardOnOrder(po.ticket.id, null, null); } catch (e) { lowErr = e.message; }
+  ok(lowErr === 'insufficient_points', `INVARIANT a reward cannot be taken without the stamps (got ${lowErr})`);
+  ok(db.prepare('SELECT points p FROM customers WHERE line_user_id=?').get(pk).p === 5,
+    'INVARIANT a refused redemption leaves the balance untouched');
+  Q.cancelOrderTicket(po.ticket.id, null, { reason: 'e2e cleanup' });
+}
+
+console.log('\n== Self-serve orders are priced by the server, not the client ==');
+{
+  // The order endpoint is public and the LIFF posts the price it displayed. A tampered client used
+  // to set its own price and the bill, the P&L, the stamps and the COGS all followed it.
+  const K = 'Uprice0000000000000000000000001';
+  const cheat = Q.createOrder(1, [{ name: 'Drink', price: 1, qty: 2 }], { source: 'customer', lineUserId: K });
+  ok(cheat.total === 200, `INVARIANT a customer cannot name their own price — ฿1 posted, ฿200 charged (got ฿${cheat.total})`);
+  const line = db.prepare('SELECT price FROM order_items WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1)').get(cheat.ticket.id);
+  ok(line.price === 100, `INVARIANT the stored line carries the catalog price, not the posted one (got ฿${line.price})`);
+  Q.cancelOrderTicket(cheat.ticket.id, null, { reason: 'e2e price test' });
+
+  // Sweetness is a label the customer picks, never a price change — the suffixed name must still
+  // resolve, or every self-serve drink order would be rejected.
+  const K2 = 'Uprice0000000000000000000000002';
+  const sweet = Q.createOrder(1, [{ name: 'Drink · หวาน 25%', price: 5, qty: 1 }], { source: 'customer', lineUserId: K2 });
+  ok(sweet.total === 100, `INVARIANT a sweetness suffix still prices from the base item (got ฿${sweet.total})`);
+  Q.cancelOrderTicket(sweet.ticket.id, null, { reason: 'e2e price test' });
+
+  // An item that is not on the menu at all cannot be invented by the client.
+  let badErr = null;
+  try { Q.createOrder(1, [{ name: 'ของที่ไม่มีในเมนู', price: 1, qty: 1 }], { source: 'customer', lineUserId: 'Uprice0000000000000000000000003' }); }
+  catch (e) { badErr = e.message; }
+  ok(badErr === 'item_unavailable', `INVARIANT an off-menu item is refused, not sold (got ${badErr})`);
+
+  // The cashier keeps price control on purpose: staff drinks, replacement cups and agreed
+  // discounts are legitimate, PIN-gated and audited.
+  const till = Q.createOrder(1, [{ name: 'Drink', price: 1, qty: 1 }], { source: 'cashier' });
+  ok(till.total === 1, `INVARIANT the till can still override a price (got ฿${till.total})`);
+  Q.cancelOrderTicket(till.ticket.id, null, { reason: 'e2e price test' });
+}
+
+console.log('\n== Coupon templates + outstanding + cancel ==');
+{
+  // Defaults must equal the values that were hard-coded before the registry existed — migrating to
+  // templates may not change a single baht of behaviour until the owner edits something.
+  const t0 = Q.couponTemplates();
+  ok(t0.length === 3, `couponTemplates returns 3 templates (got ${t0.length})`);
+  ok(t0.find((t) => t.key === 'birthday')?.value === 100 && t0.find((t) => t.key === 'reward')?.value === 49
+     && t0.find((t) => t.key === 'winback')?.value === 49,
+    'INVARIANT template defaults equal the old hard-coded values (birthday 100, reward 49, winback 49)');
+  ok(Q.couponTemplate('birthday').days === 30, 'INVARIANT default expiry stays 30 days');
+  let tplErr = null; try { Q.setCouponTemplate('nope', { value: 1 }); } catch (e) { tplErr = e.message; }
+  ok(tplErr === 'unknown_template', 'INVARIANT unknown template keys are rejected');
+  ok(Q.setCouponTemplate('reward', { value: 999999 }).value === 2000, 'INVARIANT values are clamped to a sane ceiling (฿2000)');
+  Q.setCouponTemplate('reward', { value: 49 });
+
+  // Owner edits the birthday value → the very next birthday coupon (row, label AND LINE text) follows.
+  const wasLoy = Q.loyaltyEnabled(); Q.setLoyaltyEnabled(true);
+  Q.setCouponTemplate('birthday', { value: 80, days: 20 });
+  const K = 'U' + '9'.repeat(32);
+  const bday = db.prepare("SELECT '1990-' || strftime('%m-%d', datetime('now','+7 hours')) b").get().b;
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'วันเกิดทดสอบ', ?)`).run(K, bday);
+  Q.issueBirthdayCoupons();
+  const bcc = Q.customerCoupons(K).find((c) => c.kind === 'birthday');
+  ok(!!bcc && bcc.free_cap === 80 && bcc.label.includes('80'), `INVARIANT birthday coupon takes value from the template (cap ${bcc && bcc.free_cap})`);
+
+  // Switch the campaign off → nobody new gets one, even with a birthday today.
+  Q.setCouponTemplate('birthday', { on: false });
+  const K2 = 'U' + '8'.repeat(32);
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name, birthday) VALUES (?, 'วันเกิดปิด', ?)`).run(K2, bday);
+  ok(Q.issueBirthdayCoupons().issued === 0, 'INVARIANT birthday template OFF stops the automation');
+  Q.setCouponTemplate('birthday', { on: true, value: 100, days: 30 });
+
+  // Win-back sends with no explicit cap inherit the winback template's value.
+  Q.setCouponTemplate('winback', { value: 60 });
+  const K3 = 'U' + '7'.repeat(32);
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ดึงกลับทดสอบ')`).run(K3);
+  const campT = await Q.sendCampaign({ keys: [K3], message: 'ทดสอบแม่แบบ', coupon: { label: 'คูปองแม่แบบ' } });
+  ok(campT.issuedCoupons === 1, 'INVARIANT with LINE stubbed the coupon still issues (UAT stays testable)');
+  ok(Q.customerCoupons(K3).find((c) => c.label === 'คูปองแม่แบบ')?.free_cap === 60,
+    'INVARIANT winback coupon default cap comes from the template');
+  Q.setCouponTemplate('winback', { value: 49 });
+
+  // Outstanding ledger: the coupons above appear with a liability total, and cancel recalls one.
+  const out = Q.outstandingCoupons({ q: 'วันเกิดทดสอบ' });
+  ok(out.total >= 1 && out.liability >= 80, `INVARIANT outstanding shows count + ฿ liability (n=${out.total}, ฿${out.liability})`);
+  const row = out.rows.find((r) => r.key === K);
+  ok(!!row && row.kindTh === 'วันเกิด', 'INVARIANT outstanding rows name the holder and the campaign in Thai');
+  Q.cancelCustomerCoupon(row.id);
+  ok(Q.customerCoupons(K).every((c) => c.id !== row.id), 'INVARIANT a cancelled coupon vanishes from the customer wallet');
+  ok(Q.outstandingCoupons({ q: 'วันเกิดทดสอบ' }).rows.every((r) => r.id !== row.id), 'INVARIANT and from the outstanding ledger');
+  let cErr = null; try { Q.cancelCustomerCoupon(row.id); } catch (e) { cErr = e.message; }
+  ok(cErr === 'coupon_not_cancellable', 'INVARIANT cancelling twice is refused');
+  let c404 = null; try { Q.cancelCustomerCoupon(99999999); } catch (e) { c404 = e.message; }
+  ok(c404 === 'coupon_not_found', 'INVARIANT cancelling a ghost id is refused');
+
+  Q.setLoyaltyEnabled(wasLoy);
+  for (const k of [K, K2, K3]) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(k); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(k); }
 }
 
 console.log('\n== Review: reasons + comment ==');
