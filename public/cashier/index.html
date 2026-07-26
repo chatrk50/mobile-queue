@@ -423,7 +423,7 @@
   <div id="staffCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -439,7 +439,7 @@
   <div id="branchCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()">ปิด</button>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -454,7 +454,7 @@
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / จัดซื้อ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
     </div>
     <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
     <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
@@ -489,7 +489,7 @@
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
     </div>
     <div style="margin-top:14px;display:grid;gap:16px">
 
@@ -569,7 +569,7 @@
   <div id="tenderCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()">ปิด</button>
     </div>
     <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
@@ -807,7 +807,7 @@
 
   <!-- MENU MANAGEMENT -->
   <div id="menuCard" class="card" style="display:none;max-width:980px;margin:14px auto">
-    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
+    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="priceMgr" style="margin:4px 0 12px"></div>
     <div class="ms-split">
@@ -916,7 +916,7 @@
 <div id="reviewCard" class="card" style="display:none;max-width:720px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</h1>
-    <button class="ghost" style="padding:6px 12px" onclick="hideReviews()">ปิด</button>
+    <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideReviews()">ปิด</button>
   </div>
   <div id="fbBox" style="margin-top:10px"></div>
 </div>
@@ -928,7 +928,7 @@
 <div id="couponRepCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</h1>
-    <button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()">ปิด</button>
+    <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()">ปิด</button>
   </div>
   <div id="chTabs" class="row" style="gap:6px;margin:12px 0 12px"></div>
   <div id="chTab0" style="display:none">
@@ -958,7 +958,7 @@
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
     <div class="row" style="gap:6px">
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportCustomers()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-      <button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
+      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
     </div>
   </div>
   <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap"></div>
@@ -1109,10 +1109,20 @@
      over months (520–1000px), so each page opened at a different width — the owner read that as
      the app jumping around. !important because each card carries its historical inline value.
      1100px: the owner's screens are 1366×768, so the frame can breathe wider than the old 940. */
+  /* min(): on a tablet in PORTRAIT (1024px) the 1100 cap never bound, so each card ran to whatever
+     width its own margins happened to leave — measured 984 / 1009 / 1024 / 1024 side by side, which
+     is the "แต่ละหน้ากว้างไม่เท่ากัน" the owner keeps seeing. One expression = one frame everywhere. */
   @media (min-width:640px){
     #homeCard,#settingsCard,#reportCard,#historyCard,#salesCard,#staffCard,#branchCard,#stockCard,
     #loyaltyCard,#tenderCard,#couponCard,#promoCard,#controlCard,#cashCard,#chartsCard,#detailCard,
-    #menuCard,#custListCard,#reviewCard,#couponRepCard{max-width:1100px!important}
+    #menuCard,#custListCard,#reviewCard,#couponRepCard{
+      max-width:min(1100px, calc(100vw - 68px))!important;
+      margin-left:auto!important; margin-right:auto!important;
+    }
+    /* ตั้งค่าระบบ is a popup, but it is still a settings PAGE — it gets the same frame instead of
+       the old 420px column that looked like a phone dialog stranded on an iPad. */
+    #featuresPop > .card{ max-width:min(1100px, calc(100vw - 68px))!important; }
+    #featuresBody{ grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); align-items:start; }
   }
   /* iOS-style on/off switch for the ตั้งค่าระบบ feature toggles (replaces the เปิด/ปิด buttons). */
   .tgl{position:relative;width:52px;height:30px;border-radius:999px;border:none;cursor:pointer;flex:none;padding:0;transition:background .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -1612,7 +1622,10 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
 const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard','couponRepCard'];
-function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none'; }
+function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none';
+  // Every panel opens through here, so this is the one place the "‹ ตั้งค่า" trail can reset:
+  // sgo() re-shows it right after, a header button leaves it hidden.
+  document.querySelectorAll('.bkSet').forEach(b=>{ b.style.display='none'; }); }
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
@@ -3190,7 +3203,8 @@ window.chLoadTpl=async()=>{
       <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value,64,!!t.couponId)}</span>
         <span>อายุ ${num('chDay_'+t.key,t.days,54,!!t.couponId)} วัน</span>
-        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',false)">บันทึก</button>`:''}
+        ${(own&&!t.couponId)?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',false)">บันทึกตัวเลข</button>`
+          :`<span class="muted" style="font-size:11.5px">ตัวเลขมาจากคูปองที่ผูกไว้ — แก้ที่หน้าคูปองรหัส</span>`}
       </div>
     </div>`;
   const lk=r.lucky||{};
@@ -3206,7 +3220,6 @@ window.chLoadTpl=async()=>{
       </div>
       <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
-        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('lucky',false)">บันทึก</button>`:''}
       </div>
     </div>`;
 };
@@ -3219,9 +3232,19 @@ window.chToggleLucky=async(on)=>{
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})}); toast(on?'เปิดเลขนำโชคแล้ว':'ปิดเลขนำโชคแล้ว'); }
   catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
   chLoadTpl(); };
-window.chBindChange=(key)=>{ const bound=!!$('chBind_'+key).value;
+// Picking a coupon SAVES immediately. It used to only grey out the number fields and wait for a
+// บันทึก that sat on the next line next to มูลค่า/อายุ — so the owner selected a coupon, saw the
+// numbers lock, and had no idea whether the link was stored ("SAVE Button?"). One decisive field =
+// apply on change, same rule as a toggle (DESIGN-SYSTEM §3).
+window.chBindChange=async(key)=>{
+  const sel=$('chBind_'+key); const bound=!!sel.value;
   for(const p of ['chVal_','chDay_']){ const el=$(p+key); if(el){ el.disabled=bound;
-    el.style.background=bound?'var(--surface)':''; el.style.color=bound?'var(--muted)':''; } } };
+    el.style.background=bound?'var(--surface)':''; el.style.color=bound?'var(--muted)':''; } }
+  sel.disabled=true;
+  try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify({couponId:sel.value?Number(sel.value):null})});
+    toast(bound?('ผูกกับคูปอง "'+sel.options[sel.selectedIndex].text.replace(/\s*\(.*\)$/,'')+'" แล้ว ✓'):'ยกเลิกการผูกแล้ว — กำหนดตัวเลขเองได้');
+    chLoadTpl(); }
+  catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); sel.disabled=false; chLoadTpl(); } };
 window.chSaveTpl=async(key,hasToggle)=>{
   const body={};
   const sel=$('chBind_'+key); if(sel) body.couponId=sel.value?Number(sel.value):null;
@@ -3312,11 +3335,13 @@ window.loadCouponRep=async(a,b,l)=>{
     </div>
     ${c.codeCoupons&&c.codeCoupons.redeemed?`<div class="muted" style="font-size:11.5px;margin-top:10px">คูปองรหัส (ใส่โค้ดเอง) ใช้ไป ${c.codeCoupons.redeemed} ครั้ง · ฿${c.codeCoupons.value}</div>`:''}`;
 };
-let _fbDays=30;
+let _fbDays=30, _fbSel=null, _fbShown=25;   // _fbSel = {from,to,label} จากปุ่มช่วงเวลา
 window.hideReviews=()=>{ $('reviewCard').style.display='none'; $('dash').style.display=''; };
 window.showReviews=()=>{ hideAllPanels(); closeAdmin();
   $('reviewCard').style.display=''; $('dash').style.display='none'; renderFeedback(); };
-window.setFbDays=(d)=>{ _fbDays=d; renderFeedback(); };
+window.setFbDays=(d)=>{ _fbDays=d; _fbSel=null; _fbShown=25; renderFeedback(); };
+window.fbRangeApply=(f,t,l)=>{ _fbSel={from:f,to:t,label:l}; _fbShown=25; renderFeedback(); };
+window.fbMore=()=>{ _fbShown+=25; renderFeedback(); };
 async function renderFeedback(){
   const box=$('fbBox'); if(!box) return;
   const own=(!ME||ME.role==='owner');
@@ -3324,33 +3349,57 @@ async function renderFeedback(){
   box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   // This is now a panel the owner deliberately opened, so a failure has to say so. Blanking out was
   // acceptable when it sat inside the daily report; here it reads as "the feature is broken".
-  let f; try{ f=await api('/api/reports/ratings?days='+_fbDays); }
+  const qs=_fbSel?('from='+encodeURIComponent(_fbSel.from)+'&to='+encodeURIComponent(_fbSel.to)):('days='+_fbDays);
+  let f; try{ f=await api('/api/reports/ratings?'+qs); }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">อ่านรีวิวได้เฉพาะเจ้าของร้าน — เข้าสู่ระบบด้วย PIN ของเจ้าของร้านแล้วลองใหม่</p>'; return; }
-  const seg=[7,30,90].map(d=>`<button class="ghost seg${d===_fbDays?' on':''}" onclick="setFbDays(${d})">${d} วัน</button>`).join('');
-  const bar=(list,color)=>{ if(!list.length) return '';
-    const max=list[0].n||1;
-    return list.map(t=>`<div class="row" style="align-items:center;gap:8px;font-size:12px;margin:4px 0">
-      <span style="width:104px;flex:none">${esc(t.label)}</span>
-      <div style="flex:1;height:8px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${(t.n/max*100).toFixed(0)}%;background:${color}"></div></div>
-      <span class="muted" style="width:24px;text-align:right">${t.n}</span></div>`).join(''); };
-  const comments=(f.items||[]).filter(i=>i.comment).slice(0,25).map(i=>`
-    <div style="border-top:1px solid var(--line);padding:9px 0">
-      <div class="row between" style="font-size:11.5px"><span style="color:#d9a520;font-weight:800">${'★'.repeat(i.rating)}<span style="color:var(--line)">${'★'.repeat(5-i.rating)}</span></span><span class="muted">${esc((i.at||'').slice(0,16).replace('T',' '))} · ${esc(i.code||'')}</span></div>
-      ${i.tags.length?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${i.tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:999px">${esc(t.label)}</span>`).join('')}</div>`:''}
-      <div style="font-size:13px;margin-top:5px;line-height:1.45;color:var(--ink)">${esc(i.comment)}</div>
+  const rangeLabel=_fbSel?_fbSel.label:(_fbDays===7?'7 วันล่าสุด':(_fbDays===90?'90 วันล่าสุด':'30 วันล่าสุด'));
+  // Tag bars are now measured against the number of reviews IN THAT BAND, not against the biggest
+  // tag. Six tags with 3 votes each used to draw six identical full bars — which read as fake data
+  // ("real?"). Now "3 จาก 29" with a 10% bar tells the truth at a glance.
+  const bar=(list,color)=>list.map(t=>`<div class="row" style="align-items:center;gap:10px;font-size:12.5px;margin:5px 0">
+      <span style="width:118px;flex:none;color:var(--navy)">${esc(t.label)}</span>
+      <div style="flex:1;height:9px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${Math.max(2,t.pct)}%;background:${color}"></div></div>
+      <span class="muted" style="width:86px;text-align:right;white-space:nowrap"><b style="color:var(--navy)">${t.n}</b> จาก ${t.of} · ${t.pct}%</span></div>`).join('');
+  const st=f.stars||{}; const stMax=Math.max(1,...[1,2,3,4,5].map(s=>st[s]||0));
+  const starRows=[5,4,3,2,1].map(s=>{ const n=st[s]||0; const pct=f.count?Math.round(n/f.count*100):0;
+    return `<div class="row" style="align-items:center;gap:10px;font-size:12.5px;margin:4px 0">
+      <span style="width:52px;flex:none;color:#d9a520;font-weight:800">${s} ★</span>
+      <div style="flex:1;height:9px;background:var(--surface);border-radius:6px;overflow:hidden"><div style="height:100%;width:${n?Math.max(2,Math.round(n/stMax*100)):0}%;background:${s>=4?'linear-gradient(90deg,var(--accent),var(--accent2))':(s===3?'#e8b62c':'var(--danger)')}"></div></div>
+      <span class="muted" style="width:86px;text-align:right;white-space:nowrap"><b style="color:var(--navy)">${n}</b> · ${pct}%</span></div>`; }).join('');
+  // EVERY review is listed now (paged), not only the ones carrying a written comment — the owner
+  // asked to see all the data, and a 5-star with tags is data even without text.
+  const all=f.items||[]; const shown=all.slice(0,_fbShown);
+  const rows=shown.map(i=>`
+    <div style="border-top:1px solid var(--line);padding:10px 2px">
+      <div class="row between" style="font-size:11.5px;align-items:center">
+        <span style="color:#d9a520;font-weight:800">${'★'.repeat(i.rating)}<span style="color:var(--line)">${'★'.repeat(5-i.rating)}</span></span>
+        <span class="muted">${esc((i.at||'').slice(0,16).replace('T',' '))} · คิว ${esc(i.code||'—')}${i.name?' · '+esc(i.name):''}</span></div>
+      ${i.tags.length?`<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${i.tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:999px">${esc(t.label)}</span>`).join('')}</div>`:''}
+      ${i.comment?`<div style="font-size:13px;margin-top:6px;line-height:1.45;color:var(--ink)">${esc(i.comment)}</div>`:''}
     </div>`).join('');
-  box.innerHTML=`<p class="muted" style="font-size:11.5px;margin:0 0 8px">เห็นได้เฉพาะเจ้าของร้าน · ลูกค้าให้คะแนนหลังรับเครื่องดื่ม</p>
-    <div style="margin:0">
-      <div class="row" style="gap:6px;margin-bottom:10px">${seg}</div>
-      ${!f.count ? '<p class="muted" style="font-size:12px;text-align:center;padding:10px 0">ยังไม่มีรีวิวในช่วงนี้</p>' : `
-      <div class="row between" style="align-items:center;margin-bottom:10px">
-        <span style="font-size:22px;font-weight:800;color:var(--navy)">★ ${f.avg}</span>
-        <span class="muted" style="font-size:12px">${f.count} รีวิว · เขียนข้อความ ${f.withComment}</span></div>
-      ${f.lowTags.length?`<div style="margin-top:6px"><div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:2px">ต้องแก้ไข (1–3 ดาว)</div>${bar(f.lowTags,'var(--danger)')}</div>`:''}
-      ${f.highTags.length?`<div style="margin-top:10px"><div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:2px">จุดแข็ง (4–5 ดาว)</div>${bar(f.highTags,'linear-gradient(90deg,var(--accent),var(--accent2))')}</div>`:''}
-      ${comments?`<div style="margin-top:12px"><div class="muted" style="font-size:11.5px;font-weight:800">ความคิดเห็นล่าสุด</div>${comments}</div>`
-                :'<p class="muted" style="font-size:12px;margin-top:12px">ยังไม่มีใครเขียนข้อความเพิ่ม</p>'}`}
-    </div>`;
+  const kpi=(v,l,c)=>`<div><div style="font-size:20px;font-weight:800;color:${c||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
+  box.innerHTML=`
+    <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+      <span class="row" style="gap:8px;align-items:center">${rangeBtn('fbRangeBtn',rangeLabel,fbRangeApply)}
+        <span class="muted" style="font-size:11.5px">${f.from} → ${f.to}</span></span>
+      <span class="muted" style="font-size:11.5px">เห็นได้เฉพาะเจ้าของร้าน · ลูกค้าให้คะแนนหลังรับเครื่องดื่ม</span>
+    </div>
+    ${!f.count ? `<div style="text-align:center;padding:26px 10px">
+        <svg viewBox="0 0 24 24" style="width:44px;height:44px;stroke:var(--line);fill:none;stroke-width:1.5"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>
+        <div style="font-weight:700;color:var(--navy);margin-top:8px">ยังไม่มีรีวิวในช่วงนี้</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">ลองเลือกช่วงเวลาที่กว้างขึ้น</div></div>` : `
+      <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px;margin-bottom:12px">
+        ${kpi('★ '+f.avg,'คะแนนเฉลี่ย','#d9a520')}${kpi(f.count,'รีวิวทั้งหมด')}
+        ${kpi(f.withComment,'เขียนข้อความ',f.withComment?'#16876f':'var(--muted)')}
+        ${kpi(f.withTags,'ระบุเหตุผล',f.withTags?'#16876f':'var(--muted)')}
+      </div>
+      <h2 style="margin:0 0 4px;font-size:14px">การกระจายคะแนน</h2>${starRows}
+      ${f.lowTags.length?`<h2 style="margin:14px 0 4px;font-size:14px">ต้องแก้ไข <span class="muted" style="font-weight:400;font-size:11.5px">(จากรีวิว 1–3 ดาว ${f.bandN.low} รายการ)</span></h2>${bar(f.lowTags,'var(--danger)')}`:''}
+      ${f.highTags.length?`<h2 style="margin:14px 0 4px;font-size:14px">จุดแข็ง <span class="muted" style="font-weight:400;font-size:11.5px">(จากรีวิว 4–5 ดาว ${f.bandN.high} รายการ)</span></h2>${bar(f.highTags,'linear-gradient(90deg,var(--accent),var(--accent2))')}`:''}
+      ${(!f.lowTags.length&&!f.highTags.length)?'<p class="muted" style="font-size:12px;margin-top:10px">ยังไม่มีใครเลือกเหตุผลประกอบคะแนน</p>':''}
+      <h2 style="margin:16px 0 0;font-size:14px">รีวิวทั้งหมด <span class="muted" style="font-weight:400;font-size:11.5px">(${shown.length} จาก ${all.length})</span></h2>
+      ${rows}
+      ${all.length>shown.length?`<button class="ghost" style="width:100%;margin-top:10px;padding:9px" onclick="fbMore()">ดูเพิ่ม (${all.length-shown.length})</button>`:''}`}`;
 }
 window.exportReport=()=>{ const q=[]; if(_reportDate) q.push('date='+encodeURIComponent(_reportDate)); if(PIN) q.push('pin='+encodeURIComponent(PIN)); window.open('/api/report.xlsx'+(q.length?('?'+q.join('&')):''),'_blank'); };
 window.exportCustomers=()=>{ window.open('/api/crm/customers.xlsx'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
@@ -3366,6 +3415,14 @@ window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox'
   $('dash').style.display=''; };
 window.showSettings=()=>{ hideAllPanels(); closeAdmin();
   $('settingsCard').style.display=''; $('dash').style.display='none'; renderSettingsHub(); };
+// ---- "‹ ตั้งค่า" back trail ----------------------------------------------------------------
+// Sub-pages opened from the hub used to have only ปิด, which dropped the owner on the dashboard —
+// so every settings change meant walking in from the top again. Entering through the hub arms the
+// back button that each panel already carries (.bkSet, hidden by default).
+let _fromSettings=false;
+window.sgo=(fn)=>{ _fromSettings=true; try{ (window[fn]||(()=>{}))(); }catch(e){ toast(err(e)); }
+  setTimeout(()=>{ document.querySelectorAll('.bkSet').forEach(b=>{ b.style.display=''; }); },0); };
+window.backToSettings=()=>{ _fromSettings=false; hideAllPanels(); showSettings(); };
 function renderSettingsHub(){
   const own=(!ME||ME.role==='owner');
   const row=(fn,icon,title,desc,ownerOnly)=>((ownerOnly&&!own)?'':`
@@ -3376,13 +3433,13 @@ function renderSettingsHub(){
       <span style="flex:none;font-size:16px;color:var(--muted)">›</span></div>`);
   $('settingsBody').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
     ${row('toggleFinance()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>','ต้นทุน & ค่าใช้จ่าย','ค่าเช่า ค่าแรง วัตถุดิบ % ฯลฯ — ใช้คำนวณกำไร-ขาดทุน')}
-    ${row('showBranch()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>','สาขา & เวลาเปิด-ปิด','ชื่อร้าน ที่อยู่ เวลาทำการ',true)}
-    ${row('showLoyalty()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
-    ${row('showTenders()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
+    ${row("sgo('showBranch')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>','สาขา & เวลาเปิด-ปิด','ชื่อร้าน ที่อยู่ เวลาทำการ',true)}
+    ${row("sgo('showLoyalty')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
+    ${row("sgo('showTenders')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
     ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
-    ${row('showCouponHub()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','คูปอง & แคมเปญ','มูลค่าของแถมทุกแบบ เลขนำโชค คูปองคงค้าง รายงาน',true)}
-    ${row('showMenu()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
-    ${row('showStaff()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
+    ${row("sgo('showCouponHub')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','คูปอง & แคมเปญ','มูลค่าของแถมทุกแบบ เลขนำโชค คูปองคงค้าง รายงาน',true)}
+    ${row("sgo('showMenu')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
+    ${row("sgo('showStaff')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="9" cy="7" r="4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/></svg>','พนักงาน & ค่าแรง','PIN สิทธิ์ ค่าแรง/ชม. ใบลงเวลา',true)}
   </div>
   `;
 }
@@ -4582,10 +4639,16 @@ window.showFeatures=async()=>{
         ${ln('LINE userId เจ้าของ',d.hasId?(d.idValid?'ตั้งแล้ว ถูกต้อง':'รูปแบบผิด'):'ยังไม่ได้ตั้ง',okc(d.hasId&&d.idValid))}
         ${ln('ระบบ LINE',d.lineOn?'เชื่อมอยู่':'ปิด (UAT ส่งจริงไม่ได้)',okc(d.lineOn))}
         ${ln('ส่งสำเร็จล่าสุด',d.lastSentDay||'ยังไม่เคย',d.lastSentDay?'#0f6e56':'var(--muted)')}
-        ${d.lastPush?ln('ผลส่งครั้งล่าสุด',(d.lastPush.ok?'สำเร็จ':'ล้มเหลว — เช็กว่าเจ้าของเพิ่ม OA เป็นเพื่อนแล้ว และ id เป็นของ OA นี้')+' · '+String(d.lastPush.at||'').slice(0,16),okc(d.lastPush.ok)):''}
+        ${d.lastPush?ln('ผลส่งครั้งล่าสุด',(d.lastPush.ok?'สำเร็จ':'ล้มเหลว')+' · '+String(d.lastPush.at||'').slice(0,16),okc(d.lastPush.ok)):''}
+        ${(!(d.lastPush&&d.lastPush.ok)&&(d.hint||d.lastError))?`<div style="background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:5px">
+          ${d.hint?esc(d.hint):'LINE ปฏิเสธการส่ง'}${d.lastError?`<div style="font-weight:400;font-size:11px;margin-top:3px;color:#7a2530">LINE ตอบ: ${d.lastError.status?('HTTP '+d.lastError.status+' · '):''}${esc(String(d.lastError.detail||''))}</div>`:''}</div>`:''}
         <div class="muted" style="font-size:11px;margin-top:3px">ส่งเมื่อ "ปิดรอบเงินสด" (วันละครั้ง) · ถ้าวันไหนไม่ได้ปิดรอบ ระบบส่งของเมื่อวานให้ตอนเที่ยงคืนแทน</div>
       </div>`})(f.summaryDiag||{})}
-      <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
+      <div id="lineCheckBox" style="width:100%"></div>
+      <div class="row" style="gap:6px;width:100%">
+        <button class="ghost" style="flex:1;padding:9px" onclick="checkLine()"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ตรวจการเชื่อมต่อ LINE</button>
+        <button class="ghost" style="flex:1;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปทดสอบ</button>
+      </div>
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
@@ -4664,6 +4727,22 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
+// ถาม LINE ตรงๆ ว่า "token ของเซิร์ฟเวอร์นี้เป็นของ OA ไหน" และ "รหัส U… ที่บันทึกไว้เป็นคนของ OA นั้นไหม"
+// — userId ของ LINE ผูกกับ OA เดียว รหัสที่ก๊อปมาจาก OA ทดสอบจึงส่งไม่ได้ตลอดกาล ทั้งที่เพิ่มเพื่อนแล้ว
+window.checkLine=async()=>{
+  const box=$('lineCheckBox'); if(box) box.innerHTML='<p class="muted" style="font-size:12px;margin:4px 0">กำลังถาม LINE…</p>';
+  let r; try{ r=await api('/api/admin/line-check'); }
+  catch(e){ if(box) box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">ตรวจได้เฉพาะเจ้าของร้าน</p>'; return; }
+  const okc=(b)=>b?'#0f6e56':'#a32d2d';
+  const ln=(l,v,c)=>`<div class="row between" style="font-size:12px;padding:2px 0;gap:10px"><span class="muted" style="flex:none">${l}</span><b style="color:${c||'var(--navy)'};text-align:right">${v}</b></div>`;
+  const good=!!(r.friend&&r.friend.ok&&r.friend.friend);
+  box.innerHTML=`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:6px">
+    <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:4px">ผลตรวจกับ LINE</div>
+    ${ln('OA ที่ระบบใช้อยู่', r.bot&&r.bot.ok?(esc(r.bot.basicId||'-')+(r.bot.displayName?(' · '+esc(r.bot.displayName)):'')):'ตรวจไม่ได้ (token ใช้ไม่ได้)', okc(!!(r.bot&&r.bot.ok)))}
+    ${ln('รหัสเจ้าของที่บันทึกไว้', r.ownerId?(esc(String(r.ownerId).slice(0,10))+'…'):'ยังไม่ได้ตั้ง', okc(!!r.ownerId))}
+    ${ln('เป็นเพื่อนกับ OA นี้', good?('ใช่'+(r.friend.displayName?(' · '+esc(r.friend.displayName)):'')):'ไม่ใช่', okc(good))}
+    ${r.verdict?`<div style="background:${good?'#e1f5ee':'#fcebeb'};color:${good?'#0f6b57':'#a32d2d'};border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.verdict)}</div>`:''}
+  </div>`; };
 // พักสิทธิ์ no-show: toggle มีผลทันที (กติกา design system) · เกณฑ์ครั้ง/วัน บันทึกด้วยปุ่ม
 window.toggleNoshow=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noshowOn:!!on})});
   toast(on?'เปิดพักสิทธิ์ no-show แล้ว':'ปิดพักสิทธิ์ no-show แล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };

@@ -29,13 +29,51 @@ export async function pushText(userId, text, kind = 'other') {
   }
   try {
     await client.pushMessage({ to: userId, messages: [{ type: 'text', text }] });
+    _lastPushError = null;
     logPush(userId, kind, true);
     return true;
   } catch (err) {
-    console.error('[LINE] push failed:', err?.statusMessage || err?.message || err);
+    // Keep WHAT LINE actually said. "ล้มเหลว" with no reason sent the owner guessing between four
+    // very different causes (not a friend / id from another provider / expired token / quota).
+    const status = err?.status || err?.statusCode || err?.originalError?.response?.status || null;
+    const detail = err?.body?.message || err?.originalError?.response?.data?.message
+      || err?.statusMessage || err?.message || String(err);
+    _lastPushError = { status, detail: String(detail).slice(0, 300), at: new Date().toISOString() };
+    console.error('[LINE] push failed:', status || '', detail);
     logPush(userId, kind, false);
     return false;
   }
+}
+let _lastPushError = null;
+/** What LINE said about the most recent failed push (null once one succeeds). */
+export function lastPushError() { return _lastPushError; }
+
+// ---- Identity checks. A LINE userId belongs to ONE channel: an id captured from the test OA can
+// never be pushed to from the real OA, and vice-versa. That mismatch is invisible from the outside
+// (add-friend looks fine, the id looks well-formed) so these two read-only calls make it visible.
+// The token itself is NEVER returned — only which OA it belongs to.
+/** Which OA is this server's token actually for? → { basicId:'@138dccus', displayName, ... } */
+export async function botInfo() {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: `Bearer ${token}` } });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, reason: 'api_error', status: r.status, detail: body?.message || '' };
+    return { ok: true, basicId: body.basicId || null, displayName: body.displayName || null,
+             userId: body.userId || null, premiumId: body.premiumId || null };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
+}
+/** Is this userId a friend of THIS channel? 404/403 = not this channel's user (or not a friend). */
+export async function friendCheck(userId) {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  if (!userId) return { ok: false, reason: 'no_id' };
+  try {
+    const r = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`,
+      { headers: { Authorization: `Bearer ${token}` } });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { ok: true, friend: true, displayName: body.displayName || null };
+    return { ok: true, friend: false, status: r.status, detail: body?.message || '' };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
 }
 
 /** Build a LINE message: a Flex card (text + a tappable button that hides the URL
