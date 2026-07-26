@@ -3002,7 +3002,8 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         ((r.discounts||0)>0?pl('− ส่วนลด / คูปอง',r.discounts,{neg:true}):'')+
         pl('ยอดขายสุทธิ',r.revenue,{bold:true})+
         sec('ต้นทุนขาย (COGS)')+
-        pl('− วัตถุดิบ',p.ingredient,{neg:true})+
+        pl(p.ingredientActual!=null?'− วัตถุดิบ (ตัดสต๊อกจริง)':'− วัตถุดิบ (ประมาณ % ยอดขาย)',p.ingredient,{neg:true})+
+        (p.ingredientActual!=null&&Math.abs(p.ingredientVariance||0)>=1?`<div class="row between" style="font-size:11px;color:${p.ingredientVariance>0?'#946f00':'#0f6e56'};padding:0 2px 4px"><span>เทียบแผน ${money(p.ingredientPlan)}</span><span>${p.ingredientVariance>0?'ใช้เกินแผน +':'ประหยัดกว่าแผน −'}${money(Math.abs(p.ingredientVariance))}</span></div>`:'')+
         pl('− แพ็กเกจ',p.packaging,{neg:true})+
         ((p.freight||0)>0?pl('− ค่าขนส่งวัตถุดิบ',p.freight,{neg:true}):'')+
         pl('กำไรขั้นต้น',p.grossProfit,{bold:true,accent:true,pct:p.grossMargin})+

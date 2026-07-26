@@ -795,14 +795,33 @@ export function dailyReport(branchId = null, dateStr = null) {
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings(branchId);
   const perDay = (monthly) => (f.daysPerMonth > 0 ? monthly / f.daysPerMonth : monthly);
-  const ingredient = f.ingredientPct * revenue;
+  // Ingredient cost: same actual-over-plan discipline as labour. When recipes auto-deduct stock,
+  // cogsForDay() nets the day's use/return moves at weighted-avg cost — that replaces the
+  // %-of-revenue estimate, and the variance is surfaced instead of the plan quietly hiding it.
+  // Whole-shop figure only (stock moves aren't branch-filtered), so a branch-scoped report keeps
+  // the plan number. Zero moves (no recipes yet) = plan as before.
+  const ingredientPlan = f.ingredientPct * revenue;
+  let ingredient = ingredientPlan, ingredientActual = null, stockWasteVal = 0;
+  if (branchId == null) {
+    try {
+      const ca = cogsForDay(validDay ? dateStr : null);
+      stockWasteVal = ca.wasteCost || 0;
+      if (ca.cogsActual > 0) { ingredient = ca.cogsActual; ingredientActual = ca.cogsActual; }
+    } catch { /* stock module empty */ }
+  }
+  const ingredientVariance = ingredientActual != null ? Math.round((ingredientActual - ingredientPlan) * 100) / 100 : 0;
   const packaging = f.packagingPerCup * cups;
   const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
   const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
   // Waste = product made then discarded: its ingredient+packaging is spent but earns nothing.
   // A real cost with no revenue → it reduces net profit (separate from sold-goods COGS).
-  const wasteCost = Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
+  // In ACTUAL mode the binned orders' ingredients already sit inside cogsActual (their 'use' moves
+  // were never returned) — charging the % again would double-count, so the waste line is then
+  // packaging of the binned cups + manually recorded stock waste only.
+  const wasteCost = ingredientActual != null
+    ? Math.round((byKind.waste.cups * f.packagingPerCup + stockWasteVal) * 100) / 100
+    : Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
   voided.waste.cost = wasteCost;
   // Operating expenses, grouped. Depreciation / interest / tax deliberately sit BELOW this line
   // so the report can show EBITDA → EBIT → กำไรก่อนภาษี → กำไรสุทธิ like a real set of accounts.
@@ -847,7 +866,7 @@ export function dailyReport(branchId = null, dateStr = null) {
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
-    ingredient, packaging, freight, cogs, wasteCost,
+    ingredient, ingredientPlan, ingredientActual, ingredientVariance, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
     labor, wagesPlanDaily, laborVariance, drawerPayOut,

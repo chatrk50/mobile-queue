@@ -1061,7 +1061,9 @@ console.log('\n== Coupon scoping + audience ==');
   const oldKey = 'Uoldcustomer0000000000000000001';
   db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าเก่า')`).run(oldKey);
   { const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status) VALUES (1,1,0,'OC',?, 'served')`).run(oldKey).lastInsertRowid;
-    db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 50, 'paid', datetime('now'), 1)`).run(tk); }
+    // fixture orders must carry items too — the finance tie-out asserts total == Σitems for every paid order
+    const oid = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 50, 'paid', datetime('now'), 1)`).run(tk).lastInsertRowid;
+    db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบลูกค้าเก่า', 50, 1)`).run(oid); }
   const vOld = Q.validateCoupon('NEWONLY', oldKey, 100);
   ok(!vOld.ok && /ลูกค้าใหม่/.test(vOld.reason), `INVARIANT a returning customer is refused (${vOld.reason})`);
   ok(Q.validateCoupon('NEWONLY', null, 100).ok === false, 'INVARIANT an unidentified customer cannot claim a new-only coupon');
@@ -1073,9 +1075,11 @@ console.log('\n== Customer ratings + Excel export ==');
   const rkey = 'Urating0000000000000000000001';
   db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าให้ดาว')`).run(rkey);
   const t1 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,801,'RT801',?, 'served','ลูกค้าให้ดาว', 5)`).run(rkey);
-  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t1.lastInsertRowid);
+  const rvo1 = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t1.lastInsertRowid).lastInsertRowid;
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบรีวิว', 60, 1)`).run(rvo1);
   const t2 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,802,'RT802',?, 'served','ลูกค้าให้ดาว', 3)`).run(rkey);
-  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t2.lastInsertRowid);
+  const rvo2 = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t2.lastInsertRowid).lastInsertRowid;
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบรีวิว', 60, 1)`).run(rvo2);
   const rc = Q.customersList().find((c) => c.key === rkey);
   ok(rc && rc.ratingAvg === 4 && rc.ratingCount === 2, `INVARIANT a customer's given-rating avg + count are in the list (avg ${rc && rc.ratingAvg}, n ${rc && rc.ratingCount})`);
   const { buildCustomersWorkbook } = await import('../server/report-excel.js');
@@ -1762,6 +1766,44 @@ console.log('\n== Review: reasons + comment ==');
 
   for (const id of [tLow, tHigh, tLong, tBare]) {
     db.prepare('DELETE FROM tickets WHERE id=?').run(id);
+  }
+}
+
+// ---- Finance cross-check: the report must tie out against INDEPENDENT sums over the raw tables ----
+console.log('\n== Finance report ties out ==');
+{
+  const rep = Q.dailyReport();
+  const p = rep.pnl;
+  const rr2 = (x) => Math.round(x * 100) / 100;
+  const near2 = (a, b) => Math.abs(a - b) < 0.01;
+  // 1) Revenue = independent SUM over orders (paid today, net of discount)
+  const ind = db.prepare(`SELECT COALESCE(SUM((SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id)),0) gross,
+                                 COALESCE(SUM(o.discount),0) disc
+                            FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get();
+  ok(near2(rep.grossSales, ind.gross), `INVARIANT report gross = SUM(order_items) of paid-today orders (${rep.grossSales} vs ${rr2(ind.gross)})`);
+  ok(near2(rep.revenue, ind.gross - ind.disc), `INVARIANT report net revenue = gross − discounts (${rep.revenue} vs ${rr2(ind.gross - ind.disc)})`);
+  // 2) Tender reconciliation covers the same money: sum over every tender line = paid-today net
+  const tr = Q.tenderRecon();
+  const bad = db.prepare(`SELECT o.id, o.ticket_id, o.total, COALESCE(o.discount,0) disc, o.payment_method,
+        (SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id) items
+      FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours')=date('now','+7 hours')
+        AND ABS(o.total - (SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id)) > 0.005`).all();
+  if (bad.length) console.log('   total≠items orders:', JSON.stringify(bad));
+  ok(near2(tr.total.amount, ind.gross - ind.disc), `INVARIANT tender reconciliation total = the same net takings (${tr.total.amount} vs ${rr2(ind.gross - ind.disc)})`);
+  ok(near2(tr.total.amount, tr.lines.reduce((s, l) => s + l.amount, 0)), 'INVARIANT the recon total equals the sum of its own lines');
+  // 3) P&L arithmetic identities — every subtotal derives from its parts, no hidden drift
+  ok(near2(p.cogs, p.ingredient + p.packaging + p.freight), 'INVARIANT COGS = ingredient + packaging + freight');
+  ok(near2(p.grossProfit, rep.revenue - p.cogs), 'INVARIANT gross profit = revenue − COGS');
+  ok(near2(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily - p.drawerPayOut), 'INVARIANT EBITDA = GP − waste − opex − drawer pay-outs');
+  ok(near2(p.netProfit, p.preTax - p.incomeTax), 'INVARIANT net profit = pre-tax − income tax');
+  // 4) Actual-over-plan: with recipes deducting stock in this suite, the P&L ingredient line must
+  //    BE the stock ledger figure (not the % guess), and the variance must be the difference.
+  const ca = Q.cogsForDay().cogsActual;
+  if (ca > 0) {
+    ok(near2(p.ingredient, ca), `INVARIANT P&L ingredient uses REAL stock-ledger COGS when it exists (${p.ingredient} vs ${ca})`);
+    ok(near2(p.ingredientVariance, ca - p.ingredientPlan), 'INVARIANT the plan-vs-actual variance is surfaced honestly');
+  } else {
+    ok(near2(p.ingredient, p.ingredientPlan), 'INVARIANT with no stock moves the P&L keeps the planned % figure');
   }
 }
 
