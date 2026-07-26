@@ -743,7 +743,9 @@ app.get('/api/reports/coupons', (req, res) => {
 // Reading is manager material; changing a giveaway's value is a pricing decision → owner only.
 app.get('/api/admin/coupon-templates', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ templates: Q.couponTemplates(), lucky: Q.luckyStatus() });
+  // loyaltyOn rides along so the hub can show WHY the reward campaign is on/off (it follows the
+  // loyalty switch — giving it its own toggle would strand completed stamp cards).
+  res.json({ templates: Q.couponTemplates(), lucky: Q.luckyStatus(), loyaltyOn: Q.loyaltyEnabled() });
 });
 app.post('/api/admin/coupon-templates/:key', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });

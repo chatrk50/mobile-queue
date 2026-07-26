@@ -889,10 +889,19 @@ async function doCouponClaim(){
     couponScreen('<div style="font-size:44px">🔍</div><h1 style="margin:8px 0;color:var(--navy)">ไม่พบคูปองนี้</h1><p class="muted">ลิงก์อาจหมดอายุหรือถูกยกเลิกแล้ว</p>'
       +'<button class="ok" style="width:100%;margin-top:16px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
-  const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12.5px;margin-top:4px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
-  const card='<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0">'
-    +'<div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(info.label||'คูปอง')+'</div>'
-    +'<div style="font-weight:800;color:#c2410c;font-size:15px;margin-top:3px">'+val+'</div>'+cond+'</div>';
+  const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12px;margin-top:3px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
+  // Perforated-ticket voucher (same language as the coupon wallet): value stub, tear line with
+  // punched notches, details on the right.
+  const big=info.discType==='percent'?(info.discValue+'%'):('฿'+info.discValue);
+  const notch=(pos)=>'<div style="position:absolute;left:-8px;'+pos+':-9.5px;width:15px;height:15px;border-radius:50%;background:#fff;border:1.5px solid #f3cb55"></div>';
+  const card='<div style="position:relative;display:flex;background:#fff;border:1.5px solid #f3cb55;border-radius:16px;margin:14px 0;text-align:left">'
+    +'<div style="flex:none;width:96px;border-radius:14.5px 0 0 14.5px;background:#fff7dc;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:16px 6px">'
+    +'<div style="font-size:18px;line-height:1">🎟️</div>'
+    +'<div style="font-size:'+(String(big).length>4?'17':'22')+'px;font-weight:900;color:#8a5c00;line-height:1.1">'+big+'</div>'
+    +'<div style="font-size:9.5px;font-weight:700;color:#8a5c00;opacity:.8">ส่วนลด</div></div>'
+    +'<div style="position:relative;flex:1;min-width:0;border-left:1.5px dashed #ecd9a0;padding:14px 12px 14px 14px">'+notch('top')+notch('bottom')
+    +'<div style="font-weight:800;font-size:15px;color:var(--navy);line-height:1.35">'+esc(info.label||'คูปอง')+'</div>'
+    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+'</div></div>';
   if(info.state==='already'){
     couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
       +'<p class="muted" style="font-size:12.5px">อยู่ในเมนู "คูปองของฉัน" พร้อมใช้ได้เลย</p>'
@@ -918,6 +927,7 @@ window.doCouponClaimGo=async()=>{
   let accessToken=null; try{ if(inLine && window.liff) accessToken=liff.getAccessToken(); }catch(e){}
   let r=null; try{ r=await (await fetch('/api/claim/'+encodeURIComponent(couponTok),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,accessToken})})).json(); }catch(e){}
   if(r && r.ok){
+    try{ sessionStorage.setItem('armCoupon','CCOUP:'+r.id); }catch(e){}   // สั่งเลย reloads → arm it on the other side
     couponScreen('<div style="font-size:52px">🎉</div><h1 style="margin:8px 0;color:var(--navy)">รับคูปองแล้ว!</h1>'
       +'<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
       +'<div class="muted" style="font-size:12.5px;margin-top:4px">ใช้ได้ถึง '+esc(r.expiresAt||'')+'</div></div>'
@@ -1205,12 +1215,34 @@ window.dsToggleLike=async()=>{ const d=pendingDrink; if(!d) return;
     d.likes=r.likes; if(r.liked) MY_LIKES.add(d.id); else MY_LIKES.delete(d.id); dsPaintLike(); paintMenu();
     if(r.liked) toast('❤️ ขอบคุณที่ถูกใจเมนูนี้ค่ะ'); }
   catch(e){ if(was) MY_LIKES.add(d.id); else MY_LIKES.delete(d.id); d.likes=Math.max(0,(d.likes||0)+(was?1:-1)); dsPaintLike(); paintMenu(); } };
-window.showOrderUI=async()=>{
-  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return; }   // single gate — covers member card / reorder / deep link
+// The ONE way into the menu. Every caller goes through here, because getting there means four
+// things together — load the menu, paint it, hide the queue card, show the order card — and doing
+// three of the four leaves a half-built screen.
+// opts.keepCart: arriving from the coupon wallet must not throw away what's already in the basket.
+// Returns false when the shop is closed, so callers can stop instead of continuing blindly.
+window.showOrderUI=async(opts={})=>{
+  if(!storeOpen){ toast('⏰ ตอนนี้ร้านปิดอยู่ ยังสั่งไม่ได้ค่ะ'); return false; }   // single gate — covers member card / reorder / deep link
   closeAllPopups();
-  await loadMenu(); cart=[]; cartCoupon=null; counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
+  // cartCoupon deliberately SURVIVES re-opening the menu: the customer just armed it from the
+  // wallet or a claim link; it is only cleared when the order is actually placed.
+  await loadMenu(); if(!opts.keepCart) cart=[];
+  counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
-  renderBasketCount(); show('getCard',false); show('orderCard',true); };
+  renderBasketCount(); show('getCard',false); show('orderCard',true);
+  armPendingCoupon(); return true; };
+// A claim link ends in a page RELOAD (สั่งเลย → /liff/?zone=…), so the freshly claimed coupon is
+// carried across it in sessionStorage and armed the first time the menu opens.
+async function armPendingCoupon(){
+  let code=null; try{ code=sessionStorage.getItem('armCoupon'); }catch(e){}
+  if(!code || cartCoupon) return;
+  try{ sessionStorage.removeItem('armCoupon'); }catch(e){}
+  try{
+    const ck = lineUserId || (guestPhone?('tel:'+guestPhone):'');
+    const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total=999999');
+    const c=(r.coupons||[]).find(x=>x.code===code && x.usable);
+    if(c){ cartCoupon=c; renderBasketCount(); toast('ใช้คูปอง "'+(c.label||c.code)+'" — ระบบจะลดให้อัตโนมัติเมื่อยอดเข้าเงื่อนไขค่ะ'); }
+  }catch(e){ /* wallet still has it — the customer can pick it in the basket */ }
+}
 // Re-callable so cart-count badges on the cards update when the cart changes. (declaration = hoisted,
 // callable bare from showOrderUI/dsAdd/basket ops inside this module).
 function paintMenu(){
@@ -1716,9 +1748,29 @@ function couponDiscountFor(net){ if(!cartCoupon) return 0;
   return Math.min(Math.round(d*100)/100, net); }
 function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
-  el.innerHTML = cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev); }
+  // An ARMED coupon that hasn't met its condition yet says exactly what's missing, instead of
+  // silently discounting ฿0 — the customer armed it from the wallet expecting it to work.
+  let extra='';
+  if(cartCoupon && !cartCoupon.isReward){
+    const net=cartPreCouponNet(), min=cartCoupon.min_spend||0;
+    if(net<min) extra='<div style="font-size:11px;color:#b48a00;font-weight:700;margin-top:2px">ซื้อเพิ่มอีก ฿'+(Math.round((min-net)*100)/100)+' เพื่อใช้คูปองนี้</div>';
+  }
+  el.innerHTML = (cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev)) + extra; }
 window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; if(_couponMode!=='cart') setNavTab('home'); };
 window.clearCoupon=()=>{ cartCoupon=null; closeCoupon(); renderBasket(); };
+// Browse mode "ใช้": arm the coupon and take the customer STRAIGHT to the menu (owner rule) —
+// the discount then applies itself the moment the cart meets the coupon's conditions, and the
+// basket says exactly what is still missing until it does.
+window.useCouponNow=async(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
+  cartCoupon=c; closeCoupon(); closeAllPopups();
+  // An open ticket blocks a second order in this zone, so walking them into the menu would dead-end
+  // at "already_in_queue" — keep the coupon armed for the next order and say so instead.
+  if(ticketId){ toast('เก็บคูปอง "'+(c.label||c.code)+'" ไว้ใช้กับออเดอร์ถัดไปแล้วค่ะ'); return; }
+  const oc=$('orderCard');
+  const onMenu = oc && oc.style.display!=='none';
+  if(!onMenu && !(await showOrderUI({keepCart:true}))) return;   // closed → showOrderUI already explained
+  renderBasketCount(); if(typeof renderBasket==='function'){ try{ renderBasket(); }catch(e){} }
+  toast('ใช้คูปอง "'+(c.label||c.code)+'" — ระบบจะลดให้อัตโนมัติเมื่อยอดเข้าเงื่อนไขค่ะ'); };
 let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar "my coupons" list (no active order yet)
 window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
   if(_couponMode==='browse'){ closeCoupon(); toast('มีคูปองนี้พร้อมใช้ · เลือกใช้ได้ตอนสั่งซื้อในตะกร้า'); return; }
@@ -1736,7 +1788,27 @@ window.openCoupon=async(mode)=>{
   const cartLines = _couponMode==='browse' ? null : cart.map(e=>({name:e.name, price:e.price, qty:e.qty||1}));
   try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total='+net+(cartLines?('&items='+encodeURIComponent(JSON.stringify(cartLines))):'')); _availCoupons=r.coupons||[]; }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;color:var(--danger);padding:16px 0">โหลดคูปองไม่สำเร็จ</p>'; return; }
-  if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
+  // Empty state with a real illustration (FoodStory-style), not a bare line of text — the page
+  // should still look designed when there is nothing in it.
+  if(!_availCoupons.length){
+    box.innerHTML=`<div style="text-align:center;padding:52px 0 36px">
+      <svg viewBox="0 0 140 100" style="width:132px;height:94px" aria-hidden="true">
+        <g fill="none" stroke="#d5dbe3" stroke-width="3" stroke-linecap="round">
+          <circle cx="72" cy="50" r="38" fill="#eef1f5" stroke="none"/>
+          <rect x="30" y="22" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="36" y="27" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="50" y="28" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <rect x="52" y="46" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="58" y="51" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="72" y="52" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <rect x="34" y="70" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="40" y="75" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="54" y="76" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <text x="104" y="30" font-size="22" font-weight="700" fill="#ccd3dc" stroke="none">?</text>
+          <text x="26" y="60" font-size="17" font-weight="700" fill="#d5dbe3" stroke="none">?</text>
+          <circle cx="106" cy="74" r="12"/><path d="M115 83l9 9"/>
+        </g>
+      </svg>
+      <div style="font-size:15.5px;font-weight:700;color:#98a2b0;margin-top:10px">ไม่พบคูปองที่ใช้ได้</div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">คูปองที่ได้รับจากร้านจะมาแสดงที่นี่</div>
+      ${_couponMode==='browse'?'<button class="ok" style="min-width:200px;margin-top:18px" onclick="closeCoupon()">ไปสั่งเมนู</button>':''}
+    </div>`;
+    return;
+  }
   const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   box.innerHTML = clr + _availCoupons.map(c=>{
     const isReward = c.disc_type==='reward';
@@ -1760,15 +1832,35 @@ window.openCoupon=async(mode)=>{
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
     const meta = isReward
-      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : c.couponKind==='winback' ? '💛 ของขวัญจากร้าน' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
-      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
-    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
-      <span style="min-width:0;display:block">
-        <div style="font-weight:800;color:var(--navy);font-size:14.5px;line-height:1.3">${isReward?'🎁 ':''}${esc(c.label)}</div>
+      ? ((c.couponKind==='birthday' ? 'ของขวัญวันเกิด' : c.couponKind==='winback' ? 'ของขวัญจากร้าน' : 'จากการสะสมครบ'))
+      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ')+' · โค้ด '+esc(c.code));
+    // Perforated-ticket card (Shopee pattern, YO-DEE colours): left stub = the VALUE as the
+    // picture, dashed tear line with punched notches, then details, then ONE clear action —
+    // "ใช้" in browse mode (arms + jumps to the menu), a check circle in cart mode.
+    const kindTile = isReward
+      ? (c.couponKind==='birthday' ? ['#fdeef3','#f3b8cd','#b0446c','🎂'] : c.couponKind==='winback' ? ['#fff7dc','#f3cb55','#8a5c00','💛'] : ['#e4f7f0','#a7e8d2','#0f7a5f','🎁'])
+      : ['#e6f6f9','#a8dfe9','#0e7d95','🎟️'];
+    const big = isReward ? 'ฟรี' : (c.disc_type==='percent' ? (c.disc_value+'%') : ('฿'+c.disc_value));
+    const bd = sel ? 'var(--accent)' : 'var(--line)';
+    const notch = (pos)=>`<div style="position:absolute;left:-8px;${pos}:-9.5px;width:15px;height:15px;border-radius:50%;background:#fff;border:1.5px solid ${bd}"></div>`;
+    const action = _couponMode==='browse'
+      ? (c.usable?`<div style="flex:none;display:flex;align-items:center;padding-right:11px"><button class="ok" style="padding:0 20px;font-size:13.5px;border-radius:999px;min-height:44px" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
+      : `<div style="flex:none;display:flex;align-items:center;padding-right:11px"><svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg></div>`;
+    return `<div style="position:relative;display:flex;background:${sel?'#e9f8fb':'#fff'};border:1.5px solid ${bd};border-radius:16px;margin-bottom:12px;${c.usable?'':'opacity:.55'}${_couponMode==='cart'&&c.usable?';cursor:pointer':''}" ${_couponMode==='cart'&&c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
+      <div style="flex:none;width:92px;border-radius:14.5px 0 0 14.5px;background:${kindTile[0]};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:14px 6px">
+        <div style="font-size:17px;line-height:1">${kindTile[3]}</div>
+        <div style="font-size:${big.length>3?'17':'21'}px;font-weight:900;color:${kindTile[2]};line-height:1.15">${big}</div>
+        <div style="font-size:9.5px;font-weight:700;color:${kindTile[2]};opacity:.8">${isReward?('ไม่เกิน ฿'+cap):'ส่วนลด'}</div>
+      </div>
+      <span style="position:relative;flex:1;min-width:0;display:block;border-left:1.5px dashed #d9e0e7;padding:11px 10px 11px 13px">
+        ${notch('top')}${notch('bottom')}
+        <div style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(c.label)}</div>
         <div style="color:var(--accent2);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3">${discLine}</div>
-        <div class="muted" style="font-size:11.5px;margin-top:3px">${isReward?meta:(esc(c.code)+(meta?(' · '+meta):''))}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:3px;line-height:1.4">${meta}</div>
+        ${c.expires_at?`<div class="muted" style="font-size:11.5px;margin-top:1px"><svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;fill:none;stroke:currentColor;stroke-width:2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ใช้ได้ถึง ${c.expires_at}</div>`:''}
+        ${c.usable?'':`<div style="font-size:11px;color:#b3283a;font-weight:700;margin-top:3px">${esc(c.reason||'ใช้ไม่ได้')}</div>`}
       </span>
-      <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
+      ${action}
     </div>`;}).join('');
 };
 // Phase 7: once the customer picks a QR method, auto-trigger the save-to-album flow

@@ -1100,6 +1100,11 @@
   #moreMenuBody>button{width:100%!important;justify-content:flex-start!important;padding:12px 16px!important;font-size:15px!important;min-height:50px;border-radius:12px!important;gap:8px}
   #moreMenuBody>.pill{align-self:stretch;padding:11px 16px!important;font-size:14px}
   #moreMenuBody .ic{width:19px;height:19px}
+  /* ---- Design-system control classes (rules in docs/DESIGN-SYSTEM.md) ----
+     .seg  = segment/preset chip (date ranges, tab-like filters). ONE .on at a time.
+     Buttons: .ok = primary (one per view), .ghost = secondary, .danger = destructive. */
+  .seg{flex:1;min-width:64px;padding:8px 6px;font-size:12.5px;font-weight:700}
+  .seg.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
      over months (520–1000px), so each page opened at a different width — the owner read that as
      the app jumping around. !important because each card carries its historical inline value.
@@ -3096,7 +3101,7 @@ window.showCouponHub=(tab=0)=>{ hideAllPanels(); closeAdmin();
 window.showCouponRep=()=>showCouponHub(2);   // old entry points land on the report tab
 window.chTab=(i)=>{
   const names=['แคมเปญ','คูปองคงค้าง','รายงาน'];
-  $('chTabs').innerHTML=names.map((n,x)=>`<button class="ghost" onclick="chTab(${x})" style="flex:1;padding:9px 6px;font-size:13px;font-weight:700;${x===i?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${n}</button>`).join('');
+  $('chTabs').innerHTML=names.map((n,x)=>`<button class="ghost seg${x===i?' on':''}" onclick="chTab(${x})" style="padding:9px 6px;font-size:13px">${n}</button>`).join('');
   [0,1,2].forEach(x=>{ $('chTab'+x).style.display=x===i?'':'none'; });
   if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(30);
 };
@@ -3115,10 +3120,19 @@ window.chLoadTpl=async()=>{
       <option value="">ไม่ผูก — กำหนดตัวเลขเอง</option>
       ${_chCoupList.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.label)} (${esc(c.code)})</option>`).join('')}
     </select>`;
+  // EVERY row carries its on/off state at the same top-right spot (owner: "why does only birthday
+  // have a checkbox?"). Rules per the design system: a toggle applies INSTANTLY; rows whose state
+  // lives elsewhere say so with a status pill + a link to the page that owns it.
+  const pill=(txt,on)=>`<span style="font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:${on?'#e1f5ee':'#f1f5f9'};color:${on?'#0f6b57':'#64748b'};white-space:nowrap">${txt}</span>`;
+  const state=(t)=>{
+    if(t.key==='birthday') return `<button class="tgl ${t.on?'on':'off'}" ${own?'':'disabled'} aria-label="${t.on?'ปิด':'เปิด'}แคมเปญวันเกิด" onclick="chToggleTpl('birthday',${t.on?0:1})"></button>`;
+    if(t.key==='reward') return pill('ตามระบบสะสมแต้ม · '+(r.loyaltyOn?'เปิด':'ปิด'),r.loyaltyOn)+(own?` <a href="#" onclick="showLoyalty();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">ตั้งค่าแต้ม ›</a>`:'');
+    return pill('ส่งเองจากหน้าลูกค้า',true)+(own?` <a href="#" onclick="showCustomers();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">เปิดหน้าลูกค้า ›</a>`:'');
+  };
   const tplRow=(t)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px">
       <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
         <b style="font-size:13.5px;color:var(--navy)">${esc(t.name)}</b>
-        ${t.toggle?`<label class="row" style="gap:6px;align-items:center;font-size:12.5px;cursor:pointer"><input type="checkbox" id="chOn_${t.key}" ${t.on?'checked':''} ${own?'':'disabled'} style="width:17px;height:17px">เปิดใช้งาน</label>`:''}
+        <span class="row" style="gap:8px;align-items:center">${state(t)}</span>
       </div>
       <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span style="flex:none">ผูกกับคูปอง</span>${bindSel(t.key,t.couponId)}
@@ -3126,7 +3140,7 @@ window.chLoadTpl=async()=>{
       <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span>มูลค่า ฿ ${num('chVal_'+t.key,t.value,64,!!t.couponId)}</span>
         <span>อายุ ${num('chDay_'+t.key,t.days,54,!!t.couponId)} วัน</span>
-        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',${t.toggle})">บันทึก</button>`:''}
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveTpl('${t.key}',false)">บันทึก</button>`:''}
       </div>
     </div>`;
   const lk=r.lucky||{};
@@ -3134,8 +3148,11 @@ window.chLoadTpl=async()=>{
     `<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px">
       <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:13.5px"><b style="color:var(--navy)">🎉 เลขนำโชค ${lk.number??''}</b>
-          <span class="muted" style="font-size:12px"> · ฿${lk.value??''} · ${lk.on?(lk.ready?'<b style="color:#16876f">เปิดอยู่</b>':'<b style="color:#b45309">เปิดแต่ยังไม่พร้อม</b>'):'ปิดอยู่'}</span></span>
-        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
+          <span class="muted" style="font-size:12px"> · ฿${lk.value??''}${lk.on&&!lk.ready?' · <b style="color:#b45309">ยังไม่พร้อม (ต้องเปิดโหมดคิวก่อนจ่าย)</b>':''}</span></span>
+        <span class="row" style="gap:8px;align-items:center">
+          <button class="tgl ${lk.on?'on':'off'}" ${own?'':'disabled'} aria-label="${lk.on?'ปิด':'เปิด'}เลขนำโชค" onclick="chToggleLucky(${lk.on?0:1})"></button>
+          ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
+        </span>
       </div>
       <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
@@ -3143,6 +3160,15 @@ window.chLoadTpl=async()=>{
       </div>
     </div>`;
 };
+// Toggles apply INSTANTLY (design-system rule); the number fields still save with บันทึก.
+window.chToggleTpl=async(key,on)=>{
+  try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify({on:!!on})}); toast(on?'เปิดแคมเปญแล้ว':'ปิดแคมเปญแล้ว'); }
+  catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+  chLoadTpl(); };
+window.chToggleLucky=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})}); toast(on?'เปิดเลขนำโชคแล้ว':'ปิดเลขนำโชคแล้ว'); }
+  catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
+  chLoadTpl(); };
 window.chBindChange=(key)=>{ const bound=!!$('chBind_'+key).value;
   for(const p of ['chVal_','chDay_']){ const el=$(p+key); if(el){ el.disabled=bound;
     el.style.background=bound?'var(--surface)':''; el.style.color=bound?'var(--muted)':''; } } };
@@ -3217,7 +3243,7 @@ window.loadCouponRep=async(days)=>{
     if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
     _crDays=0; qs='from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t); }
   $('crRange').innerHTML=[[1,'วันนี้'],[7,'7 วัน'],[30,'30 วัน'],[365,'1 ปี']].map(([d,l])=>
-    `<button class="ghost" onclick="loadCouponRep(${d})" style="flex:1;min-width:66px;padding:7px;font-size:12.5px;${d===_crDays?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${l}</button>`).join('');
+    `<button class="ghost seg${d===_crDays?' on':''}" onclick="loadCouponRep(${d})">${l}</button>`).join('');
   body.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   let r; try{ r=await api('/api/reports/coupons?'+qs); }
   catch(e){ body.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">ดูรายงานนี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
@@ -3253,7 +3279,7 @@ async function renderFeedback(){
   // acceptable when it sat inside the daily report; here it reads as "the feature is broken".
   let f; try{ f=await api('/api/reports/ratings?days='+_fbDays); }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">อ่านรีวิวได้เฉพาะเจ้าของร้าน — เข้าสู่ระบบด้วย PIN ของเจ้าของร้านแล้วลองใหม่</p>'; return; }
-  const seg=[7,30,90].map(d=>`<button class="ghost" onclick="setFbDays(${d})" style="flex:1;padding:6px;font-size:12px;${d===_fbDays?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${d} วัน</button>`).join('');
+  const seg=[7,30,90].map(d=>`<button class="ghost seg${d===_fbDays?' on':''}" onclick="setFbDays(${d})">${d} วัน</button>`).join('');
   const bar=(list,color)=>{ if(!list.length) return '';
     const max=list[0].n||1;
     return list.map(t=>`<div class="row" style="align-items:center;gap:8px;font-size:12px;margin:4px 0">
