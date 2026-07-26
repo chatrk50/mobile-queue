@@ -19,6 +19,19 @@ import generatePayload from 'promptpay-qr';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
+// ---- Baseline security headers. A real CSP is off the table while the app ships as two
+// inline-script single-file bundles, but these close the cheap holes: MIME sniffing,
+// clickjacking, referrer leakage, and stray browser features. camera stays self — the
+// cashier's QR scanner (jsQR) needs getUserMedia. HSTS only over HTTPS (Render terminates
+// TLS; the header is meaningless on dev http so it's gated).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
+  if (req.secure || req.get('x-forwarded-proto') === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const CASHIER_PIN = process.env.CASHIER_PIN || '1234';
@@ -128,6 +141,27 @@ app.use((req, res, next) => {
   if (pinPresent(req) && pinLocked(ipOf(req))) return res.status(429).json({ error: 'too_many_attempts' });
   next();
 });
+// ---- Public-endpoint rate limiter (in-memory, per-IP+route sliding window). The public
+// creation routes (queue ticket, self-order, coupon claim, rating, code validation) carry no
+// auth at all — without a cap one script can flood the queue, drain a claim quota, spam
+// ratings, or enumerate coupon codes. Per-route buckets, and the ceilings are deliberately
+// generous because the shop's own wifi NATs every customer behind ONE IP — they stop scripted
+// floods (hundreds/min), never a human rush.
+const rlBuckets = new Map();   // `${name}:${ip}` -> [request timestamps inside the window]
+function rateLimit(name, max, windowMs) {
+  return (req, res, next) => {
+    const key = name + ':' + ipOf(req), now = Date.now();
+    let ts = rlBuckets.get(key);
+    if (!ts) { ts = []; rlBuckets.set(key, ts); }
+    while (ts.length && ts[0] <= now - windowMs) ts.shift();
+    if (ts.length >= max) { res.setHeader('Retry-After', Math.ceil(windowMs / 1000)); return res.status(429).json({ error: 'rate_limited' }); }
+    ts.push(now); next();
+  };
+}
+setInterval(() => {   // sweep buckets idle >10 min so the map can't grow unbounded
+  const cut = Date.now() - 10 * 60 * 1000;
+  for (const [k, ts] of rlBuckets) if (!ts.length || ts[ts.length - 1] < cut) rlBuckets.delete(k);
+}, 5 * 60 * 1000).unref();
 // PWA manifest built from the brand config (so the home-screen app name/icon/colour follow the
 // brand). Registered before express.static so it wins over the static file.
 app.get('/manifest.webmanifest', (req, res) => {
@@ -193,7 +227,7 @@ app.post('/api/promo', (req, res) => {
 });
 
 // ---------- Cashier login check (validates the PIN, no side effects) ----------
-app.post('/api/auth', (req, res) => {
+app.post('/api/auth', rateLimit('auth', 20, 60e3), (req, res) => {
   res.json({ ok: pinOK(req) });
 });
 
@@ -208,7 +242,7 @@ const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || leg
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
-app.post('/api/staff/login', (req, res) => {
+app.post('/api/staff/login', rateLimit('auth', 20, 60e3), (req, res) => {
   const ip = ipOf(req);
   if (pinLocked(ip)) return res.status(429).json({ error: 'too_many_attempts' });
   const pin = (req.body?.pin || '').toString();
@@ -295,7 +329,7 @@ app.get('/api/coupons', (req, res) => {
   try { res.json({ coupons: Q.availableCoupons(req.query.customer || null, req.query.total, req.query.items ? parseItems(req.query.items) : null) }); }
   catch (e) { res.status(200).json({ coupons: [], error: e.message }); }
 });
-app.post('/api/coupons/validate', (req, res) => {
+app.post('/api/coupons/validate', rateLimit('coupon', 30, 60e3), (req, res) => {
   try { res.json(Q.validateCoupon(req.body?.code, req.body?.customer || null, req.body?.total, Array.isArray(req.body?.items) ? req.body.items : null)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -321,7 +355,7 @@ app.post('/api/coupons/:id/claim-link', (req, res) => {
 app.get('/api/claim/:token', (req, res) => {
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
 });
-app.post('/api/claim/:token', async (req, res) => {
+app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => {
   const key = String(req.body?.lineUserId || '').trim();
   if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
   // The id format alone is fabricable — with LINE live, the claimer must present a LIFF access
@@ -401,7 +435,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, hours: Q.getStoreHours(), open: Q.isStoreOpen(), pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() } });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -427,6 +461,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }
     if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
     if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
+    if (req.body?.noshowOn != null) Object.assign(out, Q.setNoshowEnabled(!!req.body.noshowOn));
+    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null) Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, windowDays: req.body?.noshowWindow }));
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -607,7 +643,7 @@ app.get('/api/zones/:zoneId/snapshot', (req, res) => {
 });
 
 // ---------- Customer: issue ticket (from LIFF scan) ----------
-app.post('/api/zones/:zoneId/tickets', (req, res) => {
+app.post('/api/zones/:zoneId/tickets', rateLimit('ticket', 30, 60e3), (req, res) => {
   try {
     const zone = Q.getZone(req.params.zoneId);
     if (!zone) return res.status(404).json({ error: 'zone_not_found' });
@@ -621,8 +657,10 @@ app.post('/api/zones/:zoneId/tickets', (req, res) => {
     emit(zone.id, 'update', (reveal) => Q.zoneSnapshot(zone.id, { reveal }));
     res.json({ ticketId: ticket.id, code: ticket.code, ahead });
   } catch (e) {
-    const map = { zone_closed: 423, zone_not_found: 404 };
-    res.status(map[e.message] || 400).json({ error: e.message });
+    const map = { zone_closed: 423, zone_not_found: 404, noshow_blocked: 403 };
+    const body = { error: e.message };
+    if (e.message === 'noshow_blocked') { body.strikes = e.strikes; body.limit = e.limit; }
+    res.status(map[e.message] || 400).json(body);
   }
 });
 
@@ -635,7 +673,7 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 
 // Customer self-order (no PIN) — from the LINE app: build a cart, get a queue
 // number, then pay at the counter. Order is tagged source='customer', unpaid.
-app.post('/api/zones/:zoneId/order', (req, res) => {
+app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) => {
   if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
@@ -651,8 +689,10 @@ app.post('/api/zones/:zoneId/order', (req, res) => {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
     }
-    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409 };
-    res.status(map[e.message] || 400).json({ error: e.message });
+    const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400, item_unavailable: 409, noshow_blocked: 403 };
+    const body = { error: e.message };
+    if (e.message === 'noshow_blocked') { body.strikes = e.strikes; body.limit = e.limit; }
+    res.status(map[e.message] || 400).json(body);
   }
 });
 
@@ -710,7 +750,7 @@ app.post('/api/tickets/:ticketId/dismiss-cancel', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer rating (no PIN) — defined before the generic /:action route so it isn't captured.
-app.post('/api/tickets/:ticketId/rate', (req, res) => {
+app.post('/api/tickets/:ticketId/rate', rateLimit('rate', 20, 60e3), (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
     res.json(Q.setRating(req.params.ticketId, req.body?.stars, {
@@ -902,7 +942,7 @@ app.post('/api/tickets/:ticketId/customer', (req, res) => {
 });
 // Customer self-attaches their phone to their OWN just-created (non-LINE) ticket → earns stamps.
 // Public, but only works on a fresh ticket with no LINE identity and no phone yet (can't hijack another's).
-app.post('/api/tickets/:ticketId/guest-phone', (req, res) => {
+app.post('/api/tickets/:ticketId/guest-phone', rateLimit('phone', 10, 60e3), (req, res) => {
   try {
     const t = db.prepare('SELECT id, line_user_id, customer_key FROM tickets WHERE id=?').get(req.params.ticketId);
     if (!t) return res.status(404).json({ error: 'ticket_not_found' });
@@ -946,6 +986,12 @@ app.get('/api/push-stats/range', (req, res) => {
 app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ customers: Q.customersList() });
+});
+// No-show forgiveness: restarts the customer's strike count (nothing is deleted — see forgiveNoshow).
+app.post('/api/crm/customers/forgive', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.forgiveNoshow((req.body?.key || '').toString())); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer list → Excel (all customers + segment + rating they gave).
 app.get('/api/crm/customers.xlsx', async (req, res) => {
@@ -1526,6 +1572,17 @@ function doDailyReset() {
     const l = Q.reconcileLoyaltyBalances();
     if (l.fixed) console.log(`[loyalty] repaired ${l.fixed}/${l.checked} cached balances from the ledger`);
   } catch (e) { console.error('[loyalty] reconcile failed:', e && e.message); }
+  // Owner-summary fallback: the primary trigger is closing the cash drawer, but on days the staff
+  // never closes a round the summary would silently not exist. At the midnight reset we are on the
+  // NEW day already, so summarize YESTERDAY; maybeAutoSummary's per-day dedup makes this a no-op
+  // when the drawer-close already sent it. (Caveat: a free-tier instance asleep at midnight never
+  // runs this — drawer close remains the reliable path.)
+  try {
+    const yd = db.prepare("SELECT date(datetime('now','+7 hours'),'-1 day') d").get().d;
+    Promise.resolve(Q.maybeAutoSummary(null, yd)).then((r) => {
+      if (r.sent) console.log(`[summary] midnight fallback sent for ${yd}`);
+    }).catch(() => {});
+  } catch { /* best-effort */ }
 }
 function msUntilBangkokMidnight() {
   const now = Date.now();

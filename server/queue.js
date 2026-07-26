@@ -85,6 +85,10 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   if (lineUserId) {
     const existing = findActiveTicket(zoneId, lineUserId);
     if (existing) return { ticket: existing, ahead: aheadCount(existing) };
+    // No-show strikes: repeat no-shows lose LINE self-service until the strikes age out or the
+    // counter forgives. Placed AFTER the existing-ticket check so a held ticket is never stranded.
+    const ns = noshowStrikes(lineUserId);
+    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.limit; throw e; }
   }
 
   const tx = db.transaction(() => {
@@ -447,6 +451,7 @@ export function pushStatsRange(from = null, to = null) {
  *  paid visit): new = ≤1 visit · regular = ≤30d · at_risk = 31–60d · lost = >60d (or never paid).
  *  canPush = real LINE user (tel:-only customers can't receive LINE messages). */
 export function customersList() {
+  const nsRules = getNoshowRules(); const nsOn = noshowEnabled();
   const rows = db.prepare(
     `SELECT c.line_user_id AS key, c.name, c.points, c.lifetime_points AS lifetime, c.birthday,
             COUNT(DISTINCT CASE WHEN o.payment_status='paid' THEN t.id END) AS visits,
@@ -454,18 +459,22 @@ export function customersList() {
             MAX(CASE WHEN o.payment_status='paid' THEN o.paid_at END) AS lastVisit,
             AVG(CASE WHEN t.rating IS NOT NULL THEN t.rating END) AS ratingAvg,
             COUNT(DISTINCT CASE WHEN t.rating IS NOT NULL THEN t.id END) AS ratingCount,
-            MAX(CASE WHEN t.rating IS NOT NULL THEN t.rating END) AS ratingLast
+            MAX(CASE WHEN t.rating IS NOT NULL THEN t.rating END) AS ratingLast,
+            COUNT(DISTINCT CASE WHEN t.status='no_show'
+                  AND COALESCE(t.closed_at, t.created_at) > COALESCE(c.noshow_forgiven_at, '1970-01-01')
+                  AND COALESCE(t.closed_at, t.created_at) >= datetime('now', ?) THEN t.id END) AS noshows
        FROM customers c
        LEFT JOIN tickets t ON t.line_user_id = c.line_user_id
        LEFT JOIN orders o  ON o.ticket_id = t.id
       GROUP BY c.line_user_id`
-  ).all();
+  ).all(`-${nsRules.windowDays} days`);
   const now = Date.now();
   return rows.map((r) => {
     const days = r.lastVisit ? Math.floor((now - new Date(r.lastVisit.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null;
     const segment = (r.visits <= 1) ? 'new' : (days == null || days > 60) ? 'lost' : (days > 30) ? 'at_risk' : 'regular';
     return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U'),
-      ratingAvg: r.ratingAvg != null ? Math.round(r.ratingAvg * 10) / 10 : null, ratingCount: r.ratingCount || 0 };
+      ratingAvg: r.ratingAvg != null ? Math.round(r.ratingAvg * 10) / 10 : null, ratingCount: r.ratingCount || 0,
+      noshows: r.noshows || 0, noshowBlocked: nsOn && (r.noshows || 0) >= nsRules.limit };
   }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
 }
 /** Targeted CRM send: message (+ optional attached coupon) to EXPLICITLY chosen customers.
@@ -795,14 +804,33 @@ export function dailyReport(branchId = null, dateStr = null) {
   // P&L from the financial settings (today's sales vs prorated daily fixed costs).
   const f = getFinanceSettings(branchId);
   const perDay = (monthly) => (f.daysPerMonth > 0 ? monthly / f.daysPerMonth : monthly);
-  const ingredient = f.ingredientPct * revenue;
+  // Ingredient cost: same actual-over-plan discipline as labour. When recipes auto-deduct stock,
+  // cogsForDay() nets the day's use/return moves at weighted-avg cost — that replaces the
+  // %-of-revenue estimate, and the variance is surfaced instead of the plan quietly hiding it.
+  // Whole-shop figure only (stock moves aren't branch-filtered), so a branch-scoped report keeps
+  // the plan number. Zero moves (no recipes yet) = plan as before.
+  const ingredientPlan = f.ingredientPct * revenue;
+  let ingredient = ingredientPlan, ingredientActual = null, stockWasteVal = 0;
+  if (branchId == null) {
+    try {
+      const ca = cogsForDay(validDay ? dateStr : null);
+      stockWasteVal = ca.wasteCost || 0;
+      if (ca.cogsActual > 0) { ingredient = ca.cogsActual; ingredientActual = ca.cogsActual; }
+    } catch { /* stock module empty */ }
+  }
+  const ingredientVariance = ingredientActual != null ? Math.round((ingredientActual - ingredientPlan) * 100) / 100 : 0;
   const packaging = f.packagingPerCup * cups;
   const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
   const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
   // Waste = product made then discarded: its ingredient+packaging is spent but earns nothing.
   // A real cost with no revenue → it reduces net profit (separate from sold-goods COGS).
-  const wasteCost = Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
+  // In ACTUAL mode the binned orders' ingredients already sit inside cogsActual (their 'use' moves
+  // were never returned) — charging the % again would double-count, so the waste line is then
+  // packaging of the binned cups + manually recorded stock waste only.
+  const wasteCost = ingredientActual != null
+    ? Math.round((byKind.waste.cups * f.packagingPerCup + stockWasteVal) * 100) / 100
+    : Math.round((byKind.waste.amount * f.ingredientPct + byKind.waste.cups * f.packagingPerCup) * 100) / 100;
   voided.waste.cost = wasteCost;
   // Operating expenses, grouped. Depreciation / interest / tax deliberately sit BELOW this line
   // so the report can show EBITDA → EBIT → กำไรก่อนภาษี → กำไรสุทธิ like a real set of accounts.
@@ -847,7 +875,7 @@ export function dailyReport(branchId = null, dateStr = null) {
   const targetDaily = f.targetRevenue > 0 && f.daysPerMonth > 0 ? f.targetRevenue / f.daysPerMonth : null;
   const pnl = {
     drinkSales, toppingSales, cups,
-    ingredient, packaging, freight, cogs, wasteCost,
+    ingredient, ingredientPlan, ingredientActual, ingredientVariance, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
     labor, wagesPlanDaily, laborVariance, drawerPayOut,
@@ -2307,6 +2335,10 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
   if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  // A claim-link coupon is quota-controlled: it may ONLY be spent from the wallet of a customer who
+  // collected it via the link. Honouring the raw code here would let anyone who saw the code bypass
+  // the quota — and let a claimer double-dip (wallet voucher + this code discount on top).
+  if (c.distribution === 'claim') return { ok: false, reason: 'คูปองนี้ต้องกดรับผ่านลิงก์ก่อน แล้วใช้จาก "คูปองของฉัน"' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
   if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
@@ -2364,7 +2396,9 @@ export function customerCoupons(customerKey) {
   ).all(customerKey);
 }
 export function availableCoupons(customerKey, orderNet, lines = null) {
-  const list = listCoupons(false).map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
+  // Claim-link coupons never appear in the public code list: the quota lives at the link, and a
+  // customer who claimed already sees their voucher via the wallet rows unshifted below.
+  const list = listCoupons(false).filter((c) => c.distribution !== 'claim').map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
     return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
       min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
@@ -2714,26 +2748,29 @@ export function setOwnerLineId(id) {
 // blocked it, the channel token expired, the monthly quota ran out) was reported as a success. Worse,
 // maybeAutoSummary() marks the day done on sent:true, so one silent rejection meant that day's
 // summary was never retried. The shop saw "✅ ส่งแล้ว" and no message ever arrived.
-export async function notifyOwner(text) {
+export async function notifyOwner(text, kind = 'owner') {
   const id = getOwnerLineId();
   if (!id) return { sent: false, reason: 'no_id' };
   if (!validOwnerLineId(id)) return { sent: false, reason: 'invalid_id' };
   if (!text) return { sent: false, reason: 'no_text' };
   if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
-  const ok = await pushText(id, text);
+  const ok = await pushText(id, text, kind);
   return { sent: !!ok, reason: ok ? 'sent' : 'push_failed' };
 }
-/** Compose a short Thai end-of-day summary from today's report. */
-export function composeDailySummary(branchId = null) {
-  const r = dailyReport(branchId); const v = r.voided || {};
+/** Compose a short Thai end-of-day summary. dateStr (YYYY-MM-DD) = summarize THAT Bangkok day —
+ *  used by the midnight fallback, which reports on yesterday. Default = today. */
+export function composeDailySummary(branchId = null, dateStr = null) {
+  const validDay = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+  const day = validDay ? dateStr : db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const r = dailyReport(branchId, validDay ? dateStr : null); const v = r.voided || {};
   // Thai-formatted Bangkok date (e.g. "พฤ 24 ก.ค. 2569") so a saved/forwarded summary is always
   // anchored to the day it covers — the owner reads these later, not only at close time.
-  const bk = db.prepare("SELECT strftime('%d',datetime('now','+7 hours')) d, strftime('%m',datetime('now','+7 hours')) m, strftime('%Y',datetime('now','+7 hours')) y, strftime('%w',datetime('now','+7 hours')) w").get();
+  const bk = db.prepare("SELECT strftime('%d',?) d, strftime('%m',?) m, strftime('%Y',?) y, strftime('%w',?) w").get(day, day, day, day);
   const THMON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   const THDOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
   const dateTh = `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`;
   const lines = [
-    `📊 สรุปยอดวันนี้ — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
+    `📊 สรุปยอด${validDay ? '' : 'วันนี้'} — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
     `🗓️ ${dateTh}`,
     `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
@@ -2741,7 +2778,9 @@ export function composeDailySummary(branchId = null) {
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
   // Anti-fraud: surface today's revenue-reductions (who reduced revenue) in the owner's daily push.
+  // listReductions is today-only — skipped when summarizing a past day (midnight fallback).
   try {
+    if (validDay) throw new Error('skip');
     const red = listReductions(branchId || 1);
     if (red.total > 0 || (red.redeems && red.redeems.length)) {
       lines.push(`🛡️ ลดยอดรวม ฿${red.total} (ยกเลิก ฿${red.byType.void} · ของเสีย ฿${red.byType.waste} · ลดราคา ฿${red.byType.discount})`);
@@ -2751,7 +2790,7 @@ export function composeDailySummary(branchId = null) {
   } catch { /* additive — never break the summary */ }
   // Cash drawer over/short of the day's last closed round.
   try {
-    const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=date('now','+7 hours') ORDER BY id DESC LIMIT 1").get(branchId || 1);
+    const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=? ORDER BY id DESC LIMIT 1").get(branchId || 1, day);
     if (last) lines.push(last.over_short === 0 ? '💵 เงินสด: พอดี ✓' : `💵 เงินสด${last.over_short > 0 ? 'เกิน' : 'ขาด'} ฿${Math.abs(last.over_short)}`);
   } catch { /* additive */ }
   // Stock heads-up: low + near-expiry + what to reorder (uses the SCM engine).
@@ -2774,15 +2813,54 @@ export function autoSummaryEnabled() { return getSetting('summary:auto', '0') ==
 export function setAutoSummary(on) { setSetting('summary:auto', on ? '1' : '0'); return { autoSummary: !!on }; }
 /** Fire the owner summary at most once per Bangkok day (dedup key), when auto-summary is on.
  *  Called when the cash drawer is closed (the natural end-of-day moment). */
-export async function maybeAutoSummary(branchId = null) {
+export async function maybeAutoSummary(branchId = null, dateStr = null) {
   if (!autoSummaryEnabled()) return { sent: false, reason: 'off' };
-  const day = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const day = (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+    ? dateStr : db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
   if (getSetting('summary:last_sent', '') === day) return { sent: false, reason: 'already' };
-  const r = await pushOwnerSummary(branchId);
+  const r = await pushOwnerSummary(branchId, dateStr);
   // Only mark the day done once it actually went out. If the owner has no id / a bad id, the next
   // close will try again — so fixing "Keys7" makes the very next round's summary arrive.
   if (r.sent) setSetting('summary:last_sent', day);
   return r;
+}
+// ---------- No-show strikes (default OFF): ลูกค้าที่กดคิว/สั่งแล้วไม่มารับซ้ำๆ ----------
+// Strikes are DERIVED from tickets (status='no_show') inside a sliding window — nothing to keep in
+// sync. Blocking applies ONLY to LINE self-service (queue + self-order); the counter always sells.
+// A cashier can forgive: customers.noshow_forgiven_at restarts the count from that moment, and old
+// strikes also age out of the window by themselves.
+export function noshowEnabled() { return getSetting('noshow:on', '0') === '1'; }
+export function setNoshowEnabled(on) { setSetting('noshow:on', on ? '1' : '0'); return { noshowOn: !!on }; }
+export function getNoshowRules() {
+  return {
+    limit: Math.max(1, Math.min(10, parseInt(getSetting('noshow:limit', '3')) || 3)),
+    windowDays: Math.max(1, Math.min(365, parseInt(getSetting('noshow:window_days', '30')) || 30)),
+  };
+}
+export function setNoshowRules({ limit, windowDays } = {}) {
+  if (limit != null) setSetting('noshow:limit', String(Math.max(1, Math.min(10, parseInt(limit) || 3))));
+  if (windowDays != null) setSetting('noshow:window_days', String(Math.max(1, Math.min(365, parseInt(windowDays) || 30))));
+  return { noshowOn: noshowEnabled(), ...getNoshowRules() };
+}
+/** Live strike count + block verdict for one LINE customer. */
+export function noshowStrikes(lineUserId) {
+  const { limit, windowDays } = getNoshowRules();
+  if (!lineUserId) return { strikes: 0, limit, windowDays, blocked: false };
+  const forgiven = db.prepare('SELECT noshow_forgiven_at f FROM customers WHERE line_user_id=?').get(lineUserId)?.f || '1970-01-01';
+  const n = db.prepare(
+    `SELECT COUNT(*) n FROM tickets
+      WHERE line_user_id=? AND status='no_show'
+        AND COALESCE(closed_at, created_at) > ?
+        AND COALESCE(closed_at, created_at) >= datetime('now', ?)`
+  ).get(lineUserId, forgiven, `-${windowDays} days`).n;
+  return { strikes: n, limit, windowDays, blocked: noshowEnabled() && n >= limit };
+}
+/** Cashier forgives the customer — the count restarts from now (no history is deleted). */
+export function forgiveNoshow(lineUserId) {
+  if (!lineUserId) throw new Error('no_customer');
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, NULL)`).run(lineUserId);
+  db.prepare(`UPDATE customers SET noshow_forgiven_at=datetime('now') WHERE line_user_id=?`).run(lineUserId);
+  return noshowStrikes(lineUserId);
 }
 // ---------- แคมเปญเลขนำโชค (default OFF) ----------
 // Whoever draws the lucky queue number that day wins a drink on the house. EVERY zone that reaches
@@ -2994,7 +3072,18 @@ export async function maybeAutoWinback(branchId = null) {
   });
   return { sent: r.sent, targeted: r.targeted, reason: 'ok' };
 }
-export async function pushOwnerSummary(branchId = null) { const text = composeDailySummary(branchId); const r = await notifyOwner(text); return { ...r, text }; }
+export async function pushOwnerSummary(branchId = null, dateStr = null) { const text = composeDailySummary(branchId, dateStr); const r = await notifyOwner(text, 'summary'); return { ...r, text }; }
+/** One glance at WHY the summary is/isn't reaching the owner — every gate in the chain. */
+export function summaryDiag() {
+  const id = getOwnerLineId();
+  let lastPush = null;
+  try { lastPush = id ? db.prepare("SELECT at, ok FROM push_log WHERE user_id=? AND kind='summary' ORDER BY id DESC LIMIT 1").get(id) || null : null; }
+  catch { /* push_log may not exist */ }
+  return {
+    autoOn: autoSummaryEnabled(), hasId: !!id, idValid: id ? validOwnerLineId(id) : false,
+    lineOn: LINE_ENABLED, lastSentDay: getSetting('summary:last_sent', '') || null, lastPush,
+  };
+}
 /** Cups (drink stamps) needed to earn one free drink. */
 export function getStampsPerReward() { return Math.max(1, Math.round(Number(getSetting('loyalty:stamps_per_reward', '10')) || 10)); }
 export function setStampsPerReward(n) {
@@ -3733,6 +3822,10 @@ export function createOrder(zoneId, items, opts = {}) {
       e.ticketId = existing.id; e.code = existing.code;
       throw e;
     }
+    // No-show strikes: repeat no-shows lose LINE self-ordering (walk-ins at the counter are
+    // unaffected — the cashier path never carries a lineUserId with source='cashier').
+    const ns = noshowStrikes(lineUserId);
+    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.limit; throw e; }
   }
 
   // SELF-SERVE ORDERS PRICE THEMSELVES FROM THE CATALOG. The LIFF posts the price it displayed and

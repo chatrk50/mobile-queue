@@ -375,7 +375,7 @@
           <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setReportDate('')">วันนี้</button>
         </div></div>
       <div class="row" style="gap:6px">
-        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="openSettingsCost()" title="แก้ต้นทุน/ค่าใช้จ่าย (อยู่ในตั้งค่าทั้งหมด)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>ต้นทุน</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleMargins()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไร/เมนู</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">ปิด</button>
@@ -407,14 +407,14 @@
     </div>
     <!-- Same switcher as chartsCard — the two panels present as ONE destination. -->
     <div class="row" style="gap:6px;margin-top:12px">
-      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showCharts()">กราฟ</button>
-      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">ตาราง P&amp;L</button>
+      <button class="ghost seg" onclick="showCharts()">กราฟ</button>
+      <button class="ghost seg on">ตาราง P&amp;L</button>
     </div>
     <div class="row" style="gap:6px;margin-top:10px">
-      <button id="salesTabDaily" class="ok" style="padding:6px 14px;font-size:13px" onclick="salesTab('daily')">รายวัน</button>
-      <button id="salesTabWeekly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('weekly')">รายสัปดาห์</button>
-      <button id="salesTabMonthly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('monthly')">รายเดือน</button>
-      <button id="salesTabYearly" class="ghost" style="padding:6px 14px;font-size:13px" onclick="salesTab('yearly')">รายปี</button>
+      <button id="salesTabDaily" class="ghost seg on" onclick="salesTab('daily')">รายวัน</button>
+      <button id="salesTabWeekly" class="ghost seg" onclick="salesTab('weekly')">รายสัปดาห์</button>
+      <button id="salesTabMonthly" class="ghost seg" onclick="salesTab('monthly')">รายเดือน</button>
+      <button id="salesTabYearly" class="ghost seg" onclick="salesTab('yearly')">รายปี</button>
     </div>
     <div id="salesBody" style="margin-top:14px"></div>
   </div>
@@ -458,10 +458,10 @@
     </div>
     <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
     <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
-      <button id="stkTabWh" class="ok" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('wh')"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>คลัง</button>
-      <button id="stkTabPo" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('po')"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>ใบสั่งซื้อ</button>
-      <button id="stkTabSup" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('sup')"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
-      <button id="stkTabPlan" class="ghost" style="padding:7px 14px;font-size:13px;border-radius:999px" onclick="stkTab('plan')"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผน</button>
+      <button id="stkTabWh" class="ghost seg on" onclick="stkTab('wh')"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>คลัง</button>
+      <button id="stkTabPo" class="ghost seg" onclick="stkTab('po')"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>ใบสั่งซื้อ</button>
+      <button id="stkTabSup" class="ghost seg" onclick="stkTab('sup')"><svg class="ic" viewBox="0 0 24 24"><path d="M1 8h15v8H1zM16 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>ผู้ขาย</button>
+      <button id="stkTabPlan" class="ghost seg" onclick="stkTab('plan')"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>วางแผน</button>
     </div>
     <!-- TAB: คลัง -->
     <div id="stkPaneWh">
@@ -638,8 +638,9 @@
           <label class="ff" style="width:140px">ยอดขั้นต่ำ ฿
             <input id="cpMin" type="number" inputmode="decimal" placeholder="0"></label>
           <label class="ff" style="min-width:150px">ใครใช้ได้
-            <select id="cpAud"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option></select></label>
+            <select id="cpAud" onchange="cpSyncAud()"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option><option value="claim">เฉพาะคนที่กดรับผ่านลิงก์ (จำกัดโควตา)</option></select></label>
         </div>
+        <div class="cphint" id="cpAudHint" style="display:none">บันทึกแล้วระบบจะให้ตั้งโควตา + สร้างลิงก์รับ — ลูกค้าต้องกดรับเข้า “คูปองของฉัน” ก่อนถึงจะใช้ได้ พิมพ์โค้ดตรงๆ ใช้ไม่ได้</div>
         <div class="cprow">
           <label class="ff" style="min-width:150px">เริ่มใช้ได้ <span class="muted">(ว่าง = ทันที)</span>
             <input id="cpFrom" type="date"></label>
@@ -661,7 +662,7 @@
       </div>
 
       <button class="ok" id="cpSaveBtn" style="width:100%;padding:12px;margin-top:12px" onclick="addCoupon()">สร้างคูปอง</button>
-      <div class="muted" style="font-size:11.5px;margin-top:6px">สร้างแล้วกด “ทำลิงก์รับ” เพื่อแจกแบบจำกัดสิทธิ์ (ลูกค้ากดรับเข้า “คูปองของฉัน”)</div>
+      <div class="muted" style="font-size:11.5px;margin-top:6px">แจกแบบจำกัดสิทธิ์: เลือก “เฉพาะคนที่กดรับผ่านลิงก์” ด้านบน หรือกด “ทำลิงก์รับ” ที่คูปองในรายการ</div>
     </div>
   </div>
 
@@ -719,8 +720,8 @@
       <div class="row between" style="align-items:center">
         <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>รอบเงินสดย้อนหลัง</h2>
         <div class="row" style="gap:6px">
-          <button id="chTabDay" class="ok" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('day')">รายวัน</button>
-          <button id="chTabMonth" class="ghost" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="chSetTab('month')">รายเดือน</button>
+          <button id="chTabDay" class="ghost seg on" style="flex:none" onclick="chSetTab('day')">รายวัน</button>
+          <button id="chTabMonth" class="ghost seg" style="flex:none" onclick="chSetTab('month')">รายเดือน</button>
         </div>
       </div>
       <div id="cashHistList" style="margin-top:10px"><p class="muted" style="font-size:12px">กำลังโหลด…</p></div>
@@ -736,8 +737,8 @@
     <!-- Shared view switcher: กราฟ (this panel) ↔ ตาราง P&L (salesCard). One destination, two
          renderings of the same /api/sales-history data — merged per the IA audit. -->
     <div class="row" style="gap:6px;margin-top:12px">
-      <button class="ok" style="padding:6px 14px;font-size:13px;border-radius:999px">กราฟ</button>
-      <button class="ghost" style="padding:6px 14px;font-size:13px;border-radius:999px" onclick="showSales()">ตาราง P&amp;L</button>
+      <button class="ghost seg on">กราฟ</button>
+      <button class="ghost seg" onclick="showSales()">ตาราง P&amp;L</button>
     </div>
     <div id="chartsBody" style="margin-top:14px"><p class="muted">กำลังโหลด…</p></div>
   </div>
@@ -748,18 +749,18 @@
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
         <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
-        <button class="ok" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()">ปิด</button>
       </div>
     </div>
     <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
-      <button class="detTab ok" data-t="tx" style="padding:6px 12px;font-size:13px" onclick="detailTab('tx')">ธุรกรรม</button>
-      <button class="detTab ghost" data-t="pay" style="padding:6px 12px;font-size:13px" onclick="detailTab('pay')">ชำระเงิน</button>
-      <button class="detTab ghost" data-t="void" style="padding:6px 12px;font-size:13px" onclick="detailTab('void')">ยกเลิก/คืน</button>
-      <button class="detTab ghost" data-t="disc" style="padding:6px 12px;font-size:13px" onclick="detailTab('disc')">ส่วนลด</button>
-      <button class="detTab ghost" data-t="chan" style="padding:6px 12px;font-size:13px" onclick="detailTab('chan')">ช่องทาง</button>
-      <button class="detTab ghost" data-t="addon" style="padding:6px 12px;font-size:13px" onclick="detailTab('addon')">ท็อปปิ้ง</button>
-      <button class="detTab ghost" data-t="hour" style="padding:6px 12px;font-size:13px" onclick="detailTab('hour')">รายชั่วโมง</button>
+      <button class="detTab ghost seg on" data-t="tx" style="flex:none" onclick="detailTab('tx')">ธุรกรรม</button>
+      <button class="detTab ghost seg" data-t="pay" style="flex:none" onclick="detailTab('pay')">ชำระเงิน</button>
+      <button class="detTab ghost seg" data-t="void" style="flex:none" onclick="detailTab('void')">ยกเลิก/คืน</button>
+      <button class="detTab ghost seg" data-t="disc" style="flex:none" onclick="detailTab('disc')">ส่วนลด</button>
+      <button class="detTab ghost seg" data-t="chan" style="flex:none" onclick="detailTab('chan')">ช่องทาง</button>
+      <button class="detTab ghost seg" data-t="addon" style="flex:none" onclick="detailTab('addon')">ท็อปปิ้ง</button>
+      <button class="detTab ghost seg" data-t="hour" style="flex:none" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
     <div id="detailSummary" style="margin-top:14px"></div>
     <div id="detailBody" style="margin-top:14px"></div>
@@ -947,13 +948,7 @@
     <div id="chOutList"></div>
   </div>
   <div id="chTab2" style="display:none">
-    <div class="row" style="gap:6px;margin:0 0 8px;flex-wrap:wrap" id="crRange"></div>
-    <div class="row" style="gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <input id="crFrom" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-      <span class="muted" style="font-size:12px">ถึง</span>
-      <input id="crTo" type="date" style="flex:1;min-width:130px;padding:7px;border:1px solid var(--line);border-radius:8px">
-      <button class="ghost" style="padding:7px 14px" onclick="loadCouponRep(null)">ดู</button>
-    </div>
+    <div id="crRange" style="margin:0 0 10px"></div>
     <div id="crBody"></div>
   </div>
 </div>
@@ -1105,6 +1100,11 @@
      Buttons: .ok = primary (one per view), .ghost = secondary, .danger = destructive. */
   .seg{flex:1;min-width:64px;padding:8px 6px;font-size:12.5px;font-weight:700}
   .seg.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* .rpop = ป๊อปเลือกช่วงเวลาแบบกะทัดรัด: ปุ่มเดียวแทนแถวชิป + ช่องวันที่ (ดู openRangePop) */
+  .rpop{position:fixed;z-index:120;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px -8px rgba(22,49,79,.28);padding:8px;width:252px;box-sizing:border-box}
+  .rpop-i{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:9px;font-size:13px;font-family:inherit;color:var(--navy);cursor:pointer;min-height:36px}
+  .rpop-i:hover{background:var(--surface)}
+  .rpop-i.on{background:var(--accent);color:#fff;font-weight:700}
   /* Every back-office panel shares ONE frame width on tablet/desktop. They were set one by one
      over months (520–1000px), so each page opened at a different width — the owner read that as
      the app jumping around. !important because each card carries its historical inline value.
@@ -1651,10 +1651,10 @@ window.showSales=async()=>{ hideAllPanels(); try{ SALES=await api('/api/sales-hi
   salesTab(salesView);
 }catch(e){ toast(err(e)); } };
 window.salesTab=(v)=>{ salesView=v;
-  $('salesTabDaily').className=v==='daily'?'ok':'ghost';
-  $('salesTabWeekly').className=v==='weekly'?'ok':'ghost';
-  $('salesTabMonthly').className=v==='monthly'?'ok':'ghost';
-  $('salesTabYearly').className=v==='yearly'?'ok':'ghost';
+  $('salesTabDaily').className=v==='daily'?'ghost seg on':'ghost seg';
+  $('salesTabWeekly').className=v==='weekly'?'ghost seg on':'ghost seg';
+  $('salesTabMonthly').className=v==='monthly'?'ghost seg on':'ghost seg';
+  $('salesTabYearly').className=v==='yearly'?'ghost seg on':'ghost seg';
   renderSales(); };
 window.archiveNow=async()=>{ try{ const r=await api('/api/archive-now',{method:'POST'});
   toast(r.saved?'บันทึกยอดวันนี้แล้ว':'วันนี้ยังไม่มียอดขาย');
@@ -1800,7 +1800,7 @@ window.showDetail=async()=>{ hideAllPanels(); if(!$('detailDate').value){ const 
 window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
   renderDetailSummary(); renderDetail(); }catch(e){ toast(err(e)); } };
-window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab '+(b.dataset.t===v?'ok':'ghost')); renderDetail(); };
+window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab ghost seg'+(b.dataset.t===v?' on':'')); renderDetail(); };
 // Date-scoped header summary (varies with the selected date) — the day at a glance above the tabs.
 function renderDetailSummary(){
   const box=$('detailSummary'); if(!box) return;
@@ -1995,7 +1995,7 @@ async function loadExpiryBanner(){ const b=$('stkExpBanner'); if(!b) return;
 window.stkTab=(t)=>{ _stkTab=t;
   const panes={wh:'stkPaneWh',po:'stkPanePo',sup:'supBox',plan:'planBox'};
   const tabs={wh:'stkTabWh',po:'stkTabPo',sup:'stkTabSup',plan:'stkTabPlan'};
-  for(const k in panes){ const p=$(panes[k]); if(p) p.style.display=(k===t)?'':'none'; $(tabs[k]).className=(k===t)?'ok':'ghost'; }
+  for(const k in panes){ const p=$(panes[k]); if(p) p.style.display=(k===t)?'':'none'; $(tabs[k]).className=(k===t)?'ghost seg on':'ghost seg'; }
   if(t==='po') renderPoTab(); else if(t==='sup') renderSuppliers(); else if(t==='plan') loadPlan(); };
 // ---------- Stock count (นับสต๊อกเทียบของจริงก่อนสั่งซื้อ) ----------
 window.toggleCount=async()=>{ const box=$('countBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
@@ -2106,12 +2106,13 @@ window.renderPoTab=async()=>{ const box=$('stkPanePo'); box.innerHTML='<p class=
           ${o.status==='draft'?`<button class="ok" style="padding:5px 11px;font-size:12px" onclick="poReceive(${o.id})">รับของ</button>`:''}
         </div></div>`;}).join(''):'<p class="muted" style="text-align:center;padding:18px 0;font-size:12.5px">ยังไม่มีใบสั่งซื้อ — กด "สร้างใบสั่งซื้อ"</p>'}`; };
 // Purchasing report: how much was bought per month, per item, per supplier (date-range filtered).
-let _prTab='item';
+let _prTab='item', _prSel=null;   // _prSel = {from,to,label} จาก rangeBtn (null = ทั้งหมด)
 window.togglePoReport=()=>{ const box=$('poReport'); if(box.style.display!=='none'){ box.style.display='none'; return; } box.style.display=''; loadPoReport(); };
+window.prRangeApply=(f,t,l)=>{ _prSel={from:f,to:t,label:l}; loadPoReport(); };
 window.loadPoReport=async()=>{ const box=$('poReport'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังรวมยอด…</p>';
-  const f=$('pr_from')?$('pr_from').value:'', t=$('pr_to')?$('pr_to').value:'';
+  const f=_prSel?_prSel.from:'', t=_prSel?_prSel.to:'';
   let d; try{ d=await api('/api/purchase-report'+((f||t)?('?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)):'')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
-  const tabBtn=(k,l)=>`<button class="${_prTab===k?'ok':'ghost'}" style="padding:5px 12px;font-size:12px;border-radius:999px" onclick="_prTab='${k}';loadPoReport()">${l}</button>`;
+  const tabBtn=(k,l)=>`<button class="ghost seg${_prTab===k?' on':''}" style="flex:none" onclick="_prTab='${k}';loadPoReport()">${l}</button>`;
   let rows='';
   if(_prTab==='item') rows=(d.byItem||[]).length?d.byItem.map(r=>`<div class="row between" style="font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)} <span class="muted">${r.qty} ${esc(r.unit)} · ${r.times} ครั้ง</span></span><b>฿${r.spent}</b></div>`).join(''):'<p class="muted" style="font-size:12px">ไม่มีการซื้อในช่วงนี้</p>';
   else if(_prTab==='sup') rows=(d.bySupplier||[]).length?d.bySupplier.map(r=>`<div class="row between" style="font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(r.supplier)} <span class="muted">· ${r.times} ครั้ง</span></span><b>฿${r.spent}</b></div>`).join(''):'<p class="muted" style="font-size:12px">ไม่มีการซื้อในช่วงนี้</p>';
@@ -2120,11 +2121,8 @@ window.loadPoReport=async()=>{ const box=$('poReport'); box.innerHTML='<p class=
     <div class="row between" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
       <b style="color:var(--navy)">รายงานจัดซื้อ · รวม ฿${d.total}</b>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poReport').style.display='none'">ปิด</button></div>
-    <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <input id="pr_from" type="date" value="${f}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-      <span class="muted" style="font-size:12px">ถึง</span>
-      <input id="pr_to" type="date" value="${t}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-      <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="loadPoReport()">ดู</button>
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      ${rangeBtn('prRangeBtn',(_prSel&&_prSel.label)||'ทั้งหมด',prRangeApply)}
       <span class="muted" style="font-size:11px">${d.from} → ${d.to}</span>
     </div>
     <div class="row" style="gap:6px;margin-bottom:8px">${tabBtn('item','ต่อรายการ')}${tabBtn('sup','ต่อผู้ขาย')}${tabBtn('month','ต่อเดือน')}</div>
@@ -2376,17 +2374,20 @@ function cpCard(c){
     </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
 window.cpSyncType=()=>{ const w=$('cpMaxWrap'); if(w) w.style.display=($('cpType').value==='percent')?'':'none'; };
+// "ใครใช้ได้" ก็คุมช่องทางแจกด้วย: เลือกลิงก์ = ต้องกดรับก่อนใช้ — โชว์คำอธิบายทันทีที่เลือก
+window.cpSyncAud=()=>{ const h=$('cpAudHint'); if(h) h.style.display=($('cpAud').value==='claim')?'':'none'; };
 let _cpEditId=null;
 window.cpResetForm=()=>{ _cpEditId=null;
   ['cpCode','cpLabel','cpValue','cpMax','cpMin','cpFrom','cpExp','cpLimit'].forEach(id=>{const e=$(id); if(e) e.value='';});
   $('cpPer').value='1'; $('cpType').value='baht'; $('cpAud').value='all'; $('cpStack').checked=false; $('cpCode').disabled=false;
-  $('cpFormTitle').textContent='สร้างคูปองใหม่'; $('cpSaveBtn').textContent='สร้างคูปอง'; $('cpCancelBtn').style.display='none'; cpSyncType(); };
+  $('cpFormTitle').textContent='สร้างคูปองใหม่'; $('cpSaveBtn').textContent='สร้างคูปอง'; $('cpCancelBtn').style.display='none'; cpSyncType(); cpSyncAud(); };
 window.cpEdit=(id)=>{ const c=COUPONS.find(x=>x.id===id); if(!c) return; _cpEditId=id;
   $('cpCode').value=c.code; $('cpCode').disabled=true;   // the code is the customer-facing key — changing it would orphan printed campaigns
   $('cpLabel').value=c.label||''; $('cpType').value=c.disc_type; $('cpValue').value=c.disc_value;
   $('cpMax').value=c.max_disc||''; $('cpMin').value=c.min_spend||''; $('cpFrom').value=c.valid_from||''; $('cpExp').value=c.expires_at||'';
-  $('cpLimit').value=c.usage_limit||''; $('cpPer').value=c.per_customer; $('cpAud').value=c.audience||'all'; $('cpStack').checked=!!c.stackable;
-  $('cpFormTitle').textContent='แก้ไข: '+c.label; $('cpSaveBtn').textContent='บันทึกการแก้ไข'; $('cpCancelBtn').style.display=''; cpSyncType();
+  $('cpLimit').value=c.usage_limit||''; $('cpPer').value=c.per_customer;
+  $('cpAud').value=(c.distribution==='claim')?'claim':(c.audience||'all'); $('cpStack').checked=!!c.stackable;
+  $('cpFormTitle').textContent='แก้ไข: '+c.label; $('cpSaveBtn').textContent='บันทึกการแก้ไข'; $('cpCancelBtn').style.display=''; cpSyncType(); cpSyncAud();
   $('cpFormTitle').scrollIntoView({behavior:'smooth',block:'center'}); };
 // Claim campaign: quota is taken when the customer TAPS the link, so "50 สิทธิ์" is honest.
 window.setupClaim=async(id,isClaim,curLimit,curDays)=>{
@@ -2424,21 +2425,30 @@ window.copyClaimLink=(tok)=>{ if(!tok){ toast('ยังไม่มีลิง
 window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
 // One save path for both create and edit — same validation, same payload shape.
 window.addCoupon=async()=>{
+  // ใครใช้ได้ = ช่องทางแจกด้วย: 'claim' ไม่ใช่ audience จริง — แปลงเป็น all + เปิด/ปิดลิงก์รับหลังบันทึก
+  const aud=$('cpAud').value||'all';
+  const cur=_cpEditId?(COUPONS.find(x=>x.id===_cpEditId)||{}):{};
   const body={ code:$('cpCode').value.trim(), label:$('cpLabel').value.trim(),
     disc_type:$('cpType').value, disc_value:Number($('cpValue').value)||0,
     max_disc:($('cpType').value==='percent'?(Number($('cpMax').value)||0):0),
     min_spend:Number($('cpMin').value)||0,
     valid_from:$('cpFrom').value||null, expires_at:$('cpExp').value||null,
     usage_limit:Number($('cpLimit').value)||0, per_customer:Number($('cpPer').value)||0,
-    stackable:$('cpStack').checked?1:0, audience:$('cpAud').value||'all' };
+    stackable:$('cpStack').checked?1:0, audience:aud==='new'?'new':(aud==='claim'?(cur.audience||'all'):'all') };
   if(!body.code){ toast('ใส่โค้ดคูปอง'); return; }
   if(!(body.disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
   if(body.disc_type==='percent'&&body.disc_value>100){ toast('ส่วนลด % ต้องไม่เกิน 100'); return; }
   if(body.valid_from&&body.expires_at&&body.valid_from>body.expires_at){ toast('วันเริ่มต้องมาก่อนวันหมดอายุ'); return; }
   try{
-    if(_cpEditId){ await api('/api/coupons/'+_cpEditId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการแก้ไขแล้ว ✓'); }
-    else { await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('สร้างคูปองแล้ว ✓'); }
+    let saved;
+    if(_cpEditId){ saved=await api('/api/coupons/'+_cpEditId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการแก้ไขแล้ว ✓'); }
+    else { saved=await api('/api/coupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('สร้างคูปองแล้ว ✓'); }
+    const id=(saved&&saved.id)||_cpEditId, wasClaim=cur.distribution==='claim';
     cpResetForm(); loadCoupons();
+    if(aud==='claim'&&id&&!wasClaim) setupClaim(id,0,cur.issue_limit||0,cur.valid_days||0);           // ตั้งโควตา + สร้างลิงก์ต่อทันที
+    else if(aud!=='claim'&&wasClaim){                                                                  // เลิกใช้ลิงก์ → กลับเป็นโค้ดธรรมดา
+      await api('/api/coupons/'+id+'/claim-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enable:false})});
+      toast('ปิดลิงก์รับแล้ว — คูปองกลับมาใช้ด้วยโค้ดปกติ'); loadCoupons(); }
   }catch(e){ const m=err(e); toast(m==='code_exists'?'โค้ดนี้มีอยู่แล้ว':(m==='code_required'?'ใส่โค้ดคูปอง':m)); } };
 window.delCoupon=async(id)=>{ if(!(await appConfirm({title:'ลบคูปอง',message:'ลบคูปองนี้?',okText:'ลบ',cancelText:'ยกเลิก',danger:true}))) return;
   try{ await api('/api/coupons/'+id,{method:'DELETE'}); toast('ลบแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); } };
@@ -2483,8 +2493,7 @@ window.loadCash=async()=>{
   renderCash(); renderCashHist(true); };   // auto-open the latest round so reconciliation is visible
 // ---------- Cash-round history: daily Z-report list + monthly rollup ----------
 let CASHHIST=null, _chTab='day';
-window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ok':'ghost'; $('chTabMonth').className=t==='month'?'ok':'ghost';
-  $('chTabDay').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; $('chTabMonth').style.cssText='padding:5px 12px;font-size:12px;border-radius:999px'; renderCashHist(); };
+window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ghost seg on':'ghost seg'; $('chTabMonth').className=t==='month'?'ghost seg on':'ghost seg'; renderCashHist(); };
 const osFmt=(os)=> os===0?'<b style="color:#16a34a">พอดี ✓</b>':(os>0?`<b style="color:#16a34a">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
 function renderCashHist(autoExpand){ const box=$('cashHistList'); if(!box) return;
   if(!CASHHIST){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดไม่สำเร็จ</p>'; return; }
@@ -2993,7 +3002,8 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         ((r.discounts||0)>0?pl('− ส่วนลด / คูปอง',r.discounts,{neg:true}):'')+
         pl('ยอดขายสุทธิ',r.revenue,{bold:true})+
         sec('ต้นทุนขาย (COGS)')+
-        pl('− วัตถุดิบ',p.ingredient,{neg:true})+
+        pl(p.ingredientActual!=null?'− วัตถุดิบ (ตัดสต๊อกจริง)':'− วัตถุดิบ (ประมาณ % ยอดขาย)',p.ingredient,{neg:true})+
+        (p.ingredientActual!=null&&Math.abs(p.ingredientVariance||0)>=1?`<div class="row between" style="font-size:11px;color:${p.ingredientVariance>0?'#946f00':'#0f6e56'};padding:0 2px 4px"><span>เทียบแผน ${money(p.ingredientPlan)}</span><span>${p.ingredientVariance>0?'ใช้เกินแผน +':'ประหยัดกว่าแผน −'}${money(Math.abs(p.ingredientVariance))}</span></div>`:'')+
         pl('− แพ็กเกจ',p.packaging,{neg:true})+
         ((p.freight||0)>0?pl('− ค่าขนส่งวัตถุดิบ',p.freight,{neg:true}):'')+
         pl('กำไรขั้นต้น',p.grossProfit,{bold:true,accent:true,pct:p.grossMargin})+
@@ -3093,7 +3103,47 @@ function renderInsightsBody(d, box){
 // Owner-only on purpose — comments name staff and judge the shop, so they are not board material.
 // The API enforces it too (ownerOK); hiding the panel is only the second lock, never the only one.
 // ---------- รายงานคูปอง ----------
-let _crDays=30;
+// ---- ช่วงเวลาแบบกะทัดรัด (เจ้าของชอบ pattern "Select date range ▾"): ปุ่มเดียวบอกช่วงที่เลือก
+// เปิดป๊อปเล็กมี preset + กำหนดเอง — แทนแถวชิป + ช่องวันที่สองช่องที่กินพื้นที่หน้ารายงาน
+// DESIGN-SYSTEM §4 ยังคุมอยู่: เลือก preset ล้าง custom และกลับกัน เพราะทั้งคู่จบที่ from/to ชุดเดียว
+function bkkDate(off){ const d=new Date(Date.now()+7*3600e3); d.setUTCDate(d.getUTCDate()+(off||0)); return d.toISOString().slice(0,10); }
+const RP_ICON='<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+const RP_PRESETS=()=>[['วันนี้',bkkDate(0),bkkDate(0)],['เมื่อวาน',bkkDate(-1),bkkDate(-1)],
+  ['7 วันล่าสุด',bkkDate(-6),bkkDate(0)],['30 วันล่าสุด',bkkDate(-29),bkkDate(0)],
+  ['เดือนนี้',bkkDate(0).slice(0,8)+'01',bkkDate(0)],['1 ปีล่าสุด',bkkDate(-364),bkkDate(0)]];
+const _rpReg={};   // id → {label, fn(from,to,label)} — ปุ่มถูก render ใหม่ได้ registry อยู่ยาว
+window.rangeBtn=(id,label,fn)=>{ _rpReg[id]={label,fn};
+  return `<button id="${id}" class="ghost" style="padding:7px 12px;font-size:12.5px;font-weight:700" aria-haspopup="true" onclick="openRangePop('${id}')">${RP_ICON}${label} <span style="font-size:10px">▾</span></button>`; };
+window.openRangePop=(id)=>{
+  const reg=_rpReg[id], btn=$(id); if(!reg||!btn) return;
+  closeRangePop();
+  const pop=document.createElement('div'); pop.id='rangePop'; pop.className='rpop';
+  pop.innerHTML=RP_PRESETS().map(([l,f,t])=>`<button class="rpop-i${l===reg.label?' on':''}" onclick="rpPick('${id}','${f}','${t}','${l}')">${l}</button>`).join('')
+    +`<div style="border-top:1px solid var(--line);margin:6px 0 0;padding-top:8px">
+      <div class="muted" style="font-size:11.5px;font-weight:800;margin-bottom:5px">กำหนดเอง</div>
+      <div class="row" style="gap:5px;align-items:center">
+        <input id="rpFrom" type="date" aria-label="วันที่เริ่ม" style="flex:1;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+        <span class="muted" style="font-size:11px">ถึง</span>
+        <input id="rpTo" type="date" aria-label="วันที่สิ้นสุด" style="flex:1;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">
+      </div>
+      <button class="ok" style="width:100%;padding:9px;margin-top:7px;font-size:12.5px" onclick="rpCustom('${id}')">ใช้ช่วงนี้</button>
+    </div>`;
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(), w=252;
+  pop.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+'px';
+  pop.style.top=Math.max(8,Math.min(r.bottom+6,innerHeight-pop.offsetHeight-8))+'px';
+  setTimeout(()=>document.addEventListener('pointerdown',rpOutside,true),0);
+};
+function rpOutside(e){ const p=$('rangePop'); if(p&&!p.contains(e.target)) closeRangePop(); }
+window.closeRangePop=()=>{ const p=$('rangePop'); if(p) p.remove(); document.removeEventListener('pointerdown',rpOutside,true); };
+window.rpPick=(id,f,t,l)=>{ closeRangePop(); const reg=_rpReg[id]; if(!reg) return;
+  reg.label=l; const btn=$(id); if(btn) btn.innerHTML=RP_ICON+l+' <span style="font-size:10px">▾</span>';
+  reg.fn(f,t,l); };
+window.rpCustom=(id)=>{ const f=$('rpFrom').value, t=$('rpTo').value;
+  if(!f||!t){ toast('เลือกวันที่เริ่มและวันที่สิ้นสุด'); return; }
+  if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
+  rpPick(id,f,t,f+' → '+t); };
+let _crSel=null;   // {from,to,label} — ช่วงที่รายงานคูปองแสดงอยู่
 window.hideCouponRep=()=>{ $('couponRepCard').style.display='none'; $('dash').style.display=''; };
 // The hub: tab 0 = campaigns/templates, 1 = outstanding, 2 = report. Data loads per tab on open.
 window.showCouponHub=(tab=0)=>{ hideAllPanels(); closeAdmin();
@@ -3232,18 +3282,15 @@ window.chCancelCoupon=async(id,label)=>{
   try{ await api('/api/admin/customer-coupons/'+id+'/cancel',{method:'POST'}); toast('ยกเลิกคูปองแล้ว'); chLoadOut(0); }
   catch(e){ toast('ยกเลิกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
 };
-window.loadCouponRep=async(days)=>{
+window.crRangeApply=(f,t,l)=>loadCouponRep(f,t,l);
+window.loadCouponRep=async(a,b,l)=>{
   const body=$('crBody'); if(!body) return;
-  // A preset clears the custom dates, and picking dates clears the preset — otherwise the heading
-  // could say "30 วัน" while showing a hand-picked range.
-  let qs;
-  if(days){ _crDays=days; $('crFrom').value=''; $('crTo').value=''; qs='days='+days; }
-  else { const f=$('crFrom').value, t=$('crTo').value;
-    if(!f||!t){ toast('เลือกวันที่เริ่มและวันที่สิ้นสุด'); return; }
-    if(f>t){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
-    _crDays=0; qs='from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t); }
-  $('crRange').innerHTML=[[1,'วันนี้'],[7,'7 วัน'],[30,'30 วัน'],[365,'1 ปี']].map(([d,l])=>
-    `<button class="ghost seg${d===_crDays?' on':''}" onclick="loadCouponRep(${d})">${l}</button>`).join('');
+  // ปุ่มช่วงเวลาเดียว (rangeBtn) แทนชิป + ช่องวันที่เดิม — รับได้ทั้งเลขวัน (ผู้เรียกเก่า) และ from/to
+  if(typeof a==='number'&&!b){ _crSel={from:bkkDate(-(a-1)),to:bkkDate(0),label:a===1?'วันนี้':(a===365?'1 ปีล่าสุด':a+' วันล่าสุด')}; }
+  else if(a&&b){ _crSel={from:a,to:b,label:l||(a+' → '+b)}; }
+  else if(!_crSel){ _crSel={from:bkkDate(-29),to:bkkDate(0),label:'30 วันล่าสุด'}; }
+  const qs='from='+encodeURIComponent(_crSel.from)+'&to='+encodeURIComponent(_crSel.to);
+  $('crRange').innerHTML=rangeBtn('crRangeBtn',_crSel.label,crRangeApply);
   body.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
   let r; try{ r=await api('/api/reports/coupons?'+qs); }
   catch(e){ body.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">ดูรายงานนี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
@@ -4487,9 +4534,9 @@ window.printKitchen=async(tid)=>{
 };
 // Owner: toggle prepared-but-dormant features (receipt printing, SlipOK auto-verify).
 // LINE-push cost report: per-day counts for any date range (default = last 31 days).
-window.loadPushRange=async()=>{ const box=$('pushRangeBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
-  const f=$('pushFrom').value, t=$('pushTo').value;
-  let d; try{ d=await api('/api/push-stats/range'+((f||t)?('?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)):'')); }
+window.pushRangeApply=(f,t)=>loadPushRange(f,t);
+window.loadPushRange=async(f,t)=>{ const box=$('pushRangeBox'); box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
+  let d; try{ d=await api('/api/push-stats/range'+((f||t)?('?from='+encodeURIComponent(f||'')+'&to='+encodeURIComponent(t||'')):'')); }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+err(e)+'</p>'; return; }
   const rows=d.daily||[];
   box.innerHTML=`<div style="background:var(--surface,#f1f5f9);border-radius:10px;padding:9px 12px;margin-top:4px">
@@ -4527,6 +4574,17 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 12px" onclick="saveOwnerLine()">บันทึก</button></div>
       ${f.ownerLineId&&!/^U[0-9a-f]{32}$/i.test(f.ownerLineId)?`<div style="width:100%;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ ค่าที่บันทึกไว้ ("${esc(f.ownerLineId)}") ไม่ใช่ LINE userId — สรุปยอดจะส่งไม่ได้ กรุณาแก้เป็นรหัส U…</div>`:''}
       <div class="muted" style="width:100%;font-size:11.5px">หา userId ของตัวเอง: ทักแชท LINE ร้าน แล้วพิมพ์คำว่า <b>id</b> — ระบบจะตอบรหัส U… กลับมาให้คัดลอกมาวาง</div>
+      ${(d=>{const okc=b=>b?'#0f6e56':'#a32d2d';
+        const ln=(l,v,c)=>`<div class="row between" style="font-size:12px;padding:2px 0"><span class="muted">${l}</span><b style="color:${c||'var(--navy)'}">${v}</b></div>`;
+        return `<div style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px">
+        <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:4px">เช็กเงื่อนไขการส่งสรุปสิ้นวัน</div>
+        ${ln('สวิตช์สรุปอัตโนมัติ',f.autoSummary?'เปิด':'ปิด — สรุปจะไม่ส่งเอง',okc(f.autoSummary))}
+        ${ln('LINE userId เจ้าของ',d.hasId?(d.idValid?'ตั้งแล้ว ถูกต้อง':'รูปแบบผิด'):'ยังไม่ได้ตั้ง',okc(d.hasId&&d.idValid))}
+        ${ln('ระบบ LINE',d.lineOn?'เชื่อมอยู่':'ปิด (UAT ส่งจริงไม่ได้)',okc(d.lineOn))}
+        ${ln('ส่งสำเร็จล่าสุด',d.lastSentDay||'ยังไม่เคย',d.lastSentDay?'#0f6e56':'var(--muted)')}
+        ${d.lastPush?ln('ผลส่งครั้งล่าสุด',(d.lastPush.ok?'สำเร็จ':'ล้มเหลว — เช็กว่าเจ้าของเพิ่ม OA เป็นเพื่อนแล้ว และ id เป็นของ OA นี้')+' · '+String(d.lastPush.at||'').slice(0,16),okc(d.lastPush.ok)):''}
+        <div class="muted" style="font-size:11px;margin-top:3px">ส่งเมื่อ "ปิดรอบเงินสด" (วันละครั้ง) · ถ้าวันไหนไม่ได้ปิดรอบ ระบบส่งของเมื่อวานให้ตอนเที่ยงคืนแทน</div>
+      </div>`})(f.summaryDiag||{})}
       <button class="ghost" style="width:100%;padding:9px" onclick="testOwnerSummary()">${IC.chart}ส่งสรุปยอดวันนี้ทดสอบ</button>
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
@@ -4547,17 +4605,27 @@ window.showFeatures=async()=>{
     `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
       <div style="flex:1"><b>เพดานข้อความดึงลูกค้ากลับ/เดือน</b><div class="muted" style="font-size:12px;margin-top:2px">คุมต้นทุน LINE — ส่งได้ไม่เกินนี้ต่อเดือน (นับคูปองที่ออกให้)</div></div>
       <input id="winbackCapInp" type="number" min="0" value="${f.autoWinbackCap!=null?f.autoWinbackCap:100}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center" onchange="saveWinbackCap()"></div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span><div><b>พักสิทธิ์ลูกค้าไม่มารับ (no-show)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.noshow&&f.noshow.on?`เปิดอยู่ — ไม่มารับครบ ${f.noshow.limit} ครั้งภายใน ${f.noshow.windowDays} วัน จะกดคิว/สั่งผ่าน LINE ไม่ได้ชั่วคราว (ซื้อหน้าร้านได้ปกติ) · ครั้งเก่าหมดอายุเองเมื่อพ้นช่วงนับ · ยกโทษได้ที่หน้า "ลูกค้า"`:'ปิดอยู่ — เปิดเพื่อพักสิทธิ์สั่งผ่าน LINE ของลูกค้าที่กดคิวแล้วไม่มารับซ้ำๆ'}</div></div></div>
+        <button class="tgl ${f.noshow&&f.noshow.on?'on':'off'}" style="flex:none;margin-top:2px" aria-label="${f.noshow&&f.noshow.on?'ปิด':'เปิด'}พักสิทธิ์ no-show" onclick="toggleNoshow(${f.noshow&&f.noshow.on?0:1})"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">ครบ <input id="nsLimitInp" type="number" inputmode="numeric" min="1" max="10" value="${(f.noshow&&f.noshow.limit)||3}" style="width:64px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> ครั้ง</label>
+        <label class="muted" style="font-size:12.5px">ภายใน <input id="nsWinInp" type="number" inputmode="numeric" min="1" max="365" value="${(f.noshow&&f.noshow.windowDays)||30}" style="width:70px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> วัน</label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveNoshowRules()">บันทึก</button>
+      </div>
+    </div>`+
     (ps?`<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:6px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.chart}</span><div><b>ข้อความ LINE ที่ส่ง (ต้นทุน OA)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">LINE OA คิดเงินตามจำนวนข้อความ — เดือนนี้ส่งแล้ว <b style="color:var(--navy)">${(ps.monthly[0]&&ps.monthly[0].ym===new Date(Date.now()+7*3600e3).toISOString().slice(0,7))?ps.monthly[0].n:0}</b> ข้อความ · วันนี้ ${ps.today}</div></div></div>
       ${ps.byKind.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${ps.byKind.map(k=>`<span style="background:var(--surface,#f1f5f9);border-radius:999px;padding:3px 10px;font-size:11.5px;color:var(--navy)">${esc(k.label)} <b>${k.n}</b></span>`).join('')}</div>`:''}
       ${ps.monthly.length>1?`<div class="muted" style="font-size:11.5px">รายเดือน: ${ps.monthly.slice(0,6).map(m=>`${m.ym} = ${m.n}`).join(' · ')}</div>`:''}
       ${ps.monthly.length===0?'<div class="muted" style="font-size:11.5px">ยังไม่มีการส่งจริง (เริ่มนับจากนี้ · ระบบทดสอบไม่ถูกนับ)</div>':''}
-      <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;width:100%">
-        <input id="pushFrom" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-        <span class="muted" style="font-size:12px">ถึง</span>
-        <input id="pushTo" type="date" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">
-        <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="loadPushRange()">ดูรายวันตามช่วง</button>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;width:100%">
+        <span class="muted" style="font-size:12px;font-weight:700">ดูรายวัน:</span>
+        ${rangeBtn('pushRangeBtn','เลือกช่วงเวลา',window.pushRangeApply)}
       </div>
       <div id="pushRangeBox" style="width:100%"></div>
     </div>`:'')+
@@ -4596,6 +4664,12 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
+// พักสิทธิ์ no-show: toggle มีผลทันที (กติกา design system) · เกณฑ์ครั้ง/วัน บันทึกด้วยปุ่ม
+window.toggleNoshow=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noshowOn:!!on})});
+  toast(on?'เปิดพักสิทธิ์ no-show แล้ว':'ปิดพักสิทธิ์ no-show แล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.saveNoshowRules=async()=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({noshowLimit:Number($('nsLimitInp').value)||3,noshowWindow:Number($('nsWinInp').value)||30})});
+  toast('บันทึกเกณฑ์แล้ว ✓'); showFeatures(); }catch(e){ toast(err(e)); } };
 window.saveOwnerLine=async()=>{ const id=$('ownerLineIdInp').value.trim();
   // Catch the "Keys7" mistake before it silently swallows every summary: a LINE userId is always
   // 'U' + 32 hex chars. Empty is allowed (clears it).
@@ -4790,7 +4864,7 @@ window.showCustomers=async()=>{ closeAdmin(); hideAllPanels(); $('custListCard')
 window.hideCustomers=()=>{ $('custListCard').style.display='none'; $('dash').style.display=''; };
 function clCount(seg){ return seg==='all' ? CL.length : CL.filter(c=>c.segment===seg).length; }
 function renderCustSegs(){ $('clSegTabs').innerHTML=CL_SEGS.map(([k,label])=>
-  `<button class="${_clSeg===k?'ok':'ghost'}" style="padding:7px 12px;font-size:12.5px;border-radius:999px" onclick="clSetSeg('${k}')">${label} <b>${clCount(k)}</b></button>`).join(''); }
+  `<button class="ghost seg${_clSeg===k?' on':''}" style="flex:none" onclick="clSetSeg('${k}')">${label} <b>${clCount(k)}</b></button>`).join(''); }
 window.clSetSeg=(k)=>{ _clSeg=k; _clShown=CL_PAGE; renderCustSegs(); renderCustList(); };
 // Search + windowed rendering: thousands of customers stay smooth — filter first,
 // render CL_PAGE rows at a time with a "แสดงเพิ่ม" tail. Selection is key-based so it
@@ -4869,7 +4943,7 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
         <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
         <span style="min-width:0;overflow:hidden">
           <div style="font-weight:700;color:var(--navy);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))}</div>
-          <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}
+          <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}${c.noshows>0?` <span style="background:${c.noshowBlocked?'#fcebeb':'#fff7e0'};color:${c.noshowBlocked?'#a32d2d':'#946f00'};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px" title="ไม่มารับออเดอร์ ${c.noshows} ครั้งในช่วงที่นับ">ไม่มารับ ${c.noshows}${c.noshowBlocked?' · พักสิทธิ์':''}</span>${c.noshowBlocked?`<button class="ghost" onclick="clForgive('${c.key}')" style="padding:1px 8px;font-size:10px;margin-left:4px">ยกโทษ</button>`:''}`:''}
         </span>
       </label>
       <span class="cl-num" data-l="มา" style="font-size:12.5px">${c.visits}</span>
@@ -4880,6 +4954,11 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+((_clQ||_clFOn())?'ไม่พบลูกค้าที่ตรงกับตัวกรอง':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>';
   if(fkey){ const el=$('clList').querySelector('[data-f="'+fkey+'"]'); if(el){ el.focus(); if(fpos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(fpos,fpos); }catch(e){} } } } }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
+// ยกโทษ no-show: นับใหม่จากตอนนี้ (ประวัติไม่ถูกลบ) — ลูกค้ากลับมาสั่งผ่าน LINE ได้ทันที
+window.clForgive=async(key)=>{
+  if(!(await appConfirm({title:'ยกโทษลูกค้าไม่มารับ',message:'เริ่มนับครั้งใหม่จากตอนนี้ — ลูกค้าจะกลับมากดคิว/สั่งผ่าน LINE ได้ทันที',okText:'ยกโทษ',cancelText:'ยกเลิก'}))) return;
+  try{ await api('/api/crm/customers/forgive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); toast('ยกโทษแล้ว ✓'); showCustomers(); }
+  catch(e){ toast(err(e)); } };
 // PDPA right-to-erasure. Anonymises the person; the SALES stay, because those are the shop's own
 // accounting records. Two-step confirm because it cannot be undone.
 window.clForget=async(key,name)=>{

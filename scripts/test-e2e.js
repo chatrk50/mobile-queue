@@ -1016,6 +1016,14 @@ console.log('\n== Coupon claim links ==');
   const want = db.prepare("SELECT date(datetime('now','+7 hours'),'+7 days') d").get().d;
   ok(exp === want, `INVARIANT valid_days sets expiry relative to the claim (${exp} vs ${want})`);
   ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
+  // Quota integrity: the raw code path must be CLOSED for claim-link coupons. Otherwise anyone who
+  // saw the code bypasses the quota, and a claimer double-dips (wallet voucher + code discount).
+  const vClaim = Q.validateCoupon('CLAIM50', k(1), 100);
+  ok(!vClaim.ok && /กดรับผ่านลิงก์/.test(vClaim.reason || ''), `INVARIANT a claim-link coupon is refused via the raw code path (${vClaim.reason})`);
+  ok(!Q.availableCoupons('Ustranger00000000000000000000001', 100).some((x) => x.code === 'CLAIM50'),
+    'INVARIANT a claim-link coupon is not advertised to customers who have not claimed it');
+  ok(Q.availableCoupons(k(1), 100).some((x) => x.couponKind === 'claim'),
+    'INVARIANT the claimer still sees the claimed voucher in their own coupon list');
 }
 
 // ---- Coupon scoping (specific menu items) + audience (new customers only) ----
@@ -1053,7 +1061,9 @@ console.log('\n== Coupon scoping + audience ==');
   const oldKey = 'Uoldcustomer0000000000000000001';
   db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าเก่า')`).run(oldKey);
   { const tk = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status) VALUES (1,1,0,'OC',?, 'served')`).run(oldKey).lastInsertRowid;
-    db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 50, 'paid', datetime('now'), 1)`).run(tk); }
+    // fixture orders must carry items too — the finance tie-out asserts total == Σitems for every paid order
+    const oid = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 50, 'paid', datetime('now'), 1)`).run(tk).lastInsertRowid;
+    db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบลูกค้าเก่า', 50, 1)`).run(oid); }
   const vOld = Q.validateCoupon('NEWONLY', oldKey, 100);
   ok(!vOld.ok && /ลูกค้าใหม่/.test(vOld.reason), `INVARIANT a returning customer is refused (${vOld.reason})`);
   ok(Q.validateCoupon('NEWONLY', null, 100).ok === false, 'INVARIANT an unidentified customer cannot claim a new-only coupon');
@@ -1065,9 +1075,11 @@ console.log('\n== Customer ratings + Excel export ==');
   const rkey = 'Urating0000000000000000000001';
   db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าให้ดาว')`).run(rkey);
   const t1 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,801,'RT801',?, 'served','ลูกค้าให้ดาว', 5)`).run(rkey);
-  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t1.lastInsertRowid);
+  const rvo1 = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t1.lastInsertRowid).lastInsertRowid;
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบรีวิว', 60, 1)`).run(rvo1);
   const t2 = db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, customer_name, rating) VALUES (1,1,802,'RT802',?, 'served','ลูกค้าให้ดาว', 3)`).run(rkey);
-  db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t2.lastInsertRowid);
+  const rvo2 = db.prepare(`INSERT INTO orders (ticket_id, total, payment_status, paid_at, branch_id) VALUES (?, 60, 'paid', datetime('now'), 1)`).run(t2.lastInsertRowid).lastInsertRowid;
+  db.prepare(`INSERT INTO order_items (order_id, name, price, qty) VALUES (?, 'เมนูทดสอบรีวิว', 60, 1)`).run(rvo2);
   const rc = Q.customersList().find((c) => c.key === rkey);
   ok(rc && rc.ratingAvg === 4 && rc.ratingCount === 2, `INVARIANT a customer's given-rating avg + count are in the list (avg ${rc && rc.ratingAvg}, n ${rc && rc.ratingCount})`);
   const { buildCustomersWorkbook } = await import('../server/report-excel.js');
@@ -1754,6 +1766,89 @@ console.log('\n== Review: reasons + comment ==');
 
   for (const id of [tLow, tHigh, tLong, tBare]) {
     db.prepare('DELETE FROM tickets WHERE id=?').run(id);
+  }
+}
+
+// ---- No-show strikes: repeat no-shows lose LINE self-service until forgiven / aged out ----
+console.log('\n== No-show strikes ==');
+{
+  const nk = 'Unoshow00000000000000000000000001';
+  db.prepare(`INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?, 'ลูกค้าไม่มารับ')`).run(nk);
+  for (let i = 0; i < 3; i++)
+    db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, closed_at) VALUES (1,1,0,'NS${i}',?, 'no_show', datetime('now'))`).run(nk);
+  ok(Q.noshowStrikes(nk).strikes === 3, 'INVARIANT strikes are derived live from no_show tickets');
+  ok(Q.noshowStrikes(nk).blocked === false, 'INVARIANT with the feature OFF nobody is blocked');
+  Q.setNoshowEnabled(true);
+  ok(Q.noshowStrikes(nk).blocked === true, 'INVARIANT reaching the limit inside the window blocks LINE self-service');
+  let err1 = null; try { Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk }); } catch (e) { err1 = e.message; }
+  ok(err1 === 'noshow_blocked', `INVARIANT taking a queue number is refused (${err1})`);
+  const nsDrink = db.prepare("SELECT name, price FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1").get();
+  let err2 = null; try { Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'customer', lineUserId: nk }); } catch (e) { err2 = e.message; }
+  ok(err2 === 'noshow_blocked', `INVARIANT self-ordering is refused (${err2})`);
+  const co = Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'cashier' });
+  ok(!!co.ticket, 'INVARIANT the counter still sells — cashier orders are never blocked');
+  db.prepare('DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE ticket_id=?)').run(co.ticket.id);
+  db.prepare('DELETE FROM orders WHERE ticket_id=?').run(co.ticket.id);
+  db.prepare('DELETE FROM tickets WHERE id=?').run(co.ticket.id);
+  const fg = Q.forgiveNoshow(nk);
+  ok(fg.strikes === 0 && fg.blocked === false, 'INVARIANT forgiveness restarts the count');
+  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE line_user_id=? AND status='no_show'").get(nk).n === 3,
+    'INVARIANT forgiveness deletes NOTHING — only the counting restarts');
+  const t2 = Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk });
+  ok(!!t2.ticket, 'INVARIANT a forgiven customer can take a queue number again');
+  db.prepare('DELETE FROM tickets WHERE id=?').run(t2.ticket.id);
+  ok((Q.customersList().find((c) => c.key === nk) || {}).noshows === 0, 'INVARIANT the CRM list reflects the restarted count');
+  Q.setNoshowEnabled(false);
+}
+
+// ---- Owner-summary: past-day anchoring (midnight fallback) + diagnosis payload ----
+console.log('\n== Owner summary fallback + diag ==');
+{
+  const yd = db.prepare("SELECT date(datetime('now','+7 hours'),'-1 day') d").get().d;
+  const txt = Q.composeDailySummary(null, yd);
+  const bud = Number(yd.slice(0, 4)) + 543;
+  ok(txt.includes(String(bud)) && txt.includes(` ${Number(yd.slice(8, 10))} `),
+    'INVARIANT a backfilled summary is anchored to the requested Bangkok day, not today');
+  const sd = Q.summaryDiag();
+  ok(typeof sd.autoOn === 'boolean' && 'hasId' in sd && 'idValid' in sd && 'lineOn' in sd && 'lastSentDay' in sd,
+    'INVARIANT summaryDiag exposes every gate in the delivery chain');
+}
+
+// ---- Finance cross-check: the report must tie out against INDEPENDENT sums over the raw tables ----
+console.log('\n== Finance report ties out ==');
+{
+  const rep = Q.dailyReport();
+  const p = rep.pnl;
+  const rr2 = (x) => Math.round(x * 100) / 100;
+  const near2 = (a, b) => Math.abs(a - b) < 0.01;
+  // 1) Revenue = independent SUM over orders (paid today, net of discount)
+  const ind = db.prepare(`SELECT COALESCE(SUM((SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id)),0) gross,
+                                 COALESCE(SUM(o.discount),0) disc
+                            FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get();
+  ok(near2(rep.grossSales, ind.gross), `INVARIANT report gross = SUM(order_items) of paid-today orders (${rep.grossSales} vs ${rr2(ind.gross)})`);
+  ok(near2(rep.revenue, ind.gross - ind.disc), `INVARIANT report net revenue = gross − discounts (${rep.revenue} vs ${rr2(ind.gross - ind.disc)})`);
+  // 2) Tender reconciliation covers the same money: sum over every tender line = paid-today net
+  const tr = Q.tenderRecon();
+  const bad = db.prepare(`SELECT o.id, o.ticket_id, o.total, COALESCE(o.discount,0) disc, o.payment_method,
+        (SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id) items
+      FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours')=date('now','+7 hours')
+        AND ABS(o.total - (SELECT COALESCE(SUM(oi.qty*oi.price),0) FROM order_items oi WHERE oi.order_id=o.id)) > 0.005`).all();
+  if (bad.length) console.log('   total≠items orders:', JSON.stringify(bad));
+  ok(near2(tr.total.amount, ind.gross - ind.disc), `INVARIANT tender reconciliation total = the same net takings (${tr.total.amount} vs ${rr2(ind.gross - ind.disc)})`);
+  ok(near2(tr.total.amount, tr.lines.reduce((s, l) => s + l.amount, 0)), 'INVARIANT the recon total equals the sum of its own lines');
+  // 3) P&L arithmetic identities — every subtotal derives from its parts, no hidden drift
+  ok(near2(p.cogs, p.ingredient + p.packaging + p.freight), 'INVARIANT COGS = ingredient + packaging + freight');
+  ok(near2(p.grossProfit, rep.revenue - p.cogs), 'INVARIANT gross profit = revenue − COGS');
+  ok(near2(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily - p.drawerPayOut), 'INVARIANT EBITDA = GP − waste − opex − drawer pay-outs');
+  ok(near2(p.netProfit, p.preTax - p.incomeTax), 'INVARIANT net profit = pre-tax − income tax');
+  // 4) Actual-over-plan: with recipes deducting stock in this suite, the P&L ingredient line must
+  //    BE the stock ledger figure (not the % guess), and the variance must be the difference.
+  const ca = Q.cogsForDay().cogsActual;
+  if (ca > 0) {
+    ok(near2(p.ingredient, ca), `INVARIANT P&L ingredient uses REAL stock-ledger COGS when it exists (${p.ingredient} vs ${ca})`);
+    ok(near2(p.ingredientVariance, ca - p.ingredientPlan), 'INVARIANT the plan-vs-actual variance is surfaced honestly');
+  } else {
+    ok(near2(p.ingredient, p.ingredientPlan), 'INVARIANT with no stock moves the P&L keeps the planned % figure');
   }
 }
 
