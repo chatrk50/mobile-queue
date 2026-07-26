@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, lastPushError, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -253,10 +253,23 @@ export function setRating(ticketId, stars, opts = {}) {
  * The star distribution already exists in customerInsights(); this answers the next question —
  * WHY. Tag counts are split by band so "รอนาน ×7" is never averaged against "รวดเร็ว ×20".
  */
-export function ratingFeedback({ days = 30, limit = 200 } = {}) {
+export function ratingFeedback({ days = 30, from = null, to = null, limit = 500 } = {}) {
   const d = Math.max(1, Math.min(365, Math.round(Number(days) || 30)));
-  const lim = Math.max(1, Math.min(500, Math.round(Number(limit) || 200)));
-  const rows = db.prepare(`
+  const lim = Math.max(1, Math.min(1000, Math.round(Number(limit) || 500)));
+  const isDay = (x) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  // An explicit from–to wins over the day count, so the compact range picker (DESIGN-SYSTEM §4)
+  // drives this report the same way it drives every other one.
+  const custom = isDay(from) && isDay(to) && from <= to;
+  const rows = custom
+    ? db.prepare(`
+    SELECT id, code, rating, rating_tags AS tags, rating_comment AS comment,
+           COALESCE(rated_at, created_at) AS at, customer_name AS name
+      FROM tickets
+     WHERE rating IS NOT NULL
+       AND date(COALESCE(rated_at, created_at), '+7 hours') BETWEEN ? AND ?
+     ORDER BY COALESCE(rated_at, created_at) DESC
+     LIMIT ?`).all(from, to, lim)
+    : db.prepare(`
     SELECT id, code, rating, rating_tags AS tags, rating_comment AS comment,
            COALESCE(rated_at, created_at) AS at, customer_name AS name
       FROM tickets
@@ -267,24 +280,35 @@ export function ratingFeedback({ days = 30, limit = 200 } = {}) {
 
   const label = (band, id) => (RATING_TAGS[band].find((x) => x.id === id) || {}).label || id;
   const counts = { low: {}, high: {} };
-  let sum = 0, withComment = 0;
+  // bandN = how many reviews are IN each band. Without it a tag count is unreadable: "อร่อย 3"
+  // could be 3 of 3 happy customers or 3 of 300, and the old bar (scaled to the largest tag) drew
+  // every equal count as a full bar — which is exactly what made the owner ask "real?".
+  const bandN = { low: 0, high: 0 };
+  const stars = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let sum = 0, withComment = 0, withTags = 0;
   const items = rows.map((r) => {
     const band = ratingBand(r.rating);
     const tags = (r.tags || '').split(',').filter(Boolean);
     for (const t of tags) counts[band][t] = (counts[band][t] || 0) + 1;
+    bandN[band] += 1;
+    if (stars[r.rating] != null) stars[r.rating] += 1;
     sum += r.rating;
     if (r.comment) withComment += 1;
+    if (tags.length) withTags += 1;
     return { id: r.id, code: r.code, rating: r.rating, at: r.at, name: r.name || null,
              comment: r.comment || null, tags: tags.map((t) => ({ id: t, label: label(band, t) })) };
   });
   const top = (band) => Object.entries(counts[band])
-    .map(([id, n]) => ({ id, label: label(band, id), n }))
+    .map(([id, n]) => ({ id, label: label(band, id), n, of: bandN[band],
+      pct: bandN[band] ? Math.round((n / bandN[band]) * 100) : 0 }))
     .sort((a, b) => b.n - a.n);
   return {
-    days: d,
+    days: custom ? null : d,
+    from: custom ? from : db.prepare("SELECT date('now','+7 hours',?) d").get(`-${d - 1} days`).d,
+    to: custom ? to : db.prepare("SELECT date('now','+7 hours') d").get().d,
     count: items.length,
     avg: items.length ? Math.round((sum / items.length) * 10) / 10 : null,
-    withComment,
+    withComment, withTags, stars, bandN,
     lowTags: top('low'),
     highTags: top('high'),
     items,
@@ -2755,7 +2779,23 @@ export async function notifyOwner(text, kind = 'owner') {
   if (!text) return { sent: false, reason: 'no_text' };
   if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
   const ok = await pushText(id, text, kind);
-  return { sent: !!ok, reason: ok ? 'sent' : 'push_failed' };
+  // Remember WHY it failed so the ⚙ panel can name the cause instead of saying "ล้มเหลว".
+  try {
+    const e = ok ? null : lastPushError();
+    setSetting('owner:last_push_error', e ? JSON.stringify(e) : '');
+  } catch { /* never block on diagnostics */ }
+  return { sent: !!ok, reason: ok ? 'sent' : 'push_failed', error: ok ? null : lastPushError() };
+}
+/** Turn a raw LINE failure into the single sentence that tells the owner what to DO. */
+export function pushErrorHint(err) {
+  if (!err) return null;
+  const s = Number(err.status) || 0, d = String(err.detail || '');
+  if (/not.*friend|blocked|ไม่ได้เป็นเพื่อน/i.test(d) || s === 403)
+    return 'บัญชี LINE นี้ยังไม่ได้เพิ่มร้านเป็นเพื่อน (หรือบล็อกไว้) — เพิ่มเพื่อนแล้วลองใหม่';
+  if (s === 400) return 'LINE ไม่รู้จัก userId นี้ในบัญชี OA ของร้าน — รหัส U… ต้องได้มาจากการทักแชทกับ OA ร้านนี้เท่านั้น (รหัสจาก OA อื่น/ระบบทดสอบใช้ไม่ได้)';
+  if (s === 401 || s === 403) return 'Token ของ LINE OA หมดอายุหรือไม่ถูกต้อง — ต้องออก Channel access token ใหม่';
+  if (s === 429) return 'ส่งเกินโควตาข้อความของ LINE OA เดือนนี้';
+  return null;
 }
 /** Compose a short Thai end-of-day summary. dateStr (YYYY-MM-DD) = summarize THAT Bangkok day —
  *  used by the midnight fallback, which reports on yesterday. Default = today. */
@@ -3079,9 +3119,12 @@ export function summaryDiag() {
   let lastPush = null;
   try { lastPush = id ? db.prepare("SELECT at, ok FROM push_log WHERE user_id=? AND kind='summary' ORDER BY id DESC LIMIT 1").get(id) || null : null; }
   catch { /* push_log may not exist */ }
+  let lastError = null;
+  try { const raw = getSetting('owner:last_push_error', ''); lastError = raw ? JSON.parse(raw) : null; } catch { lastError = null; }
   return {
     autoOn: autoSummaryEnabled(), hasId: !!id, idValid: id ? validOwnerLineId(id) : false,
     lineOn: LINE_ENABLED, lastSentDay: getSetting('summary:last_sent', '') || null, lastPush,
+    lastError, hint: pushErrorHint(lastError),
   };
 }
 /** Cups (drink stamps) needed to earn one free drink. */

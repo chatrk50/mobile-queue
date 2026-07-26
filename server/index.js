@@ -807,7 +807,7 @@ app.post('/api/admin/customer-coupons/:id/cancel', (req, res) => {
 // and its staff; they are not board/cashier material, so this sits behind ownerOK like the backup.
 app.get('/api/reports/ratings', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.ratingFeedback({ days: req.query.days, limit: req.query.limit })); }
+  try { res.json(Q.ratingFeedback({ days: req.query.days, from: req.query.from, to: req.query.to, limit: req.query.limit })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer declares they paid by PromptPay (no PIN, ownership checked) -> 'claimed',

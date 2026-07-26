@@ -29,14 +29,24 @@ export async function pushText(userId, text, kind = 'other') {
   }
   try {
     await client.pushMessage({ to: userId, messages: [{ type: 'text', text }] });
+    _lastPushError = null;
     logPush(userId, kind, true);
     return true;
   } catch (err) {
-    console.error('[LINE] push failed:', err?.statusMessage || err?.message || err);
+    // Keep WHAT LINE actually said. "ล้มเหลว" with no reason sent the owner guessing between four
+    // very different causes (not a friend / id from another provider / expired token / quota).
+    const status = err?.status || err?.statusCode || err?.originalError?.response?.status || null;
+    const detail = err?.body?.message || err?.originalError?.response?.data?.message
+      || err?.statusMessage || err?.message || String(err);
+    _lastPushError = { status, detail: String(detail).slice(0, 300), at: new Date().toISOString() };
+    console.error('[LINE] push failed:', status || '', detail);
     logPush(userId, kind, false);
     return false;
   }
 }
+let _lastPushError = null;
+/** What LINE said about the most recent failed push (null once one succeeds). */
+export function lastPushError() { return _lastPushError; }
 
 /** Build a LINE message: a Flex card (text + a tappable button that hides the URL
  *  behind a label) when a link is given; otherwise a plain text message. */
