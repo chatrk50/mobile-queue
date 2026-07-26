@@ -1736,7 +1736,27 @@ window.openCoupon=async(mode)=>{
   const cartLines = _couponMode==='browse' ? null : cart.map(e=>({name:e.name, price:e.price, qty:e.qty||1}));
   try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total='+net+(cartLines?('&items='+encodeURIComponent(JSON.stringify(cartLines))):'')); _availCoupons=r.coupons||[]; }
   catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;color:var(--danger);padding:16px 0">โหลดคูปองไม่สำเร็จ</p>'; return; }
-  if(!_availCoupons.length){ box.innerHTML='<p class="muted" style="font-size:13px;text-align:center;padding:20px 0">ยังไม่มีคูปองให้ใช้ตอนนี้</p>'; return; }
+  // Empty state with a real illustration (FoodStory-style), not a bare line of text — the page
+  // should still look designed when there is nothing in it.
+  if(!_availCoupons.length){
+    box.innerHTML=`<div style="text-align:center;padding:52px 0 36px">
+      <svg viewBox="0 0 140 100" style="width:132px;height:94px" aria-hidden="true">
+        <g fill="none" stroke="#d5dbe3" stroke-width="3" stroke-linecap="round">
+          <circle cx="72" cy="50" r="38" fill="#eef1f5" stroke="none"/>
+          <rect x="30" y="22" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="36" y="27" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="50" y="28" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <rect x="52" y="46" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="58" y="51" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="72" y="52" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <rect x="34" y="70" width="56" height="18" rx="6" fill="#fff" stroke="none"/><rect x="40" y="75" width="9" height="8" rx="2" fill="#dfe4ea" stroke="none"/><rect x="54" y="76" width="26" height="3" rx="1.5" fill="#e6eaef" stroke="none"/>
+          <text x="104" y="30" font-size="22" font-weight="700" fill="#ccd3dc" stroke="none">?</text>
+          <text x="26" y="60" font-size="17" font-weight="700" fill="#d5dbe3" stroke="none">?</text>
+          <circle cx="106" cy="74" r="12"/><path d="M115 83l9 9"/>
+        </g>
+      </svg>
+      <div style="font-size:15.5px;font-weight:700;color:#98a2b0;margin-top:10px">ไม่พบคูปองที่ใช้ได้</div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">คูปองที่ได้รับจากร้านจะมาแสดงที่นี่</div>
+      ${_couponMode==='browse'?'<button class="ok" style="min-width:200px;margin-top:18px" onclick="closeCoupon()">ไปสั่งเมนู</button>':''}
+    </div>`;
+    return;
+  }
   const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   box.innerHTML = clr + _availCoupons.map(c=>{
     const isReward = c.disc_type==='reward';
@@ -1760,13 +1780,27 @@ window.openCoupon=async(mode)=>{
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
     const meta = isReward
-      ? ((c.couponKind==='birthday' ? '🎂 ของขวัญวันเกิด' : c.couponKind==='winback' ? '💛 ของขวัญจากร้าน' : 'จากการสะสมครบ') + (c.expires_at?(' · ใช้ได้ถึง '+c.expires_at):''))
-      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'') + (c.expires_at?((c.min_spend>0?' · ':'')+'ถึง '+c.expires_at):''));
-    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':(isReward?'#f3cb55':'var(--line)')};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':(isReward?'#fffbea':'#fff')};${c.usable?'cursor:pointer':'opacity:.5'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
-      <span style="min-width:0;display:block">
-        <div style="font-weight:800;color:var(--navy);font-size:14.5px;line-height:1.3">${isReward?'🎁 ':''}${esc(c.label)}</div>
+      ? ((c.couponKind==='birthday' ? 'ของขวัญวันเกิด' : c.couponKind==='winback' ? 'ของขวัญจากร้าน' : 'จากการสะสมครบ'))
+      : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ')+' · โค้ด '+esc(c.code));
+    // Left art tile (FoodStory-style thumbnail): the VALUE is the picture. Kind sets the colour —
+    // birthday pink, shop-gift warm yellow, earned-reward mint, code coupons brand teal.
+    const kindTile = isReward
+      ? (c.couponKind==='birthday' ? ['#fdeef3','#f3b8cd','#b0446c','🎂'] : c.couponKind==='winback' ? ['#fff7dc','#f3cb55','#8a5c00','💛'] : ['#e4f7f0','#a7e8d2','#0f7a5f','🎁'])
+      : ['#e6f6f9','#a8dfe9','#0e7d95','🎟️'];
+    const big = isReward ? 'ฟรี' : (c.disc_type==='percent' ? (c.disc_value+'%') : ('฿'+c.disc_value));
+    const tile = `<div style="flex:none;width:84px;height:84px;border-radius:14px;background:${kindTile[0]};border:1px solid ${kindTile[1]};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+        <div style="font-size:17px;line-height:1">${kindTile[3]}</div>
+        <div style="font-size:${big.length>3?'17':'20'}px;font-weight:900;color:${kindTile[2]};line-height:1.15">${big}</div>
+        <div style="font-size:9.5px;font-weight:700;color:${kindTile[2]};opacity:.75">${isReward?('ไม่เกิน ฿'+cap):'ส่วนลด'}</div>
+      </div>`;
+    return `<div style="display:flex;gap:12px;align-items:center;background:${sel?'#e9f8fb':'#fff'};border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:16px;padding:11px 12px;margin-bottom:10px;${c.usable?'cursor:pointer':'opacity:.55'}" ${c.usable?`onclick="selectCoupon('${c.code}')"`:''}>
+      ${tile}
+      <span style="flex:1;min-width:0;display:block">
+        <div style="font-weight:800;color:var(--navy);font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(c.label)}</div>
         <div style="color:var(--accent2);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3">${discLine}</div>
-        <div class="muted" style="font-size:11.5px;margin-top:3px">${isReward?meta:(esc(c.code)+(meta?(' · '+meta):''))}${c.usable?'':(' · '+esc(c.reason||'ใช้ไม่ได้'))}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:3px;line-height:1.4">${meta}</div>
+        ${c.expires_at?`<div class="muted" style="font-size:11.5px;margin-top:1px"><svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;fill:none;stroke:currentColor;stroke-width:2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ใช้ได้ถึง ${c.expires_at}</div>`:''}
+        ${c.usable?'':`<div style="font-size:11px;color:#b3283a;font-weight:700;margin-top:3px">${esc(c.reason||'ใช้ไม่ได้')}</div>`}
       </span>
       <svg viewBox="0 0 24 24" style="width:22px;height:22px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('');
