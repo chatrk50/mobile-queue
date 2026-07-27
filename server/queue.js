@@ -2883,6 +2883,14 @@ export async function maybeAutoSummary(branchId = null, dateStr = null) {
   if (r.sent) setSetting('summary:last_sent', day);
   return r;
 }
+/** Cashier-safe availability flip: ONLY the active flag, never price/name/recipe. The till needs
+ *  to pull a sold-out drink off the menu immediately; editing what a drink COSTS stays manager+. */
+export function setMenuAvailable(id, on) {
+  const it = db.prepare('SELECT id, name, active FROM menu_items WHERE id=?').get(Number(id));
+  if (!it) throw new Error('item_not_found');
+  db.prepare('UPDATE menu_items SET active=? WHERE id=?').run(on ? 1 : 0, it.id);
+  return { id: it.id, name: it.name, active: on ? 1 : 0 };
+}
 // ---------- No-show strikes (default OFF): ลูกค้าที่กดคิว/สั่งแล้วไม่มารับซ้ำๆ ----------
 // Strikes are DERIVED from tickets (status='no_show') inside a sliding window — nothing to keep in
 // sync. Blocking applies ONLY to LINE self-service (queue + self-order); the counter always sells.

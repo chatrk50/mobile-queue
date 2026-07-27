@@ -537,6 +537,31 @@ app.post('/api/pending/sweep', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---------- ตั้งค่าเร็วของหน้าร้าน (cashier tier) ----------
+// Three things a till legitimately owns during a shift: stop taking online orders, pull a sold-out
+// drink off the menu, and open the drawer for the day. Deliberately NARROW endpoints rather than
+// lowering the manager gate on /api/admin/features, /api/menu/:id or /api/cash/*: a cashier can
+// flip availability but never a price, and can open a round but never close/count one.
+app.get('/api/shift/state', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  let cash = null; try { cash = Q.currentCashSession(cashBranch(req)); } catch { /* optional */ }
+  res.json({ onlineOrders: Q.onlineOrdersEnabled(), ordering: Q.orderingPaused(),
+    cashOpen: !!(cash && cash.open), openedAt: cash?.session?.opened_at || null,
+    items: Q.listMenu().map((m) => ({ id: m.id, name: m.name, category: m.category, active: m.active ? 1 : 0 })) });
+});
+app.post('/api/shift/online', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.setOnlineOrders(!!req.body?.on)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/shift/menu-available', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.setMenuAvailable(req.body?.id, !!req.body?.on)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/shift/cash-open', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.openCashSession(cashBranch(req), { actorId: req.staff?.id || null, openFloat: req.body?.openFloat })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // "ตรวจการเชื่อมต่อ LINE": which OA the server's token belongs to + whether the saved owner id is
 // a user of that same OA. Owner-only, read-only, and the token itself never leaves the server.
 app.get('/api/admin/line-check', async (req, res) => {
