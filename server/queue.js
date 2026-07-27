@@ -85,10 +85,11 @@ export function issueTicket({ storeId, zoneId, partySize = 1, lineUserId = null,
   if (lineUserId) {
     const existing = findActiveTicket(zoneId, lineUserId);
     if (existing) return { ticket: existing, ahead: aheadCount(existing) };
-    // No-show strikes: repeat no-shows lose LINE self-service until the strikes age out or the
-    // counter forgives. Placed AFTER the existing-ticket check so a held ticket is never stranded.
+    // No-show strikes: only the BLOCKED tier loses the queue button. The prepay tier still gets a
+    // number — it just has to pay first, which createOrder enforces. Placed AFTER the existing-ticket
+    // check so a held ticket is never stranded.
     const ns = noshowStrikes(lineUserId);
-    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.limit; throw e; }
+    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.blockLimit; throw e; }
   }
 
   const tx = db.transaction(() => {
@@ -498,7 +499,10 @@ export function customersList() {
     const segment = (r.visits <= 1) ? 'new' : (days == null || days > 60) ? 'lost' : (days > 30) ? 'at_risk' : 'regular';
     return { ...r, spend: r2(r.spend), daysSince: days, segment, canPush: String(r.key || '').startsWith('U'),
       ratingAvg: r.ratingAvg != null ? Math.round(r.ratingAvg * 10) / 10 : null, ratingCount: r.ratingCount || 0,
-      noshows: r.noshows || 0, noshowBlocked: nsOn && (r.noshows || 0) >= nsRules.limit };
+      noshows: r.noshows || 0,
+      noshowTier: !nsOn ? null : ((r.noshows || 0) >= nsRules.blockLimit ? 'blocked'
+        : ((r.noshows || 0) >= nsRules.limit ? 'prepay' : null)),
+      noshowBlocked: nsOn && (r.noshows || 0) >= nsRules.blockLimit };
   }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
 }
 /** Targeted CRM send: message (+ optional attached coupon) to EXPLICITLY chosen customers.
@@ -2976,20 +2980,26 @@ export function setMenuAvailable(id, on) {
 export function noshowEnabled() { return getSetting('noshow:on', '0') === '1'; }
 export function setNoshowEnabled(on) { setSetting('noshow:on', on ? '1' : '0'); return { noshowOn: !!on }; }
 export function getNoshowRules() {
+  const limit = Math.max(1, Math.min(10, parseInt(getSetting('noshow:limit', '3')) || 3));
+  // Two tiers, owner's rule: reaching `limit` costs the pay-later privilege (they can still order
+  // online, but must pay first — the shop carries no risk). No-showing AGAIN after that closes the
+  // online channel entirely. Default = one more strike than the prepay threshold.
+  const blockLimit = Math.max(limit + 1, Math.min(20, parseInt(getSetting('noshow:block_limit', String(limit + 1))) || (limit + 1)));
   return {
-    limit: Math.max(1, Math.min(10, parseInt(getSetting('noshow:limit', '3')) || 3)),
+    limit, blockLimit,
     windowDays: Math.max(1, Math.min(365, parseInt(getSetting('noshow:window_days', '30')) || 30)),
   };
 }
-export function setNoshowRules({ limit, windowDays } = {}) {
+export function setNoshowRules({ limit, blockLimit, windowDays } = {}) {
   if (limit != null) setSetting('noshow:limit', String(Math.max(1, Math.min(10, parseInt(limit) || 3))));
+  if (blockLimit != null) setSetting('noshow:block_limit', String(Math.max(1, Math.min(20, parseInt(blockLimit) || 4))));
   if (windowDays != null) setSetting('noshow:window_days', String(Math.max(1, Math.min(365, parseInt(windowDays) || 30))));
   return { noshowOn: noshowEnabled(), ...getNoshowRules() };
 }
-/** Live strike count + block verdict for one LINE customer. */
+/** Live strike count + verdict for one LINE customer: normal → prepay → blocked. */
 export function noshowStrikes(lineUserId) {
-  const { limit, windowDays } = getNoshowRules();
-  if (!lineUserId) return { strikes: 0, limit, windowDays, blocked: false };
+  const { limit, blockLimit, windowDays } = getNoshowRules();
+  if (!lineUserId) return { strikes: 0, limit, blockLimit, windowDays, prepay: false, blocked: false };
   const forgiven = db.prepare('SELECT noshow_forgiven_at f FROM customers WHERE line_user_id=?').get(lineUserId)?.f || '1970-01-01';
   const n = db.prepare(
     `SELECT COUNT(*) n FROM tickets
@@ -2997,7 +3007,10 @@ export function noshowStrikes(lineUserId) {
         AND COALESCE(closed_at, created_at) > ?
         AND COALESCE(closed_at, created_at) >= datetime('now', ?)`
   ).get(lineUserId, forgiven, `-${windowDays} days`).n;
-  return { strikes: n, limit, windowDays, blocked: noshowEnabled() && n >= limit };
+  const on = noshowEnabled();
+  return { strikes: n, limit, blockLimit, windowDays,
+    prepay: on && n >= limit && n < blockLimit,
+    blocked: on && n >= blockLimit };
 }
 /** Cashier forgives the customer — the count restarts from now (no history is deleted). */
 export function forgiveNoshow(lineUserId) {
@@ -3945,6 +3958,7 @@ function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
 }
 export function createOrder(zoneId, items, opts = {}) {
   const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null } = opts;
+  let prepayOnly = false;   // set below for a customer on the no-show prepay tier
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
       name: (it.name || '').toString().slice(0, 60),
@@ -3974,10 +3988,14 @@ export function createOrder(zoneId, items, opts = {}) {
       e.ticketId = existing.id; e.code = existing.code;
       throw e;
     }
-    // No-show strikes: repeat no-shows lose LINE self-ordering (walk-ins at the counter are
-    // unaffected — the cashier path never carries a lineUserId with source='cashier').
+    // No-show strikes (walk-ins at the counter are unaffected — the cashier path never carries a
+    // lineUserId with source='cashier'):
+    //   blocked → the online channel is closed for them
+    //   prepay  → they may order, but the queue number waits for payment even when the shop runs
+    //             queue-first, so nothing is made before the money is in.
     const ns = noshowStrikes(lineUserId);
-    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.limit; throw e; }
+    if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.blockLimit; throw e; }
+    prepayOnly = ns.prepay;
   }
 
   // SELF-SERVE ORDERS PRICE THEMSELVES FROM THE CATALOG. The LIFF posts the price it displayed and
@@ -4052,7 +4070,9 @@ export function createOrder(zoneId, items, opts = {}) {
     // in a SEPARATE transaction after the order committed — on prod (Turso) a stale write-stream could
     // make that second tx fail while the order tx had already committed, stranding the order in
     // "รอชำระเงิน" with no number against the toggle. Atomic = an order is never created-but-unnumbered.
-    if (getQueueFirst()) {
+    // prepayOnly forces the pay-first path for THIS order only: no number until the money lands,
+    // so a repeat no-show can still order but can never have a drink made on credit.
+    if (getQueueFirst() && !prepayOnly) {
       const zr = db.prepare('SELECT last_number, prefix FROM zones WHERE id=?').get(zoneId);
       const next = (zr.last_number || 0) + 1;
       db.prepare('UPDATE zones SET last_number=? WHERE id=?').run(next, zoneId);
@@ -4063,7 +4083,7 @@ export function createOrder(zoneId, items, opts = {}) {
       markLuckyIfWon(tinfo.lastInsertRowid, next, lineUserId);
     }
     logSaleEvent({ branchId: zone.store_id, ticketId: tinfo.lastInsertRowid, orderId: oinfo.lastInsertRowid, type: 'order_created', amount: total, actor: actorId, meta: { source } });
-    return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total };
+    return { ticket: db.prepare('SELECT * FROM tickets WHERE id=?').get(tinfo.lastInsertRowid), total, prepayOnly };
   });
   // Run the whole create+number transaction with Turso resilience: a stale write-stream (free instance
   // waking from idle) throws on the first write — reconnect + retry ONCE. The clientToken/dedup

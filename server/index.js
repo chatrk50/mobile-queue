@@ -474,7 +474,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
     if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
     if (req.body?.noshowOn != null) Object.assign(out, Q.setNoshowEnabled(!!req.body.noshowOn));
-    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null) Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, windowDays: req.body?.noshowWindow }));
+    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null || req.body?.noshowBlock != null)
+      Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, blockLimit: req.body?.noshowBlock, windowDays: req.body?.noshowWindow }));
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -733,7 +734,7 @@ app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) =>
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
-    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
+    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total, prepayOnly: !!r.prepayOnly });
   } catch (e) {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
