@@ -1779,10 +1779,32 @@ console.log('\n== No-show strikes ==');
   ok(Q.noshowStrikes(nk).strikes === 3, 'INVARIANT strikes are derived live from no_show tickets');
   ok(Q.noshowStrikes(nk).blocked === false, 'INVARIANT with the feature OFF nobody is blocked');
   Q.setNoshowEnabled(true);
-  ok(Q.noshowStrikes(nk).blocked === true, 'INVARIANT reaching the limit inside the window blocks LINE self-service');
+  Q.setNoshowRules({ limit: 3, blockLimit: 4, windowDays: 30 });
+  const nsDrink = db.prepare("SELECT name, price FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1").get();
+  // --- TIER 1 at 3 strikes: may still order online, but must pay first ---
+  const t1 = Q.noshowStrikes(nk);
+  ok(t1.prepay === true && t1.blocked === false, `INVARIANT the first threshold costs pay-later, not the channel (prepay=${t1.prepay} blocked=${t1.blocked})`);
+  Q.setQueueFirst(true);   // shop hands out numbers before payment...
+  const pre = Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'customer', lineUserId: nk });
+  ok(pre.prepayOnly === true, 'INVARIANT the order is flagged prepay-only');
+  ok(pre.ticket.number === 0 && pre.ticket.status === 'pending',
+    `INVARIANT ...but THIS customer gets no queue number until they pay (number=${pre.ticket.number} status=${pre.ticket.status})`);
+  // a customer with no strikes still gets a number immediately under queue-first
+  const cleanKey = 'Uclean0000000000000000000000001';
+  const okOrder = Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'customer', lineUserId: cleanKey });
+  ok(okOrder.ticket.number > 0 && !okOrder.prepayOnly, 'INVARIANT an ordinary customer is untouched by the prepay tier');
+  for (const t of [pre.ticket.id, okOrder.ticket.id]) {
+    db.prepare('DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE ticket_id=?)').run(t);
+    db.prepare('DELETE FROM orders WHERE ticket_id=?').run(t);
+    db.prepare('DELETE FROM tickets WHERE id=?').run(t);
+  }
+  Q.setQueueFirst(false);
+  // --- TIER 2 at 4 strikes: the online channel closes ---
+  db.prepare(`INSERT INTO tickets (store_id, zone_id, number, code, line_user_id, status, closed_at) VALUES (1,1,0,'NS3',?, 'no_show', datetime('now'))`).run(nk);
+  const tier2 = Q.noshowStrikes(nk);
+  ok(tier2.blocked === true && tier2.prepay === false, `INVARIANT one more no-show closes the channel (blocked=${tier2.blocked})`);
   let err1 = null; try { Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk }); } catch (e) { err1 = e.message; }
   ok(err1 === 'noshow_blocked', `INVARIANT taking a queue number is refused (${err1})`);
-  const nsDrink = db.prepare("SELECT name, price FROM menu_items WHERE active=1 AND category!='topping' ORDER BY id LIMIT 1").get();
   let err2 = null; try { Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'customer', lineUserId: nk }); } catch (e) { err2 = e.message; }
   ok(err2 === 'noshow_blocked', `INVARIANT self-ordering is refused (${err2})`);
   const co = Q.createOrder(1, [{ name: nsDrink.name, price: nsDrink.price, qty: 1 }], { source: 'cashier' });
@@ -1792,7 +1814,7 @@ console.log('\n== No-show strikes ==');
   db.prepare('DELETE FROM tickets WHERE id=?').run(co.ticket.id);
   const fg = Q.forgiveNoshow(nk);
   ok(fg.strikes === 0 && fg.blocked === false, 'INVARIANT forgiveness restarts the count');
-  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE line_user_id=? AND status='no_show'").get(nk).n === 3,
+  ok(db.prepare("SELECT COUNT(*) n FROM tickets WHERE line_user_id=? AND status='no_show'").get(nk).n === 4,
     'INVARIANT forgiveness deletes NOTHING — only the counting restarts');
   const t2 = Q.issueTicket({ storeId: 1, zoneId: 1, lineUserId: nk });
   ok(!!t2.ticket, 'INVARIANT a forgiven customer can take a queue number again');

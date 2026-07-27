@@ -337,7 +337,9 @@ app.delete('/api/tenders/:id', (req, res) => {
 // Coupons — customer reads available/validates (public); owner manages (managerOK). Specific paths before /:id.
 // `items` (JSON [{name,price,qty}]) lets a scoped coupon price itself against the real cart.
 const parseItems = (raw) => { try { const a = JSON.parse(raw); return Array.isArray(a) ? a : null; } catch { return null; } };
-app.get('/api/coupons', (req, res) => {
+// Deliberately open to `tel:` keys: a guest with no LINE login has no session, and the LIFF
+// reads their wallet by phone. Rate-limited instead, to blunt phone-number enumeration.
+app.get('/api/coupons', rateLimit('coupon', 30, 60e3), (req, res) => {
   try { res.json({ coupons: Q.availableCoupons(req.query.customer || null, req.query.total, req.query.items ? parseItems(req.query.items) : null) }); }
   catch (e) { res.status(200).json({ coupons: [], error: e.message }); }
 });
@@ -474,7 +476,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.luckyNumber != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyNumber(req.body.luckyNumber)); }
     if (req.body?.luckyValue != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLuckyValue(req.body.luckyValue)); }
     if (req.body?.noshowOn != null) Object.assign(out, Q.setNoshowEnabled(!!req.body.noshowOn));
-    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null) Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, windowDays: req.body?.noshowWindow }));
+    if (req.body?.noshowLimit != null || req.body?.noshowWindow != null || req.body?.noshowBlock != null)
+      Object.assign(out, Q.setNoshowRules({ limit: req.body?.noshowLimit, blockLimit: req.body?.noshowBlock, windowDays: req.body?.noshowWindow }));
     if (req.body?.posOfflineMinutes != null) Object.assign(out, Q.setPosOfflineMinutes(req.body.posOfflineMinutes));
     if (req.body?.hours != null) out.hours = Q.setStoreHours(req.body.hours);
     res.json(out);
@@ -733,7 +736,7 @@ app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) =>
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
-    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total });
+    res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total, prepayOnly: !!r.prepayOnly });
   } catch (e) {
     if (e.message === 'already_in_queue') {
       return res.status(409).json({ error: 'already_in_queue', ticketId: e.ticketId, code: e.code });
@@ -993,10 +996,17 @@ app.post('/api/tickets/:ticketId/customer', (req, res) => {
 // Public, but only works on a fresh ticket with no LINE identity and no phone yet (can't hijack another's).
 app.post('/api/tickets/:ticketId/guest-phone', rateLimit('phone', 10, 60e3), (req, res) => {
   try {
-    const t = db.prepare('SELECT id, line_user_id, customer_key FROM tickets WHERE id=?').get(req.params.ticketId);
+    const t = db.prepare(`SELECT id, line_user_id, customer_key, status,
+        (julianday('now') - julianday(created_at)) * 1440 AS age_min
+      FROM tickets WHERE id=?`).get(req.params.ticketId);
     if (!t) return res.status(404).json({ error: 'ticket_not_found' });
     if (t.line_user_id) return res.status(409).json({ error: 'already_line_customer' });
     if (t.customer_key) return res.status(409).json({ error: 'already_attached' });
+    // Ticket ids are sequential, so without this window anyone could walk the ids and
+    // claim a stranger's walk-in ticket (and its loyalty points) by attaching their phone.
+    if (!pinOK(req) && (t.status === 'served' || t.status === 'cancelled' || (t.age_min ?? 1e9) > 60)) {
+      return res.status(409).json({ error: 'ticket_closed' });
+    }
     const r = Q.attachCustomerToTicket(req.params.ticketId, req.body?.phone, req.body?.name || null);
     const z = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (z) emit(z.zone_id, 'update', (reveal) => Q.zoneSnapshot(z.zone_id, { reveal }));
