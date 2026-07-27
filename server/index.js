@@ -103,6 +103,18 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   }
   res.sendStatus(200);
 });
+// A bad/missing x-line-signature must answer 401, not 500. Without this the SDK's
+// SignatureValidationFailed fell through to the terminal handler and prod replied
+// {"error":"internal"} — LINE's console shows that as a server error, which is exactly the wrong
+// hint when someone is trying to work out why the webhook "doesn't work". Verified live: prod
+// answered 500 to an unsigned POST before this.
+app.use('/line/webhook', (err, req, res, next) => {
+  const m = String(err?.message || '');
+  if (/signature/i.test(m) || err?.name === 'SignatureValidationFailed') {
+    return res.status(401).json({ error: 'bad_signature' });
+  }
+  return next(err);
+});
 
 app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + promo banner (base64 data URLs)
 
