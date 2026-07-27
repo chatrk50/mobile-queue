@@ -270,6 +270,8 @@
       <button id="soundBtn" class="ghost ic-btn" style="display:none" onclick="toggleSound()" title="เสียงเตือนออเดอร์ใหม่จากไลน์" aria-label="เสียงเตือนออเดอร์ใหม่จากไลน์"></button>
       <!-- Device-fit: tap to cycle layout อัตโนมัติ → มือถือ → แท็บเล็ต → คอม (persisted) -->
       <button id="devBtn" class="ghost ic-btn" onclick="cycleDevMode()"></button>
+      <!-- ตั้งค่าหน้าร้าน — the cashier tier has no ⚙ (manager+), so its door is here in the bar. -->
+      <button id="shiftBtn" class="ghost ic-btn" style="display:none" onclick="showShift()" title="ตั้งค่าหน้าร้าน" aria-label="ตั้งค่าหน้าร้าน"><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg></button>
       <!-- Phone overflow. Eleven controls at a 38px touch target need ~630px; a 375px phone has
            ~343px of usable width, so on a phone the five low-frequency tools fold in here instead
            of wrapping the bar onto a second and third row. Its own menu, not the ⚙ one, because a
@@ -347,7 +349,7 @@
         <p class="muted" style="margin:2px 0 0;font-size:12.5px" id="homeSub">ภาพรวมวันนี้</p></div>
       <div class="row" style="gap:6px">
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.65 4.36A9 9 0 0 0 20.5 15"/></svg>รีเฟรช</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHome()">ปิด</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHome()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <div id="homeBody" style="margin-top:12px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
@@ -360,7 +362,7 @@
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าทั้งหมด</h1>
         <p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการตั้งค่าอยู่ที่นี่ที่เดียว</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSettings()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button id="finBack" class="ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="closeFinance()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSettings()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="settingsBody" style="margin-top:12px"></div>
     <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
@@ -378,7 +380,7 @@
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportReport()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="openSettingsCost()" title="แก้ต้นทุน/ค่าใช้จ่าย (อยู่ในตั้งค่าทั้งหมด)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>ต้นทุน</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="toggleMargins()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไร/เมนู</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()">ปิด</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideReport()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <div id="marginsBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
@@ -389,7 +391,7 @@
   <div id="historyCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()">ปิด</button>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <input id="histSearch" oninput="filterHistory()" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู" autocomplete="off" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);background:#fff;box-sizing:border-box">
     <div id="historyBody" style="margin-top:14px"></div>
@@ -402,7 +404,7 @@
       <div class="row" style="gap:6px">
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="archiveNow()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกวันนี้</button>
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="archivePastDay()" title="บันทึกยอดของวันที่ผ่านมา (กู้คืนวันที่ระบบบันทึกอัตโนมัติพลาด)"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>บันทึกย้อนหลัง</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()">ปิด</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSales()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <!-- Same switcher as chartsCard — the two panels present as ONE destination. -->
@@ -423,7 +425,7 @@
   <div id="staffCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -439,7 +441,7 @@
   <div id="branchCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -454,7 +456,7 @@
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / จัดซื้อ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
     <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
@@ -489,7 +491,7 @@
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div style="margin-top:14px;display:grid;gap:16px">
 
@@ -569,7 +571,7 @@
   <div id="tenderCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
@@ -584,7 +586,7 @@
 
   <!-- COUPONS management (owner only) -->
   <div id="promoCard" class="card" style="display:none;max-width:520px;margin:14px auto">
-    <div class="row between"><div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()">ปิด</button></div>
+    <div class="row between"><div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>โปรโมชั่น (แบนเนอร์)</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">รูปโฆษณาที่โชว์ลูกค้าหลังเปิดแอป · เปลี่ยนได้เอง (แนะนำรูปแนวตั้ง)</p></div><button class="ghost" style="padding:6px 12px" onclick="hidePromo()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div id="promoPreview" style="margin:14px 0;text-align:center"></div>
     <input id="promoFile" type="file" accept="image/*" style="display:none" onchange="promoPick(this)">
     <div class="row" style="gap:8px;margin-bottom:12px">
@@ -599,7 +601,7 @@
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">สร้าง / แก้ / เปิด-ปิด / ลบ · ลูกค้าใช้ในตะกร้า (ตรวจสอบฝั่ง server)</p></div>
       <div class="row" style="gap:6px">
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="showCouponRep()">รายงานการใช้</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()">ปิด</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCoupons()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <div id="couponList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
@@ -669,7 +671,7 @@
   <!-- COUPON SCOPE: which menus a coupon applies to (none ticked = whole bill) -->
   <div id="scopePop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
     <div class="card" style="max-width:440px;width:100%;max-height:86vh;overflow:hidden;margin:0;display:flex;flex-direction:column;padding:16px">
-      <div class="row between" style="flex:none;align-items:center"><h1 style="margin:0;font-size:18px">เมนูที่ร่วมรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeScope()">ปิด</button></div>
+      <div class="row between" style="flex:none;align-items:center"><h1 style="margin:0;font-size:18px">เมนูที่ร่วมรายการ</h1><button class="ghost" style="padding:6px 12px" onclick="closeScope()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div id="scopeBody" style="overflow-y:auto;flex:1;min-height:0;margin:10px 0"></div>
       <button class="ok" style="width:100%;flex:none" onclick="saveScope()">บันทึก</button>
     </div>
@@ -679,7 +681,7 @@
   <div id="controlCard" class="card" style="display:none;max-width:620px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>ควบคุมการลดยอด</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการ ยกเลิก · ของเสีย · ลดราคา · ลบรายการเงินสด · แลกของฟรี — ใครทำ เมื่อไหร่ มูลค่าเท่าไหร่</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideControl()">ปิด</button>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideControl()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="row between" style="align-items:center;margin-top:12px">
       <h2 style="margin:0;font-size:15px"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>รายวัน</h2>
@@ -696,7 +698,7 @@
   <div id="cashCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>รอบเงินสด</h1><p class="muted" style="margin:2px 0 0">เปิดรอบด้วยเงินทอน → ปิดรอบนับเงิน → ส่วนต่าง</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCash()">ปิด</button>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCash()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div id="cashBody" style="margin-top:14px"></div>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
@@ -732,7 +734,7 @@
   <div id="chartsCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>แนวโน้ม / ย้อนหลัง</h1><p class="muted" id="chartsSub" style="margin:2px 0 0">ยอดขาย 7 วัน · เมนูขายดี · ช่วงเวลาพีค · ช่องทางชำระ</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()">ปิด</button>
+      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideCharts()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <!-- Shared view switcher: กราฟ (this panel) ↔ ตาราง P&L (salesCard). One destination, two
          renderings of the same /api/sales-history data — merged per the IA audit. -->
@@ -750,7 +752,7 @@
       <div class="row" style="gap:6px;align-items:center">
         <input id="detailDate" type="date" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" onchange="loadDetail()">
         <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportDetail()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()">ปิด</button>
+        <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideDetail()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
     </div>
     <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
@@ -807,7 +809,7 @@
 
   <!-- MENU MANAGEMENT -->
   <div id="menuCard" class="card" style="display:none;max-width:980px;margin:14px auto">
-    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideMenu()">ปิด</button></div>
+    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideMenu()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="priceMgr" style="margin:4px 0 12px"></div>
     <div class="ms-split">
@@ -895,7 +897,7 @@
   <div class="card" style="max-width:380px;width:100%;margin:0;max-height:92vh;overflow:auto;padding:18px">
     <div class="row between" style="margin-bottom:10px">
       <h1 style="margin:0;font-size:19px;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>ค้นหาลูกค้า</h1>
-      <button class="ghost" style="padding:6px 12px" onclick="closeCust()">ปิด</button>
+      <button class="ghost" style="padding:6px 12px" onclick="closeCust()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div id="custPad">
       <input id="custPhone" type="tel" readonly placeholder="กดเบอร์ลูกค้า" style="width:100%;box-sizing:border-box;text-align:center;padding:12px;font-size:26px;font-weight:800;letter-spacing:3px;border:1.5px solid var(--line);border-radius:12px;color:var(--navy);background:#fff;margin-bottom:10px">
@@ -911,12 +913,25 @@
 </div>
 
 <!-- CRM: customers page — list + lifecycle segments + targeted win-back (+ coupon) + campaign history -->
+<!-- ตั้งค่าหน้าร้าน (cashier tier). A till cannot reach ⚙ ตั้งค่าทั้งหมด (manager+), but three
+     things genuinely belong to whoever is standing at the counter: stop taking online orders when
+     the queue is buried, pull a sold-out drink off the menu, and open the drawer for the day.
+     Prices, costs, staff and reports stay manager+ — both here and in the API. -->
+<div id="shiftCard" class="card" style="display:none;max-width:720px;margin:14px auto">
+  <div class="row between" style="align-items:center">
+    <div><h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>ตั้งค่าหน้าร้าน</h1>
+      <p class="muted" style="margin:2px 0 0;font-size:12.5px">สิ่งที่แคชเชียร์ปรับเองได้ระหว่างเปิดร้าน</p></div>
+    <button class="ghost" style="padding:6px 12px" onclick="hideShift()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div id="shiftBody" style="margin-top:12px"><p class="muted" style="font-size:12.5px">กำลังโหลด…</p></div>
+</div>
+
 <!-- รีวิวจากลูกค้า — its own panel with its own door. It used to sit at the bottom of the daily
      report, which meant scrolling past every sales figure to read it; the owner couldn't find it. -->
 <div id="reviewCard" class="card" style="display:none;max-width:720px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</h1>
-    <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideReviews()">ปิด</button>
+    <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideReviews()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
   </div>
   <div id="fbBox" style="margin-top:10px"></div>
 </div>
@@ -928,7 +943,7 @@
 <div id="couponRepCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</h1>
-    <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()">ปิด</button>
+    <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
   </div>
   <div id="chTabs" class="row" style="gap:6px;margin:12px 0 12px"></div>
   <div id="chTab0" style="display:none">
@@ -958,7 +973,7 @@
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
     <div class="row" style="gap:6px">
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportCustomers()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px;font-size:13px" onclick="backToSettings()">‹ ตั้งค่า</button><button class="ghost" style="padding:6px 12px" onclick="hideCustomers()">ปิด</button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCustomers()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
   </div>
   <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap"></div>
@@ -977,7 +992,7 @@
   </div>
   <div style="margin-top:6px">
     <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
-    <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
+    <textarea id="clMsg" rows="2" maxlength="380" oninput="clMsgChanged()" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
     <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
       <input type="checkbox" id="clCoupOn" onchange="clCoupToggle(this)" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
     </label>
@@ -996,6 +1011,7 @@
         </div>
       </div>
       <div class="muted" style="font-size:11px;margin-top:5px">คูปองจะเข้า "คูปองของฉัน" ของลูกค้าทันที และข้อความจะบอกวันหมดอายุให้เอง</div>
+      <div id="clCoupSaved" style="display:none;font-size:11px;margin-top:4px;color:#0f6b57;font-weight:700">✓ จำคูปองใบนี้ไว้ให้แล้ว — เปิดหน้านี้ครั้งหน้าจะยังอยู่</div>
     </div>
     <button class="ok" id="clSend" style="width:100%;min-height:48px;font-size:15px;margin-top:10px" onclick="clSendCampaign()"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งถึงลูกค้าที่เลือก</button>
   </div>
@@ -1005,7 +1021,7 @@
 <!-- QR check-in: customer scans to link their LINE identity to this order -->
 <div id="checkinPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:57;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:320px;width:100%;margin:0;text-align:center;padding:18px">
-    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()">ปิด</button></div>
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">ให้ลูกค้าสแกน</h1><button class="ghost" style="padding:6px 12px" onclick="closeCheckin()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">สแกนด้วย LINE เพื่อสะสมประวัติ — ไม่ต้องพิมพ์เบอร์</p>
     <img id="checkinImg" alt="QR เช็คอิน" style="width:240px;height:240px;border-radius:14px;border:1px solid var(--line);object-fit:contain;background:#fff">
     <p class="muted" id="checkinHint" style="font-size:12px;margin:10px 0 0">รอลูกค้าสแกน… ระบบจะแสดงชื่อบนการ์ดเองเมื่อเช็คอินสำเร็จ</p>
@@ -1015,7 +1031,7 @@
 <!-- Scan a customer's "บัตรของฉัน" member QR → pull up their profile (no typing) -->
 <div id="scanPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:58;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:340px;width:100%;margin:0;text-align:center;padding:18px">
-    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()">ปิด</button></div>
+    <div class="row between" style="margin-bottom:6px"><h1 style="margin:0;font-size:18px">สแกนบัตรลูกค้า</h1><button class="ghost" style="padding:6px 12px" onclick="closeScanner()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <p class="muted" style="font-size:13px;margin:0 0 10px">เล็งกล้องไปที่ QR บัตรสมาชิกของลูกค้า</p>
     <video id="scanVideo" playsinline muted autoplay style="width:100%;border-radius:14px;background:#000;aspect-ratio:1/1;object-fit:cover"></video>
     <div id="scanStatus" style="font-size:13px;margin-top:8px;min-height:16px;color:var(--navy);font-weight:600;white-space:pre-line"></div>
@@ -1115,7 +1131,7 @@
   @media (min-width:640px){
     #homeCard,#settingsCard,#reportCard,#historyCard,#salesCard,#staffCard,#branchCard,#stockCard,
     #loyaltyCard,#tenderCard,#couponCard,#promoCard,#controlCard,#cashCard,#chartsCard,#detailCard,
-    #menuCard,#custListCard,#reviewCard,#couponRepCard{
+    #menuCard,#custListCard,#reviewCard,#couponRepCard,#shiftCard{
       max-width:min(1100px, calc(100vw - 68px))!important;
       margin-left:auto!important; margin-right:auto!important;
     }
@@ -1131,6 +1147,16 @@
   .tgl::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(16,40,70,.3)}
   .tgl.on::after{left:25px}
   .tgl:disabled{opacity:.45;cursor:not-allowed}
+  /* Compact pair for list rows: the switch and its delete sit together, small enough not to shout.
+     Hit area stays ≥40px tall via the wrapper's padding (DESIGN-SYSTEM §2). */
+  .tgl.sm{width:40px;height:23px}
+  .tgl.sm::after{top:2.5px;left:2.5px;width:18px;height:18px}
+  .tgl.sm.on::after{left:19.5px}
+  .icx{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+       border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;flex:none}
+  .icx svg{width:15px;height:15px;margin:0}
+  .icx.danger{color:var(--danger);border-color:#f3c9cf}
+  .icx.danger:hover{background:#fcebeb}
   .feat-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card,#fff)}
   .feat-row .ic{width:22px;height:22px;color:var(--navy);flex:none}
   #payMethodBtns .ic{margin:0;width:26px;height:26px}
@@ -1235,7 +1261,7 @@
 
 <div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'">ปิด</button></div>
+    <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 12px">ฟีเจอร์ที่เตรียมไว้ — เปิดใช้เมื่อพร้อม</p>
     <div id="featuresBody" style="display:grid;gap:10px"></div>
   </div>
@@ -1255,7 +1281,7 @@
     <img id="slipPopImg" alt="สลิป" onclick="zoomSlip()" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 2px;cursor:zoom-in">
     <div class="muted" style="font-size:11.5px;margin-bottom:4px">แตะรูปเพื่อดูขนาดเต็ม</div>
     <p class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
-    <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()">ปิด</button>
+    <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
 </div>
 
@@ -1585,30 +1611,44 @@ window.login=async()=>{
     // Coupon figures are ordinary business numbers, so a manager may read them (matches the API gate).
     { const cb=$('couponRepBtn'); if(cb) cb.style.display=mgr?'':'none'; }
     { const sb=$('settingsBtn'); if(sb) sb.style.display=mgr?'':'none'; }   // the hub; owner-only rows inside gate themselves
+    // ตั้งค่าหน้าร้าน: the cashier's own three switches. A manager already has all of it inside ⚙,
+    // so this door only appears for the tier that has no other way in.
+    { const shb=$('shiftBtn'); if(shb) shb.style.display=mgr?'none':''; }
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
     await loadMenu(); await boot();
+    openDeepLink();   // ?go=po / ?go=report from a LINE card — land on the page, not the dashboard
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
+// A LINE card can only ever hand over a URL, so the destination travels as ?go=… and is opened
+// once, AFTER login (the PIN screen always comes first). The param is then stripped so a refresh
+// doesn't keep re-opening the same page.
+const DEEP_LINKS={ po:()=>{ showStock(); setTimeout(()=>{ try{ stkTab('po'); }catch(e){} },400); },
+  report:()=>showReport(), stock:()=>showStock(), customers:()=>showCustomers(),
+  coupons:()=>showCouponHub(0), reviews:()=>showReviews(), cash:()=>showCash() };
+function openDeepLink(){
+  let go=null; try{ go=new URLSearchParams(location.search).get('go'); }catch(e){ return; }
+  if(!go||!DEEP_LINKS[go]) return;
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  setTimeout(()=>{ try{ DEEP_LINKS[go](); }catch(e){ toast('เปิดหน้านั้นไม่ได้'); } },200);
+}
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   stopHeartbeat(); { const ob=$('onlineBtn'); if(ob) ob.style.display='none'; }
   // Background timers outlived the session: a logged-out till kept polling ingredients every 3
   // minutes and the stats strip every minute, forever.
   for(const k of ['_lowStockTimer','_todayTimer']){ if(window[k]){ clearInterval(window[k]); window[k]=null; } }
   MY_SHIFT=null; { const cb=$('clockBtn'); if(cb) cb.style.display='none'; }   // signing out is NOT clocking out — the shift keeps running on purpose
-  $('staffBtn').style.display='none'; $('staffCard').style.display='none';
-  $('detailBtn').style.display='none'; $('detailCard').style.display='none';
-  $('cashBtn').style.display='none'; $('cashCard').style.display='none';
-  $('controlBtn').style.display='none'; const _cc=$('controlCard'); if(_cc) _cc.style.display='none';
-  $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
-  { const sb=$('settingsBtn'); if(sb) sb.style.display='none'; const sc=$('settingsCard'); if(sc) sc.style.display='none'; }
-  $('adminBtn').style.display='none'; closeAdmin();
-  $('dash').innerHTML=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('logoutBtn').style.display='none';
-  $('reportBtn').style.display='none'; $('reportCard').style.display='none';
-  $('menuBtn').style.display='none'; $('orderCard').style.display='none'; $('menuCard').style.display='none';
-  $('storeBtn').style.display='none'; $('historyBtn').style.display='none'; $('custBtn').style.display='none'; $('scanBtn').style.display='none'; $('historyCard').style.display='none';
-  $('salesCard').style.display='none';
+  // Panels are hidden through the ONE canonical list. The hand-written list this replaced had
+  // drifted: รีวิว / ลูกค้า / คูปอง were never in it, so a panel left open by the owner stayed
+  // on screen under the login card and for whoever logged in next (owner-only data on a till).
+  hideAllPanels();
+  ['staffBtn','detailBtn','cashBtn','controlBtn','settingsBtn','adminBtn','reportBtn','menuBtn',
+   'storeBtn','historyBtn','custBtn','scanBtn','shiftBtn','reviewBtn','couponRepBtn','winbackBtn',
+   'stockBtn','loyaltyBtn','tenderBtn','promoBtn','homeBtn','chartsBtn']
+    .forEach(id=>{ const el=$(id); if(el) el.style.display='none'; });
+  closeAdmin();
+  $('dash').innerHTML=''; $('dash').style.display='none'; $('logoutBtn').style.display='none';
   $('loginCard').style.display=''; $('pin').value=''; $('pin').focus(); };
 window.hideHistory=()=>{ $('historyCard').style.display='none'; $('dash').style.display=''; };
 let HIST=[];
@@ -1621,7 +1661,7 @@ window.filterHistory=()=>{ const q=($('histSearch').value||'').trim().toLowerCas
   renderHistory(f, q); };
 // One canonical list of every full-screen admin panel — every show* hides them ALL first
 // so two panels can never stack (previous per-function hide-lists drifted out of sync).
-const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard','couponRepCard'];
+const ADMIN_PANELS=['homeCard','settingsCard','reportCard','historyCard','salesCard','staffCard','branchCard','stockCard','loyaltyCard','tenderCard','couponCard','promoCard','controlCard','cashCard','chartsCard','detailCard','menuCard','orderCard','custListCard','reviewCard','couponRepCard','shiftCard'];
 function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.style.display='none';}); const d=$('dash'); if(d) d.style.display='none';
   // Every panel opens through here, so this is the one place the "‹ ตั้งค่า" trail can reset:
   // sgo() re-shows it right after, a header button leaves it hidden.
@@ -2133,7 +2173,7 @@ window.loadPoReport=async()=>{ const box=$('poReport'); box.innerHTML='<p class=
   box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px">
     <div class="row between" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
       <b style="color:var(--navy)">รายงานจัดซื้อ · รวม ฿${d.total}</b>
-      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poReport').style.display='none'">ปิด</button></div>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poReport').style.display='none'" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       ${rangeBtn('prRangeBtn',(_prSel&&_prSel.label)||'ทั้งหมด',prRangeApply)}
       <span class="muted" style="font-size:11px">${d.from} → ${d.to}</span>
@@ -2149,7 +2189,7 @@ window.poEdit=async(id)=>{ const box=$('poEditor');
   const supOpts='<option value="">— เลือกผู้ขาย —</option>'+(SUPPLIERS||[]).map(s=>`<option value="${s.id}" ${po&&po.supplier_id===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
   box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px">
     <div class="row between" style="align-items:center;margin-bottom:8px"><b style="color:var(--navy)">${po?esc(po.po_no||('ใบสั่งซื้อ #'+po.id)):'ใบสั่งซื้อใหม่'}</b>
-      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poEditor').innerHTML=''">ปิด</button></div>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="$('poEditor').innerHTML=''" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <select id="po_sup" ${editable?'':'disabled'} style="flex:1;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px">${supOpts}</select>
       <input id="po_note" ${editable?'':'disabled'} placeholder="หมายเหตุ" value="${po?esc(po.note||''):''}" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px">
@@ -2375,14 +2415,16 @@ function cpCard(c){
           <div class="muted" style="font-size:11.5px;margin-top:1px">ใช้แล้ว ${c.used_count}${c.usage_limit>0?('/'+c.usage_limit):' (ไม่จำกัด)'} · ต่อคน ${c.per_customer>0?c.per_customer+' ครั้ง':'ไม่จำกัด'}</div>
           ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:2px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}</div>`:''}
         </div>
-        <button class="tgl ${c.active?'on':'off'}" style="flex:none;margin:2px 0 0" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
+        <span class="row" style="gap:6px;flex:none;align-items:center;padding:5px 0">
+          <button class="tgl sm ${c.active?'on':'off'}" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" title="${c.active?'ปิดใช้':'เปิดใช้'}" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
+          <button class="icx danger" aria-label="ลบคูปองนี้" title="ลบคูปอง" onclick="delCoupon(${c.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+        </span>
       </div>
       <div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="cpEdit(${c.id})">แก้ไข</button>
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="editCouponScope(${c.id})">เมนูที่ร่วม</button>
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
-        ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
-        <button class="ghost danger" style="padding:5px 10px;font-size:12px;margin-left:auto" onclick="delCoupon(${c.id})">ลบ</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="cpEdit(${c.id})">แก้ไข</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="editCouponScope(${c.id})">เมนูที่ร่วม</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
+        ${c.distribution==='claim'?`<button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
       </div>
     </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
@@ -3215,12 +3257,17 @@ window.chLoadTpl=async()=>{
           <span class="muted" style="font-size:12px"> · ฿${lk.value??''}${lk.on&&!lk.ready?' · <b style="color:#b45309">ยังไม่พร้อม (ต้องเปิดโหมดคิวก่อนจ่าย)</b>':''}</span></span>
         <span class="row" style="gap:8px;align-items:center">
           <button class="tgl ${lk.on?'on':'off'}" ${own?'':'disabled'} aria-label="${lk.on?'ปิด':'เปิด'}เลขนำโชค" onclick="chToggleLucky(${lk.on?0:1})"></button>
-          ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
         </span>
       </div>
       <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
       </div>
+      <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span>เลขคิว ${num('lkNumInp',lk.number??67,64)}</span>
+        <span>มูลค่า ฿ ${num('lkValInp',lk.value??40,64,!!lk.couponId)}</span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveLucky()">บันทึกตัวเลข</button>`:''}
+      </div>
+      ${lk.reason==='needs_queue_first'?`<div style="margin-top:7px;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ ยังทำงานไม่ได้ — ต้องเปิด "เข้าคิวทันที (Queue-first)" ที่ ⚙ ตั้งค่าระบบ ไม่งั้นเลขคิวจะออกหลังจ่ายเงินแล้ว จึงไม่เหลือยอดให้ลด</div>`:''}
     </div>`;
 };
 // Toggles apply INSTANTLY (design-system rule); the number fields still save with บันทึก.
@@ -3228,6 +3275,13 @@ window.chToggleTpl=async(key,on)=>{
   try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify({on:!!on})}); toast(on?'เปิดแคมเปญแล้ว':'ปิดแคมเปญแล้ว'); }
   catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
   chLoadTpl(); };
+// เลขคิว + มูลค่า now save from the hub too — ⚙ no longer carries a second copy of these fields.
+window.chSaveLucky=async()=>{
+  const body={ luckyNumber:+$('lkNumInp').value||67 };
+  const v=$('lkValInp'); if(v && !v.disabled) body.luckyValue=+v.value||40;
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('บันทึกแล้ว ✓'); chLoadTpl(); }
+  catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); } };
 window.chToggleLucky=async(on)=>{
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})}); toast(on?'เปิดเลขนำโชคแล้ว':'ปิดเลขนำโชคแล้ว'); }
   catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
@@ -3281,7 +3335,23 @@ window.chLoadOut=async(offset=0)=>{
 // First open of the coupon box: load the coupons built on the coupon page into the dropdown and
 // prefill the custom fields from the winback template. Both cached — opening again costs nothing.
 let _clTplLoaded=false, _clCoupons=[];
+// The composer's setup is REMEMBERED (server-side). It used to reset every time the page opened,
+// so the attached gift silently disappeared and a blast went out with no coupon.
+let _clDefT=null;
+function clSaveDefaults(patch){ clearTimeout(_clDefT);
+  _clDefT=setTimeout(()=>{ api('/api/crm/campaign-defaults',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).catch(()=>{}); },400); }
+window.clMsgChanged=()=>clSaveDefaults({message:$('clMsg').value||''});
+async function clRestoreDefaults(){
+  let d; try{ d=await api('/api/crm/campaign-defaults'); }catch(e){ return; }
+  if(d.message) $('clMsg').value=d.message;
+  const cb=$('clCoupOn');
+  if(d.couponOn && !cb.checked){ cb.checked=true; await clCoupToggle(cb); }
+  if(d.couponOn && d.couponId){ const sel=$('clCoupPick');
+    if([...sel.options].some(o=>o.value===String(d.couponId))){ sel.value=String(d.couponId); clCoupPickChange(); } }
+  const hint=$('clCoupSaved'); if(hint) hint.style.display=(d.couponOn&&d.couponId)?'':'none';
+}
 window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'none';
+  clSaveDefaults({couponOn:!!cb.checked});
   if(cb.checked&&!_clTplLoaded){ _clTplLoaded=true;
     try{ const r=await api('/api/admin/coupon-templates');
       const t=(r.templates||[]).find(x=>x.key==='winback');
@@ -3293,6 +3363,8 @@ window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'non
     clCoupPickChange(); } };
 window.clCoupPickChange=()=>{
   const v=$('clCoupPick').value, info=$('clCoupInfo');
+  clSaveDefaults({couponId:(v&&v!=='custom')?Number(v):null});
+  { const hint=$('clCoupSaved'); if(hint) hint.style.display=(v&&v!=='custom')?'':'none'; }
   $('clCoupCustom').style.display=(v==='custom')?'':'none';
   const c=_clCoupons.find(x=>String(x.id)===v);
   info.style.display=c?'':'none';
@@ -3336,6 +3408,59 @@ window.loadCouponRep=async(a,b,l)=>{
     ${c.codeCoupons&&c.codeCoupons.redeemed?`<div class="muted" style="font-size:11.5px;margin-top:10px">คูปองรหัส (ใส่โค้ดเอง) ใช้ไป ${c.codeCoupons.redeemed} ครั้ง · ฿${c.codeCoupons.value}</div>`:''}`;
 };
 let _fbDays=30, _fbSel=null, _fbShown=25;   // _fbSel = {from,to,label} จากปุ่มช่วงเวลา
+// ---------- ตั้งค่าหน้าร้าน (แคชเชียร์) ----------
+window.hideShift=()=>{ $('shiftCard').style.display='none'; $('dash').style.display=''; };
+window.showShift=async()=>{ hideAllPanels(); closeAdmin(); $('shiftCard').style.display=''; renderShift(); };
+let _shiftQ='';
+window.shiftSearch=(v)=>{ _shiftQ=(v||'').trim().toLowerCase(); renderShift(true); };
+async function renderShift(keepFocus){
+  const box=$('shiftBody'); if(!box) return;
+  if(!keepFocus) box.innerHTML='<p class="muted" style="font-size:12.5px">กำลังโหลด…</p>';
+  let s; try{ s=await api('/api/shift/state'); }
+  catch(e){ box.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">โหลดไม่สำเร็จ — เข้าสู่ระบบใหม่แล้วลองอีกครั้ง</p>'; return; }
+  const items=(s.items||[]).filter(m=>!_shiftQ||m.name.toLowerCase().includes(_shiftQ));
+  const off=(s.items||[]).filter(m=>!m.active).length;
+  box.innerHTML=`
+    <div class="feat-row" style="align-items:center">
+      <span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14 0M1.4 9a16 16 0 0 1 21.2 0M8.5 16.1a6 6 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></svg></span>
+      <div style="flex:1"><b>รับออเดอร์ออนไลน์ (LINE)</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">${s.onlineOrders?'เปิดอยู่ — ลูกค้าสั่งผ่าน LINE ได้':'ปิดอยู่ — ลูกค้าสั่งผ่าน LINE ไม่ได้ ขายหน้าร้านตามปกติ'}${(s.ordering&&s.ordering.paused&&s.onlineOrders)?'<br><span style="color:#946f00">ตอนนี้ระบบพักรับอัตโนมัติ: '+esc(s.ordering.reason||'')+'</span>':''}</div></div>
+      <button class="tgl ${s.onlineOrders?'on':'off'}" aria-label="${s.onlineOrders?'ปิด':'เปิด'}รับออเดอร์ออนไลน์" onclick="shiftOnline(${s.onlineOrders?0:1})"></button>
+    </div>
+    <div class="feat-row" style="align-items:center;margin-top:10px">
+      <span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></span>
+      <div style="flex:1"><b>รอบเงินสด</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">${s.cashOpen?('เปิดรอบอยู่แล้ว'+(s.openedAt?(' · ตั้งแต่ '+esc(String(s.openedAt).slice(11,16))):'')+' · ปิดรอบ/นับเงินให้ผู้จัดการทำ'):'ยังไม่เปิดรอบวันนี้ — เปิดก่อนเริ่มรับเงินสด'}</div></div>
+      ${s.cashOpen?'<span style="font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:#e1f5ee;color:#0f6b57">เปิดอยู่</span>'
+        :'<button class="ok" style="padding:8px 14px" onclick="shiftOpenCash()">เปิดรอบ</button>'}
+    </div>
+    <div style="margin-top:14px">
+      <div class="row between" style="align-items:center;flex-wrap:wrap;gap:8px">
+        <b style="color:var(--navy);font-size:14px">เมนูวันนี้</b>
+        <span class="muted" style="font-size:11.5px">${off?('ปิดขายอยู่ '+off+' รายการ'):'ขายครบทุกเมนู'} · ปิดเมื่อของหมด ลูกค้าจะไม่เห็นเมนูนั้น</span>
+      </div>
+      <input type="search" value="${esc(_shiftQ)}" placeholder="🔍 ค้นหาเมนู" oninput="shiftSearch(this.value)"
+        style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:16px;border:1.5px solid var(--line);border-radius:11px;margin:8px 0">
+      ${items.length?items.map(m=>`<div class="row between" style="align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;color:${m.active?'var(--navy)':'var(--muted)'}">${esc(m.name)}${m.category==='topping'?' <span class="muted" style="font-size:11px">· ท็อปปิ้ง</span>':''}</span>
+          <button class="tgl ${m.active?'on':'off'}" style="flex:none" aria-label="${m.active?'ปิดขาย':'เปิดขาย'} ${esc(m.name)}" onclick="shiftMenu(${m.id},${m.active?0:1})"></button>
+        </div>`).join(''):'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">ไม่พบเมนูที่ค้นหา</p>'}
+    </div>
+    <p class="muted" style="font-size:11.5px;margin-top:12px">ราคา · ต้นทุน · พนักงาน · รายงาน ต้องให้ผู้จัดการหรือเจ้าของร้านเป็นคนแก้</p>`;
+  if(keepFocus){ const el=box.querySelector('input[type=search]'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+}
+window.shiftOnline=async(on)=>{ try{ await api('/api/shift/online',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!!on})});
+  toast(on?'เปิดรับออเดอร์ออนไลน์แล้ว':'ปิดรับออเดอร์ออนไลน์แล้ว'); ONLINE_ON=!!on; if(typeof renderOnlineBtn==='function') renderOnlineBtn(); renderShift(); }
+  catch(e){ toast(err(e)); } };
+window.shiftMenu=async(id,on)=>{ try{ await api('/api/shift/menu-available',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,on:!!on})});
+  toast(on?'เปิดขายเมนูนี้แล้ว':'ปิดขายเมนูนี้แล้ว (ของหมด)'); await loadMenu(); renderShift(true); }
+  catch(e){ toast(err(e)); } };
+window.shiftOpenCash=async()=>{
+  const v=await appPrompt({title:'เปิดรอบเงินสด',message:'เงินทอนตั้งต้นในลิ้นชักเท่าไหร่?',type:'number',inputMode:'decimal',value:'0',okText:'เปิดรอบ'});
+  if(v===null) return;
+  try{ await api('/api/shift/cash-open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({openFloat:Number(v)||0})});
+    toast('เปิดรอบเงินสดแล้ว ✓'); renderShift(); }
+  catch(e){ toast(err(e)==='session_already_open'?'มีรอบเปิดอยู่แล้ว':err(e)); } };
 window.hideReviews=()=>{ $('reviewCard').style.display='none'; $('dash').style.display=''; };
 window.showReviews=()=>{ hideAllPanels(); closeAdmin();
   $('reviewCard').style.display=''; $('dash').style.display='none'; renderFeedback(); };
@@ -3411,6 +3536,7 @@ let FIN=null;
 // inside the daily report) or jump to the panel that owns the setting. Owner-only rows are
 // hidden for managers; the APIs behind them still enforce the role server-side.
 window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none';
+  { const fb=$('finBack'); if(fb) fb.style.display='none'; }
   $('settingsBody').style.display='';   // leaving from the cost page must not hide the hub next time
   $('dash').style.display=''; };
 window.showSettings=()=>{ hideAllPanels(); closeAdmin();
@@ -3446,8 +3572,8 @@ function renderSettingsHub(){
 // The campaign controls live on the ระบบ page; the owner looked for them in ตั้งค่าทั้งหมด and found
 // nothing, because that row only advertised "คิว การพิมพ์ สรุปอัตโนมัติ". Its own row now, landing
 // straight on the block instead of somewhere in a long page.
-window.openCampaigns=async()=>{ await showFeatures();
-  setTimeout(()=>{ const el=$('luckyBox'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },250); };
+// Campaigns all live on the coupon hub now — old entry points land there instead of ⚙.
+window.openCampaigns=()=>showCouponHub(0);
 // Old habit preserved: the ต้นทุน button on the daily report now leads HERE with the form open.
 window.openSettingsCost=async()=>{ showSettings(); await toggleFinance(); };
 // Costs used to EXPAND under the still-visible hub while every other row navigated away — one row
@@ -3458,9 +3584,11 @@ window.toggleFinance=async()=>{
   renderFinance();
   $('settingsBody').style.display='none';
   $('financeBox').style.display='';
+  { const fb=$('finBack'); if(fb) fb.style.display=''; }   // back sits next to ✕, same as every other sub-page
   $('settingsCard').scrollIntoView({behavior:'smooth',block:'start'});
 };
-window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display=''; renderSettingsHub(); };
+window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display='';
+  { const fb=$('finBack'); if(fb) fb.style.display='none'; } renderSettingsHub(); };
 // Every cost line the P&L knows about, grouped exactly like the statement reads. Adding a line
 // here is all it takes for it to appear in the form, the daily P&L and the Excel export.
 const FIN_FORM=[
@@ -3503,7 +3631,7 @@ const FIN_FORM=[
 const FIN_ALL=FIN_FORM.flatMap(([,,rows])=>rows.map(r=>r[0]));
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" inputmode="decimal" step="${step||'1'}" value="${FIN[id]??0}" style="padding:8px"></div>`;
-  $('financeBox').innerHTML=`<button class="ghost" style="padding:6px 12px;font-size:12.5px;margin-bottom:10px" onclick="closeFinance()">‹ กลับไปตั้งค่าทั้งหมด</button>`
+  $('financeBox').innerHTML=``
     +`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
     +FIN_FORM.map(([title,hint,rows])=>`<div style="border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:10px">
         <div style="font-weight:800;color:var(--navy);font-size:13px">${title}</div>
@@ -4652,17 +4780,15 @@ window.showFeatures=async()=>{
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
-    `<div class="feat-row" id="luckyBox" style="align-items:flex-start;flex-direction:column;gap:8px">
-      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">🎉</span><div><b>แคมเปญเลขนำโชค</b>
-        <div class="muted" style="font-size:12px;margin-top:2px">ลูกค้าที่ได้คิวเลขนี้ (ทุกโซนที่ถึงเลข) จะเห็นป๊อบอัพยินดีด้วยบนจอตัวเอง กด "ใช้เลย" เพื่อลดกับออเดอร์นั้นทันที · เฉพาะลูกค้าที่สั่งผ่าน LINE · โอนสิทธิ์/แลกเงินสดไม่ได้</div></div></div>
-      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
-        <label class="muted" style="font-size:12.5px">เลข <input id="lkNumInp" type="number" min="1" value="${(f.lucky&&f.lucky.number)||67}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
-        <label class="muted" style="font-size:12.5px">มูลค่า ฿ <input id="lkValInp" type="number" min="1" value="${(f.lucky&&f.lucky.value)||40}" style="width:82px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
-        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveLucky()">บันทึก</button>
-        <button class="${(f.lucky&&f.lucky.on)?'danger':'ok'}" style="padding:8px 14px" onclick="toggleLucky(${(f.lucky&&f.lucky.on)?'false':'true'})">${(f.lucky&&f.lucky.on)?'ปิดแคมเปญ':'เปิดแคมเปญ'}</button>
-      </div>
-      ${f.lucky&&f.lucky.reason==='needs_queue_first'?`<div style="width:100%;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ แคมเปญยังทำงานไม่ได้ — ต้องเปิด "เข้าคิวทันที (Queue-first)" ก่อน มิฉะนั้นเลขคิวจะออกหลังจ่ายเงินแล้ว จึงไม่เหลือยอดให้ลด</div>`:''}
-      ${f.lucky&&f.lucky.ready?`<div style="width:100%;background:#eafaf4;color:#0f7a5f;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">✅ แคมเปญทำงานอยู่ — คิวเลข ${f.lucky.number} รับฟรี ฿${f.lucky.value}</div>`:''}
+    // เลขนำโชค used to be configurable BOTH here and on the coupon hub — same campaign, two
+    // different control styles (a switch there, a green เปิดแคมเปญ button here), which is exactly
+    // the "ซ้ำซ้อน" the owner spotted. It now lives on the hub with every other campaign; this is
+    // just a signpost so anyone who looks here still finds it.
+    `<div class="feat-row" id="luckyBox" style="align-items:center">
+      <span style="flex:none">🎉</span>
+      <div style="flex:1"><b>แคมเปญเลขนำโชค</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">${(f.lucky&&f.lucky.on)?`เปิดอยู่ — คิวเลข ${f.lucky.number} รับฟรี ฿${f.lucky.value}`:'ปิดอยู่'} · ตั้งค่าและเปิด-ปิดได้ที่หน้า "คูปอง & แคมเปญ" ที่เดียว</div></div>
+      <button class="ghost" style="padding:7px 13px;font-size:12.5px;flex:none" onclick="showCouponHub(0)">เปิดหน้าคูปอง ›</button>
     </div>`+
     row('autoWinback', f.autoWinback, '<svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>', 'ดึงลูกค้ากลับอัตโนมัติ', f.autoWinback?'เปิดอยู่ — ลูกค้าที่เริ่มห่างหาย (กลุ่มเสี่ยงหาย) จะได้คูปอง + ข้อความทาง LINE เองวันละครั้ง (ไม่ส่งซ้ำคนเดิมภายใน 45 วัน)':'ปิดอยู่ — เปิดเพื่อส่งคูปองดึงลูกค้ากลับให้อัตโนมัติ', false)+
     `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
@@ -4742,7 +4868,24 @@ window.checkLine=async()=>{
     ${ln('รหัสเจ้าของที่บันทึกไว้', r.ownerId?(esc(String(r.ownerId).slice(0,10))+'…'):'ยังไม่ได้ตั้ง', okc(!!r.ownerId))}
     ${ln('เป็นเพื่อนกับ OA นี้', good?('ใช่'+(r.friend.displayName?(' · '+esc(r.friend.displayName)):'')):'ไม่ใช่', okc(good))}
     ${r.verdict?`<div style="background:${good?'#e1f5ee':'#fcebeb'};color:${good?'#0f6b57':'#a32d2d'};border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.verdict)}</div>`:''}
+    ${(()=>{ const w=r.webhook||{}; const whGood=!!(w.ok&&w.endpoint&&w.active&&w.matches&&(!w.test||w.test.success));
+      return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:6px">
+        <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:3px">Webhook (ตัวที่ทำให้พิมพ์ “id” แล้วมีคนตอบ)</div>
+        ${ln('ตั้งไว้ที่', w.endpoint?esc(w.endpoint):'ยังไม่ได้ตั้ง', okc(!!w.endpoint))}
+        ${ln('เปิดใช้งาน', w.ok?(w.active?'เปิด':'ปิดอยู่'):'ตรวจไม่ได้', okc(!!(w.ok&&w.active)))}
+        ${w.test?ln('LINE ยิงทดสอบ', w.test.ok?(w.test.success?'ถึงเซิร์ฟเวอร์ ✓':('ไม่สำเร็จ '+esc(String(w.test.statusCode||w.test.reason||'')))):'ตรวจไม่ได้', okc(!!(w.test.ok&&w.test.success))):''}
+        ${r.webhookVerdict?`<div style="background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.webhookVerdict)}</div>`:''}
+        ${whGood?'':`<button class="ghost" style="width:100%;margin-top:7px;padding:8px;font-size:12.5px" onclick="fixWebhook()">ตั้ง Webhook ให้อัตโนมัติ (ชี้มาที่เซิร์ฟเวอร์นี้)</button>`}
+      </div>`; })()}
   </div>`; };
+// Owner-pressed only: writes the OA's webhook URL. After this LINE still needs "ใช้ Webhook" ON in
+// OA Manager if it is off — the check above says so explicitly.
+window.fixWebhook=async()=>{
+  if(!(await appConfirm({title:'ตั้ง Webhook ให้ LINE',message:'ระบบจะตั้งค่า Webhook ของ LINE OA ให้ชี้มาที่เซิร์ฟเวอร์นี้\n(ตั้งค่านี้อยู่ในบัญชี LINE ของร้าน — เปลี่ยนกลับเองได้ที่ LINE Developers)',okText:'ตั้งให้เลย',cancelText:'ยกเลิก'}))) return;
+  try{ const r=await api('/api/admin/line-webhook',{method:'POST'});
+    toast(r.ok?'ตั้ง Webhook แล้ว ✓ ลองพิมพ์ "id" ในแชทร้านอีกครั้ง':'ตั้งไม่สำเร็จ: '+(r.detail||r.reason||''));
+    checkLine(); }
+  catch(e){ toast(err(e)); } };
 // พักสิทธิ์ no-show: toggle มีผลทันที (กติกา design system) · เกณฑ์ครั้ง/วัน บันทึกด้วยปุ่ม
 window.toggleNoshow=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noshowOn:!!on})});
   toast(on?'เปิดพักสิทธิ์ no-show แล้ว':'ปิดพักสิทธิ์ no-show แล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
@@ -4777,15 +4920,8 @@ window.testOwnerSummary=async()=>{
       no_text:'ℹ️ ไม่มีข้อมูลให้สรุป' };
     toast(REASON[r.reason]||(r.sent?'✅ ส่งแล้ว':'ℹ️ ส่งไม่สำเร็จ'));
     await appConfirm({title:'ข้อความสรุปที่จะส่ง',message:(r.text||'(ว่าง)'),okText:'ปิด',cancelText:''}); }catch(e){ toast(err(e)); } };
-window.saveLucky=async()=>{
-  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({luckyNumber:+$('lkNumInp').value||67, luckyValue:+$('lkValInp').value||40})});
-    toast('บันทึกแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
-window.toggleLucky=async(on)=>{
-  if(on && !(await appConfirm({title:'เปิดแคมเปญเลขนำโชค',
-    message:'ลูกค้าที่ได้คิวเลข '+($('lkNumInp').value||67)+' จะได้ส่วนลด ฿'+($('lkValInp').value||40)+' ทันที\nทุกโซนที่ถึงเลขนี้จะมีผู้ได้รับ 1 คนต่อวัน\n\nเปิดใช้งานเลยไหม?',okText:'เปิดแคมเปญ'}))) return;
-  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})});
-    toast(on?'🎉 เปิดแคมเปญเลขนำโชคแล้ว':'ปิดแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+// (saveLucky / toggleLucky removed — the ⚙ copy of this campaign is gone; the coupon hub's
+//  chSaveLucky + chToggleLucky are the single path now.)
 window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
@@ -4939,7 +5075,7 @@ window.openWinback=()=>{ showCustomers(); };   // legacy entry point → the new
 window.showCustomers=async()=>{ closeAdmin(); hideAllPanels(); $('custListCard').style.display='';
   try{ const r=await api('/api/crm/customers'); CL=r.customers||[]; }catch(e){ toast(err(e)); CL=[]; }
   _clSel.clear(); _clQ=''; _clShown=CL_PAGE; const si=$('clSearch'); if(si) si.value='';
-  renderCustSegs(); renderCustList(); loadCampaigns(); };
+  renderCustSegs(); renderCustList(); loadCampaigns(); clRestoreDefaults(); };
 window.hideCustomers=()=>{ $('custListCard').style.display='none'; $('dash').style.display=''; };
 function clCount(seg){ return seg==='all' ? CL.length : CL.filter(c=>c.segment===seg).length; }
 function renderCustSegs(){ $('clSegTabs').innerHTML=CL_SEGS.map(([k,label])=>

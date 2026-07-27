@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, lastPushError, botInfo, friendCheck, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, pushSummary, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -2772,13 +2772,14 @@ export function setOwnerLineId(id) {
 // blocked it, the channel token expired, the monthly quota ran out) was reported as a success. Worse,
 // maybeAutoSummary() marks the day done on sent:true, so one silent rejection meant that day's
 // summary was never retried. The shop saw "✅ ส่งแล้ว" and no message ever arrived.
-export async function notifyOwner(text, kind = 'owner') {
+export async function notifyOwner(text, kind = 'owner', summaryData = null) {
   const id = getOwnerLineId();
   if (!id) return { sent: false, reason: 'no_id' };
   if (!validOwnerLineId(id)) return { sent: false, reason: 'invalid_id' };
   if (!text) return { sent: false, reason: 'no_text' };
   if (!LINE_ENABLED) return { sent: false, reason: 'line_off' };
-  const ok = await pushText(id, text, kind);
+  // A card when we have numbers worth laying out; plain text otherwise (stock alert, PO draft).
+  const ok = summaryData ? await pushSummary(id, summaryData, text, kind) : await pushText(id, text, kind);
   // Remember WHY it failed so the ⚙ panel can name the cause instead of saying "ล้มเหลว".
   try {
     const e = ok ? null : lastPushError();
@@ -2795,6 +2796,17 @@ export async function lineCheck() {
   const id = getOwnerLineId();
   const bot = await botInfo();
   const friend = id ? await friendCheck(id) : { ok: false, reason: 'no_id' };
+  // Webhook: the "พิมพ์ id แล้วระบบตอบรหัสให้" trick — and every queue reply — depends on it.
+  // With it off or pointed elsewhere, the customer's message never reaches this server at all.
+  const wh = await webhookInfo();
+  const want = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/line/webhook';
+  const whTest = (wh.ok && wh.endpoint && wh.active) ? await webhookTest() : null;
+  const webhook = { ...wh, expected: want, matches: !!(wh.ok && wh.endpoint === want), test: whTest };
+  let webhookVerdict = null;
+  if (wh.ok && !wh.endpoint) webhookVerdict = `ยังไม่ได้ตั้ง Webhook — พิมพ์ "id" ในแชทจะไม่มีอะไรตอบกลับ · กดปุ่ม "ตั้ง Webhook ให้อัตโนมัติ" ด้านล่างได้เลย`;
+  else if (wh.ok && !wh.active) webhookVerdict = 'Webhook ตั้งไว้แล้วแต่ยัง "ปิดใช้งาน" — เปิดที่ LINE Official Account Manager → ตั้งค่า → การตอบกลับ → เปิด Webhook (และปิดโหมดแชทอัตโนมัติ)';
+  else if (wh.ok && !webhook.matches) webhookVerdict = `Webhook ชี้ไปที่อื่น (${wh.endpoint}) ไม่ใช่เซิร์ฟเวอร์นี้ — ควรเป็น ${want}`;
+  else if (whTest && whTest.ok && !whTest.success) webhookVerdict = `LINE ยิงทดสอบไปที่ Webhook แล้วไม่สำเร็จ (${whTest.statusCode || whTest.reason || 'ไม่ทราบสาเหตุ'})`;
   let verdict = null;
   if (!LINE_ENABLED) verdict = 'ระบบ LINE ปิดอยู่บนเซิร์ฟเวอร์นี้ (ไม่ได้ตั้ง token) — ส่งจริงไม่ได้';
   else if (!bot.ok) verdict = 'Token ของ LINE ใช้ไม่ได้ — ต้องออก Channel access token ใหม่ใน LINE Developers';
@@ -2803,7 +2815,14 @@ export async function lineCheck() {
   else if (friend.ok && !friend.friend)
     verdict = `LINE ไม่รู้จัก id นี้ในบัญชี ${bot.basicId || 'OA ที่ระบบใช้อยู่'} — แปลว่ารหัส U… ถูกคัดลอกมาจาก OA อื่น (เช่นตัวทดสอบ) `
       + `หรือยังไม่ได้ทักแชทกับ OA นี้ · วิธีแก้: ทักแชท ${bot.basicId || 'OA ของร้าน'} แล้วพิมพ์ "id" เพื่อรับรหัสของ OA นี้โดยตรง`;
-  return { lineOn: LINE_ENABLED, bot, ownerId: id || null, friend, verdict };
+  return { lineOn: LINE_ENABLED, bot, ownerId: id || null, friend, verdict, webhook, webhookVerdict };
+}
+/** Owner-triggered: point the OA's webhook at this server (so "id" in the chat can reply). */
+export async function pointWebhookHere() {
+  const url = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/line/webhook';
+  if (!/^https:\/\//.test(url)) return { ok: false, reason: 'no_public_url' };
+  const r = await setWebhook(url);
+  return { ...r, endpoint: url };
 }
 /** Turn a raw LINE failure into the single sentence that tells the owner what to DO. */
 export function pushErrorHint(err) {
@@ -2868,6 +2887,47 @@ export function composeDailySummary(branchId = null, dateStr = null) {
   } catch { /* additive */ }
   return lines.join('\n');
 }
+/** The SAME summary as structured data, for the Flex card. The text version stays the source of
+ *  truth (it is the altText and the fallback), so the card and the text can never disagree. */
+export function dailySummaryData(branchId = null, dateStr = null) {
+  const validDay = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+  const day = validDay ? dateStr : db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  const r = dailyReport(branchId, validDay ? dateStr : null); const v = r.voided || {};
+  const bk = db.prepare("SELECT strftime('%d',?) d, strftime('%m',?) m, strftime('%Y',?) y, strftime('%w',?) w").get(day, day, day, day);
+  const THMON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const THDOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  const out = {
+    shopName: process.env.BRAND_NAME || 'YO-DEE Yogurt',
+    dateTh: `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`,
+    unit: UNIT,
+    revenue: r.revenue, cups: r.cupsSold || 0,
+    netProfit: Math.round(r.pnl?.netProfit || 0),
+    cancelled: v.cancelled?.orders || 0, refunded: v.refunded?.orders || 0, wasteCups: v.waste?.cups || 0,
+    rating: r.avgRating, ratingCount: r.ratingCount || 0,
+    cashLine: null, lowCount: 0, expiringCount: 0, expired: false,
+    buyCount: 0, buyCost: 0, buyList: [],
+    // Deep links, not just "open the app": ?go= lands on the exact page after the PIN screen, so
+    // the owner standing in Makro taps once and sees the draft order instead of hunting menus.
+    link: process.env.PUBLIC_BASE_URL ? (process.env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/cashier/?go=report') : null,
+    poLink: process.env.PUBLIC_BASE_URL ? (process.env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/cashier/?go=po') : null,
+  };
+  try {
+    const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=? ORDER BY id DESC LIMIT 1").get(branchId || 1, day);
+    if (last) out.cashLine = last.over_short === 0
+      ? { ok: true, text: 'พอดี ✓' }
+      : { ok: false, text: `${last.over_short > 0 ? 'เกิน' : 'ขาด'} ฿${Math.abs(last.over_short)}` };
+  } catch { /* additive */ }
+  try {
+    out.lowCount = listIngredients().filter((i) => i.low).length;
+    const exp = expiringLots(7);
+    out.expiringCount = exp.length; out.expired = exp.some((l) => l.expired);
+    const need = purchasePlan().filter((p) => p.suggestQty > 0);
+    out.buyCount = need.length;
+    out.buyCost = Math.round(need.reduce((s, p) => s + (p.estCost || 0), 0));
+    out.buyList = need.map((p) => `${p.name} ×${p.suggestQty}${p.unit ? ' ' + p.unit : ''}`);
+  } catch { /* additive */ }
+  return out;
+}
 export function autoSummaryEnabled() { return getSetting('summary:auto', '0') === '1'; }
 export function setAutoSummary(on) { setSetting('summary:auto', on ? '1' : '0'); return { autoSummary: !!on }; }
 /** Fire the owner summary at most once per Bangkok day (dedup key), when auto-summary is on.
@@ -2882,6 +2942,31 @@ export async function maybeAutoSummary(branchId = null, dateStr = null) {
   // close will try again — so fixing "Keys7" makes the very next round's summary arrive.
   if (r.sent) setSetting('summary:last_sent', day);
   return r;
+}
+/** The win-back composer's last setup (message + which coupon is attached). The owner sets this up
+ *  once and expects it to still be there next time — it used to reset on every page open, so the
+ *  attached coupon silently vanished and blasts went out with no gift. Stored server-side so it
+ *  survives a different till/device too. */
+export function campaignDefaults() {
+  return {
+    message: getSetting('crm:msg', '') || null,
+    couponOn: getSetting('crm:coupon_on', '0') === '1',
+    couponId: Number(getSetting('crm:coupon_id', '0')) || null,
+  };
+}
+export function setCampaignDefaults({ message, couponOn, couponId } = {}) {
+  if (message != null) setSetting('crm:msg', String(message).slice(0, 380));
+  if (couponOn != null) setSetting('crm:coupon_on', couponOn ? '1' : '0');
+  if (couponId !== undefined) setSetting('crm:coupon_id', couponId ? String(Number(couponId) || 0) : '');
+  return campaignDefaults();
+}
+/** Cashier-safe availability flip: ONLY the active flag, never price/name/recipe. The till needs
+ *  to pull a sold-out drink off the menu immediately; editing what a drink COSTS stays manager+. */
+export function setMenuAvailable(id, on) {
+  const it = db.prepare('SELECT id, name, active FROM menu_items WHERE id=?').get(Number(id));
+  if (!it) throw new Error('item_not_found');
+  db.prepare('UPDATE menu_items SET active=? WHERE id=?').run(on ? 1 : 0, it.id);
+  return { id: it.id, name: it.name, active: on ? 1 : 0 };
 }
 // ---------- No-show strikes (default OFF): ลูกค้าที่กดคิว/สั่งแล้วไม่มารับซ้ำๆ ----------
 // Strikes are DERIVED from tickets (status='no_show') inside a sliding window — nothing to keep in
@@ -3131,7 +3216,12 @@ export async function maybeAutoWinback(branchId = null) {
   });
   return { sent: r.sent, targeted: r.targeted, reason: 'ok' };
 }
-export async function pushOwnerSummary(branchId = null, dateStr = null) { const text = composeDailySummary(branchId, dateStr); const r = await notifyOwner(text, 'summary'); return { ...r, text }; }
+export async function pushOwnerSummary(branchId = null, dateStr = null) {
+  const text = composeDailySummary(branchId, dateStr);
+  let data = null; try { data = dailySummaryData(branchId, dateStr); } catch { /* card optional — text still goes */ }
+  const r = await notifyOwner(text, 'summary', data);
+  return { ...r, text };
+}
 /** One glance at WHY the summary is/isn't reaching the owner — every gate in the chain. */
 export function summaryDiag() {
   const id = getOwnerLineId();

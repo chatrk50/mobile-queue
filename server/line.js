@@ -63,6 +63,42 @@ export async function botInfo() {
              userId: body.userId || null, premiumId: body.premiumId || null };
   } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
 }
+/** Is the OA's webhook set, switched on, and does LINE actually reach it? Typing "id" in the chat
+ *  can only ever reply if all three are true — with webhook off, the message never leaves LINE. */
+export async function webhookInfo() {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint', { headers: { Authorization: `Bearer ${token}` } });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, reason: 'api_error', status: r.status, detail: body?.message || '' };
+    return { ok: true, endpoint: body.endpoint || null, active: body.active === true };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
+}
+/** Ask LINE to POST a test event to the configured webhook and report what came back. */
+export async function webhookTest() {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/test',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, reason: 'api_error', status: r.status, detail: body?.message || '' };
+    return { ok: true, success: body.success === true, statusCode: body.statusCode ?? null,
+             reason: body.reason || null, detail: body.detail || null };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
+}
+/** Point the OA's webhook at this server. Owner-triggered only — it changes the LINE channel's
+ *  own configuration, so it is never called automatically. */
+export async function setWebhook(url) {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint',
+      { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: url }) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, status: r.status, detail: body?.message || '' };
+    return { ok: true };
+  } catch (e) { return { ok: false, detail: String(e?.message || e) }; }
+}
 /** Is this userId a friend of THIS channel? 404/403 = not this channel's user (or not a friend). */
 export async function friendCheck(userId) {
   if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
@@ -111,46 +147,49 @@ function buildQueueMessage(text, link, label) {
  *  the lock screen shows the alt-text status line, and the chat shows a progress card.
  *  stage: 1 = รับออเดอร์แล้ว · 2 = กำลังทำ/ใกล้ถึงคิว · 3 = พร้อมรับ. Costs the SAME one message
  *  as the plain push it replaces. */
-const STAGE_META = [
-  { icon: '🧾', label: 'รับออเดอร์' },
-  { icon: '🥤', label: 'กำลังทำ' },
-  { icon: '🔔', label: 'พร้อมรับ' },
-];
-const ON = '#16a34a', OFF = '#d9e2e8', INK = '#1e3a5f', MUT = '#8a9aa8';
+// No emoji anywhere by owner request: the state is carried by the bar, the colour and the words.
+// Emoji rendered at a different size on every device and made the card read as a chat message
+// rather than an order status.
+const STAGE_LABELS = ['รับออเดอร์', 'กำลังทำ', 'พร้อมรับ'];
+const ON = '#1ab3ce', DONE = '#2fc2a6', OFF = '#E4ECF1', INK = '#284B63', MUT = '#8A9299';
 function buildStageMessage({ stage, title, subtitle, code, link, label }) {
-  const seg = (i) => ({ type: 'box', layout: 'vertical', height: '4px', flex: 3, backgroundColor: i < stage ? ON : OFF, cornerRadius: '2px', contents: [{ type: 'filler' }] });
-  const dot = (i) => ({
-    type: 'box', layout: 'vertical', flex: 2, contents: [
-      { type: 'text', text: STAGE_META[i].icon, align: 'center', size: i === stage - 1 ? 'md' : 'sm' },
-      { type: 'text', text: STAGE_META[i].label, align: 'center', size: 'xxs', color: i < stage ? ON : MUT, weight: i === stage - 1 ? 'bold' : 'regular' },
+  // One column per step: a 4px rail above its label. Done = mint, current = teal, later = grey.
+  const step = (i) => {
+    const state = i < stage - 1 ? 'done' : (i === stage - 1 ? 'now' : 'next');
+    const c = state === 'done' ? DONE : state === 'now' ? ON : OFF;
+    return {
+      type: 'box', layout: 'vertical', flex: 1, spacing: 'sm',
+      contents: [
+        { type: 'box', layout: 'vertical', height: '4px', backgroundColor: c, cornerRadius: '2px', contents: [{ type: 'filler' }] },
+        { type: 'text', text: STAGE_LABELS[i], size: 'xxs', align: 'center',
+          color: state === 'next' ? MUT : INK, weight: state === 'now' ? 'bold' : 'regular' },
+      ],
+    };
+  };
+  const body = [
+    { type: 'text', text: title, weight: 'bold', size: 'lg', color: INK, wrap: true },
+    ...(subtitle ? [{ type: 'text', text: subtitle, size: 'sm', color: MUT, wrap: true, margin: 'xs' }] : []),
+  ];
+  // The queue number is the one thing the customer looks for — give it its own quiet panel.
+  if (code) body.push({
+    type: 'box', layout: 'vertical', margin: 'lg', paddingAll: '14px', cornerRadius: '12px',
+    backgroundColor: '#F4FAFC', alignItems: 'center',
+    contents: [
+      { type: 'text', text: 'หมายเลขคิว', size: 'xxs', color: MUT },
+      { type: 'text', text: code, size: '3xl', weight: 'bold', color: INK, align: 'center' },
     ],
   });
+  body.push({ type: 'box', layout: 'horizontal', margin: 'lg', spacing: 'sm', contents: [step(0), step(1), step(2)] });
   return {
     type: 'flex',
-    altText: `${STAGE_META[stage - 1].icon} ${title}${code ? ` · คิว ${code}` : ''}`,
+    altText: `${title}${code ? ` · คิว ${code}` : ''}`,
     contents: {
       type: 'bubble', size: 'mega',
-      body: {
-        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '16px',
-        contents: [
-          {
-            type: 'box', layout: 'horizontal', contents: [
-              { type: 'text', text: title, weight: 'bold', size: 'lg', color: INK, wrap: true, flex: 5 },
-              ...(code ? [{ type: 'text', text: code, weight: 'bold', size: 'lg', color: ON, align: 'end', flex: 2 }] : []),
-            ],
-          },
-          ...(subtitle ? [{ type: 'text', text: subtitle, size: 'sm', color: '#555555', wrap: true }] : []),
-          {
-            type: 'box', layout: 'horizontal', alignItems: 'center', margin: 'md', contents: [
-              dot(0), seg(1), dot(1), seg(2), dot(2),
-            ],
-          },
-        ],
-      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '18px', backgroundColor: '#FFFFFF', contents: body },
       ...(link ? {
         footer: {
-          type: 'box', layout: 'vertical',
-          contents: [{ type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
+          type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px',
+          contents: [{ type: 'button', style: 'primary', color: ON, height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
         },
       } : {}),
     },
@@ -159,7 +198,7 @@ function buildStageMessage({ stage, title, subtitle, code, link, label }) {
 /** Push an order-status progress card (falls back to plain text like pushQueue). */
 export async function pushStage(userId, opts, kind = 'queue') {
   if (!userId) return false;
-  const fallbackText = `${STAGE_META[(opts.stage || 1) - 1].icon} ${opts.title}${opts.code ? `\nหมายเลข: ${opts.code}` : ''}${opts.subtitle ? `\n${opts.subtitle}` : ''}`;
+  const fallbackText = `${opts.title}${opts.code ? `\nหมายเลขคิว ${opts.code}` : ''}${opts.subtitle ? `\n${opts.subtitle}` : ''}`;
   if (!LINE_ENABLED) {
     console.log(`\n[LINE-STUB stage${opts.stage}] -> ${userId}\n${fallbackText}\n`);
     return false;
@@ -175,6 +214,98 @@ export async function pushStage(userId, opts, kind = 'queue') {
       await client.pushMessage({ to: userId, messages: [{ type: 'text', text: t }] });
       logPush(userId, kind, true); return true;
     } catch (e) { logPush(userId, kind, false); return false; }
+  }
+}
+/** The owner's end-of-day summary as a Flex card. The plain-text version was a wall of 15+ emoji
+ *  lines that had to be re-read every night to find the two numbers that matter; this leads with
+ *  ยอดขาย/กำไร, groups the rest, and always carries the same text as altText so a notification
+ *  preview (and any client that cannot render Flex) still says everything. */
+function buildSummaryFlex(s, fallbackText) {
+  const NAVY = '#284B63', MUTED = '#8A9299', TEAL = '#1ab3ce', GREEN = '#0f6b57', RED = '#b3283a', WARN = '#946f00';
+  const money = (n) => '฿' + Number(n || 0).toLocaleString('en-US');
+  const row = (label, value, color, bold) => ({
+    type: 'box', layout: 'horizontal', margin: 'sm',
+    contents: [
+      { type: 'text', text: label, size: 'sm', color: MUTED, flex: 5, wrap: true },
+      { type: 'text', text: String(value), size: 'sm', color: color || NAVY, align: 'end', flex: 4,
+        weight: bold ? 'bold' : 'regular', wrap: true },
+    ],
+  });
+  const sep = (m) => ({ type: 'separator', margin: m || 'lg', color: '#EAF0F4' });
+  const head = (t) => ({ type: 'text', text: t, size: 'xs', color: MUTED, weight: 'bold', margin: 'lg' });
+  const body = [
+    { type: 'text', text: 'สรุปยอดวันนี้', size: 'xs', color: MUTED, weight: 'bold' },
+    { type: 'text', text: s.shopName || 'ร้าน', size: 'lg', color: NAVY, weight: 'bold', margin: 'xs', wrap: true },
+    { type: 'text', text: s.dateTh || '', size: 'xs', color: MUTED, margin: 'xs' },
+    // The two numbers the owner actually opens this for.
+    { type: 'box', layout: 'vertical', margin: 'lg', paddingAll: '14px', cornerRadius: '12px',
+      backgroundColor: '#F4FAFC',
+      contents: [
+        { type: 'text', text: 'ยอดขาย', size: 'xs', color: MUTED },
+        { type: 'text', text: money(s.revenue), size: 'xxl', weight: 'bold', color: NAVY },
+        { type: 'box', layout: 'horizontal', margin: 'md', contents: [
+          { type: 'text', text: `${s.cups || 0} ${s.unit || 'แก้ว'}`, size: 'sm', color: MUTED, flex: 4 },
+          { type: 'text', text: (s.netProfit >= 0 ? 'กำไร ' : 'ขาดทุน ') + money(Math.abs(s.netProfit || 0)),
+            size: 'sm', weight: 'bold', align: 'end', flex: 5, color: s.netProfit >= 0 ? GREEN : RED },
+        ] },
+      ] },
+  ];
+  if (s.cancelled || s.refunded || s.wasteCups) {
+    body.push(head('ยกเลิก / คืนเงิน / ของเสีย'));
+    body.push(row('ยกเลิก', `${s.cancelled || 0} ออเดอร์`, s.cancelled ? WARN : NAVY));
+    body.push(row('คืนเงิน', `${s.refunded || 0} ออเดอร์`, s.refunded ? WARN : NAVY));
+    body.push(row('ของเสีย', `${s.wasteCups || 0} ${s.unit || 'แก้ว'}`, s.wasteCups ? RED : NAVY));
+  }
+  if (s.rating || s.cashLine) {
+    body.push(sep());
+    if (s.rating) body.push(row('รีวิวเฉลี่ย', `★ ${s.rating}${s.ratingCount ? ` (${s.ratingCount})` : ''}`, '#d9a520'));
+    if (s.cashLine) body.push(row('เงินสด', s.cashLine.text, s.cashLine.ok ? GREEN : RED, true));
+  }
+  if (s.lowCount || s.expiringCount || (s.buyList || []).length) {
+    body.push(head('สต๊อก'));
+    if (s.lowCount) body.push(row('ใกล้หมด', `${s.lowCount} รายการ`, WARN));
+    if (s.expiringCount) body.push(row('ใกล้/หมดอายุ', `${s.expiringCount} ล็อต`, s.expired ? RED : WARN));
+    if ((s.buyList || []).length) {
+      body.push(row('ควรสั่งซื้อ', `${s.buyCount} รายการ${s.buyCost ? ` · ~${money(s.buyCost)}` : ''}`, NAVY, true));
+      // EVERY line, not a preview: the owner reads this standing in the shop with no browser open.
+      // 60 is a safety stop far above a real shopping list (a bubble caps at 10KB).
+      const items = s.buyList.slice(0, 60);
+      body.push({ type: 'box', layout: 'vertical', margin: 'sm', paddingAll: '10px', cornerRadius: '10px',
+        backgroundColor: '#FFFBEA',
+        contents: items.map((t) => ({ type: 'text', text: '• ' + t, size: 'xs', color: '#7a5c00', wrap: true }))
+          .concat(s.buyList.length > items.length
+            ? [{ type: 'text', text: `…และอีก ${s.buyList.length - items.length} รายการ (เปิดใบสั่งซื้อเพื่อดูครบ)`, size: 'xs', color: MUTED, margin: 'sm', wrap: true }] : []) });
+    }
+  }
+  return {
+    type: 'flex', altText: fallbackText.slice(0, 400),
+    contents: {
+      type: 'bubble', size: 'mega',
+      body: { type: 'box', layout: 'vertical', paddingAll: '18px', backgroundColor: '#FFFFFF', contents: body },
+      // Two doors, both deep links: straight to the draft purchase order when there is one to
+      // approve (that is what the owner acts on while out buying), and to the day's report.
+      footer: (s.link || s.poLink) ? {
+        type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px', spacing: 'sm',
+        contents: [
+          ...(s.poLink && (s.buyList || []).length ? [{ type: 'button', style: 'primary', height: 'sm', color: TEAL,
+            action: { type: 'uri', label: 'เปิดใบสั่งซื้อ', uri: s.poLink } }] : []),
+          ...(s.link ? [{ type: 'button', style: 'secondary', height: 'sm',
+            action: { type: 'uri', label: 'เปิดรายงานวันนี้', uri: s.link } }] : []),
+        ],
+      } : undefined,
+    },
+  };
+}
+/** Send the owner summary as a card; falls back to the plain text on any Flex error. */
+export async function pushSummary(userId, summary, fallbackText, kind = 'summary') {
+  if (!userId) return false;
+  if (!LINE_ENABLED) { console.log(`\n[LINE-STUB summary] -> ${userId}\n${fallbackText}\n`); return false; }
+  try {
+    await client.pushMessage({ to: userId, messages: [buildSummaryFlex(summary, fallbackText)] });
+    _lastPushError = null; logPush(userId, kind, true); return true;
+  } catch (err) {
+    console.error('[LINE] summary flex failed, falling back to text:', err?.statusMessage || err?.message || err);
+    return pushText(userId, fallbackText, kind);
   }
 }
 // Every REAL push (LINE enabled) is counted in push_log — LINE OA bills by message volume, and

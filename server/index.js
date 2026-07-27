@@ -103,6 +103,18 @@ app.post('/line/webhook', lineMiddleware, async (req, res) => {
   }
   res.sendStatus(200);
 });
+// A bad/missing x-line-signature must answer 401, not 500. Without this the SDK's
+// SignatureValidationFailed fell through to the terminal handler and prod replied
+// {"error":"internal"} — LINE's console shows that as a server error, which is exactly the wrong
+// hint when someone is trying to work out why the webhook "doesn't work". Verified live: prod
+// answered 500 to an unsigned POST before this.
+app.use('/line/webhook', (err, req, res, next) => {
+  const m = String(err?.message || '');
+  if (/signature/i.test(m) || err?.name === 'SignatureValidationFailed') {
+    return res.status(401).json({ error: 'bad_signature' });
+  }
+  return next(err);
+});
 
 app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + promo banner (base64 data URLs)
 
@@ -537,11 +549,42 @@ app.post('/api/pending/sweep', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// ---------- ตั้งค่าเร็วของหน้าร้าน (cashier tier) ----------
+// Three things a till legitimately owns during a shift: stop taking online orders, pull a sold-out
+// drink off the menu, and open the drawer for the day. Deliberately NARROW endpoints rather than
+// lowering the manager gate on /api/admin/features, /api/menu/:id or /api/cash/*: a cashier can
+// flip availability but never a price, and can open a round but never close/count one.
+app.get('/api/shift/state', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  let cash = null; try { cash = Q.currentCashSession(cashBranch(req)); } catch { /* optional */ }
+  res.json({ onlineOrders: Q.onlineOrdersEnabled(), ordering: Q.orderingPaused(),
+    cashOpen: !!(cash && cash.open), openedAt: cash?.session?.opened_at || null,
+    items: Q.listMenu().map((m) => ({ id: m.id, name: m.name, category: m.category, active: m.active ? 1 : 0 })) });
+});
+app.post('/api/shift/online', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.setOnlineOrders(!!req.body?.on)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/shift/menu-available', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.setMenuAvailable(req.body?.id, !!req.body?.on)); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/shift/cash-open', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { res.json(Q.openCashSession(cashBranch(req), { actorId: req.staff?.id || null, openFloat: req.body?.openFloat })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // "ตรวจการเชื่อมต่อ LINE": which OA the server's token belongs to + whether the saved owner id is
 // a user of that same OA. Owner-only, read-only, and the token itself never leaves the server.
 app.get('/api/admin/line-check', async (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(await Q.lineCheck()); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Point the OA's webhook at this server. Changes the LINE channel's own settings, so it is
+// owner-only and only ever runs when the owner presses the button.
+app.post('/api/admin/line-webhook', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.pointWebhookHere()); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
 app.post('/api/admin/owner-summary', async (req, res) => {
@@ -992,6 +1035,15 @@ app.get('/api/push-stats/range', (req, res) => {
 app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ customers: Q.customersList() });
+});
+// The win-back composer remembers its own setup (message + attached coupon) — see campaignDefaults.
+app.get('/api/crm/campaign-defaults', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.campaignDefaults());
+});
+app.post('/api/crm/campaign-defaults', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setCampaignDefaults(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // No-show forgiveness: restarts the customer's strike count (nothing is deleted — see forgiveNoshow).
 app.post('/api/crm/customers/forgive', (req, res) => {
