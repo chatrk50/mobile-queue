@@ -1617,9 +1617,22 @@ window.login=async()=>{
     if(mgr){ $('onlineBtn').style.display=''; try{ const f=await api('/api/admin/features'); ONLINE_ON=f.onlineOrders!==false; }catch(e){} renderOnlineBtn(); }
     startHeartbeat(); loadMyShift();
     await loadMenu(); await boot();
+    openDeepLink();   // ?go=po / ?go=report from a LINE card — land on the page, not the dashboard
   }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่สำเร็จ'; }
   finally{ _loggingIn=false; if(lb){ lb.disabled=false; lb.style.opacity=1; lb.textContent='เข้าสู่ระบบ'; } }
 };
+// A LINE card can only ever hand over a URL, so the destination travels as ?go=… and is opened
+// once, AFTER login (the PIN screen always comes first). The param is then stripped so a refresh
+// doesn't keep re-opening the same page.
+const DEEP_LINKS={ po:()=>{ showStock(); setTimeout(()=>{ try{ stkTab('po'); }catch(e){} },400); },
+  report:()=>showReport(), stock:()=>showStock(), customers:()=>showCustomers(),
+  coupons:()=>showCouponHub(0), reviews:()=>showReviews(), cash:()=>showCash() };
+function openDeepLink(){
+  let go=null; try{ go=new URLSearchParams(location.search).get('go'); }catch(e){ return; }
+  if(!go||!DEEP_LINKS[go]) return;
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  setTimeout(()=>{ try{ DEEP_LINKS[go](); }catch(e){ toast('เปิดหน้านั้นไม่ได้'); } },200);
+}
 window.logout=()=>{ PIN=null; ME=null; try{ fetch('/api/staff/logout',{method:'POST'}); }catch{} streams.forEach(s=>s.close()); streams=[];
   stopHeartbeat(); { const ob=$('onlineBtn'); if(ob) ob.style.display='none'; }
   // Background timers outlived the session: a logged-out till kept polling ingredients every 3

@@ -2906,7 +2906,10 @@ export function dailySummaryData(branchId = null, dateStr = null) {
     rating: r.avgRating, ratingCount: r.ratingCount || 0,
     cashLine: null, lowCount: 0, expiringCount: 0, expired: false,
     buyCount: 0, buyCost: 0, buyList: [],
-    link: process.env.PUBLIC_BASE_URL ? (process.env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/cashier/') : null,
+    // Deep links, not just "open the app": ?go= lands on the exact page after the PIN screen, so
+    // the owner standing in Makro taps once and sees the draft order instead of hunting menus.
+    link: process.env.PUBLIC_BASE_URL ? (process.env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/cashier/?go=report') : null,
+    poLink: process.env.PUBLIC_BASE_URL ? (process.env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/cashier/?go=po') : null,
   };
   try {
     const last = db.prepare("SELECT over_short FROM cash_sessions WHERE branch_id=? AND closed_at IS NOT NULL AND date(closed_at,'+7 hours')=? ORDER BY id DESC LIMIT 1").get(branchId || 1, day);

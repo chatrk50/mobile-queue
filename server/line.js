@@ -147,46 +147,49 @@ function buildQueueMessage(text, link, label) {
  *  the lock screen shows the alt-text status line, and the chat shows a progress card.
  *  stage: 1 = รับออเดอร์แล้ว · 2 = กำลังทำ/ใกล้ถึงคิว · 3 = พร้อมรับ. Costs the SAME one message
  *  as the plain push it replaces. */
-const STAGE_META = [
-  { icon: '🧾', label: 'รับออเดอร์' },
-  { icon: '🥤', label: 'กำลังทำ' },
-  { icon: '🔔', label: 'พร้อมรับ' },
-];
-const ON = '#16a34a', OFF = '#d9e2e8', INK = '#1e3a5f', MUT = '#8a9aa8';
+// No emoji anywhere by owner request: the state is carried by the bar, the colour and the words.
+// Emoji rendered at a different size on every device and made the card read as a chat message
+// rather than an order status.
+const STAGE_LABELS = ['รับออเดอร์', 'กำลังทำ', 'พร้อมรับ'];
+const ON = '#1ab3ce', DONE = '#2fc2a6', OFF = '#E4ECF1', INK = '#284B63', MUT = '#8A9299';
 function buildStageMessage({ stage, title, subtitle, code, link, label }) {
-  const seg = (i) => ({ type: 'box', layout: 'vertical', height: '4px', flex: 3, backgroundColor: i < stage ? ON : OFF, cornerRadius: '2px', contents: [{ type: 'filler' }] });
-  const dot = (i) => ({
-    type: 'box', layout: 'vertical', flex: 2, contents: [
-      { type: 'text', text: STAGE_META[i].icon, align: 'center', size: i === stage - 1 ? 'md' : 'sm' },
-      { type: 'text', text: STAGE_META[i].label, align: 'center', size: 'xxs', color: i < stage ? ON : MUT, weight: i === stage - 1 ? 'bold' : 'regular' },
+  // One column per step: a 4px rail above its label. Done = mint, current = teal, later = grey.
+  const step = (i) => {
+    const state = i < stage - 1 ? 'done' : (i === stage - 1 ? 'now' : 'next');
+    const c = state === 'done' ? DONE : state === 'now' ? ON : OFF;
+    return {
+      type: 'box', layout: 'vertical', flex: 1, spacing: 'sm',
+      contents: [
+        { type: 'box', layout: 'vertical', height: '4px', backgroundColor: c, cornerRadius: '2px', contents: [{ type: 'filler' }] },
+        { type: 'text', text: STAGE_LABELS[i], size: 'xxs', align: 'center',
+          color: state === 'next' ? MUT : INK, weight: state === 'now' ? 'bold' : 'regular' },
+      ],
+    };
+  };
+  const body = [
+    { type: 'text', text: title, weight: 'bold', size: 'lg', color: INK, wrap: true },
+    ...(subtitle ? [{ type: 'text', text: subtitle, size: 'sm', color: MUT, wrap: true, margin: 'xs' }] : []),
+  ];
+  // The queue number is the one thing the customer looks for — give it its own quiet panel.
+  if (code) body.push({
+    type: 'box', layout: 'vertical', margin: 'lg', paddingAll: '14px', cornerRadius: '12px',
+    backgroundColor: '#F4FAFC', alignItems: 'center',
+    contents: [
+      { type: 'text', text: 'หมายเลขคิว', size: 'xxs', color: MUT },
+      { type: 'text', text: code, size: '3xl', weight: 'bold', color: INK, align: 'center' },
     ],
   });
+  body.push({ type: 'box', layout: 'horizontal', margin: 'lg', spacing: 'sm', contents: [step(0), step(1), step(2)] });
   return {
     type: 'flex',
-    altText: `${STAGE_META[stage - 1].icon} ${title}${code ? ` · คิว ${code}` : ''}`,
+    altText: `${title}${code ? ` · คิว ${code}` : ''}`,
     contents: {
       type: 'bubble', size: 'mega',
-      body: {
-        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '16px',
-        contents: [
-          {
-            type: 'box', layout: 'horizontal', contents: [
-              { type: 'text', text: title, weight: 'bold', size: 'lg', color: INK, wrap: true, flex: 5 },
-              ...(code ? [{ type: 'text', text: code, weight: 'bold', size: 'lg', color: ON, align: 'end', flex: 2 }] : []),
-            ],
-          },
-          ...(subtitle ? [{ type: 'text', text: subtitle, size: 'sm', color: '#555555', wrap: true }] : []),
-          {
-            type: 'box', layout: 'horizontal', alignItems: 'center', margin: 'md', contents: [
-              dot(0), seg(1), dot(1), seg(2), dot(2),
-            ],
-          },
-        ],
-      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '18px', backgroundColor: '#FFFFFF', contents: body },
       ...(link ? {
         footer: {
-          type: 'box', layout: 'vertical',
-          contents: [{ type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
+          type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px',
+          contents: [{ type: 'button', style: 'primary', color: ON, height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
         },
       } : {}),
     },
@@ -195,7 +198,7 @@ function buildStageMessage({ stage, title, subtitle, code, link, label }) {
 /** Push an order-status progress card (falls back to plain text like pushQueue). */
 export async function pushStage(userId, opts, kind = 'queue') {
   if (!userId) return false;
-  const fallbackText = `${STAGE_META[(opts.stage || 1) - 1].icon} ${opts.title}${opts.code ? `\nหมายเลข: ${opts.code}` : ''}${opts.subtitle ? `\n${opts.subtitle}` : ''}`;
+  const fallbackText = `${opts.title}${opts.code ? `\nหมายเลขคิว ${opts.code}` : ''}${opts.subtitle ? `\n${opts.subtitle}` : ''}`;
   if (!LINE_ENABLED) {
     console.log(`\n[LINE-STUB stage${opts.stage}] -> ${userId}\n${fallbackText}\n`);
     return false;
@@ -264,10 +267,14 @@ function buildSummaryFlex(s, fallbackText) {
     if (s.expiringCount) body.push(row('ใกล้/หมดอายุ', `${s.expiringCount} ล็อต`, s.expired ? RED : WARN));
     if ((s.buyList || []).length) {
       body.push(row('ควรสั่งซื้อ', `${s.buyCount} รายการ${s.buyCost ? ` · ~${money(s.buyCost)}` : ''}`, NAVY, true));
+      // EVERY line, not a preview: the owner reads this standing in the shop with no browser open.
+      // 60 is a safety stop far above a real shopping list (a bubble caps at 10KB).
+      const items = s.buyList.slice(0, 60);
       body.push({ type: 'box', layout: 'vertical', margin: 'sm', paddingAll: '10px', cornerRadius: '10px',
         backgroundColor: '#FFFBEA',
-        contents: s.buyList.slice(0, 6).map((t) => ({ type: 'text', text: '• ' + t, size: 'xs', color: '#7a5c00', wrap: true }))
-          .concat(s.buyList.length > 6 ? [{ type: 'text', text: `…และอีก ${s.buyList.length - 6} รายการ`, size: 'xs', color: MUTED, margin: 'sm' }] : []) });
+        contents: items.map((t) => ({ type: 'text', text: '• ' + t, size: 'xs', color: '#7a5c00', wrap: true }))
+          .concat(s.buyList.length > items.length
+            ? [{ type: 'text', text: `…และอีก ${s.buyList.length - items.length} รายการ (เปิดใบสั่งซื้อเพื่อดูครบ)`, size: 'xs', color: MUTED, margin: 'sm', wrap: true }] : []) });
     }
   }
   return {
@@ -275,10 +282,16 @@ function buildSummaryFlex(s, fallbackText) {
     contents: {
       type: 'bubble', size: 'mega',
       body: { type: 'box', layout: 'vertical', paddingAll: '18px', backgroundColor: '#FFFFFF', contents: body },
-      footer: s.link ? {
-        type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px',
-        contents: [{ type: 'button', style: 'primary', height: 'sm', color: TEAL,
-          action: { type: 'uri', label: 'เปิดรายงานเต็ม', uri: s.link } }],
+      // Two doors, both deep links: straight to the draft purchase order when there is one to
+      // approve (that is what the owner acts on while out buying), and to the day's report.
+      footer: (s.link || s.poLink) ? {
+        type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px', spacing: 'sm',
+        contents: [
+          ...(s.poLink && (s.buyList || []).length ? [{ type: 'button', style: 'primary', height: 'sm', color: TEAL,
+            action: { type: 'uri', label: 'เปิดใบสั่งซื้อ', uri: s.poLink } }] : []),
+          ...(s.link ? [{ type: 'button', style: 'secondary', height: 'sm',
+            action: { type: 'uri', label: 'เปิดรายงานวันนี้', uri: s.link } }] : []),
+        ],
       } : undefined,
     },
   };
