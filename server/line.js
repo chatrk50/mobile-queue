@@ -63,6 +63,42 @@ export async function botInfo() {
              userId: body.userId || null, premiumId: body.premiumId || null };
   } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
 }
+/** Is the OA's webhook set, switched on, and does LINE actually reach it? Typing "id" in the chat
+ *  can only ever reply if all three are true — with webhook off, the message never leaves LINE. */
+export async function webhookInfo() {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint', { headers: { Authorization: `Bearer ${token}` } });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, reason: 'api_error', status: r.status, detail: body?.message || '' };
+    return { ok: true, endpoint: body.endpoint || null, active: body.active === true };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
+}
+/** Ask LINE to POST a test event to the configured webhook and report what came back. */
+export async function webhookTest() {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/test',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, reason: 'api_error', status: r.status, detail: body?.message || '' };
+    return { ok: true, success: body.success === true, statusCode: body.statusCode ?? null,
+             reason: body.reason || null, detail: body.detail || null };
+  } catch (e) { return { ok: false, reason: 'network', detail: String(e?.message || e) }; }
+}
+/** Point the OA's webhook at this server. Owner-triggered only — it changes the LINE channel's
+ *  own configuration, so it is never called automatically. */
+export async function setWebhook(url) {
+  if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint',
+      { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: url }) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, status: r.status, detail: body?.message || '' };
+    return { ok: true };
+  } catch (e) { return { ok: false, detail: String(e?.message || e) }; }
+}
 /** Is this userId a friend of THIS channel? 404/403 = not this channel's user (or not a friend). */
 export async function friendCheck(userId) {
   if (!LINE_ENABLED) return { ok: false, reason: 'line_off' };

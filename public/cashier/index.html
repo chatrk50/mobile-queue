@@ -362,7 +362,7 @@
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>ตั้งค่าทั้งหมด</h1>
         <p class="muted" style="margin:2px 0 0;font-size:12.5px">ทุกการตั้งค่าอยู่ที่นี่ที่เดียว</p></div>
-      <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSettings()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button id="finBack" class="ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="closeFinance()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideSettings()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="settingsBody" style="margin-top:12px"></div>
     <div id="financeBox" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px"></div>
@@ -425,7 +425,7 @@
   <div id="staffCard" class="card" style="display:none;max-width:900px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>พนักงาน</h1><p class="muted" style="margin:2px 0 0">จัดการพนักงานและสิทธิ์ (เฉพาะเจ้าของร้าน)</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStaff()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -441,7 +441,7 @@
   <div id="branchCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>จัดการสาขา</h1><p class="muted" style="margin:2px 0 0">ข้อมูลสาขา · เวลาเปิด-ปิด · ที่ตั้ง · เบอร์ติดต่อ</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideBranch()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div class="ms-split" style="margin-top:12px">
       <div class="ms-list">
@@ -456,7 +456,7 @@
   <div id="stockCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>สต๊อก / จัดซื้อ</h1><p class="muted" id="stockSummary" style="margin:2px 0 0">—</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideStock()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="stkExpBanner" style="display:none;margin:10px 0 0"></div>
     <div class="row" style="gap:6px;margin:12px 0 4px;flex-wrap:wrap">
@@ -491,7 +491,7 @@
   <div id="loyaltyCard" class="card" style="display:none;max-width:680px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>แต้มสะสม / ของรางวัล</h1><p class="muted" style="margin:2px 0 0">ลูกค้าที่จ่ายเงินแล้วได้แต้มอัตโนมัติ — ผูกเบอร์ที่เคาน์เตอร์ (📱 แต้ม) หรือสั่งผ่านไลน์</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideLoyalty()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div style="margin-top:14px;display:grid;gap:16px">
 
@@ -571,7 +571,7 @@
   <div id="tenderCard" class="card" style="display:none;max-width:560px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</h1><p class="muted" style="margin:2px 0 0;font-size:12.5px">เพิ่ม / ลบ / เปิด-ปิด · ปรากฏในหน้าเลือกวิธีจ่ายของแคชเชียร์</p></div>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
@@ -809,7 +809,7 @@
 
   <!-- MENU MANAGEMENT -->
   <div id="menuCard" class="card" style="display:none;max-width:980px;margin:14px auto">
-    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideMenu()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="row between"><h1><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>จัดการเมนู</h1><span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideMenu()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span></div>
     <input id="imgFile" type="file" accept="image/*" style="display:none">
     <div id="priceMgr" style="margin:4px 0 12px"></div>
     <div class="ms-split">
@@ -931,7 +931,7 @@
 <div id="reviewCard" class="card" style="display:none;max-width:720px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>รีวิวจากลูกค้า</h1>
-    <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideReviews()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideReviews()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
   </div>
   <div id="fbBox" style="margin-top:10px"></div>
 </div>
@@ -943,7 +943,7 @@
 <div id="couponRepCard" class="card" style="display:none;max-width:760px;margin:14px auto">
   <div class="row between" style="align-items:center">
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง & แคมเปญ</h1>
-    <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCouponRep()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
   </div>
   <div id="chTabs" class="row" style="gap:6px;margin:12px 0 12px"></div>
   <div id="chTab0" style="display:none">
@@ -973,7 +973,7 @@
     <h1 style="margin:0;display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 8h6M20 5v6"/></svg>ลูกค้า</h1>
     <div class="row" style="gap:6px">
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="exportCustomers()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
-      <button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCustomers()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="display:none;padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="hideCustomers()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
   </div>
   <div id="clSegTabs" class="row" style="gap:6px;margin:12px 0 8px;flex-wrap:wrap"></div>
@@ -3480,6 +3480,7 @@ let FIN=null;
 // inside the daily report) or jump to the panel that owns the setting. Owner-only rows are
 // hidden for managers; the APIs behind them still enforce the role server-side.
 window.hideSettings=()=>{ $('settingsCard').style.display='none'; $('financeBox').style.display='none';
+  { const fb=$('finBack'); if(fb) fb.style.display='none'; }
   $('settingsBody').style.display='';   // leaving from the cost page must not hide the hub next time
   $('dash').style.display=''; };
 window.showSettings=()=>{ hideAllPanels(); closeAdmin();
@@ -3527,9 +3528,11 @@ window.toggleFinance=async()=>{
   renderFinance();
   $('settingsBody').style.display='none';
   $('financeBox').style.display='';
+  { const fb=$('finBack'); if(fb) fb.style.display=''; }   // back sits next to ✕, same as every other sub-page
   $('settingsCard').scrollIntoView({behavior:'smooth',block:'start'});
 };
-window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display=''; renderSettingsHub(); };
+window.closeFinance=()=>{ $('financeBox').style.display='none'; $('settingsBody').style.display='';
+  { const fb=$('finBack'); if(fb) fb.style.display='none'; } renderSettingsHub(); };
 // Every cost line the P&L knows about, grouped exactly like the statement reads. Adding a line
 // here is all it takes for it to appear in the form, the daily P&L and the Excel export.
 const FIN_FORM=[
@@ -3572,7 +3575,7 @@ const FIN_FORM=[
 const FIN_ALL=FIN_FORM.flatMap(([,,rows])=>rows.map(r=>r[0]));
 function renderFinance(){
   const f=(id,label,step)=>`<div style="display:flex;flex-direction:column;gap:2px"><label class="muted" style="font-size:11px">${label}</label><input id="fin_${id}" type="number" inputmode="decimal" step="${step||'1'}" value="${FIN[id]??0}" style="padding:8px"></div>`;
-  $('financeBox').innerHTML=`<button class="ghost" style="padding:6px 12px;margin-bottom:10px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="closeFinance()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg><span style="font-size:12.5px;margin-left:4px">ตั้งค่าทั้งหมด</span></button>`
+  $('financeBox').innerHTML=``
     +`<div class="row between"><b>ค่าใช้จ่ายทั้งหมด (ใช้คำนวณงบกำไร–ขาดทุน)</b><span class="muted" style="font-size:11px">฿/เดือน · เว้น 0 ได้</span></div>`
     +FIN_FORM.map(([title,hint,rows])=>`<div style="border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:10px">
         <div style="font-weight:800;color:var(--navy);font-size:13px">${title}</div>
@@ -4811,7 +4814,24 @@ window.checkLine=async()=>{
     ${ln('รหัสเจ้าของที่บันทึกไว้', r.ownerId?(esc(String(r.ownerId).slice(0,10))+'…'):'ยังไม่ได้ตั้ง', okc(!!r.ownerId))}
     ${ln('เป็นเพื่อนกับ OA นี้', good?('ใช่'+(r.friend.displayName?(' · '+esc(r.friend.displayName)):'')):'ไม่ใช่', okc(good))}
     ${r.verdict?`<div style="background:${good?'#e1f5ee':'#fcebeb'};color:${good?'#0f6b57':'#a32d2d'};border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.verdict)}</div>`:''}
+    ${(()=>{ const w=r.webhook||{}; const whGood=!!(w.ok&&w.endpoint&&w.active&&w.matches&&(!w.test||w.test.success));
+      return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:6px">
+        <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:3px">Webhook (ตัวที่ทำให้พิมพ์ “id” แล้วมีคนตอบ)</div>
+        ${ln('ตั้งไว้ที่', w.endpoint?esc(w.endpoint):'ยังไม่ได้ตั้ง', okc(!!w.endpoint))}
+        ${ln('เปิดใช้งาน', w.ok?(w.active?'เปิด':'ปิดอยู่'):'ตรวจไม่ได้', okc(!!(w.ok&&w.active)))}
+        ${w.test?ln('LINE ยิงทดสอบ', w.test.ok?(w.test.success?'ถึงเซิร์ฟเวอร์ ✓':('ไม่สำเร็จ '+esc(String(w.test.statusCode||w.test.reason||'')))):'ตรวจไม่ได้', okc(!!(w.test.ok&&w.test.success))):''}
+        ${r.webhookVerdict?`<div style="background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-top:6px">${esc(r.webhookVerdict)}</div>`:''}
+        ${whGood?'':`<button class="ghost" style="width:100%;margin-top:7px;padding:8px;font-size:12.5px" onclick="fixWebhook()">ตั้ง Webhook ให้อัตโนมัติ (ชี้มาที่เซิร์ฟเวอร์นี้)</button>`}
+      </div>`; })()}
   </div>`; };
+// Owner-pressed only: writes the OA's webhook URL. After this LINE still needs "ใช้ Webhook" ON in
+// OA Manager if it is off — the check above says so explicitly.
+window.fixWebhook=async()=>{
+  if(!(await appConfirm({title:'ตั้ง Webhook ให้ LINE',message:'ระบบจะตั้งค่า Webhook ของ LINE OA ให้ชี้มาที่เซิร์ฟเวอร์นี้\n(ตั้งค่านี้อยู่ในบัญชี LINE ของร้าน — เปลี่ยนกลับเองได้ที่ LINE Developers)',okText:'ตั้งให้เลย',cancelText:'ยกเลิก'}))) return;
+  try{ const r=await api('/api/admin/line-webhook',{method:'POST'});
+    toast(r.ok?'ตั้ง Webhook แล้ว ✓ ลองพิมพ์ "id" ในแชทร้านอีกครั้ง':'ตั้งไม่สำเร็จ: '+(r.detail||r.reason||''));
+    checkLine(); }
+  catch(e){ toast(err(e)); } };
 // พักสิทธิ์ no-show: toggle มีผลทันที (กติกา design system) · เกณฑ์ครั้ง/วัน บันทึกด้วยปุ่ม
 window.toggleNoshow=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noshowOn:!!on})});
   toast(on?'เปิดพักสิทธิ์ no-show แล้ว':'ปิดพักสิทธิ์ no-show แล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };

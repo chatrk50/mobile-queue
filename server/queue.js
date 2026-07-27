@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, lastPushError, botInfo, friendCheck, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -2795,6 +2795,17 @@ export async function lineCheck() {
   const id = getOwnerLineId();
   const bot = await botInfo();
   const friend = id ? await friendCheck(id) : { ok: false, reason: 'no_id' };
+  // Webhook: the "พิมพ์ id แล้วระบบตอบรหัสให้" trick — and every queue reply — depends on it.
+  // With it off or pointed elsewhere, the customer's message never reaches this server at all.
+  const wh = await webhookInfo();
+  const want = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/line/webhook';
+  const whTest = (wh.ok && wh.endpoint && wh.active) ? await webhookTest() : null;
+  const webhook = { ...wh, expected: want, matches: !!(wh.ok && wh.endpoint === want), test: whTest };
+  let webhookVerdict = null;
+  if (wh.ok && !wh.endpoint) webhookVerdict = `ยังไม่ได้ตั้ง Webhook — พิมพ์ "id" ในแชทจะไม่มีอะไรตอบกลับ · กดปุ่ม "ตั้ง Webhook ให้อัตโนมัติ" ด้านล่างได้เลย`;
+  else if (wh.ok && !wh.active) webhookVerdict = 'Webhook ตั้งไว้แล้วแต่ยัง "ปิดใช้งาน" — เปิดที่ LINE Official Account Manager → ตั้งค่า → การตอบกลับ → เปิด Webhook (และปิดโหมดแชทอัตโนมัติ)';
+  else if (wh.ok && !webhook.matches) webhookVerdict = `Webhook ชี้ไปที่อื่น (${wh.endpoint}) ไม่ใช่เซิร์ฟเวอร์นี้ — ควรเป็น ${want}`;
+  else if (whTest && whTest.ok && !whTest.success) webhookVerdict = `LINE ยิงทดสอบไปที่ Webhook แล้วไม่สำเร็จ (${whTest.statusCode || whTest.reason || 'ไม่ทราบสาเหตุ'})`;
   let verdict = null;
   if (!LINE_ENABLED) verdict = 'ระบบ LINE ปิดอยู่บนเซิร์ฟเวอร์นี้ (ไม่ได้ตั้ง token) — ส่งจริงไม่ได้';
   else if (!bot.ok) verdict = 'Token ของ LINE ใช้ไม่ได้ — ต้องออก Channel access token ใหม่ใน LINE Developers';
@@ -2803,7 +2814,14 @@ export async function lineCheck() {
   else if (friend.ok && !friend.friend)
     verdict = `LINE ไม่รู้จัก id นี้ในบัญชี ${bot.basicId || 'OA ที่ระบบใช้อยู่'} — แปลว่ารหัส U… ถูกคัดลอกมาจาก OA อื่น (เช่นตัวทดสอบ) `
       + `หรือยังไม่ได้ทักแชทกับ OA นี้ · วิธีแก้: ทักแชท ${bot.basicId || 'OA ของร้าน'} แล้วพิมพ์ "id" เพื่อรับรหัสของ OA นี้โดยตรง`;
-  return { lineOn: LINE_ENABLED, bot, ownerId: id || null, friend, verdict };
+  return { lineOn: LINE_ENABLED, bot, ownerId: id || null, friend, verdict, webhook, webhookVerdict };
+}
+/** Owner-triggered: point the OA's webhook at this server (so "id" in the chat can reply). */
+export async function pointWebhookHere() {
+  const url = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/line/webhook';
+  if (!/^https:\/\//.test(url)) return { ok: false, reason: 'no_public_url' };
+  const r = await setWebhook(url);
+  return { ...r, endpoint: url };
 }
 /** Turn a raw LINE failure into the single sentence that tells the owner what to DO. */
 export function pushErrorHint(err) {

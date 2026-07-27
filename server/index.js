@@ -568,6 +568,12 @@ app.get('/api/admin/line-check', async (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(await Q.lineCheck()); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Point the OA's webhook at this server. Changes the LINE channel's own settings, so it is
+// owner-only and only ever runs when the owner presses the button.
+app.post('/api/admin/line-webhook', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.pointWebhookHere()); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Push today's summary to the owner's LINE (manual trigger / wireable to a daily cron later).
 app.post('/api/admin/owner-summary', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
