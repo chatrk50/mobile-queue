@@ -4255,8 +4255,11 @@ export function payPartial(ticketId, amount, opts = {}) {
   const net = Math.round(((order.total || 0) - (order.discount || 0)) * 100) / 100;
   const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
   if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
-    db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
-    const r = setOrderPaid(ticketId, { actorId, method });
+    // both writes or neither: a throw inside setOrderPaid must not leave paid_amount=net on an unpaid order
+    const r = db.transaction(() => {
+      db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
+      return setOrderPaid(ticketId, { actorId, method });
+    })();
     return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
   }
   db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
@@ -4512,20 +4515,26 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   // this ticket", so voiding by ticket_id silently killed earlier orders too. The 'void' guard
   // makes a second cancel a no-op instead of overwriting voided_at/voided_by and logging the
   // refund amount twice.
-  const voided = order
-    ? db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE id=? AND payment_status<>'void'`)
-        .run(kind, reason, actorId, order.id)
-    : { changes: 0 };
-  const alreadyVoid = !!order && !voided.changes;
-  // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
-  // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
-  if (order && wasPaid && restock && !alreadyVoid) returnStockForOrder(order);
-  // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order — BUT only
-  // if the drink wasn't already served. Once served, the product cost is incurred and the free
-  // drink was handed over, so points are never returned (owner rule).
-  const pointsReturned = (order && t.status !== 'served' && !alreadyVoid) ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
-  if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned } });
-  db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
+  // Void + restock + loyalty reversal + ticket close are one refund: a throw partway through must
+  // not leave the order voided with the stamps still spent (or the stock still deducted).
+  // The LINE push and notification sweep stay outside — network work never belongs in a transaction.
+  const pointsReturned = db.transaction(() => {
+    const voided = order
+      ? db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE id=? AND payment_status<>'void'`)
+          .run(kind, reason, actorId, order.id)
+      : { changes: 0 };
+    const alreadyVoid = !!order && !voided.changes;
+    // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
+    // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
+    if (order && wasPaid && restock && !alreadyVoid) returnStockForOrder(order);
+    // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order — BUT only
+    // if the drink wasn't already served. Once served, the product cost is incurred and the free
+    // drink was handed over, so points are never returned (owner rule).
+    const pts = (order && t.status !== 'served' && !alreadyVoid) ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
+    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts } });
+    db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
+    return pts;
+  })();
   if (t.line_user_id) {
     const byRequest = !!t.cancel_requested;   // the customer asked → confirm we did it; else the shop cancelled
     const safeReason = !byRequest ? safeCancelReason(reason || '') : null;   // same whitelist the web ticket screen uses
@@ -4639,8 +4648,12 @@ export function payItems(ticketId, lineIdxs, opts = {}) {
   const amt = Math.round(fresh.reduce((s, i) => s + lineSubtotal(o.lines[i]), 0) * 100) / 100;
   const order = db.prepare('SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   const merged = [...already, ...fresh].sort((a, b) => a - b);
-  db.prepare('UPDATE orders SET paid_lines=? WHERE id=?').run(JSON.stringify(merged), order.id);
-  const r = payPartial(ticketId, amt, { actorId, method });   // accumulates paid_amount + settles when covered
+  // marking the lines paid and taking the money must be atomic, or a throw inside payPartial
+  // would leave the lines flagged as settled with no payment recorded against them
+  const r = db.transaction(() => {
+    db.prepare('UPDATE orders SET paid_lines=? WHERE id=?').run(JSON.stringify(merged), order.id);
+    return payPartial(ticketId, amt, { actorId, method });   // accumulates paid_amount + settles when covered
+  })();
   return { ...r, paidLines: merged, paidNow: amt };
 }
 
