@@ -213,6 +213,88 @@ export async function pushStage(userId, opts, kind = 'queue') {
     } catch (e) { logPush(userId, kind, false); return false; }
   }
 }
+/** The owner's end-of-day summary as a Flex card. The plain-text version was a wall of 15+ emoji
+ *  lines that had to be re-read every night to find the two numbers that matter; this leads with
+ *  ยอดขาย/กำไร, groups the rest, and always carries the same text as altText so a notification
+ *  preview (and any client that cannot render Flex) still says everything. */
+function buildSummaryFlex(s, fallbackText) {
+  const NAVY = '#284B63', MUTED = '#8A9299', TEAL = '#1ab3ce', GREEN = '#0f6b57', RED = '#b3283a', WARN = '#946f00';
+  const money = (n) => '฿' + Number(n || 0).toLocaleString('en-US');
+  const row = (label, value, color, bold) => ({
+    type: 'box', layout: 'horizontal', margin: 'sm',
+    contents: [
+      { type: 'text', text: label, size: 'sm', color: MUTED, flex: 5, wrap: true },
+      { type: 'text', text: String(value), size: 'sm', color: color || NAVY, align: 'end', flex: 4,
+        weight: bold ? 'bold' : 'regular', wrap: true },
+    ],
+  });
+  const sep = (m) => ({ type: 'separator', margin: m || 'lg', color: '#EAF0F4' });
+  const head = (t) => ({ type: 'text', text: t, size: 'xs', color: MUTED, weight: 'bold', margin: 'lg' });
+  const body = [
+    { type: 'text', text: 'สรุปยอดวันนี้', size: 'xs', color: MUTED, weight: 'bold' },
+    { type: 'text', text: s.shopName || 'ร้าน', size: 'lg', color: NAVY, weight: 'bold', margin: 'xs', wrap: true },
+    { type: 'text', text: s.dateTh || '', size: 'xs', color: MUTED, margin: 'xs' },
+    // The two numbers the owner actually opens this for.
+    { type: 'box', layout: 'vertical', margin: 'lg', paddingAll: '14px', cornerRadius: '12px',
+      backgroundColor: '#F4FAFC',
+      contents: [
+        { type: 'text', text: 'ยอดขาย', size: 'xs', color: MUTED },
+        { type: 'text', text: money(s.revenue), size: 'xxl', weight: 'bold', color: NAVY },
+        { type: 'box', layout: 'horizontal', margin: 'md', contents: [
+          { type: 'text', text: `${s.cups || 0} ${s.unit || 'แก้ว'}`, size: 'sm', color: MUTED, flex: 4 },
+          { type: 'text', text: (s.netProfit >= 0 ? 'กำไร ' : 'ขาดทุน ') + money(Math.abs(s.netProfit || 0)),
+            size: 'sm', weight: 'bold', align: 'end', flex: 5, color: s.netProfit >= 0 ? GREEN : RED },
+        ] },
+      ] },
+  ];
+  if (s.cancelled || s.refunded || s.wasteCups) {
+    body.push(head('ยกเลิก / คืนเงิน / ของเสีย'));
+    body.push(row('ยกเลิก', `${s.cancelled || 0} ออเดอร์`, s.cancelled ? WARN : NAVY));
+    body.push(row('คืนเงิน', `${s.refunded || 0} ออเดอร์`, s.refunded ? WARN : NAVY));
+    body.push(row('ของเสีย', `${s.wasteCups || 0} ${s.unit || 'แก้ว'}`, s.wasteCups ? RED : NAVY));
+  }
+  if (s.rating || s.cashLine) {
+    body.push(sep());
+    if (s.rating) body.push(row('รีวิวเฉลี่ย', `★ ${s.rating}${s.ratingCount ? ` (${s.ratingCount})` : ''}`, '#d9a520'));
+    if (s.cashLine) body.push(row('เงินสด', s.cashLine.text, s.cashLine.ok ? GREEN : RED, true));
+  }
+  if (s.lowCount || s.expiringCount || (s.buyList || []).length) {
+    body.push(head('สต๊อก'));
+    if (s.lowCount) body.push(row('ใกล้หมด', `${s.lowCount} รายการ`, WARN));
+    if (s.expiringCount) body.push(row('ใกล้/หมดอายุ', `${s.expiringCount} ล็อต`, s.expired ? RED : WARN));
+    if ((s.buyList || []).length) {
+      body.push(row('ควรสั่งซื้อ', `${s.buyCount} รายการ${s.buyCost ? ` · ~${money(s.buyCost)}` : ''}`, NAVY, true));
+      body.push({ type: 'box', layout: 'vertical', margin: 'sm', paddingAll: '10px', cornerRadius: '10px',
+        backgroundColor: '#FFFBEA',
+        contents: s.buyList.slice(0, 6).map((t) => ({ type: 'text', text: '• ' + t, size: 'xs', color: '#7a5c00', wrap: true }))
+          .concat(s.buyList.length > 6 ? [{ type: 'text', text: `…และอีก ${s.buyList.length - 6} รายการ`, size: 'xs', color: MUTED, margin: 'sm' }] : []) });
+    }
+  }
+  return {
+    type: 'flex', altText: fallbackText.slice(0, 400),
+    contents: {
+      type: 'bubble', size: 'mega',
+      body: { type: 'box', layout: 'vertical', paddingAll: '18px', backgroundColor: '#FFFFFF', contents: body },
+      footer: s.link ? {
+        type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px',
+        contents: [{ type: 'button', style: 'primary', height: 'sm', color: TEAL,
+          action: { type: 'uri', label: 'เปิดรายงานเต็ม', uri: s.link } }],
+      } : undefined,
+    },
+  };
+}
+/** Send the owner summary as a card; falls back to the plain text on any Flex error. */
+export async function pushSummary(userId, summary, fallbackText, kind = 'summary') {
+  if (!userId) return false;
+  if (!LINE_ENABLED) { console.log(`\n[LINE-STUB summary] -> ${userId}\n${fallbackText}\n`); return false; }
+  try {
+    await client.pushMessage({ to: userId, messages: [buildSummaryFlex(summary, fallbackText)] });
+    _lastPushError = null; logPush(userId, kind, true); return true;
+  } catch (err) {
+    console.error('[LINE] summary flex failed, falling back to text:', err?.statusMessage || err?.message || err);
+    return pushText(userId, fallbackText, kind);
+  }
+}
 // Every REAL push (LINE enabled) is counted in push_log — LINE OA bills by message volume, and
 // before this the owner had no way to see how many messages a month the shop was paying for.
 // The UAT stub is NOT logged (it costs nothing). Best-effort: logging never blocks a push.

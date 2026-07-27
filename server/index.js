@@ -1036,6 +1036,15 @@ app.get('/api/crm/customers', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ customers: Q.customersList() });
 });
+// The win-back composer remembers its own setup (message + attached coupon) — see campaignDefaults.
+app.get('/api/crm/campaign-defaults', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.campaignDefaults());
+});
+app.post('/api/crm/campaign-defaults', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setCampaignDefaults(req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // No-show forgiveness: restarts the customer's strike count (nothing is deleted — see forgiveNoshow).
 app.post('/api/crm/customers/forgive', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });

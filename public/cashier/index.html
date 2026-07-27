@@ -992,7 +992,7 @@
   </div>
   <div style="margin-top:6px">
     <div class="muted" style="font-size:12px;margin-bottom:4px">ข้อความ (ส่งผ่าน LINE OA — มีค่าใช้จ่ายต่อข้อความ)</div>
-    <textarea id="clMsg" rows="2" maxlength="380" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
+    <textarea id="clMsg" rows="2" maxlength="380" oninput="clMsgChanged()" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;font-family:inherit">คิดถึงลูกค้าจัง 💛 แวะมาทาน YO-DEE Yogurt อีกนะคะ</textarea>
     <label class="row" style="gap:8px;align-items:center;margin-top:8px;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer">
       <input type="checkbox" id="clCoupOn" onchange="clCoupToggle(this)" style="width:18px;height:18px">แนบคูปองของขวัญ 🎁
     </label>
@@ -1011,6 +1011,7 @@
         </div>
       </div>
       <div class="muted" style="font-size:11px;margin-top:5px">คูปองจะเข้า "คูปองของฉัน" ของลูกค้าทันที และข้อความจะบอกวันหมดอายุให้เอง</div>
+      <div id="clCoupSaved" style="display:none;font-size:11px;margin-top:4px;color:#0f6b57;font-weight:700">✓ จำคูปองใบนี้ไว้ให้แล้ว — เปิดหน้านี้ครั้งหน้าจะยังอยู่</div>
     </div>
     <button class="ok" id="clSend" style="width:100%;min-height:48px;font-size:15px;margin-top:10px" onclick="clSendCampaign()"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>ส่งถึงลูกค้าที่เลือก</button>
   </div>
@@ -1146,6 +1147,16 @@
   .tgl::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(16,40,70,.3)}
   .tgl.on::after{left:25px}
   .tgl:disabled{opacity:.45;cursor:not-allowed}
+  /* Compact pair for list rows: the switch and its delete sit together, small enough not to shout.
+     Hit area stays ≥40px tall via the wrapper's padding (DESIGN-SYSTEM §2). */
+  .tgl.sm{width:40px;height:23px}
+  .tgl.sm::after{top:2.5px;left:2.5px;width:18px;height:18px}
+  .tgl.sm.on::after{left:19.5px}
+  .icx{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+       border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;flex:none}
+  .icx svg{width:15px;height:15px;margin:0}
+  .icx.danger{color:var(--danger);border-color:#f3c9cf}
+  .icx.danger:hover{background:#fcebeb}
   .feat-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card,#fff)}
   .feat-row .ic{width:22px;height:22px;color:var(--navy);flex:none}
   #payMethodBtns .ic{margin:0;width:26px;height:26px}
@@ -2391,14 +2402,16 @@ function cpCard(c){
           <div class="muted" style="font-size:11.5px;margin-top:1px">ใช้แล้ว ${c.used_count}${c.usage_limit>0?('/'+c.usage_limit):' (ไม่จำกัด)'} · ต่อคน ${c.per_customer>0?c.per_customer+' ครั้ง':'ไม่จำกัด'}</div>
           ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:2px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}</div>`:''}
         </div>
-        <button class="tgl ${c.active?'on':'off'}" style="flex:none;margin:2px 0 0" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
+        <span class="row" style="gap:6px;flex:none;align-items:center;padding:5px 0">
+          <button class="tgl sm ${c.active?'on':'off'}" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" title="${c.active?'ปิดใช้':'เปิดใช้'}" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
+          <button class="icx danger" aria-label="ลบคูปองนี้" title="ลบคูปอง" onclick="delCoupon(${c.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+        </span>
       </div>
       <div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap">
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="cpEdit(${c.id})">แก้ไข</button>
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="editCouponScope(${c.id})">เมนูที่ร่วม</button>
-        <button class="ghost" style="padding:5px 10px;font-size:12px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
-        ${c.distribution==='claim'?`<button class="ghost" style="padding:5px 10px;font-size:12px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
-        <button class="ghost danger" style="padding:5px 10px;font-size:12px;margin-left:auto" onclick="delCoupon(${c.id})">ลบ</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="cpEdit(${c.id})">แก้ไข</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="editCouponScope(${c.id})">เมนูที่ร่วม</button>
+        <button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="setupClaim(${c.id},${c.distribution==='claim'?1:0},${c.issue_limit||0},${c.valid_days||0})">${c.distribution==='claim'?'แก้ลิงก์':'ทำลิงก์รับ'}</button>
+        ${c.distribution==='claim'?`<button class="ghost" style="padding:4px 9px;font-size:11.5px" onclick="copyClaimLink('${esc(c.claim_token||'')}')">คัดลอกลิงก์</button>`:''}
       </div>
     </div>`;}
 // The ลดสูงสุด cap only means anything for a % coupon, so it appears with the % mode.
@@ -3297,7 +3310,23 @@ window.chLoadOut=async(offset=0)=>{
 // First open of the coupon box: load the coupons built on the coupon page into the dropdown and
 // prefill the custom fields from the winback template. Both cached — opening again costs nothing.
 let _clTplLoaded=false, _clCoupons=[];
+// The composer's setup is REMEMBERED (server-side). It used to reset every time the page opened,
+// so the attached gift silently disappeared and a blast went out with no coupon.
+let _clDefT=null;
+function clSaveDefaults(patch){ clearTimeout(_clDefT);
+  _clDefT=setTimeout(()=>{ api('/api/crm/campaign-defaults',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).catch(()=>{}); },400); }
+window.clMsgChanged=()=>clSaveDefaults({message:$('clMsg').value||''});
+async function clRestoreDefaults(){
+  let d; try{ d=await api('/api/crm/campaign-defaults'); }catch(e){ return; }
+  if(d.message) $('clMsg').value=d.message;
+  const cb=$('clCoupOn');
+  if(d.couponOn && !cb.checked){ cb.checked=true; await clCoupToggle(cb); }
+  if(d.couponOn && d.couponId){ const sel=$('clCoupPick');
+    if([...sel.options].some(o=>o.value===String(d.couponId))){ sel.value=String(d.couponId); clCoupPickChange(); } }
+  const hint=$('clCoupSaved'); if(hint) hint.style.display=(d.couponOn&&d.couponId)?'':'none';
+}
 window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'none';
+  clSaveDefaults({couponOn:!!cb.checked});
   if(cb.checked&&!_clTplLoaded){ _clTplLoaded=true;
     try{ const r=await api('/api/admin/coupon-templates');
       const t=(r.templates||[]).find(x=>x.key==='winback');
@@ -3309,6 +3338,8 @@ window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'non
     clCoupPickChange(); } };
 window.clCoupPickChange=()=>{
   const v=$('clCoupPick').value, info=$('clCoupInfo');
+  clSaveDefaults({couponId:(v&&v!=='custom')?Number(v):null});
+  { const hint=$('clCoupSaved'); if(hint) hint.style.display=(v&&v!=='custom')?'':'none'; }
   $('clCoupCustom').style.display=(v==='custom')?'':'none';
   const c=_clCoupons.find(x=>String(x.id)===v);
   info.style.display=c?'':'none';
@@ -5028,7 +5059,7 @@ window.openWinback=()=>{ showCustomers(); };   // legacy entry point → the new
 window.showCustomers=async()=>{ closeAdmin(); hideAllPanels(); $('custListCard').style.display='';
   try{ const r=await api('/api/crm/customers'); CL=r.customers||[]; }catch(e){ toast(err(e)); CL=[]; }
   _clSel.clear(); _clQ=''; _clShown=CL_PAGE; const si=$('clSearch'); if(si) si.value='';
-  renderCustSegs(); renderCustList(); loadCampaigns(); };
+  renderCustSegs(); renderCustList(); loadCampaigns(); clRestoreDefaults(); };
 window.hideCustomers=()=>{ $('custListCard').style.display='none'; $('dash').style.display=''; };
 function clCount(seg){ return seg==='all' ? CL.length : CL.filter(c=>c.segment===seg).length; }
 function renderCustSegs(){ $('clSegTabs').innerHTML=CL_SEGS.map(([k,label])=>
