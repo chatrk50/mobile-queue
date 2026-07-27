@@ -3244,12 +3244,17 @@ window.chLoadTpl=async()=>{
           <span class="muted" style="font-size:12px"> · ฿${lk.value??''}${lk.on&&!lk.ready?' · <b style="color:#b45309">ยังไม่พร้อม (ต้องเปิดโหมดคิวก่อนจ่าย)</b>':''}</span></span>
         <span class="row" style="gap:8px;align-items:center">
           <button class="tgl ${lk.on?'on':'off'}" ${own?'':'disabled'} aria-label="${lk.on?'ปิด':'เปิด'}เลขนำโชค" onclick="chToggleLucky(${lk.on?0:1})"></button>
-          ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="openCampaigns()">ตั้งค่า ›</button>`:''}
         </span>
       </div>
       <div class="row" style="gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
         <span style="flex:none">ผูกกับคูปอง</span>${bindSel('lucky',lk.couponId)}
       </div>
+      <div class="row" style="gap:10px;align-items:center;margin-top:7px;flex-wrap:wrap;font-size:12.5px">
+        <span>เลขคิว ${num('lkNumInp',lk.number??67,64)}</span>
+        <span>มูลค่า ฿ ${num('lkValInp',lk.value??40,64,!!lk.couponId)}</span>
+        ${own?`<button class="ghost" style="padding:6px 14px;font-size:12.5px" onclick="chSaveLucky()">บันทึกตัวเลข</button>`:''}
+      </div>
+      ${lk.reason==='needs_queue_first'?`<div style="margin-top:7px;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ ยังทำงานไม่ได้ — ต้องเปิด "เข้าคิวทันที (Queue-first)" ที่ ⚙ ตั้งค่าระบบ ไม่งั้นเลขคิวจะออกหลังจ่ายเงินแล้ว จึงไม่เหลือยอดให้ลด</div>`:''}
     </div>`;
 };
 // Toggles apply INSTANTLY (design-system rule); the number fields still save with บันทึก.
@@ -3257,6 +3262,13 @@ window.chToggleTpl=async(key,on)=>{
   try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify({on:!!on})}); toast(on?'เปิดแคมเปญแล้ว':'ปิดแคมเปญแล้ว'); }
   catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
   chLoadTpl(); };
+// เลขคิว + มูลค่า now save from the hub too — ⚙ no longer carries a second copy of these fields.
+window.chSaveLucky=async()=>{
+  const body={ luckyNumber:+$('lkNumInp').value||67 };
+  const v=$('lkValInp'); if(v && !v.disabled) body.luckyValue=+v.value||40;
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('บันทึกแล้ว ✓'); chLoadTpl(); }
+  catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); } };
 window.chToggleLucky=async(on)=>{
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})}); toast(on?'เปิดเลขนำโชคแล้ว':'ปิดเลขนำโชคแล้ว'); }
   catch(e){ toast('ทำไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
@@ -3547,8 +3559,8 @@ function renderSettingsHub(){
 // The campaign controls live on the ระบบ page; the owner looked for them in ตั้งค่าทั้งหมด and found
 // nothing, because that row only advertised "คิว การพิมพ์ สรุปอัตโนมัติ". Its own row now, landing
 // straight on the block instead of somewhere in a long page.
-window.openCampaigns=async()=>{ await showFeatures();
-  setTimeout(()=>{ const el=$('luckyBox'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },250); };
+// Campaigns all live on the coupon hub now — old entry points land there instead of ⚙.
+window.openCampaigns=()=>showCouponHub(0);
 // Old habit preserved: the ต้นทุน button on the daily report now leads HERE with the form open.
 window.openSettingsCost=async()=>{ showSettings(); await toggleFinance(); };
 // Costs used to EXPAND under the still-visible hub while every other row navigated away — one row
@@ -4755,17 +4767,15 @@ window.showFeatures=async()=>{
     </div>`+
     row('autoSummary', f.autoSummary, IC.bell, 'สรุปปิดร้านอัตโนมัติ', f.autoSummary?'เปิดอยู่ — พอปิดรอบเงินสด ระบบส่งสรุป (ยอด/กำไร/เงินสดเกิน-ขาด/ของใกล้หมด+หมดอายุ/ควรสั่งซื้อ) เข้า LINE เจ้าของ วันละครั้ง':'ปิดอยู่ — เปิดเพื่อให้ระบบส่งสรุปเข้า LINE เองทุกครั้งที่ปิดรอบเงินสด', false)+
     row('autoReorder', f.autoReorder, '<svg class="ic" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>', 'ร่างใบสั่งซื้ออัตโนมัติ', f.autoReorder?'เปิดอยู่ — พอปิดรอบเงินสด ถ้ามีของต้องสั่ง ระบบร่างใบสั่งซื้อให้ + แจ้ง LINE (ยังไม่รับของ รอเจ้าของตรวจ+กดยืนยันเอง)':'ปิดอยู่ — เปิดเพื่อให้ระบบร่างใบสั่งซื้อจากแผนให้อัตโนมัติเมื่อของใกล้หมด', false)+
-    `<div class="feat-row" id="luckyBox" style="align-items:flex-start;flex-direction:column;gap:8px">
-      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">🎉</span><div><b>แคมเปญเลขนำโชค</b>
-        <div class="muted" style="font-size:12px;margin-top:2px">ลูกค้าที่ได้คิวเลขนี้ (ทุกโซนที่ถึงเลข) จะเห็นป๊อบอัพยินดีด้วยบนจอตัวเอง กด "ใช้เลย" เพื่อลดกับออเดอร์นั้นทันที · เฉพาะลูกค้าที่สั่งผ่าน LINE · โอนสิทธิ์/แลกเงินสดไม่ได้</div></div></div>
-      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
-        <label class="muted" style="font-size:12.5px">เลข <input id="lkNumInp" type="number" min="1" value="${(f.lucky&&f.lucky.number)||67}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
-        <label class="muted" style="font-size:12.5px">มูลค่า ฿ <input id="lkValInp" type="number" min="1" value="${(f.lucky&&f.lucky.value)||40}" style="width:82px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
-        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveLucky()">บันทึก</button>
-        <button class="${(f.lucky&&f.lucky.on)?'danger':'ok'}" style="padding:8px 14px" onclick="toggleLucky(${(f.lucky&&f.lucky.on)?'false':'true'})">${(f.lucky&&f.lucky.on)?'ปิดแคมเปญ':'เปิดแคมเปญ'}</button>
-      </div>
-      ${f.lucky&&f.lucky.reason==='needs_queue_first'?`<div style="width:100%;background:#fcebeb;color:#a32d2d;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">⚠️ แคมเปญยังทำงานไม่ได้ — ต้องเปิด "เข้าคิวทันที (Queue-first)" ก่อน มิฉะนั้นเลขคิวจะออกหลังจ่ายเงินแล้ว จึงไม่เหลือยอดให้ลด</div>`:''}
-      ${f.lucky&&f.lucky.ready?`<div style="width:100%;background:#eafaf4;color:#0f7a5f;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">✅ แคมเปญทำงานอยู่ — คิวเลข ${f.lucky.number} รับฟรี ฿${f.lucky.value}</div>`:''}
+    // เลขนำโชค used to be configurable BOTH here and on the coupon hub — same campaign, two
+    // different control styles (a switch there, a green เปิดแคมเปญ button here), which is exactly
+    // the "ซ้ำซ้อน" the owner spotted. It now lives on the hub with every other campaign; this is
+    // just a signpost so anyone who looks here still finds it.
+    `<div class="feat-row" id="luckyBox" style="align-items:center">
+      <span style="flex:none">🎉</span>
+      <div style="flex:1"><b>แคมเปญเลขนำโชค</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">${(f.lucky&&f.lucky.on)?`เปิดอยู่ — คิวเลข ${f.lucky.number} รับฟรี ฿${f.lucky.value}`:'ปิดอยู่'} · ตั้งค่าและเปิด-ปิดได้ที่หน้า "คูปอง & แคมเปญ" ที่เดียว</div></div>
+      <button class="ghost" style="padding:7px 13px;font-size:12.5px;flex:none" onclick="showCouponHub(0)">เปิดหน้าคูปอง ›</button>
     </div>`+
     row('autoWinback', f.autoWinback, '<svg class="ic" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>', 'ดึงลูกค้ากลับอัตโนมัติ', f.autoWinback?'เปิดอยู่ — ลูกค้าที่เริ่มห่างหาย (กลุ่มเสี่ยงหาย) จะได้คูปอง + ข้อความทาง LINE เองวันละครั้ง (ไม่ส่งซ้ำคนเดิมภายใน 45 วัน)':'ปิดอยู่ — เปิดเพื่อส่งคูปองดึงลูกค้ากลับให้อัตโนมัติ', false)+
     `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
@@ -4897,15 +4907,8 @@ window.testOwnerSummary=async()=>{
       no_text:'ℹ️ ไม่มีข้อมูลให้สรุป' };
     toast(REASON[r.reason]||(r.sent?'✅ ส่งแล้ว':'ℹ️ ส่งไม่สำเร็จ'));
     await appConfirm({title:'ข้อความสรุปที่จะส่ง',message:(r.text||'(ว่าง)'),okText:'ปิด',cancelText:''}); }catch(e){ toast(err(e)); } };
-window.saveLucky=async()=>{
-  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({luckyNumber:+$('lkNumInp').value||67, luckyValue:+$('lkValInp').value||40})});
-    toast('บันทึกแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
-window.toggleLucky=async(on)=>{
-  if(on && !(await appConfirm({title:'เปิดแคมเปญเลขนำโชค',
-    message:'ลูกค้าที่ได้คิวเลข '+($('lkNumInp').value||67)+' จะได้ส่วนลด ฿'+($('lkValInp').value||40)+' ทันที\nทุกโซนที่ถึงเลขนี้จะมีผู้ได้รับ 1 คนต่อวัน\n\nเปิดใช้งานเลยไหม?',okText:'เปิดแคมเปญ'}))) return;
-  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({luckyOn:!!on})});
-    toast(on?'🎉 เปิดแคมเปญเลขนำโชคแล้ว':'ปิดแคมเปญแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+// (saveLucky / toggleLucky removed — the ⚙ copy of this campaign is gone; the coupon hub's
+//  chSaveLucky + chToggleLucky are the single path now.)
 window.toggleFeature=async(key,on)=>{
   try{ const body={}; body[key]=!!on; await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){}
