@@ -1384,11 +1384,26 @@ export function firstStore() {
   return db.prepare('SELECT * FROM stores ORDER BY id LIMIT 1').get();
 }
 /** Open/close the whole store: flips the store flag AND every one of its zones,
- *  so the customer LIFF shows "closed" everywhere. Returns affected zone ids. */
+ *  so the customer LIFF shows "closed" everywhere. Returns affected zone ids.
+ *  Closing remembers which zones were already closed on purpose (zone_was_open in settings), so
+ *  reopening the store restores only the zones that were open — a zone shut for repairs stays shut. */
 export function setStoreOpen(storeId, isOpen) {
   const v = isOpen ? 1 : 0;
   db.prepare('UPDATE stores SET is_open=? WHERE id=?').run(v, storeId);
-  db.prepare('UPDATE zones SET is_open=? WHERE store_id=?').run(v, storeId);
+  if (!v) {
+    const openIds = db.prepare('SELECT id FROM zones WHERE store_id=? AND is_open=1').all(storeId).map((z) => z.id);
+    setSetting(`store:${storeId}:zones_were_open`, JSON.stringify(openIds));
+    db.prepare('UPDATE zones SET is_open=0 WHERE store_id=?').run(storeId);
+  } else {
+    let remembered = null;
+    try { remembered = JSON.parse(getSetting(`store:${storeId}:zones_were_open`, 'null')); } catch { /* fall through */ }
+    if (Array.isArray(remembered) && remembered.length) {
+      for (const id of remembered) db.prepare('UPDATE zones SET is_open=1 WHERE id=? AND store_id=?').run(id, storeId);
+    } else {
+      db.prepare('UPDATE zones SET is_open=1 WHERE store_id=?').run(storeId);   // nothing remembered → open all (old behaviour)
+    }
+    setSetting(`store:${storeId}:zones_were_open`, '');
+  }
   return db.prepare('SELECT id FROM zones WHERE store_id=?').all(storeId).map((z) => z.id);
 }
 /** Is this branch within its own opening hours right now (BKK)? True if no hours configured. */
@@ -2732,27 +2747,8 @@ export function askToPay(ticketId) {
   return { ok: true };
 }
 // Store opening hours → auto-close. Empty open/close = always open (no behaviour change).
-// days = CSV of open weekdays (0=Sun..6=Sat); empty = open every day. Times are "HH:MM" BKK.
-export function getStoreHours() {
-  return { open: getSetting('hours:open', '') || '', close: getSetting('hours:close', '') || '', days: getSetting('hours:days', '') || '' };
-}
-export function setStoreHours({ open, close, days } = {}) {
-  if (open != null) setSetting('hours:open', /^\d{1,2}:\d{2}$/.test(open) ? open : '');
-  if (close != null) setSetting('hours:close', /^\d{1,2}:\d{2}$/.test(close) ? close : '');
-  if (days != null) setSetting('hours:days', Array.isArray(days) ? days.join(',') : String(days || ''));
-  return getStoreHours();
-}
-/** Is the shop open right now (Bangkok time)? True when no hours are configured. */
-export function isStoreOpen() {
-  const h = getStoreHours();
-  if (!h.open || !h.close) return true;
-  const b = new Date(Date.now() + 7 * 3600 * 1000);          // shift to BKK wall-clock
-  const hm = b.getUTCHours() * 60 + b.getUTCMinutes(), day = b.getUTCDay();
-  if (h.days && !h.days.split(',').filter(Boolean).includes(String(day))) return false;
-  const [oh, om] = h.open.split(':').map(Number), [ch, cm] = h.close.split(':').map(Number);
-  const openM = oh * 60 + om, closeM = ch * 60 + cm;
-  return closeM > openM ? (hm >= openM && hm < closeM) : (hm >= openM || hm < closeM);  // handle past-midnight
-}
+// Store hours now live per-branch on the stores row (hours_open/hours_close/hours_days, enforced by
+// isStoreOpenRow at order time). The old settings-based hours:* layer was display-only and is gone.
 // Owner LINE notifications: DORMANT until the owner stores their LINE userId. notifyOwner()
 // no-ops when unset or when the LINE channel is off — so this is safe to ship disabled.
 export function getOwnerLineId() { return (getSetting('owner:line_id', '') || '').trim(); }
