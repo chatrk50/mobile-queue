@@ -1440,7 +1440,11 @@ function _appModal({title,message,okText,cancelText,danger,input}){
   const ok=$('amOk'); ok.textContent=okText||'ตกลง'; ok.className=danger?'ghost danger':'ok';
   const cancel=$('amCancel'); cancel.textContent=cancelText||'ยกเลิก'; cancel.style.display=(cancelText==='')?'none':'';  // '' = info-only (OK only)
   $('appModal').style.display='flex';
-  if(input) setTimeout(()=>{ try{ inp.focus(); inp.select(); }catch(e){} },60);
+  // focus SYNCHRONOUSLY, inside the tap's call stack: iPadOS only raises the on-screen keyboard
+  // for a focus() it can trace to a user gesture — the old setTimeout(60) placed the caret but
+  // left the keyboard down, so number prompts (e.g. ส่วนลด) looked dead on the tablet.
+  if(input){ try{ inp.focus({preventScroll:true}); inp.select(); }catch(e){}
+    setTimeout(()=>{ try{ if(document.activeElement!==inp) inp.focus(); }catch(e){} },60); }  // fallback if a layout pass stole it
   return new Promise(res=>{ _amRes=res; }); }
 // appPrompt → resolves the typed string, or null if cancelled.
 window.appPrompt=({title='',message='',value='',placeholder='',type='text',inputMode='',okText='ตกลง',cancelText='ยกเลิก'}={})=>
