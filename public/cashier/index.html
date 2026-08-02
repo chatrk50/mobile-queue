@@ -1687,15 +1687,25 @@ function renderHistory(list, q){
     // A past order can still be voided/refunded later (e.g. the customer comes back).
     const canVoid = t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
     const label = t.payment_status==='paid' ? 'คืนเงิน' : 'ยกเลิก';
+    // A cancelled UNPAID void (typically the auto payment-timeout) can be revived when the
+    // customer shows up — back into the queue, collect payment, serve. Refunds cannot.
+    const isTimeout = (t.void_reason||'').startsWith('auto:');
+    const canRecover = t.status==='cancelled' && t.payment_status==='void' && t.void_kind!=='refund' && t.order_total!=null;
     return `<div class="qitem"><div style="flex:1">
-      <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
+      <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${isTimeout?' <span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
       ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
-      <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
+      <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canRecover?`<button class="ok" style="padding:6px 12px;font-size:12px" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
   }).join('');
 }
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
 // already paid (deducts from sales + drops it from the report); otherwise just void.
+// Revive a timed-out order (customer showed up late): back into the queue → รับเงิน → เสิร์ฟ.
+window.recoverHistory=async(tid)=>{
+  if(!(await appConfirm({title:'กู้คืนออเดอร์',message:'นำออเดอร์นี้กลับเข้าคิว (สถานะค้างชำระ)\nรับเงินแล้วเสิร์ฟได้ตามปกติ',okText:'กู้คืน'}))) return;
+  try{ const r=await api('/api/tickets/'+tid+'/recover',{method:'POST'});
+    toast('กู้คืนแล้ว'+(r.code?' — คิว '+r.code:'')+' · เก็บเงินได้เลย'); showHistory();
+  }catch(e){ toast(err(e)); } };
 window.refundHistory=async(tid,label)=>{
   const choice=await pickVoidReason(); if(!choice) return;   // same preset reasons + stock logic
   try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock})});
