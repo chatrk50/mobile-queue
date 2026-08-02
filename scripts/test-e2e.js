@@ -341,6 +341,25 @@ db.prepare("UPDATE tickets SET created_at=datetime('now','-60 minutes') WHERE id
 Q.setPendingVoidMinutes(30);
 const swept = Q.sweepStalePending({});
 ok(swept.voided >= 1 && db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'cancelled', `INVARIANT stale unpaid WAITING order auto-voids (swept ${swept.voided})`);
+
+// ---- Recover: a timed-out order comes back when the customer shows up ----
+console.log('\n== Recover timed-out order ==');
+const rec = Q.recoverOrderTicket(stale.ticket.id, {});
+const recT = db.prepare('SELECT status, closed_at FROM tickets WHERE id=?').get(stale.ticket.id);
+const recO = db.prepare('SELECT payment_status, void_kind, void_reason, voided_at FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(stale.ticket.id);
+ok(rec.ok && recT.status === 'waiting' && recT.closed_at == null, `INVARIANT recovered ticket rejoins the queue (${recT.status})`);
+ok(recO.payment_status === 'unpaid' && recO.void_kind == null && recO.void_reason == null && recO.voided_at == null, 'INVARIANT recovery clears every void field → order is unpaid again');
+const resweep = Q.sweepStalePending({});
+ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'waiting', `INVARIANT the sweep does NOT instantly re-void a recovered order (created_at refreshed; swept ${resweep.voided})`);
+Q.setOrderPaid(stale.ticket.id, { method: 'cash' });
+Q.setStatus(stale.ticket.id, 'served');
+ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(stale.ticket.id).status === 'served', 'INVARIANT recovered order pays + serves like any normal order');
+// a refunded (paid-then-voided) order must NOT be recoverable — money already moved
+const rf = Q.createOrder(1, [{ name: 'Drink', price: 60, qty: 1 }], {});
+Q.setOrderPaid(rf.ticket.id, { method: 'cash' });
+Q.cancelOrderTicket(rf.ticket.id, null, { reason: 'test refund' });
+let refundRecovered = false; try { Q.recoverOrderTicket(rf.ticket.id, {}); refundRecovered = true; } catch (e) { /* refund_not_recoverable */ }
+ok(!refundRecovered, 'INVARIANT a refund canNOT be recovered (only unpaid voids)');
 // The เข้าคิวทันที toggle must GOVERN numbering for EVERY channel (cashier + LINE) in BOTH states.
 // (Prod report: orders piled into "รอชำระเงิน" under queue-first; numbering is now Turso-resilient.)
 console.log('\n== Toggle governs queue numbering across all channels ==');

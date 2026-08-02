@@ -933,11 +933,14 @@ export function orderHistory(limit = 100) {
   return rows.map((t) => {
     const o = orderForTicket(t.id);
     const hasSlip = !!db.prepare('SELECT 1 FROM slips s JOIN orders o2 ON o2.id=s.order_id WHERE o2.ticket_id=? LIMIT 1').get(t.id);
+    const v = db.prepare('SELECT void_kind, void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
     return {
       id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
       closed_at: t.closed_at,
       order_total: o ? o.total : null,
       payment_status: o ? o.payment_status : null,
+      void_kind: v ? (v.void_kind || null) : null,
+      void_reason: v ? (v.void_reason || null) : null,
       refund_requested: o ? (o.refund_requested || 0) : 0,
       refund_note: o ? (o.refund_note || null) : null,
       has_slip: hasSlip,
@@ -4544,6 +4547,33 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
+}
+
+/** กู้คืนออเดอร์: revive a cancelled UNPAID order (typically auto-voided by the payment timeout)
+ *  when the customer finally shows up — back into the queue, collect payment, serve as normal.
+ *  Refunds are NOT recoverable (money already moved; re-key a fresh order instead). */
+export function recoverOrderTicket(ticketId, opts = {}) {
+  const { actorId = null } = opts;
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (t.status !== 'cancelled') throw new Error('not_cancelled');
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order || order.payment_status !== 'void') throw new Error('order_not_void');
+  if (order.void_kind === 'refund') throw new Error('refund_not_recoverable');
+  // A numbered ticket rejoins the queue as waiting; a never-numbered one goes back to pending
+  // (it gets its number at payment, same as any pay-first order).
+  const backTo = t.code ? 'waiting' : 'pending';
+  db.transaction(() => {
+    db.prepare(`UPDATE orders SET payment_status='unpaid', void_kind=NULL, void_reason=NULL, voided_at=NULL, voided_by=NULL WHERE id=?`).run(order.id);
+    // created_at is refreshed so the stale-pending sweep doesn't instantly re-void the ticket
+    // (its original created_at is already past the timeout) — and the customer re-queues from now.
+    db.prepare(`UPDATE tickets SET status=?, closed_at=NULL, cancel_requested=0, created_at=datetime('now') WHERE id=?`).run(backTo, ticketId);
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'recover', amount: order.total, actor: actorId, meta: { was: order.void_reason || null } });
+  })();
+  if (t.line_user_id) {
+    pushQueue(t.line_user_id, `✅ ออเดอร์ ${t.code || ''} ของคุณกลับเข้าคิวแล้วค่ะ\nชำระเงินที่หน้าร้านได้เลยนะคะ 🙂`, null);
+  }
+  return { ok: true, status: backTo, code: t.code || null };
 }
 
 /** Auto-void abandoned pending tickets (pay-first orders that were never paid). Voids any
