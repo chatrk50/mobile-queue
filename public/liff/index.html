@@ -1876,7 +1876,11 @@ window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice
 let _qrTimer=null; const _qrStarted=new Set();
 function startQrCountdown(){
   if(!ticketId || _qrStarted.has(ticketId)) return; _qrStarted.add(ticketId);
-  let left=15*60;
+  // Count down from the REAL auto-void window (pending:void_min), not a hardcoded 15:00 —
+  // a made-up number expires with nothing happening, then the order dies later anyway.
+  const mins=Number(cfg.pendingVoidMinutes)||0;
+  if(!(mins>0)){ const w=$('qrCountdown'); if(w) w.style.display='none'; return; }
+  let left=mins*60;
   const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return; const m=Math.floor(left/60), s=left%60; el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); };
   tick();
   if(_qrTimer) clearInterval(_qrTimer);

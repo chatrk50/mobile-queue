@@ -132,8 +132,16 @@ export function callNext(zoneId, threshold) {
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
-  pushStage(next.line_user_id, { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
-    subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
+  // Stage depends on payment: an UNPAID call means "come pay" — showing the full stage-3 bar
+  // (พร้อมรับ) would then REGRESS to stage 2 when the paid push fires minutes later, which reads
+  // as the system going backwards. Paid orders keep the original "ready" presentation.
+  const nextOrder = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(next.id);
+  const nextPaid = !nextOrder || nextOrder.payment_status === 'paid';
+  pushStage(next.line_user_id, nextPaid
+    ? { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+        subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
+    : { stage: 2, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+        subtitle: 'กรุณามาชำระเงินที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -4623,7 +4631,7 @@ export function sweepStalePending({ actorId = null } = {}) {
   })();
   // Best-effort: tell each customer their unpaid order expired (graceful no-op without a token).
   for (const r of rows) {
-    if (r.line_user_id) pushQueue(r.line_user_id, '⌛ ออเดอร์ของคุณหมดเวลาชำระและถูกยกเลิกอัตโนมัติ\nสั่งใหม่ได้ตลอดเลยค่ะ 🙂', null);
+    if (r.line_user_id) pushQueue(r.line_user_id, '⌛ ออเดอร์ของคุณหมดเวลาชำระและถูกยกเลิกอัตโนมัติ\nยังต้องการอยู่ไหมคะ? แจ้งพนักงานที่ร้านให้กู้คืนออเดอร์เดิมได้เลย หรือสั่งใหม่ได้ตลอดค่ะ 🙂', null);
   }
   return { voided: rows.length, zones: [...zones] };
 }
