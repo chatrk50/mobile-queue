@@ -2246,26 +2246,34 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
-      c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
+  const type = c.disc_type === 'percent' ? 'percent' : 'baht';
+  // percent is capped at 100 — a typo like "500%" otherwise silently means "free order"
+  const value = Math.min(type === 'percent' ? 100 : 1e7, Math.max(0, Number(c.disc_value) || 0));
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,valid_days,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+      type, value,
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
       (c.valid_from || null) && String(c.valid_from).slice(0, 10),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
-      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all',
+      // days-after-receipt expiry — used by claim links AND targeted sends (sendCampaign reads it)
+      Math.max(0, Math.min(365, parseInt(c.valid_days) || 0)));
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
-    .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
-      Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
+  const newType = c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type);
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,valid_days=?,active=? WHERE id=?`)
+    .run((g('label', cur.label) || '').toString().slice(0, 60), newType,
+      Math.min(newType === 'percent' ? 100 : 1e7, Math.max(0, Number(g('disc_value', cur.disc_value)) || 0)), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
       Math.max(0, Number(g('min_spend', cur.min_spend)) || 0),
       (c.valid_from !== undefined ? (c.valid_from ? String(c.valid_from).slice(0, 10) : null) : cur.valid_from),
       (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
-      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')),
+      Math.max(0, Math.min(365, parseInt(g('valid_days', cur.valid_days)) || 0)),
+      c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }

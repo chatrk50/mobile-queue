@@ -642,11 +642,11 @@
           <label class="ff" style="min-width:150px">ใครใช้ได้
             <select id="cpAud" onchange="cpSyncAud()"><option value="all">ลูกค้าทุกคน</option><option value="new">ลูกค้าใหม่เท่านั้น</option><option value="claim">เฉพาะคนที่กดรับผ่านลิงก์ (จำกัดโควตา)</option></select></label>
         </div>
-        <div class="cphint" id="cpAudHint" style="display:none">บันทึกแล้วระบบจะให้ตั้งโควตา + สร้างลิงก์รับ — ลูกค้าต้องกดรับเข้า “คูปองของฉัน” ก่อนถึงจะใช้ได้ พิมพ์โค้ดตรงๆ ใช้ไม่ได้</div>
-        <!-- อายุแบบนับจากวันที่ "กดรับ" (ไม่ใช่วันตายตัว): ของเดิมถามผ่านป๊อปตอนสร้างลิงก์ ทำให้หาไม่เจอ -->
-        <div class="cprow" id="cpDaysWrap" style="display:none">
-          <label class="ff" style="min-width:220px">หมดอายุกี่วันหลังลูกค้ากดรับ <span class="muted">(0 = ใช้วันหมดอายุด้านบน)</span>
-            <input id="cpValidDays" type="number" inputmode="numeric" min="0" max="365" placeholder="30"></label>
+        <div class="cphint" id="cpAudHint" style="display:none">บันทึกแล้วระบบจะให้ตั้งโควตา + สร้างลิงก์รับ — <b>ใครก็ตามที่ได้ลิงก์กดรับได้จนกว่าโควตาหมด ไม่ใช่การส่งเจาะจงรายคน</b> · ถ้าต้องการส่งเฉพาะลูกค้าที่เลือก ให้สร้างคูปองนี้เสร็จแล้วไปที่หน้า "ลูกค้า" → แนบคูปอง</div>
+        <!-- อายุแบบนับจากวันที่ "ได้รับ" (ไม่ใช่วันตายตัว) — ใช้ทั้งลิงก์กดรับ และการส่งตรงจากหน้าลูกค้า -->
+        <div class="cprow" id="cpDaysWrap">
+          <label class="ff" style="min-width:220px">หมดอายุกี่วันหลังลูกค้าได้รับ <span class="muted">(ใช้กับลิงก์รับ/ส่งตรงถึงลูกค้า · 0 = ใช้วันหมดอายุด้านบน)</span>
+            <input id="cpValidDays" type="number" inputmode="numeric" min="0" max="365" placeholder="เช่น 15"></label>
         </div>
         <div class="cprow">
           <label class="ff" style="min-width:150px">เริ่มใช้ได้ <span class="muted">(ว่าง = ทันที)</span>
@@ -2451,8 +2451,7 @@ function cpCard(c){
 window.cpSyncType=()=>{ const w=$('cpMaxWrap'); if(w) w.style.display=($('cpType').value==='percent')?'':'none'; };
 // "ใครใช้ได้" ก็คุมช่องทางแจกด้วย: เลือกลิงก์ = ต้องกดรับก่อนใช้ — โชว์คำอธิบายทันทีที่เลือก
 window.cpSyncAud=()=>{ const claim=($('cpAud').value==='claim');
-  const h=$('cpAudHint'); if(h) h.style.display=claim?'':'none';
-  const d=$('cpDaysWrap'); if(d) d.style.display=claim?'':'none'; };
+  const h=$('cpAudHint'); if(h) h.style.display=claim?'':'none'; };   // อายุหลังรับ (cpDaysWrap) โชว์เสมอ — ใช้กับส่งตรงด้วย ไม่ใช่แค่ลิงก์
 let _cpEditId=null;
 window.cpResetForm=()=>{ _cpEditId=null;
   ['cpCode','cpLabel','cpValue','cpMax','cpMin','cpFrom','cpExp','cpLimit','cpValidDays'].forEach(id=>{const e=$(id); if(e) e.value='';});
@@ -2511,7 +2510,8 @@ window.addCoupon=async()=>{
     min_spend:Number($('cpMin').value)||0,
     valid_from:$('cpFrom').value||null, expires_at:$('cpExp').value||null,
     usage_limit:Number($('cpLimit').value)||0, per_customer:Number($('cpPer').value)||0,
-    stackable:$('cpStack').checked?1:0, audience:aud==='new'?'new':(aud==='claim'?(cur.audience||'all'):'all') };
+    stackable:$('cpStack').checked?1:0, audience:aud==='new'?'new':(aud==='claim'?(cur.audience||'all'):'all'),
+    valid_days:Number($('cpValidDays').value)||0 };
   if(!body.code){ toast('ใส่โค้ดคูปอง'); return; }
   if(!(body.disc_value>0)){ toast('ใส่จำนวนส่วนลด'); return; }
   if(body.disc_type==='percent'&&body.disc_value>100){ toast('ส่วนลด % ต้องไม่เกิน 100'); return; }
