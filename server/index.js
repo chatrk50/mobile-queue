@@ -1685,7 +1685,10 @@ setInterval(() => {
 
 // Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose
 // saved birthday is today. Hourly + once at boot; idempotent per customer per calendar year.
-const birthdaySweep = () => { try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ } };
+const birthdaySweep = () => {
+  try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ }
+  try { Q.nudgeExpiringCoupons(); } catch { /* best-effort — self-gates to once/day after 10:00 */ }
+};
 birthdaySweep();
 setInterval(birthdaySweep, 60 * 60 * 1000);
 

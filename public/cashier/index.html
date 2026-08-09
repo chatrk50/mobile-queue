@@ -1007,7 +1007,10 @@
       <select id="clCoupPick" onchange="clCoupPickChange()" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;background:#fff">
         <option value="">กำลังโหลดคูปอง…</option>
       </select>
-      <div id="clCoupInfo" class="muted" style="font-size:11.5px;margin-top:6px;display:none"></div>
+      <div class="row between" style="margin-top:6px;align-items:center">
+        <div id="clCoupInfo" class="muted" style="font-size:11.5px;display:none;flex:1"></div>
+        <a href="#" onclick="showCouponHub(0);return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none;white-space:nowrap">+ สร้างคูปองใหม่ที่หน้าคูปอง ›</a>
+      </div>
       <div id="clCoupCustom" style="display:none;margin-top:8px">
         <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
           <input id="clCoupLabel" value="คูปองคิดถึง — ฟรี 1 แก้ว" style="flex:2;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
@@ -3377,8 +3380,8 @@ window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'non
       if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ }
     try{ _clCoupons=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _clCoupons=[]; }
     const opts=_clCoupons.map(c=>`<option value="${c.id}">${esc(c.label)} (${esc(c.code)})</option>`).join('');
-    $('clCoupPick').innerHTML=(opts?`<option value="">— เลือกคูปองที่สร้างไว้ —</option>${opts}`:'')
-      +`<option value="custom" ${opts?'':'selected'}>✏️ กำหนดเอง (พิมพ์ใหม่)</option>`;
+    $('clCoupPick').innerHTML=(opts?`<option value="">— เลือกคูปองจากหน้าคูปอง (แนะนำ) —</option>${opts}`:'')
+      +`<option value="custom" ${opts?'':'selected'}>✏️ ของขวัญด่วน — ตั้งแค่มูลค่า+อายุ (เงื่อนไขละเอียดต้องสร้างที่หน้าคูปอง)</option>`;
     clCoupPickChange(); } };
 window.clCoupPickChange=()=>{
   const v=$('clCoupPick').value, info=$('clCoupInfo');

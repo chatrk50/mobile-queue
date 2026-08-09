@@ -3647,6 +3647,31 @@ export function awardPoints(orderId) {
 /** Issue this year's birthday coupon (free drink, value/expiry from the birthday template) to every
  *  customer whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic
  *  sweep; idempotent per customer per calendar year. */
+/** Expiry nudge: once a day (after 10:00 BKK), remind holders of unused wallet coupons that
+ *  expire within `coupon:nudge_days` days (default 2, 0 = off). One push per coupon, ever
+ *  (nudged_at), capped per run so a big backlog can't blow the LINE message budget. */
+export function nudgeExpiringCoupons() {
+  const days = Math.max(0, Math.min(14, parseInt(getSetting('coupon:nudge_days', '2')) || 0));
+  if (!days) return { nudged: 0 };
+  const now = db.prepare(`SELECT date(datetime('now','+7 hours')) d, CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get();
+  if (now.h < 10) return { nudged: 0 };                                       // never push at night
+  if (getSetting('coupon:nudge_last_day', '') === now.d) return { nudged: 0 }; // once per day
+  const rows = db.prepare(
+    `SELECT id, customer_key, label, expires_at FROM customer_coupons
+      WHERE used_at IS NULL AND state != 'cancelled' AND nudged_at IS NULL
+        AND expires_at >= ? AND expires_at <= date(?, '+${days} days')
+        AND customer_key LIKE 'U%' LIMIT 60`).all(now.d, now.d);
+  setSetting('coupon:nudge_last_day', now.d);
+  const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  for (const r of rows) {
+    db.prepare(`UPDATE customer_coupons SET nudged_at=datetime('now') WHERE id=?`).run(r.id);
+    pushQueue(r.customer_key,
+      `⏰ คูปอง "${r.label}" ของคุณจะหมดอายุ ${r.expires_at} นี้แล้วนะคะ\n` +
+      `อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛` + (base ? `\nสั่งเลย: ${base}/liff/` : ''), null);
+  }
+  return { nudged: rows.length };
+}
+
 export function issueBirthdayCoupons() {
   const tpl = couponTemplate('birthday');
   if (!loyaltyEnabled() || !tpl.on) return { issued: 0 };
@@ -4576,6 +4601,16 @@ export function recoverOrderTicket(ticketId, opts = {}) {
     // created_at is refreshed so the stale-pending sweep doesn't instantly re-void the ticket
     // (its original created_at is already past the timeout) — and the customer re-queues from now.
     db.prepare(`UPDATE tickets SET status=?, closed_at=NULL, cancel_requested=0, created_at=datetime('now') WHERE id=?`).run(backTo, ticketId);
+    // The void handed the coupon back; the recovered order still carries its discount, so
+    // re-consume the code coupon (best-effort) or the discount would be double-spendable.
+    const cm = /คูปอง (\S+)/.exec(order.discount_reason || '');
+    if (cm && !db.prepare('SELECT 1 FROM coupon_uses WHERE order_id=?').get(order.id)) {
+      const cp = db.prepare('SELECT id, usage_limit, used_count FROM coupons WHERE UPPER(code)=UPPER(?)').get(cm[1]);
+      if (cp && db.prepare('UPDATE coupons SET used_count=used_count+1 WHERE id=? AND (usage_limit<=0 OR used_count<usage_limit)').run(cp.id).changes) {
+        db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)')
+          .run(cp.id, order.id, t.line_user_id || t.customer_key || null, order.discount || 0);
+      }
+    }
     logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'recover', amount: order.total, actor: actorId, meta: { was: order.void_reason || null } });
   })();
   if (t.line_user_id) {
@@ -4625,6 +4660,9 @@ export function sweepStalePending({ actorId = null } = {}) {
     for (const r of rows) {
       db.prepare(`UPDATE orders SET payment_status='void', void_kind='void', void_reason='auto: หมดเวลาชำระ', voided_at=datetime('now'), voided_by=? WHERE id=?`).run(actorId, r.order_id);
       db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(r.id);
+      // Same reversal as a manual void: hand back the wallet coupon and the code-coupon
+      // quota/allowance — a timed-out order used to burn them permanently.
+      try { reverseLoyaltyForOrder(r.order_id, r.line_user_id); } catch { /* never break the sweep */ }
       logSaleEvent({ branchId: r.branch_id, ticketId: r.id, orderId: r.order_id, type: 'void', amount: r.total, actor: actorId, meta: { reason: 'auto_timeout' } });
       zones.add(r.zone_id);
     }

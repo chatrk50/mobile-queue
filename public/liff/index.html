@@ -881,7 +881,14 @@ function couponValueText(i){
   if(i.discType==='percent') return 'ลด '+i.discValue+'%'+(i.maxDisc?(' (สูงสุด ฿'+i.maxDisc+')'):'');
   return 'ลด ฿'+i.discValue;
 }
-function couponScreen(html){ document.querySelector('.wrap').innerHTML='<div class="card" style="text-align:center;padding:26px 20px">'+html+'</div>'; }
+function couponScreen(html){
+  // Brand-standard claim layout: shop identity on top, then the offer — the customer must know
+  // WHO the coupon is from before what it's worth (The1/Shopee/LINE all lead with the brand).
+  const brandName=(window.cfg&&cfg.brand)||'YO-DEE Yogurt';
+  const head='<div style="display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px">'
+    +'<img src="/assets/logo.png" alt="" style="height:38px;width:38px;border-radius:10px;object-fit:cover" onerror="this.style.display=\'none\'">'
+    +'<div style="font-weight:800;font-size:15px;color:var(--navy)">'+esc(brandName)+'</div></div>';
+  document.querySelector('.wrap').innerHTML='<div class="card" style="text-align:center;padding:22px 20px 26px;max-width:400px;margin:0 auto">'+head+html+'</div>'; }
 window.goCouponWallet=()=>{ location.href='/liff/'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''); };
 async function doCouponClaim(){
   let info=null; try{ info=await (await fetch('/api/claim/'+encodeURIComponent(couponTok)+(lineUserId?('?u='+encodeURIComponent(lineUserId)):''))).json(); }catch(e){}
@@ -890,6 +897,10 @@ async function doCouponClaim(){
       +'<button class="ok" style="width:100%;margin-top:16px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
   const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12px;margin-top:3px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
+  // Expiry ON the card — the single most-read line on any voucher (drives urgency + trust).
+  const life=(info.validDays>0)?('ใช้ได้ '+info.validDays+' วันหลังกดรับ')
+            :(info.expiresAt?('ใช้ได้ถึง '+info.expiresAt):'ไม่มีวันหมดอายุ');
+  const lifeRow='<div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#8a5c00;margin-top:6px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+life+'</div>';
   // Perforated-ticket voucher (same language as the coupon wallet): value stub, tear line with
   // punched notches, details on the right.
   const big=info.discType==='percent'?(info.discValue+'%'):('฿'+info.discValue);
@@ -901,7 +912,8 @@ async function doCouponClaim(){
     +'<div style="font-size:9.5px;font-weight:700;color:#8a5c00;opacity:.8">ส่วนลด</div></div>'
     +'<div style="position:relative;flex:1;min-width:0;border-left:1.5px dashed #ecd9a0;padding:14px 12px 14px 14px">'+notch('top')+notch('bottom')
     +'<div style="font-weight:800;font-size:15px;color:var(--navy);line-height:1.35">'+esc(info.label||'คูปอง')+'</div>'
-    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+'</div></div>';
+    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+lifeRow+'</div></div>';
+  const terms='<p class="muted" style="font-size:11px;line-height:1.5;margin:2px 0 0">รับได้ 1 สิทธิ์ต่อบัญชี · เฉพาะเจ้าของสิทธิ์ โอนต่อไม่ได้ · ใช้จากเมนู "คูปองของฉัน"</p>';
   if(info.state==='already'){
     couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
       +'<p class="muted" style="font-size:12.5px">อยู่ในเมนู "คูปองของฉัน" พร้อมใช้ได้เลย</p>'
@@ -917,8 +929,8 @@ async function doCouponClaim(){
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
   const left=(info.remaining!=null&&info.remaining<=50)?('<div style="font-weight:800;color:#c2410c;font-size:13px;margin-bottom:6px">เหลืออีก '+info.remaining+' สิทธิ์เท่านั้น!</div>'):'';
-  couponScreen('<div style="font-size:44px">🎁</div><h1 style="margin:8px 0;color:var(--navy)">คูปองพิเศษสำหรับคุณ</h1>'+left+card
-    +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:50px;font-size:16px" onclick="doCouponClaimGo()">รับคูปอง</button>');
+  couponScreen('<h1 style="margin:6px 0 2px;color:var(--navy);font-size:20px">คูปองพิเศษสำหรับคุณ 🎁</h1>'+left+card
+    +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:52px;font-size:17px;font-weight:800" onclick="doCouponClaimGo()">เก็บคูปอง</button>'+terms);
 }
 window.doCouponClaimGo=async()=>{
   const b=$('cpClaimBtn'); if(b){ b.disabled=true; b.textContent='กำลังรับ…'; }

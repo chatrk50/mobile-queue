@@ -648,6 +648,7 @@ for (const stmt of [
   // column only marks the moment a cashier forgave the customer, so counting restarts from there.
   `ALTER TABLE customers ADD COLUMN noshow_forgiven_at TEXT`,
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
+  `ALTER TABLE customer_coupons ADD COLUMN nudged_at TEXT`,   // expiry-nudge LINE push sent (once per coupon)
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
