@@ -18,7 +18,10 @@ import generatePayload from 'promptpay-qr';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
+app.set('trust proxy', 1); // Render is behind exactly ONE proxy. Trusting only the last hop means
+// req.ip is the real client IP and a spoofed X-Forwarded-For (which an attacker prepends) is ignored —
+// so the PIN-lockout + rate limiters key off an IP the client can't forge. (`true` trusted the leftmost,
+// attacker-controlled, entry and let XFF rotation bypass the lockout entirely — SEC-C1.)
 // ---- Baseline security headers. A real CSP is off the table while the app ships as two
 // inline-script single-file bundles, but these close the cheap holes: MIME sniffing,
 // clickjacking, referrer leakage, and stray browser features. camera stays self — the
@@ -267,11 +270,14 @@ app.post('/api/staff/login', rateLimit('auth', 20, 60e3), (req, res) => {
   const branchIds = staff.role === 'owner' ? []
     : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
   const token = signSession({ staffId: staff.id, role: staff.role, tenantId: staff.tenant_id, branchIds, exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
-  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  // Secure on https (prod) so the session cookie never rides plain HTTP; omitted on local http dev.
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${secure}`);
   res.json({ ok: true, staff: { id: staff.id, name: staff.name, role: staff.role } });
 });
 app.post('/api/staff/logout', (req, res) => {
-  res.setHeader('Set-Cookie', 'sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${secure}`);
   res.json({ ok: true });
 });
 // Who am I (frontend reads this to show the logged-in staff + role).

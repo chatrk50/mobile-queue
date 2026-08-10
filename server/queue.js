@@ -4044,10 +4044,29 @@ export function createOrder(zoneId, items, opts = {}) {
   // Cashier lines keep the submitted price on purpose: a till operator legitimately overrides
   // (staff drink, replacement cup, agreed discount) and is authenticated, PIN-gated and audited.
   if (source === 'customer') {
+    // A sold-out drink was orderable + payable via reorder / stale cart because catalogPrice only
+    // checked active+enabled, never soldout or BOM stock (CUS-C2). The disabled dish-card was the
+    // ONLY guard. Re-check both here — the same server-side gate that re-prices the line.
+    const makeable = menuMakeable();
+    const soldByBranch = new Map(
+      db.prepare('SELECT item_id, soldout FROM branch_menu WHERE branch_id=?').all(zone.store_id).map((r) => [r.item_id, r.soldout])
+    );
+    const needByItem = new Map();   // cumulative qty per item across the cart (2 lines of the same drink)
     for (const it of lines) {
+      const base = String(it.name || '').split(' · ')[0].trim();
       const p = catalogPrice(it.name, { channelId, branchId: zone.store_id });
       if (p == null) throw new Error('item_unavailable');
       it.price = p;
+      const mi = db.prepare('SELECT id, soldout FROM menu_items WHERE name=? AND active=1').get(base);
+      if (mi) {
+        const soldout = soldByBranch.has(mi.id) ? soldByBranch.get(mi.id) : mi.soldout;
+        if (soldout) throw new Error('item_soldout');
+        if (makeable.has(mi.id)) {
+          const need = (needByItem.get(mi.id) || 0) + (Number(it.qty) || 1);
+          needByItem.set(mi.id, need);
+          if (makeable.get(mi.id) < need) throw new Error('item_soldout');
+        }
+      }
     }
   }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
@@ -4374,6 +4393,11 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'void') throw new Error('order_void');
+  // A discount AFTER payment silently erased revenue + expected cash (the money was already in the
+  // drawer). Post-payment price changes must go through refund + re-ring. The UI hides the button
+  // on a paid card, but a two-till stale-card race could still reach here (CASH-2). Reward/lucky/
+  // birthday redemptions all guard `paid` before calling this, so they're unaffected.
+  if (order.payment_status === 'paid') throw new Error('order_already_paid');
   let amt = Math.max(0, Number(amount) || 0);
   amt = Math.min(amt, order.total);
   amt = Math.round(amt * 100) / 100;

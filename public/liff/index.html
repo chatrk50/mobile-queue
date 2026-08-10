@@ -398,7 +398,11 @@
     <button id="goHomeBtn" class="ok" style="width:100%;margin-top:12px;display:none" onclick="goHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>กลับหน้าหลัก · สั่งใหม่</button>
   </div>
 
-  <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
+  <div id="errCard" class="card" style="display:none;text-align:center;padding:28px 20px">
+    <img src="/assets/logo.png" alt="" style="height:44px;width:44px;border-radius:11px;object-fit:cover;margin-bottom:10px" onerror="this.style.display='none'">
+    <b id="errMsg" style="display:block;color:var(--navy);font-size:16px"></b>
+    <button class="ok" style="width:100%;margin-top:16px" onclick="location.reload()">ลองใหม่อีกครั้ง</button>
+  </div>
 </div>
 <div id="toast" class="toast"></div>
 
@@ -700,7 +704,11 @@ applyBrand();
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
-function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=msg;}
+// Map raw server codes / fetch failures to friendly Thai — a bare "zone_not_found" or "Failed to
+// fetch" as the whole screen (CUS-C3) reads as a broken app. Unknown codes get a generic line.
+const ERR_TH={zone_not_found:'ไม่พบสาขา/โซนนี้ค่ะ — กรุณาสแกน QR ที่หน้าร้านอีกครั้ง',ไม่พบโซนใน:'ไม่พบโซนใน QR code — กรุณาสแกน QR ที่หน้าร้านค่ะ',store_not_found:'ไม่พบร้านค้าค่ะ',Failed:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ',NetworkError:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ'};
+function errTH(msg){ const m=String(msg||''); if(ERR_TH[m]) return ERR_TH[m]; for(const k in ERR_TH){ if(m.indexOf(k)===0||m.indexOf(k)>-1&&/[A-Za-z]/.test(m)) return ERR_TH[k]; } return /[A-Za-z]{4}/.test(m)?'ขออภัยค่ะ เปิดหน้านี้ไม่สำเร็จ — ลองใหม่อีกครั้งนะคะ':m; }
+function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=errTH(msg);}
 
 async function initLiff(){
   cfg = await api('/api/config');
@@ -1206,7 +1214,8 @@ function itemImg(m){
   if(m.image) return `<img src="${esc(m.image)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   return fb;
 }
-async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; }
+let menuLoadFailed=false;
+async function loadMenu(){ try{ MENU=await api('/api/menu'); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
   // Which items THIS customer has hearted (paints the ❤️ filled). Real LINE ids only — the demo
   // fallback ids can't like, which is what keeps the public counts honest.
   try{ if(/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ const r=await api('/api/menu-likes?u='+encodeURIComponent(lineUserId)); MY_LIKES=new Set(r.ids||[]); } }catch(e){}
@@ -1271,7 +1280,10 @@ function paintMenu(){
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${cnr}</div></div></button>`; };
-  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
+  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>`
+    : (menuLoadFailed
+        ? '<div style="text-align:center;padding:18px 8px"><p class="muted" style="margin-bottom:12px">เชื่อมต่อไม่ได้ค่ะ — โหลดเมนูไม่สำเร็จ</p><button class="ok" onclick="loadMenu().then(paintMenu)">ลองโหลดเมนูอีกครั้ง</button></div>'
+        : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>');
 };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
   // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
@@ -1590,11 +1602,13 @@ window.confirmBasket=async()=>{
       storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
     } else if(_err==='online_orders_off'||_err==='pos_offline'){   // channel paused mid-checkout
       storeOpen=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
-    } else if(_err==='item_unavailable'){   // the menu changed under an old cart / reorder — reload it
-      cart=[]; cartCoupon=null; toast('มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
+    } else if(_err==='item_unavailable'||_err==='item_soldout'){   // menu changed / sold out under an old cart or reorder — reload it
+      cart=[]; cartCoupon=null;
+      toast(_err==='item_soldout'?'ขออภัยค่ะ มีเมนูในตะกร้าที่ของหมดแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏':'มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
       try{ await loadZone(); }catch(_){} show('orderCard',true); renderBasketCount();
-    } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine
-      toast('ขออภัยค่ะ ระบบพักการสั่งผ่าน LINE ชั่วคราว เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏');
+    } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine — restore a screen (CUS-C1) so the customer isn't left on a blank page
+      cart=[]; renderBasketCount(); show('orderCard',true);
+      appConfirm({title:'พักการสั่งผ่าน LINE ชั่วคราว',message:'เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\n\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏',okText:'เข้าใจแล้ว',cancelText:''});
     } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
