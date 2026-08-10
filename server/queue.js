@@ -4624,6 +4624,39 @@ function returnStockForOrder(order) {
     }
   } catch { /* stock return must never break a void */ }
 }
+/** ของเสีย + ทำใหม่ on a PAID order (CASH-4). The drink was made, spoiled, and is being remade —
+ *  so the SALE stands (revenue kept, drawer untouched) and the wasted first attempt is booked as a
+ *  waste cost: its recipe ingredients are posted as 'waste' stock moves (a second consumption on top
+ *  of the sale's). byShop only flavours the reason (ความผิดร้าน vs ลูกค้า) — the money is identical
+ *  either way. Does NOT cancel the ticket. Returns the wasted cup count + ingredient cost. */
+export function recordWaste(ticketId, { reason = null, byShop = false, actorId = null } = {}) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status !== 'paid') throw new Error('order_not_paid');   // waste-of-unpaid = cancel-with-waste path
+  const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
+  const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
+  let cups = 0, cost = 0;
+  const rsn = (byShop ? 'ของเสีย (ความผิดร้าน)' : 'ของเสีย (ไม่ใช่ความผิดร้าน)') + (reason ? ` — ${String(reason).slice(0, 120)}` : '');
+  db.transaction(() => {
+    for (const it of items) {
+      cups += Number(it.qty) || 1;
+      let miId = it.menu_item_id;
+      if (!miId) { const base = String(it.name).split(' · ')[0]; miId = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base)?.id; }
+      if (!miId) continue;
+      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(miId)) {
+        const q = (Number(r.qty) || 0) * (Number(it.qty) || 1);
+        if (q > 0) try {
+          const ing = db.prepare('SELECT avg_cost FROM ingredients WHERE id=?').get(r.ingredient_id);
+          cost += q * (Number(ing?.avg_cost) || 0);
+          recordStockMove(r.ingredient_id, { kind: 'waste', qty: q, note: 'ของเสีย/ทำใหม่ ' + code, actorId });
+        } catch { /* a missing ingredient must never block booking the waste */ }
+      }
+    }
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'waste_remake', amount: order.total, actor: actorId, meta: { reason: rsn, byShop, cups } });
+  })();
+  return { ok: true, cups, cost: Math.round(cost * 100) / 100, byShop, reason: rsn };
+}
+
 /** Undo an order's loyalty effects when it's voided: returns redeemed stamps to the customer
  *  and removes any stamps it earned, keeping the ledger consistent. Returns net points returned
  *  to the ticket's own customer (positive = points given back). */

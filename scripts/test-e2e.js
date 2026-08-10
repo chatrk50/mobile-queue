@@ -1927,6 +1927,21 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
     ok(accNear2(before, after), `INVARIANT ACC-F4 renaming a menu item does not restate closed-day drink sales (${before} vs ${after})`);
   }
 }
+{
+  // CASH-4: ของเสีย + ทำใหม่ on a PAID order keeps the money (revenue + drawer untouched) and books
+  // a waste cost — it must NOT become a refund/void.
+  const zc = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(zc.ticket.id, { method: 'cash' });
+  const revBefore = Q.dailyReport().revenue;
+  const cashBefore = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM order_payments WHERE method='cash' AND kind='payment'`).get().v;
+  const wr = Q.recordWaste(zc.ticket.id, { byShop: true, reason: 'ทำหก' });
+  const oRow = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(zc.ticket.id);
+  ok(oRow.payment_status === 'paid', 'INVARIANT CASH-4 waste-remake keeps the order PAID (not voided)');
+  ok(accNear2(Q.dailyReport().revenue, revBefore), 'INVARIANT CASH-4 waste-remake does not reduce revenue');
+  ok(accNear2(db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM order_payments WHERE method='cash' AND kind='payment'`).get().v, cashBefore), 'INVARIANT CASH-4 waste-remake never touches the cash drawer (no refund leg)');
+  ok(db.prepare(`SELECT COUNT(*) n FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) AND kind='refund'`).get(zc.ticket.id).n === 0, 'INVARIANT CASH-4 waste-remake writes no refund leg');
+  ok(wr.cups >= 1, `INVARIANT CASH-4 waste-remake reports the wasted cups (${wr.cups})`);
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

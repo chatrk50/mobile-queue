@@ -5001,8 +5001,15 @@ function pickVoidReason(){ const box=$('voidReasonBtns');
 window.chooseVoidReason=(i)=>{ $('voidPop').style.display='none'; const r=_voidRes; _voidRes=null; if(r) r(i<0?null:VOID_REASONS[i]); };
 window.voidTicket=async(tid)=>{
   const choice=await pickVoidReason(); if(!choice) return;
-  try{ await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock})});
-    toast(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
+  // For the generic "ของเสีย/ทำพลาด" reason, ask whose fault it is — on a PAID bill this becomes a
+  // ทำใหม่ (keep the money + book the waste), so the label matters in the report. Clear-cut customer
+  // reasons (ไม่มารับ/ไม่พอใจ) are auto byShop=false.
+  let byShop=false;
+  if(choice.kind==='waste' && /ทำพลาด|ของเสีย/.test(choice.reason)){
+    byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — ถ้าบิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'});
+  }
+  try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop})});
+    toast(r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว + ทำใหม่ · เก็บเงินเดิม'):(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว'))); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
   const a=await appPrompt({title:'ลดราคา',message:'ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด',type:'number',inputMode:'decimal',placeholder:'0'}); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }

@@ -1216,9 +1216,18 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
-    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
+    // ของเสียบนบิลที่จ่ายแล้ว = ทำใหม่ให้ลูกค้า (เก็บเงินเดิม + บันทึกของเสีย) — NOT a refund/cancel
+    // (CASH-4). Only an UNPAID waste, or an explicit refund/cancel, goes through cancelOrderTicket.
+    const o = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(req.params.ticketId);
+    let result = { ok: true };
+    if (req.body?.kind === 'waste' && o && o.payment_status === 'paid') {
+      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 120) || null, byShop: !!req.body?.byShop });
+      result.wasteRemake = true;
+    } else {
+      Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
+    }
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
-    res.json({ ok: true });
+    res.json(result);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
