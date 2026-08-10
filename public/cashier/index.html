@@ -3092,6 +3092,8 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         // Cash spent straight out of the drawer that day — a real expense, shown on its own line
         // so it is never confused with the planned monthly costs above.
         ((p.drawerPayOut||0)>0?pl('− จ่ายออกจากลิ้นชัก (ซื้อของหน้างาน)',p.drawerPayOut,{neg:true}):'')+
+        // Delivery-platform commission (Grab/LINE MAN ~30%) — a real cost of every delivery order.
+        ((p.commission||0)>0?pl('− ค่าคอมมิชชั่นเดลิเวอรี่',p.commission,{neg:true}):'')+
         // When anyone clocked in, the wage line above is the REAL cost, not the plan — say by how
         // much it differed so an over-staffed day is visible instead of averaged away.
         ((p.labor&&p.labor.cost>0)?`<div class="qitem" style="padding:6px 12px;background:#fff;font-size:12px">

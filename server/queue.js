@@ -798,7 +798,10 @@ export function dailyReport(branchId = null, dateStr = null) {
             SUM(oi.qty*oi.price) AS revenue
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
+     -- Category comes from the item's pinned catalog id (rename-proof), falling back to name only for
+     -- legacy rows with no menu_item_id. Matching by name meant renaming a menu item restated the
+     -- drink/topping split of every CLOSED day (ACC-F4).
+     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id OR (oi.menu_item_id IS NULL AND mi.name = oi.name)
      WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)   -- SALES = paid TODAY only (pay-first); optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all(...B);
@@ -855,7 +858,11 @@ export function dailyReport(branchId = null, dateStr = null) {
     } catch { /* stock module empty */ }
   }
   const ingredientVariance = ingredientActual != null ? Math.round((ingredientActual - ingredientPlan) * 100) / 100 : 0;
-  const packaging = f.packagingPerCup * cups;
+  // Packaging: a PLAN-mode estimate (perCup × cups). In ACTUAL mode the real cups/lids/straws consumed
+  // by sold drinks are already inside cogsActual (their stock 'use' moves fired at payment), so adding
+  // the estimate on top double-counts the whole packaging line (ACC-F2) → 0. A shop that doesn't track
+  // packaging in stock should add it to the recipe so it lands in real COGS.
+  const packaging = ingredientActual != null ? 0 : f.packagingPerCup * cups;
   const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
   const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
@@ -894,7 +901,16 @@ export function dailyReport(branchId = null, dateStr = null) {
   // takings. The drawer reconciliation already expects it to be gone, but until now it never
   // reached the P&L — so net profit was overstated by exactly the amount spent.
   const drawerPayOut = payOutForDay(branchId || 1, validDay ? dateStr : null);
-  const ebitda = grossProfit - wasteCost - dailyOpex - drawerPayOut;
+  // Delivery-platform commission (Grab/LINE MAN/Shopee take ~30% of each order) is a real cost of the
+  // sale — it was computed for the channel report but never reached the profit line, so net profit was
+  // overstated by the whole fee (ACC-F3). Same basis as channelsReport: net-of-discount × commission%.
+  const commission = Math.round((db.prepare(
+    `SELECT COALESCE(SUM((o.total - COALESCE(o.discount,0)) * COALESCE(c.commission_pct,0) / 100), 0) v
+       FROM orders o LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = COALESCE(?, date('now','+7 hours'))
+        AND (? IS NULL OR o.branch_id = ?)`
+  ).get(dateStr, branchId, branchId).v || 0) * 100) / 100;
+  const ebitda = grossProfit - commission - wasteCost - dailyOpex - drawerPayOut;
   const depreciation = perDay(f.depreciation);
   const ebit = ebitda - depreciation;
   const interest = perDay(f.interest);
@@ -914,7 +930,7 @@ export function dailyReport(branchId = null, dateStr = null) {
     ingredient, ingredientPlan, ingredientActual, ingredientVariance, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
-    labor, wagesPlanDaily, laborVariance, drawerPayOut,
+    labor, wagesPlanDaily, laborVariance, drawerPayOut, commission,
     ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
@@ -1651,10 +1667,16 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
     q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
   }
   const exp = (kind === 'purchase' && /^\d{4}-\d{2}-\d{2}$/.test(String(expiry || ''))) ? expiry : null;
+  // Freeze the per-unit cost on the move (ACC-F1): a purchase carries its own unit price; a
+  // consumption/adjustment is valued at the weighted-average cost AS IT STANDS NOW, so a later
+  // purchase that shifts avg_cost can never re-price a day that was already closed.
+  const unitCost = (kind === 'purchase')
+    ? ((q > 0 && Number(cost) > 0) ? round2i(Number(cost) / q) : ing.avg_cost)
+    : ing.avg_cost;
   const tx = db.transaction(() => {
     db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
-    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId,
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, unit_cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, unitCost, note ? note.toString().slice(0, 200) : null, actorId,
         kind === 'purchase' ? (Number(supplierId) || null) : null, exp, kind === 'purchase' ? (Number(poId) || null) : null);
   });
   tx();
@@ -2039,16 +2061,18 @@ export function menuMargins() {
  *  cost — an approximation (moves don't snapshot unit cost), stated as such in the UI. */
 export function cogsForDay(date = null) {
   const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  // Value consumption at the cost FROZEN on each move (COALESCE to the ingredient's current avg only
+  // for un-backfilled legacy rows), NOT the live avg_cost — so buying stock after a day closed can no
+  // longer restate that day's COGS (ACC-F1). Sum per row (each carries its own unit_cost).
   const rows = db.prepare(
-    `SELECT sm.kind, SUM(sm.qty) q, i.avg_cost
+    `SELECT sm.qty q, COALESCE(sm.unit_cost, i.avg_cost) uc
        FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
-      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')
-      GROUP BY sm.ingredient_id, sm.kind`
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')`
   ).all(day);
   // use rows carry negative qty (deduction); return rows positive — netting both gives real consumption.
-  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.avg_cost) || 0), 0);
+  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.uc) || 0), 0);
   const wasteRows = db.prepare(
-    `SELECT SUM(-sm.qty * i.avg_cost) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+    `SELECT SUM(-sm.qty * COALESCE(sm.unit_cost, i.avg_cost)) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
       WHERE date(sm.at,'+7 hours')=? AND sm.kind='waste'`
   ).get(day);
   return { date: day, cogsActual: r2(Math.max(0, cogs)), wasteCost: r2(Math.max(0, wasteRows?.v || 0)) };
