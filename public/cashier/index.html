@@ -4647,8 +4647,24 @@ window.payPartialStart=async(tid, remain, paid=0, net=0)=>{
   if(s===null) return; const amt=Math.round((Number(s)||0)*100)/100;
   if(!(amt>0)){ toast('จำนวนเงินไม่ถูกต้อง'); return; }
   const method=await pickPayMethod(amt); if(method===null) return;   // reuses the cash keypad for this slice
-  try{ const r=await api('/api/tickets/'+tid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:amt,method})});
-    if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')+(r.change>0?(' · ทอน ฿'+r.change):'')); if(CFG.printEnabled) printKitchen(tid); }
+  // Idempotency token: one per confirmed slice. A flaky-wifi retry reuses it (caller re-invokes with
+  // the same amt/method) so the server records the leg once — CASH-3: a double-tap must not settle
+  // the bill for half the money.
+  const clientToken='pp_'+tid+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  const body=JSON.stringify({amount:amt,method,clientToken});
+  // Retry ONLY on a network failure (fetch rejects), reusing the SAME token: if the first request
+  // actually reached the server, the server dedups the token and returns the already-applied state
+  // instead of charging twice. A 4xx/5xx is a real error → surfaced, not retried.
+  const postOnce=()=>api('/api/tickets/'+tid+'/pay-partial',{method:'POST',headers:{'Content-Type':'application/json'},body});
+  try{
+    let r=null;
+    for(let attempt=0; attempt<3; attempt++){
+      try{ r=await postOnce(); break; }
+      catch(e){ if(e && e.data){ throw e; }              // server responded with an error → don't retry
+                if(attempt===2) throw e; await new Promise(res=>setTimeout(res,600)); }   // network fail → retry same token
+    }
+    if(r.duplicate){ toast(r.settled?'✅ รายการนี้บันทึกไปแล้ว':'💵 รับงวดนี้ไปแล้ว'); }
+    else if(r.settled){ toast('✅ ชำระครบแล้ว'+(r.code?(' · คิว '+r.code):'')+(r.change>0?(' · ทอน ฿'+r.change):'')); if(CFG.printEnabled) printKitchen(tid); }
     else toast('💵 รับบางส่วน ฿'+amt+' · เหลืออีก ฿'+r.remaining);
   }catch(e){ toast(err(e)); } };
 // ---------- แยกจ่ายตามรายการ: pick menu lines → their subtotal becomes a partial payment ----------

@@ -1125,22 +1125,36 @@ export function detailedReports({ date = null, branchId = null } = {}) {
 // ---------- Cash drawer / Z-report (end-of-day cash-up) ----------
 const r2 = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
 function cashComponents(branchId, sinceAt) {
-  // Cash physically collected = every order paid by cash in the window — INCLUDING any
-  // later refunded (paid_at persists after a void), so the refund isn't double-removed.
-  const cashIn = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND o.paid_at >= ?`).get(branchId, sinceAt).v || 0;
-  // Cash paid back out = refunds (paid-then-voided) that had been paid by cash.
-  const cashRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?`).get(branchId, sinceAt).v || 0;
+  // Cash IN/OUT come from the per-leg ledger (order_payments), NOT orders.payment_method — a split
+  // bill records a cash leg + a card leg, so cash-half-of-a-split and unsettled partial cash are now
+  // counted (CASH-1). Positive 'payment' legs = collected; negative 'refund' legs = paid back out.
+  // Fallback (defense-in-depth): a paid order with NO leg at all — a raw insert, or a boot before the
+  // backfill ran — is synthesized from payment_method so no money is ever silently dropped. NOT
+  // EXISTS keeps it from double-counting an order that already has a leg.
+  const legCash = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='payment' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  const noLegCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND o.paid_at >= ?
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')`).get(branchId, sinceAt).v || 0;
+  const cashIn = legCash + noLegCash;
+  const legRefund = db.prepare(`SELECT COALESCE(-SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='refund' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  const noLegRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='refund')`).get(branchId, sinceAt).v || 0;
+  const cashRefund = legRefund + noLegRefund;
   // Manual drawer movements in the window: pay_in adds cash, pay_out removes it.
   const payIn = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_in' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   const payOut = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   // ALL cash taken this Bangkok day, regardless of when the round was opened. cashIn only counts
   // sales made AFTER the round opened; the difference is money rung up before the round existed —
   // the single most common reason "over/short" looks wrong (owner opened the round mid-day).
-  const dayCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=?
-      AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const dayCashLeg = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='payment' AND branch_id=? AND date(at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const dayCashNoLeg = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND date(o.paid_at,'+7 hours')=date('now','+7 hours')
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')`).get(branchId).v || 0;
+  const dayCash = dayCashLeg + dayCashNoLeg;
   const preRoundCash = r2(Math.max(0, dayCash - cashIn));
   return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut), dayCash: r2(dayCash), preRoundCash };
 }
@@ -1291,13 +1305,22 @@ export function cashSessionDetail(branchId, sessionId) {
   const until = s.closed_at || db.prepare("SELECT datetime('now') t").get().t;
   // Every tender taken while this round was open, grouped by method (what was in the drawer +
   // what came in electronically), so the round's money is fully explained after the fact.
+  // Per-leg ledger: a split bill contributes to EACH method it used (payment legs +, refund legs −),
+  // so cash-half-of-a-split shows under cash and card-half under card — not the whole bill under the
+  // last method (the split-tender reconciliation bug).
   const payments = db.prepare(
-    `SELECT COALESCE(o.payment_method,'other') AS method, COUNT(*) AS orders,
-            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
-       FROM orders o
-      WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
-      GROUP BY method ORDER BY amount DESC`
-  ).all(branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
+    `SELECT method, COUNT(DISTINCT order_id) AS orders, COALESCE(SUM(amount),0) AS amount FROM (
+        SELECT method, order_id, amount FROM order_payments WHERE branch_id=? AND at >= ? AND at <= ?
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'other'), o.id, ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'other'), o.id, -ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.void_kind='refund' AND o.branch_id=? AND o.voided_at >= ? AND o.voided_at <= ?
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='refund')
+      ) GROUP BY method HAVING amount <> 0 ORDER BY amount DESC`
+  ).all(branchId, s.opened_at, until, branchId, s.opened_at, until, branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
   const moves = db.prepare(
     `SELECT kind, amount, remark, at FROM cash_moves WHERE branch_id=? AND at >= ? AND at <= ? ORDER BY at`
   ).all(branchId, s.opened_at, until);
@@ -2520,13 +2543,22 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
 export function tenderRecon({ date = null, branchId = null } = {}) {
   const DAY = "COALESCE(?, date('now','+7 hours'))";
   const BR = "(? IS NULL OR o.branch_id = ?)";
+  // Net-of-discount takings per tender code, split across each method a bill actually used. Attributed
+  // by the ORDER's paid_at day (JOIN to orders) — NOT the leg's own timestamp — so a bill partially
+  // paid before midnight and settled after lands entirely on its settlement day, matching the revenue
+  // report exactly. Only PAID orders' payment legs count (refunds are a separate report). Fallback
+  // synthesizes a leg for any paid order that has none (raw insert / pre-backfill).
   const rows = db.prepare(
-    `SELECT COALESCE(o.payment_method,'unspecified') AS code, COUNT(*) AS orders,
-            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
-       FROM orders o
-      WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND ${BR}
-      GROUP BY code`
-  ).all(date, branchId, branchId);
+    `SELECT code, COUNT(DISTINCT order_id) AS orders, COALESCE(SUM(amount),0) AS amount FROM (
+        SELECT p.method AS code, p.order_id, p.amount
+          FROM order_payments p JOIN orders o ON o.id=p.order_id
+         WHERE p.kind='payment' AND o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND (? IS NULL OR o.branch_id = ?)
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'unspecified'), o.id, ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND (? IS NULL OR o.branch_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')
+      ) GROUP BY code`
+  ).all(date, branchId, branchId, date, branchId, branchId);
   const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
   const tenders = listTenders();
   const lines = tenders.map((t) => {
@@ -4230,8 +4262,25 @@ export function assignQueueNumber(ticketId) {
 /** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter).
  *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other.
  *  Under the pay-first model this is also what ISSUES the queue number. */
+/** Record one tender leg (a split bill = several rows). kind='payment' stores +amount, 'refund'
+ *  stores -amount. A client_token makes a retried leg idempotent (pay-partial double-tap on flaky
+ *  wifi). Returns true if a row was written, false if it was a duplicate token. */
+function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, kind = 'payment', actorId = null, clientToken = null }) {
+  const amt = Math.round(Math.abs(Number(amount) || 0) * 100) / 100;
+  if (!amt) return false;
+  try {
+    const r = db.prepare(
+      `INSERT INTO order_payments (order_id, branch_id, method, amount, kind, client_token, actor_id) VALUES (?,?,?,?,?,?,?)`
+    ).run(orderId, branchId, method || 'cash', kind === 'refund' ? -amt : amt, kind === 'refund' ? 'refund' : 'payment', clientToken, actorId);
+    return r.changes > 0;
+  } catch (e) {
+    if (String(e.message || '').includes('UNIQUE')) return false;   // duplicate token = already applied, not an error
+    throw e;
+  }
+}
+
 export function setOrderPaid(ticketId, opts = {}) {
-  const { actorId = null, method = null, skipLoyalty = false } = opts;
+  const { actorId = null, method = null, skipLoyalty = false, _skipLeg = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   // Idempotent: an already-paid order returns its existing result unchanged, so a retried
@@ -4248,6 +4297,9 @@ export function setOrderPaid(ticketId, opts = {}) {
   const paidNow = db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method), paid_amount=ROUND(total - COALESCE(discount,0), 2) WHERE id=? AND payment_status NOT IN ('paid','void')`)
     .run(actorId, method, order.id);
   if (!paidNow.changes) throw new Error('order_void');
+  // Record the tender leg for the drawer/tender reconciliation. Skipped when called from payPartial's
+  // settle (the partial legs already cover the full net — else the settling amount is double-counted).
+  if (!_skipLeg) recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: order.total - (order.discount || 0), kind: 'payment', actorId });
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
@@ -4304,7 +4356,7 @@ export function payMulti(ticketIds, opts = {}) {
  *  covers the net (total − discount), settle in full via setOrderPaid (issue queue number etc.).
  *  Returns the running paid + remaining so the cashier keeps collecting until the balance is 0. */
 export function payPartial(ticketId, amount, opts = {}) {
-  const { actorId = null, method = null } = opts;
+  const { actorId = null, method = null, clientToken = null } = opts;
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   if (amt <= 0) throw new Error('bad_amount');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4312,18 +4364,30 @@ export function payPartial(ticketId, amount, opts = {}) {
   if (order.payment_status === 'paid') return { ok: true, settled: true, alreadyPaid: true, remaining: 0 };
   if (order.payment_status === 'void') throw new Error('order_void');
   const net = Math.round(((order.total || 0) - (order.discount || 0)) * 100) / 100;
-  const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
-  if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
-    // both writes or neither: a throw inside setOrderPaid must not leave paid_amount=net on an unpaid order
-    const r = db.transaction(() => {
+  // Leg + paid_amount move atomically. Record the tender leg FIRST: with a clientToken, a retried tap
+  // (flaky wifi) inserts a duplicate token → recordPaymentLeg returns false → we return the current
+  // state without re-accumulating (CASH-3: a double-tap used to settle the bill for half the money).
+  return db.transaction(() => {
+    // The leg records only the money the drawer KEEPS: on an overpaying final slice the change is
+    // handed back, so cap the leg at the remaining balance (else cash is over by the change).
+    const remaining = Math.round((net - (order.paid_amount || 0)) * 100) / 100;
+    const applied = Math.min(amt, Math.max(0, remaining));
+    const legWritten = recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: applied, kind: 'payment', actorId, clientToken });
+    if (clientToken && !legWritten) {
+      const cur = db.prepare('SELECT paid_amount, payment_status FROM orders WHERE id=?').get(order.id);
+      const settled = cur.payment_status === 'paid';
+      return { ok: true, settled, duplicate: true, paid: cur.paid_amount || 0, remaining: settled ? 0 : Math.round((net - (cur.paid_amount || 0)) * 100) / 100 };
+    }
+    const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
+    if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
       db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
-      return setOrderPaid(ticketId, { actorId, method });
-    })();
-    return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
-  }
-  db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
-  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'partial', amount: amt, actor: actorId, meta: { method: method || 'cash', paid: newPaid, net } });
-  return { ok: true, settled: false, paid: newPaid, remaining: Math.round((net - newPaid) * 100) / 100 };
+      const r = setOrderPaid(ticketId, { actorId, method, _skipLeg: true });   // leg already recorded above
+      return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
+    }
+    db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'partial', amount: amt, actor: actorId, meta: { method: method || 'cash', paid: newPaid, net } });
+    return { ok: true, settled: false, paid: newPaid, remaining: Math.round((net - newPaid) * 100) / 100 };
+  })();
 }
 
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
@@ -4567,7 +4631,7 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
 }
 
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null, kind: kindOpt = null, restock = false } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod = null } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4595,7 +4659,13 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
     // if the drink wasn't already served. Once served, the product cost is incurred and the free
     // drink was handed over, so points are never returned (owner rule).
     const pts = (order && t.status !== 'served' && !alreadyVoid) ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
-    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts } });
+    // Refund tender leg: the money left the drawer in refundMethod (the cashier says HOW it was
+    // returned — a K PLUS sale can be refunded in cash). Defaults to the original method. This is
+    // what makes a cash refund of a non-cash sale reduce the drawer (CASH-5).
+    if (order && wasPaid && kind === 'refund' && !alreadyVoid) {
+      recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: refundMethod || order.payment_method || 'cash', amount: order.total - (order.discount || 0), kind: 'refund', actorId });
+    }
+    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts, refundMethod: (kind === 'refund' ? (refundMethod || order.payment_method || 'cash') : undefined) } });
     db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
     return pts;
   })();

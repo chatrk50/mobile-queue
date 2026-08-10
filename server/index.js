@@ -1171,7 +1171,7 @@ app.post('/api/orders/pay-multi', (req, res) => {
 app.post('/api/tickets/:ticketId/pay-partial', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.payPartial(req.params.ticketId, req.body?.amount, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const r = Q.payPartial(req.params.ticketId, req.body?.amount, { actorId: req.staff?.id || null, method: req.body?.method || null, clientToken: req.body?.clientToken || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     if (r.settled) notifyLoyalty(r);
@@ -1216,7 +1216,7 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
-    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock });
+    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
