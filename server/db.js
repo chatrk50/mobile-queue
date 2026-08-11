@@ -63,8 +63,11 @@ if (USE_TURSO && Database) {
     timer = setTimeout(() => { timer = null; if (dirty) { dirty = false; doSync(); } }, 800);
     if (timer.unref) timer.unref();
   };
-  // Safety net: periodic sync even if writes are quiet, + flush on shutdown.
-  const iv = setInterval(doSync, 60_000); if (iv.unref) iv.unref();
+  // Safety net: periodic sync even if writes are quiet, + flush on shutdown. Every write already
+  // flushes within 800ms (scheduleSync), so this only pulls remote changes when idle — on a single
+  // instance that is near-redundant, so 5 min (not 60s) is plenty and cuts the Turso read quota ~5×
+  // (INF-R1: repeated quota exhaustion killed deploys at boot pull).
+  const iv = setInterval(doSync, 300_000); if (iv.unref) iv.unref();
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => { try { raw.sync(); } catch { /* best effort */ } process.exit(0); });
   }

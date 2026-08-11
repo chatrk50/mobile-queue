@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE, reconnectDb } from './db.js';
+import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
@@ -1299,7 +1299,7 @@ app.post('/api/store/:storeId/open', (req, res) => {
 // Reset the whole queue to start from 0 (manager+; also run by the daily scheduler).
 app.post('/api/reset', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  doDailyReset();
+  doDailyReset(true);   // owner asked explicitly → bypass the same-day guard
   res.json({ ok: true });
 });
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
@@ -1675,11 +1675,20 @@ function resetAllZonesResilient() {
     throw e;
   }
 }
-function doDailyReset() {
+function bangkokToday() { return db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d; }
+// INF-R4: a free-tier instance asleep at Bangkok midnight never fires the scheduled setTimeout, so the
+// queue would keep yesterday's numbers into the new day. Guard the reset by the last day it actually
+// ran (reset:last_day) and drive it from boot + a periodic check too — so a woke-from-sleep instance
+// catches up on the first tick. `force` = the manual owner reset (POST /api/reset), which must always
+// run and must not be blocked by the same-day guard.
+function doDailyReset(force = false) {
+  const today = bangkokToday();
+  if (!force && getSetting('reset:last_day', '') === today) return;   // already reset this Bangkok day
   try {
     const zoneIds = resetAllZonesResilient();
     for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
-    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+    try { setSetting('reset:last_day', today); } catch { /* marker best-effort */ }
+    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones (day ${today})`);
   } catch (e) {
     // Never let a reset failure crash the process or stop the next night from being scheduled.
     console.error('[reset] failed:', e && e.message);
@@ -1718,6 +1727,7 @@ function scheduleDailyReset() {
   setTimeout(() => { doDailyReset(); scheduleDailyReset(); }, msUntilBangkokMidnight());
 }
 scheduleDailyReset();
+doDailyReset();   // boot catch-up: if the instance slept through midnight, reset now (guarded, no-op same day)
 
 // Background sweep: void abandoned (unpaid) pending orders so they don't pile up on the till.
 // Controlled by the owner's "pending:void_min" setting (0 = off). Refreshes any zone it touches.
@@ -1726,6 +1736,9 @@ setInterval(() => {
     const r = Q.sweepStalePending();
     if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
   } catch { /* never let the sweep crash the server */ }
+  // INF-R4 catch-up: if the day rolled over while this instance was asleep, the scheduled midnight
+  // timer never fired — reset now (guarded, so it's a no-op once done for the day).
+  try { doDailyReset(); } catch { /* never let the reset guard crash the sweep */ }
 }, 60 * 1000);
 
 // Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose

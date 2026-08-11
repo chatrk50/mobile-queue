@@ -70,16 +70,23 @@ export function seedBlank() {
 }
 
 // Run directly via `npm run seed` (demo) or `npm run seed -- blank` for a clean brand.
+// Seeding MUST NEVER block boot: on a durable (Turso) instance the store already exists so this
+// no-ops, but a transient DB hiccup here used to crash the seed and — via `&&` in the start command
+// — take the whole app down with it. Swallow any failure and always exit 0 (INF: seed non-fatal).
 if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('scripts/seed.js')) {
-  const blank = process.argv.includes('blank') || (process.env.SEED || '').toLowerCase() === 'blank';
-  if (blank) {
-    const r = seedBlank();
-    if (!r.seeded) console.log('Stores already exist — skipping blank seed.');
-    else console.log(`Seeded BLANK store #${r.storeId} "${r.store}" with 1 zone, no menu (add yours in the cashier).`);
-  } else {
-    const r = seedDemo();
-    if (!r.seeded) console.log('Stores already exist — skipping seed. (Delete data/queue.db to reset.)');
-    else console.log(`Seeded store #${r.storeId} "SAT Market" with ${r.zones} zones, ${r.drinks} drinks + ${r.toppings} toppings.`);
+  try {
+    const blank = process.argv.includes('blank') || (process.env.SEED || '').toLowerCase() === 'blank';
+    if (blank) {
+      const r = seedBlank();
+      if (!r.seeded) console.log('Stores already exist — skipping blank seed.');
+      else console.log(`Seeded BLANK store #${r.storeId} "${r.store}" with 1 zone, no menu (add yours in the cashier).`);
+    } else {
+      const r = seedDemo();
+      if (!r.seeded) console.log('Stores already exist — skipping seed. (Delete data/queue.db to reset.)');
+      else console.log(`Seeded store #${r.storeId} "SAT Market" with ${r.zones} zones, ${r.drinks} drinks + ${r.toppings} toppings.`);
+    }
+  } catch (e) {
+    console.error('[seed] non-fatal — continuing to boot:', (e && e.message) || e);
   }
-  process.exit(0);
+  process.exit(0);   // always succeed so `npm start` runs even if seeding hiccuped
 }
