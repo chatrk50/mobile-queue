@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, pushSummary, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -543,10 +543,15 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
     : (cp.fixedExpiry || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
   let sent = 0, failed = 0, issuedCoupons = 0;
   for (const key of targets) {
-    let text = msg;
-    if (cp) text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
     let ok = false;
-    try { ok = (await pushQueue(key, text, shopLink(), 'สั่งเลย', 'winback')) !== false; } catch { ok = false; }
+    try {
+      // A coupon campaign now goes out as the branded YO-DEE coupon card (Phase 4A) — ONE Flex message
+      // carrying the owner's message + the coupon; no attachment, no extra send. Message-only campaigns
+      // stay a plain text push.
+      ok = cp
+        ? (await pushCouponFlex(key, { label: cp.label, disc_type: 'amount', disc_value: cp.cap, expiresAt }, shopLink(), msg, 'winback')) !== false
+        : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
+    } catch { ok = false; }
     if (ok) sent++; else failed++;
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
