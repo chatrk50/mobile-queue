@@ -671,6 +671,7 @@ for (const stmt of [
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN nudged_at TEXT`,   // expiry-nudge LINE push sent (once per coupon)
   `ALTER TABLE stock_moves ADD COLUMN unit_cost REAL`,        // per-unit cost FROZEN at move time → COGS of a closed day never re-prices when new stock is bought (ACC-F1)
+  `ALTER TABLE orders ADD COLUMN invoice_no TEXT`,            // sequential tax-invoice number, assigned at payment when VAT is on (3D). Unbroken sequence per Thai tax law.
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)

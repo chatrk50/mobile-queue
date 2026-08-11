@@ -4328,6 +4328,74 @@ function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, k
   }
 }
 
+// ---------- VAT / tax invoice (3D) ----------
+// Dormant until the owner switches it on (they fill the tax id after registering for VAT). When on,
+// every paid order takes the next number in an UNBROKEN sequence (Thai tax law) and can print an
+// abbreviated tax invoice (ใบกำกับภาษีอย่างย่อ) with the VAT split out. Prices are treated as
+// VAT-INCLUSIVE by default — the Thai retail norm (the shelf price already contains the 7%).
+export function vatEnabled() { return getSetting('vat:enabled', '0') === '1'; }
+export function getVatConfig() {
+  return {
+    enabled: vatEnabled(),
+    taxId: getSetting('vat:tax_id', '') || '',
+    rate: Number(getSetting('vat:rate', '7')) || 7,
+    inclusive: getSetting('vat:inclusive', '1') === '1',
+    bizName: getSetting('vat:biz_name', '') || '',
+    bizAddress: getSetting('vat:biz_address', '') || '',
+    prefix: getSetting('vat:prefix', '') || '',
+    seq: Number(getSetting('vat:seq', '0')) || 0,
+  };
+}
+export function setVatConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('vat:enabled', patch.enabled ? '1' : '0');
+  if (patch.taxId != null) setSetting('vat:tax_id', String(patch.taxId).replace(/\D/g, '').slice(0, 13));  // 13-digit Thai tax id, digits only
+  if (patch.rate != null) setSetting('vat:rate', String(Math.max(0, Math.min(30, Number(patch.rate) || 0))));
+  if (patch.inclusive != null) setSetting('vat:inclusive', patch.inclusive ? '1' : '0');
+  if (patch.bizName != null) setSetting('vat:biz_name', String(patch.bizName).slice(0, 200));
+  if (patch.bizAddress != null) setSetting('vat:biz_address', String(patch.bizAddress).slice(0, 400));
+  if (patch.prefix != null) setSetting('vat:prefix', String(patch.prefix).replace(/[^\w\-/]/g, '').slice(0, 12));
+  // seq lets the owner align with an existing paper book, but can never go BELOW what's been issued
+  // (that would reuse a number — illegal). It only ever moves forward.
+  if (patch.seq != null) setSetting('vat:seq', String(Math.max(Number(getSetting('vat:seq', '0')) || 0, Math.floor(Number(patch.seq) || 0))));
+  return getVatConfig();
+}
+// Atomic, unbroken increment — single-writer SQLite + a transaction guarantee no sale gets a
+// duplicate number and none is skipped.
+function nextInvoiceNo() {
+  return db.transaction(() => {
+    const n = (Number(getSetting('vat:seq', '0')) || 0) + 1;
+    setSetting('vat:seq', String(n));
+    return `${getSetting('vat:prefix', '') || ''}${String(n).padStart(6, '0')}`;
+  })();
+}
+// Assign a number to a paid order ONCE (idempotent). Never throws — invoicing must not break a sale.
+function assignInvoiceForOrder(orderId) {
+  try {
+    const o = db.prepare('SELECT invoice_no FROM orders WHERE id=?').get(orderId);
+    if (!o || o.invoice_no) return o ? o.invoice_no : null;
+    const no = nextInvoiceNo();
+    db.prepare('UPDATE orders SET invoice_no=? WHERE id=? AND invoice_no IS NULL').run(no, orderId);
+    return no;
+  } catch { return null; }
+}
+// Abbreviated-tax-invoice payload for a paid order: VAT split out of the amount actually charged
+// (order total net of discount).
+export function taxInvoiceForOrder(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return null;
+  const cfg = getVatConfig();
+  const charged = r2((order.total || 0) - (order.discount || 0));
+  const vat = cfg.inclusive ? r2(charged * cfg.rate / (100 + cfg.rate)) : r2(charged * cfg.rate / 100);
+  const net = cfg.inclusive ? r2(charged - vat) : charged;
+  const total = cfg.inclusive ? charged : r2(charged + vat);
+  const items = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+  return {
+    invoiceNo: order.invoice_no || null, issued: !!order.invoice_no, paid: order.payment_status === 'paid',
+    dateTime: order.paid_at || null, taxId: cfg.taxId, bizName: cfg.bizName, bizAddress: cfg.bizAddress,
+    rate: cfg.rate, inclusive: cfg.inclusive, items, net, vat, total,
+  };
+}
+
 export function setOrderPaid(ticketId, opts = {}) {
   const { actorId = null, method: rawMethod = null, skipLoyalty = false, _skipLeg = false } = opts;
   const method = normalizeMethod(rawMethod);   // CASH-10: reject garbage methods before they hit the ledger
@@ -4351,6 +4419,8 @@ export function setOrderPaid(ticketId, opts = {}) {
   // settle (the partial legs already cover the full net — else the settling amount is double-counted).
   if (!_skipLeg) recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: order.total - (order.discount || 0), kind: 'payment', actorId });
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
+  if (vatEnabled()) assignInvoiceForOrder(order.id);   // 3D: unbroken tax-invoice number, tied to the sale
+
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
   // without a number; falls back to the current ticket row if numbering ultimately fails.

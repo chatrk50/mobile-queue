@@ -483,7 +483,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() } });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -491,6 +491,9 @@ app.post('/api/admin/features', (req, res) => {
     const out = {};
     if (req.body?.slipAuto != null) Object.assign(out, Q.setSlipAuto(!!req.body.slipAuto));
     if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
+    // VAT/tax-invoice config is owner-only — it carries the shop's tax id and controls the legal
+    // invoice sequence; a manager must not be able to change either (3D).
+    if (req.body?.vat != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); out.vat = Q.setVatConfig(req.body.vat); }
     // Where the daily revenue/profit summary is pushed — only the OWNER may redirect it. A manager
     // could otherwise point the owner's financials at their own LINE (audit finding #6).
     if (req.body?.ownerLineId != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId)); }
@@ -1229,6 +1232,14 @@ app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Abbreviated tax invoice (ใบกำกับภาษีอย่างย่อ) for a paid order — the VAT split + assigned invoice
+// number, for the cashier to show/print when the customer asks (3D). Staff-gated.
+app.get('/api/tickets/:ticketId/tax-invoice', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const inv = Q.taxInvoiceForOrder(req.params.ticketId);
+  if (!inv) return res.status(404).json({ error: 'order_not_found' });
+  res.json(inv);
 });
 // Cashier revives a timed-out (auto-voided, unpaid) order when the customer shows up late:
 // back into the queue → รับเงิน → เสิร์ฟ as normal. Refunds are rejected server-side.

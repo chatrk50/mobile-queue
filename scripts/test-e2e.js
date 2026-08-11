@@ -1964,6 +1964,24 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   const ev = db.prepare("SELECT actor FROM sale_events WHERE type='order_edited' AND order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) ORDER BY id DESC LIMIT 1").get(ez.ticket.id);
   ok(ev && ev.actor === 77, `INVARIANT ACC-F7 order_edited records the acting cashier (got ${ev && ev.actor})`);
 }
+{
+  // 3D VAT: with VAT on, each paid order takes the next UNBROKEN invoice number, and the abbreviated
+  // tax invoice splits VAT out of the (inclusive) charged amount so net + vat == total.
+  Q.setVatConfig({ enabled: true, rate: 7, inclusive: true, prefix: 'INV' });
+  const seq0 = Q.getVatConfig().seq;
+  const v1 = Q.createOrder(1, [{ name: 'Drink107', price: 107, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(v1.ticket.id, { method: 'cash' });
+  const v2 = Q.createOrder(1, [{ name: 'Drink53', price: 53, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(v2.ticket.id, { method: 'cash' });
+  const inv1 = Q.taxInvoiceForOrder(v1.ticket.id), inv2 = Q.taxInvoiceForOrder(v2.ticket.id);
+  ok(inv1.invoiceNo === 'INV' + String(seq0 + 1).padStart(6, '0'), `INVARIANT 3D first invoice = prefix+seq+1 (got ${inv1.invoiceNo})`);
+  ok(inv2.invoiceNo === 'INV' + String(seq0 + 2).padStart(6, '0'), `INVARIANT 3D invoice numbers are sequential + unbroken (got ${inv2.invoiceNo})`);
+  ok(accNear2(inv1.net + inv1.vat, inv1.total) && accNear2(inv1.total, 107), `INVARIANT 3D net+vat==total (${inv1.net}+${inv1.vat}==${inv1.total})`);
+  ok(accNear2(inv1.vat, 107 * 7 / 107), `INVARIANT 3D VAT split out of inclusive price (${inv1.vat} == 7)`);
+  // re-reading the same order returns the SAME number (idempotent, never re-issued)
+  ok(Q.taxInvoiceForOrder(v1.ticket.id).invoiceNo === inv1.invoiceNo, 'INVARIANT 3D invoice number is stable per order (idempotent)');
+  Q.setVatConfig({ enabled: false });   // leave VAT off for the rest of the suite
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
