@@ -221,30 +221,48 @@ export async function pushStage(userId, opts, kind = 'queue') {
  *  the LIFF. `msg` (optional) lets a campaign carry its own line instead of the generic congrats, so
  *  the whole thing is ONE Flex message — no extra LINE cost over the old text push. */
 function buildCouponFlex(c, link, msg) {
-  const NAVY = '#284B63', MUTED = '#5C7187', TEAL = '#00B5D8';
+  const NAVY = '#284B63', MUTED = '#5C7187', TEAL = '#00B5D8', HAIR = '#EEF1F5';
   const isReward = c.isReward || c.disc_type === 'reward';
+  const kind = c.couponKind || c.kind || (isReward ? 'reward' : 'discount');
+  // Per-kind gradient hero, mirroring the in-app .cpn / .cw-ticket value stub.
+  const GRAD = {
+    birthday: ['#F68CAE', '#E0608F'], winback: ['#F7C458', '#EF9C2A'],
+    reward: ['#33C9AC', '#10A582'], discount: ['#00B5D8', '#2FC2A6'],
+  };
+  const [g0, g1] = GRAD[kind] || GRAD.discount;
   const big = isReward ? 'ฟรี 1 แก้ว'
     : (c.disc_type === 'percent' ? `ส่วนลด ${c.disc_value}%` : `ส่วนลด ฿${c.disc_value ?? c.amount ?? c.cap ?? ''}`);
   const cond = isReward ? `ไม่เกิน ฿${c.freeCap || c.cap || 49}` : (c.min_spend > 0 ? `ขั้นต่ำ ฿${c.min_spend}` : 'ไม่มีขั้นต่ำ · ทุกเมนู');
+  const kicker = kind === 'birthday' ? '🎂 ของขวัญวันเกิด' : kind === 'winback' ? '💛 ยินดีต้อนรับกลับ' : kind === 'reward' ? '🎁 รางวัลสะสมครบ' : '🎟️ คูปองส่วนลด';
   const bodyLine = (msg && String(msg).trim()) || 'ยินดีด้วย! 🎉 คุณได้รับคูปองจาก YO-DEE';
   return {
     type: 'flex', altText: `🎁 คุณได้รับคูปอง YO-DEE — ${big}${c.expiresAt ? ` · ใช้ได้ถึง ${c.expiresAt}` : ''}`.slice(0, 390),
     contents: {
       type: 'bubble', size: 'mega',
       body: {
-        type: 'box', layout: 'vertical', paddingAll: '0px',
+        type: 'box', layout: 'vertical', paddingAll: '0px', backgroundColor: '#FFFFFF',
         contents: [
-          { type: 'box', layout: 'vertical', backgroundColor: TEAL, paddingAll: '18px',
+          { type: 'box', layout: 'horizontal', paddingStart: '20px', paddingEnd: '20px', paddingTop: '18px', paddingBottom: '10px',
             contents: [
-              { type: 'text', text: '🎟️ คูปอง YO-DEE', size: 'xs', color: '#EAFBFF', weight: 'bold' },
-              { type: 'text', text: big, size: '3xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' },
-              { type: 'text', text: cond, size: 'xxs', color: '#EAFBFF', margin: 'xs' },
+              { type: 'text', text: 'YO-DEE Yogurt', size: 'sm', weight: 'bold', color: NAVY, flex: 1, gravity: 'center' },
+              { type: 'text', text: 'คูปอง', size: 'xs', color: '#8A9299', align: 'end', gravity: 'center' },
             ] },
-          { type: 'box', layout: 'vertical', paddingAll: '16px',
+          { type: 'box', layout: 'vertical', paddingAll: '22px',
+            background: { type: 'linearGradient', angle: '135deg', startColor: g0, endColor: g1 },
+            contents: [
+              { type: 'text', text: kicker, size: 'xs', color: '#FFFFFF', weight: 'bold' },
+              { type: 'text', text: big, size: '3xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' },
+              { type: 'text', text: cond, size: 'xxs', color: '#FFFFFF', margin: 'sm' },
+            ] },
+          { type: 'box', layout: 'vertical', paddingAll: '18px',
             contents: [
               { type: 'text', text: bodyLine, weight: 'bold', size: 'md', color: NAVY, wrap: true },
               { type: 'text', text: c.label || big, size: 'sm', color: MUTED, wrap: true, margin: 'sm' },
-              ...(c.expiresAt ? [{ type: 'text', text: `⏳ ใช้ได้ถึง ${c.expiresAt}`, size: 'xs', color: MUTED, margin: 'md' }] : []),
+              { type: 'separator', margin: 'lg', color: HAIR },
+              ...(c.expiresAt ? [{ type: 'box', layout: 'baseline', margin: 'lg', contents: [
+                { type: 'text', text: '⏳', flex: 0, size: 'sm' },
+                { type: 'text', text: `ใช้ได้ถึง ${c.expiresAt}`, size: 'xs', color: '#8A9299', margin: 'sm' },
+              ] }] : []),
               { type: 'button', style: 'primary', color: TEAL, margin: 'lg', height: 'sm',
                 action: { type: 'uri', label: 'เปิดคูปอง · ใช้เลย', uri: link || 'https://line.me' } },
             ] },

@@ -3809,7 +3809,11 @@ export function issueBirthdayCoupons() {
   for (const r of rows) {
     db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, ?, ?, 'birthday')`)
       .run(r.key, bdayLabel, tpl.value, expiresAt);
-    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿${tpl.value}) — กดใช้ได้เองในเมนูคูปอง ภายใน ${tpl.days} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
+    try {
+      pushCouponFlex(r.key,
+        { isReward: true, disc_type: 'reward', couponKind: 'birthday', freeCap: tpl.value, label: bdayLabel, expiresAt },
+        shopLink(), '🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้คุณ 💛', 'birthday');
+    } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };
 }
