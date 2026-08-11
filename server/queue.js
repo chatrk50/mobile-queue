@@ -3991,7 +3991,8 @@ export function customerSuggestions(lineUserId) {
 /** Edit a still-unpaid order's items in place (change drink / sweetness / toppings) instead of
  *  cancel-and-rekey. Replaces all order_items + recomputes total. Guarded: not paid, not void, and
  *  nothing collected yet (paid_amount 0). Stock isn't touched here — it deducts at payment. */
-export function editOrderItems(ticketId, items) {
+export function editOrderItems(ticketId, items, opts = {}) {
+  const { actorId = null } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') throw new Error('already_paid');
@@ -4016,7 +4017,7 @@ export function editOrderItems(ticketId, items) {
     db.prepare('UPDATE orders SET total=?, discount=?, discount_reason=? WHERE id=?').run(total, newDisc, newReason, order.id);
   });
   tx();
-  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, meta: {} });
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, actor: actorId, meta: {} });
   return { ok: true, total, ticketId: Number(ticketId) };
 }
 
@@ -4289,6 +4290,19 @@ export function assignQueueNumber(ticketId) {
 /** Record one tender leg (a split bill = several rows). kind='payment' stores +amount, 'refund'
  *  stores -amount. A client_token makes a retried leg idempotent (pay-partial double-tap on flaky
  *  wifi). Returns true if a row was written, false if it was a duplicate token. */
+// CASH-10: a client can POST any string as the pay method; an unknown one (e.g. 'banana') would slip
+// into the ledger + orders.payment_method and never match a tender bucket, silently breaking the
+// drawer/tender reconciliation. Collapse anything that isn't a configured tender code (dynamic — never
+// rejects a real tender the owner set up) or an always-valid built-in down to 'other'. null/''
+// is preserved so "keep the existing payment_method" (COALESCE on update) still works.
+const BUILTIN_METHODS = new Set(['cash', 'other', 'reward', 'slip']);
+function normalizeMethod(m) {
+  if (m == null || m === '') return m;
+  const k = String(m).trim().toLowerCase().slice(0, 24);
+  if (BUILTIN_METHODS.has(k)) return k;
+  try { if (db.prepare('SELECT 1 FROM tenders WHERE code=?').get(k)) return k; } catch { /* fall through to other */ }
+  return 'other';
+}
 function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, kind = 'payment', actorId = null, clientToken = null }) {
   const amt = Math.round(Math.abs(Number(amount) || 0) * 100) / 100;
   if (!amt) return false;
@@ -4304,7 +4318,8 @@ function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, k
 }
 
 export function setOrderPaid(ticketId, opts = {}) {
-  const { actorId = null, method = null, skipLoyalty = false, _skipLeg = false } = opts;
+  const { actorId = null, method: rawMethod = null, skipLoyalty = false, _skipLeg = false } = opts;
+  const method = normalizeMethod(rawMethod);   // CASH-10: reject garbage methods before they hit the ledger
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   // Idempotent: an already-paid order returns its existing result unchanged, so a retried
@@ -4380,7 +4395,8 @@ export function payMulti(ticketIds, opts = {}) {
  *  covers the net (total − discount), settle in full via setOrderPaid (issue queue number etc.).
  *  Returns the running paid + remaining so the cashier keeps collecting until the balance is 0. */
 export function payPartial(ticketId, amount, opts = {}) {
-  const { actorId = null, method = null, clientToken = null } = opts;
+  const { actorId = null, method: rawMethod = null, clientToken = null } = opts;
+  const method = normalizeMethod(rawMethod);   // CASH-10
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   if (amt <= 0) throw new Error('bad_amount');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4688,7 +4704,8 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
 }
 
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod = null } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod: rawRefundMethod = null } = opts;
+  const refundMethod = normalizeMethod(rawRefundMethod);   // CASH-10
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);

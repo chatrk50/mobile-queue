@@ -1942,6 +1942,28 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   ok(db.prepare(`SELECT COUNT(*) n FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) AND kind='refund'`).get(zc.ticket.id).n === 0, 'INVARIANT CASH-4 waste-remake writes no refund leg');
   ok(wr.cups >= 1, `INVARIANT CASH-4 waste-remake reports the wasted cups (${wr.cups})`);
 }
+{
+  // CASH-10: a garbage pay method must normalize to 'other' (it would otherwise create a phantom
+  // tender bucket that never reconciles); a real configured tender code passes through untouched.
+  const gz = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(gz.ticket.id, { method: 'banana' });
+  const go = db.prepare('SELECT id, payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(gz.ticket.id);
+  const gl = db.prepare("SELECT method FROM order_payments WHERE order_id=? AND kind='payment' ORDER BY id DESC LIMIT 1").get(go.id);
+  ok(go.payment_method === 'other', `INVARIANT CASH-10 garbage method → orders.payment_method 'other' (got ${go.payment_method})`);
+  ok(gl && gl.method === 'other', `INVARIANT CASH-10 garbage method → ledger leg 'other' (got ${gl && gl.method})`);
+  const cz = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(cz.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(cz.ticket.id).payment_method === 'cash',
+    'INVARIANT CASH-10 a real tender code (cash) passes through unchanged');
+}
+{
+  // ACC-F7: editing an unpaid bill must record WHO edited it in the audit trail (anti-fraud).
+  const ez = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.editOrderItems(ez.ticket.id, [{ name: 'Drink49', price: 49, qty: 2 }], { actorId: 77 });
+  await new Promise((r) => setImmediate(r));   // sale_events flush on a setImmediate tick — let it fire
+  const ev = db.prepare("SELECT actor FROM sale_events WHERE type='order_edited' AND order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) ORDER BY id DESC LIMIT 1").get(ez.ticket.id);
+  ok(ev && ev.actor === 77, `INVARIANT ACC-F7 order_edited records the acting cashier (got ${ev && ev.actor})`);
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

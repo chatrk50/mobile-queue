@@ -1224,7 +1224,7 @@ app.post('/api/tickets/:ticketId/pay-items', (req, res) => {
 app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.editOrderItems(req.params.ticketId, req.body?.items);
+    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
