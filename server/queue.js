@@ -5034,5 +5034,13 @@ export function ticketView(ticketId) {
     // Lucky-number prize. Only present on a winning ticket; the LIFF shows the congratulations
     // sheet while state is 'won' and the order is still unpaid (a paid order can't be discounted).
     lucky: t.lucky_state ? { state: t.lucky_state, value: t.lucky_value || 0, number: getLuckyNumber() } : null,
+    // PAY-H2: the REAL auto-void moment (ticket created_at + pending:void_min), as epoch ms, so the
+    // LIFF's QR countdown reflects true time left even after a reload/app-switch — not a fresh 30:00
+    // that lies. Only while the order is still unpaid & auto-void is armed. sweepStalePending keys off
+    // t.created_at (stored UTC), so we parse it as UTC here.
+    payDeadline: (['pending', 'waiting'].includes(t.status) && o && o.payment_status !== 'paid'
+                  && getPendingVoidMinutes() > 0 && t.created_at)
+      ? Date.parse(String(t.created_at).replace(' ', 'T') + 'Z') + getPendingVoidMinutes() * 60000
+      : null,
   };
 }

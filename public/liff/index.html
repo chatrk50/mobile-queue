@@ -1690,7 +1690,7 @@ function renderOrderBlock(v){
     // ONE cancellation message on the screen, not five. The status pill on the order row carries
     // the fact; the payment panel below is hidden entirely (there is nothing left to pay), and the
     // only remaining copy is the reason — which is the one thing the customer doesn't already know.
-    stopQrCountdown();
+    stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} }
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
     // The whole payment panel goes — there is nothing left to pay. (counterConfirmedMsg lives
     // INSIDE payChoice, so the reason cannot be rendered here; render() puts it in tNotifyNote,
@@ -1698,7 +1698,7 @@ function renderOrderBlock(v){
     show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
     else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
   else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
@@ -1712,6 +1712,10 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
+      // PAY-H1: a customer who app-switched to their bank and had the LINE webview killed loses the
+      // in-memory payMethod. Restore the channel they'd picked (persisted per ticket) so they land
+      // back on their QR, not on the chooser again.
+      if(!payMethod && ticketId){ try{ const sm=localStorage.getItem('paymethod_'+ticketId); if(sm==='promptpay'||sm==='kbank'||sm==='counter') payMethod=sm; }catch(e){} }
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
@@ -1728,7 +1732,7 @@ function renderOrderBlock(v){
   }
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
-let payMethod=null, counterConfirmed=false, _orderTotal=0;
+let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
 let cartPayMethod=null;
 const PAY_OPTS=[
@@ -1760,7 +1764,8 @@ window.selectPayMethod=(m)=>{
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
     payMethod=m; counterConfirmed=false;
-    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
+    if(ticketId){ try{ localStorage.setItem('paymethod_'+ticketId,m); }catch(e){}   // PAY-H1: survive an app-switch/reload
+      api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
       if((m==='promptpay'||m==='kbank') && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },400); } }
   } else { cartPayMethod=m; updateCartPayLabel(); }
 };
@@ -1903,23 +1908,28 @@ window.openCoupon=async(mode)=>{
 // Guarded per-ticket — never re-fires on background poll re-renders.
 const _qrAutoSaved=new Set();
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice();
+  if(ticketId){ try{ localStorage.setItem('paymethod_'+ticketId,m); }catch(e){} }   // PAY-H1: survive an app-switch/reload
   if((m==='promptpay'||m==='kbank') && ticketId && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },300); } };
-// Phase 7: soft countdown nudge (visual only — no auto-cancel) shown while the QR is up.
-// Starts once per ticket when the QR first appears; stops once payChoice is no longer relevant.
-let _qrTimer=null; const _qrStarted=new Set();
+// PAY-H2: countdown bound to the server's REAL auto-void moment (_payDeadline, epoch ms). Recomputing
+// from Date.now() every tick keeps it honest across a reload or an app-switch to the bank — a fresh
+// full 30:00 on every return was a lie, then the order died later anyway. At 00:00 we pull the ticket
+// so the customer lands on the cancelled screen + reason (PAY-H3) instead of a dead QR.
+let _qrTimer=null, _qrTimerDl=null;
 function startQrCountdown(){
-  if(!ticketId || _qrStarted.has(ticketId)) return; _qrStarted.add(ticketId);
-  // Count down from the REAL auto-void window (pending:void_min), not a hardcoded 15:00 —
-  // a made-up number expires with nothing happening, then the order dies later anyway.
-  const mins=Number(cfg.pendingVoidMinutes)||0;
-  if(!(mins>0)){ const w=$('qrCountdown'); if(w) w.style.display='none'; return; }
-  let left=mins*60;
-  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return; const m=Math.floor(left/60), s=left%60; el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); };
+  const w=$('qrCountdown');
+  if(!_payDeadline){ stopQrCountdown(); if(w) w.style.display='none'; return; }
+  if(w) w.style.display='';
+  if(_qrTimer && _qrTimerDl===_payDeadline) return;   // already ticking to this exact deadline
+  _qrTimerDl=_payDeadline;
+  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return;
+    const left=Math.max(0,Math.round((_payDeadline-Date.now())/1000));
+    el.textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');
+    if(left<=0){ stopQrCountdown(); if(ticketId) api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };
   tick();
   if(_qrTimer) clearInterval(_qrTimer);
-  _qrTimer=setInterval(()=>{ left=Math.max(0,left-1); tick(); if(left<=0){ clearInterval(_qrTimer); _qrTimer=null; } },1000);
+  _qrTimer=setInterval(tick,1000);
 }
-function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } }
+function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } _qrTimerDl=null; }
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
 // then the attached slip is checked by SlipOK against the order total.
@@ -2154,6 +2164,7 @@ function render(v){
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
   const isPending = v.status==='pending';
+  _payDeadline = v.payDeadline || null;   // PAY-H2: real auto-void moment, so the QR countdown can't lie across reloads
   $('tCode').textContent = isPending ? '💳' : v.code;
   $('tCodeLabel').textContent = isPending ? 'ชำระเงินเพื่อรับหมายเลขคิว' : 'หมายเลขคิวของคุณ';
   $('tStore').textContent = v.zone;
