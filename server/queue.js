@@ -2523,6 +2523,17 @@ export function availableCoupons(customerKey, orderNet, lines = null) {
         isReward: true, ccId: cc.id, freeCap: cc.free_cap, couponKind: cc.kind });
     }
   }
+  // CUS-H6: surface what's usable NOW. Order = the customer's earned rewards, then usable coupons
+  // (biggest discount first), then anything not-yet-usable (expired / min-spend / used up) at the
+  // bottom — a valuable usable coupon must never sit buried below an expired one. Array.sort is
+  // stable in V8, so rewards keep their claim order and unusable rows keep newest-first.
+  const rank = (c) => (c.usable ? (c.isReward ? 0 : 1) : 2);
+  list.sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 1) return (b.discount || 0) - (a.discount || 0);
+    return 0;
+  });
   return list;
 }
 /** Apply a coupon to an order at creation: re-validate SERVER-SIDE, add its discount (respecting any

@@ -127,6 +127,10 @@
      keeps its proportions) and an invisible ::after extends the HIT AREA to a full 44px. */
   .qstep{width:32px;height:32px;padding:0;border-radius:50%;font-size:17px;line-height:1;position:relative}
   .qstep::after{content:'';position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+  /* CUS-H8: iOS Safari zooms the page whenever a focused field is <16px — jarring mid-payment, and it
+     often doesn't zoom back out. Force 16px on every text field so focus never triggers a zoom.
+     !important is deliberate: it must beat the smaller inline font-sizes on individual inputs. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
