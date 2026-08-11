@@ -620,6 +620,7 @@
     <div class="row between" style="flex:none"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
     <div id="cartNudge" style="display:none;flex:none;margin:12px 0 0;font-size:14px;font-weight:800;border-radius:12px;padding:11px 12px;text-align:center"></div>
     <div id="basketList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:8px 0"></div>
+    <div id="basketUpsell" style="flex:none;display:none;margin:0 0 8px"></div>
     <div style="flex:none;padding-top:2px">
       <div class="row between" style="font-size:13.5px;margin-bottom:4px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
       <div id="basketDiscRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
@@ -1479,7 +1480,38 @@ function renderBasket(){
   $('basketConfirm').disabled = !cart.length;
   updateCartPayLabel(); updateCartCouponLabel();
   updateNudges();
+  renderUpsell();
 }
+// Phase 4 #1: gentle cross-sell in the basket — "เพิ่มอีกนิด?" suggests popular drinks the customer
+// hasn't added yet (ranked by merchandising badge then likes), one tap to add. Lifts the order value
+// without nagging: it only shows when the cart has items and there's something new to suggest.
+function upsellPicks(){
+  const inCart = new Set(cart.map(e=>e.name));
+  const score = (m)=> (m.badge==='rec'||m.badge==='hot') ? 2 : (m.badge==='promo' ? 1 : 0);
+  return MENU
+    .filter(m=>m.active && m.category!=='topping' && !m.soldout && !m.stockSoldout && !inCart.has(m.name))
+    .sort((a,b)=> score(b)-score(a) || (b.likes||0)-(a.likes||0))
+    .slice(0,6);
+}
+function renderUpsell(){
+  const box=$('basketUpsell'); if(!box) return;
+  const picks = cart.length ? upsellPicks() : [];
+  if(!picks.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML = '<div style="font-size:13px;font-weight:800;color:var(--navy);margin:2px 0 8px">🥄 เพิ่มอีกนิด?</div>'
+    + '<div style="display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px">'
+    + picks.map(m=>`<div style="flex:none;width:104px;border:1px solid var(--line);border-radius:14px;padding:8px;text-align:center;background:#fff">
+        <div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;margin-bottom:6px">${itemImg(m)}</div>
+        <div style="font-size:11.5px;font-weight:700;color:var(--navy);line-height:1.2;height:28px;overflow:hidden">${esc(m.name)}</div>
+        <div style="font-size:12.5px;font-weight:800;color:var(--accent2);margin:3px 0 6px">฿${m.price}</div>
+        <button class="ok" style="width:100%;padding:6px 0;font-size:12px;font-weight:800" onclick="upsellAdd(${m.id})">+ เพิ่ม</button>
+      </div>`).join('')
+    + '</div>';
+}
+window.upsellAdd=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m||m.soldout||m.stockSoldout) return;
+  cart.push({name:m.name,price:m.price,sweet:100,toppings:[]});
+  renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} }
+  if(window.toast) toast('เพิ่ม '+m.name+' แล้ว 🥄'); };
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
 window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
