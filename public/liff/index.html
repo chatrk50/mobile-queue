@@ -172,6 +172,10 @@
   .cpn-act{flex:none;display:flex;align-items:center;padding:0 11px 0 2px}
   .cpn-use{border:none;border-radius:999px;background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:#fff;font-family:inherit;font-weight:800;font-size:13.5px;padding:0 19px;min-height:44px;cursor:pointer;box-shadow:0 8px 16px -8px rgba(0,181,216,.7)}
   .cpn-check{width:23px;height:23px;fill:none;stroke-width:2}
+  /* Flash-sale bar (Phase 4 #4) — thin, dismissible, top of screen during the happy-hour window. */
+  #flashBar{position:fixed;left:0;right:0;top:0;z-index:70;display:none;align-items:center;gap:8px;padding:9px 14px;color:#fff;font-weight:800;font-size:13px;background:linear-gradient(135deg,#ff9a3d,#f2683b);box-shadow:0 6px 16px -8px rgba(242,104,59,.75)}
+  #flashBar #flashMsg{flex:1;min-width:0;line-height:1.35}
+  #flashBar .fx{flex:none;border:none;background:rgba(255,255,255,.22);color:#fff;font-weight:900;font-size:13px;line-height:1;width:26px;height:26px;border-radius:50%;cursor:pointer;font-family:inherit}
   .cw-title{font-weight:800;font-size:18px;color:var(--navy);margin:9px 0 3px;position:relative;z-index:2}
   .cw-desc{font-size:12.5px;color:var(--muted);line-height:1.45;margin-bottom:14px;position:relative;z-index:2}
   .cw-desc b{color:var(--navy)}
@@ -456,6 +460,8 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<!-- Phase 4 #4: flash-sale bar — shown only while the owner's happy-hour window is live -->
+<div id="flashBar"><span id="flashMsg">⚡ FLASH SALE</span><button class="fx" onclick="dismissFlash()" aria-label="ปิด">✕</button></div>
 
 <!-- ORDER DETAILS bottom sheet: itemized breakdown, opened by tapping the order summary row -->
 <div id="orderDetailSheet" onclick="if(event.target===this)closeOrderDetail()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:flex-end;justify-content:center">
@@ -1945,6 +1951,20 @@ window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!
 // with the branded card so it doesn't sit forgotten. Once per day per zone, owner-toggleable, only
 // ever shown when there is a genuinely usable coupon. "ใช้เลย" arms it and jumps to the menu.
 let _cwCoupon=null;
+window.dismissFlash=()=>{ const b=$('flashBar'); if(b) b.style.display='none'; };
+// Phase 4 #4: while the flash window is live, silently claim today's flash coupon into the wallet
+// (idempotent server-side) and show a dismissible bar. Never breaks the app.
+async function maybeFlashSale(){
+  try{
+    const f=cfg.flash; if(!f || !f.active) return;
+    const ck=lineUserId||(guestPhone?('tel:'+guestPhone):'');
+    let claimed=false;
+    if(ck){ try{ const r=await api('/api/flash/'+encodeURIComponent(ck)+'/claim',{method:'POST'}); claimed=!!(r&&r.issued); }catch(e){} }
+    const endTxt=String(f.end).padStart(2,'0')+':00';
+    $('flashMsg').textContent='⚡ FLASH SALE ลด ฿'+f.amount+' ทุกออเดอร์ ถึง '+endTxt+' น.'+(ck?' · เก็บคูปองไว้ในเมนูคูปองแล้ว':' · สั่งเลยรับส่วนลด');
+    $('flashBar').style.display='flex';
+  }catch(e){ /* a flash bar must never break the app */ }
+}
 async function maybeCouponWelcome(){
   try{
     if(!cfg.couponPopup) return;
@@ -2024,6 +2044,9 @@ window.openCoupon=async(mode)=>{
     const sel = cartCoupon && cartCoupon.code===c.code;
     let discLine;
     const cap = c.freeCap||49;
+    // Value coupons (bounce-back, streak) ride the same reward machinery but are "฿X off", not a
+    // free drink — label + colour them as discounts so the wallet reads honestly.
+    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash';
     if(isReward){
       // In cart mode, show the REAL amount this coupon will discount THIS order (capped at the
       // coupon's value or the cheapest item, same math as the server) instead of a generic
@@ -2035,26 +2058,31 @@ window.openCoupon=async(mode)=>{
         const est=Math.min(cap, cheapest||net, net);
         discLine = 'ลดออเดอร์นี้ ฿'+est+(est<cap?(' · แก้วนี้ราคาต่ำกว่า ฿'+cap):'');
       } else {
-        discLine = 'ฟรี 1 แก้ว · ไม่เกิน ฿'+cap+' หรือราคาแก้วนั้น';
+        discLine = isValue ? ('ลดสูงสุด ฿'+cap+' หรือราคาแก้วนั้น') : ('ฟรี 1 แก้ว · ไม่เกิน ฿'+cap+' หรือราคาแก้วนั้น');
       }
     } else {
       discLine = 'ลด ' + (c.disc_type==='percent' ? (c.disc_value+'%'+(c.max_disc>0?(' (สูงสุด ฿'+c.max_disc+')'):'')) : ('฿'+c.disc_value));
     }
     const meta = isReward
-      ? ((c.couponKind==='birthday' ? 'ของขวัญวันเกิด' : c.couponKind==='winback' ? 'ของขวัญจากร้าน' : 'จากการสะสมครบ'))
+      ? (c.couponKind==='birthday' ? 'ของขวัญวันเกิด' : c.couponKind==='winback' ? 'ของขวัญจากร้าน'
+         : c.couponKind==='streak' ? 'รางวัลมาต่อเนื่อง' : c.couponKind==='bounceback' ? 'ของขวัญกลับมาหาเรา'
+         : c.couponKind==='flash' ? 'Flash Sale วันนี้' : 'จากการสะสมครบ')
       : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ')+' · โค้ด '+esc(c.code));
     // Shared premium ticket (.cpn): brand-gradient value stub, clean dotted tear line (no floating
     // notches — the owner flagged those), details, then ONE clear action — "ใช้" in browse mode
     // (arms + jumps to the menu), a check circle in cart mode.
-    const grad = isReward
-      ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
-        : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
-        : 'linear-gradient(150deg,#33c9ac,#10a582)')
-      : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
-    const icon = isReward
-      ? '<rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M4 13h16M12 9v11"/><path d="M8.5 9C6 9 6 5.5 8.5 5.5 10.6 5.5 12 9 12 9s1.4-3.5 3.5-3.5C18 5.5 18 9 15.5 9"/>'
-      : '<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/>';
-    const big = isReward ? 'ฟรี' : (c.disc_type==='percent' ? (c.disc_value+'%') : ('฿'+c.disc_value));
+    const grad = c.couponKind==='streak' ? 'linear-gradient(150deg,#7c83e0,#5560c8)'
+      : c.couponKind==='bounceback' ? 'linear-gradient(150deg,#12b8b0,#0a8f9c)'
+      : c.couponKind==='flash' ? 'linear-gradient(150deg,#ff9a3d,#f2683b)'
+      : isReward
+        ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
+          : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
+          : 'linear-gradient(150deg,#33c9ac,#10a582)')
+        : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
+    const TICKET='<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/>';
+    const GIFT='<rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M4 13h16M12 9v11"/><path d="M8.5 9C6 9 6 5.5 8.5 5.5 10.6 5.5 12 9 12 9s1.4-3.5 3.5-3.5C18 5.5 18 9 15.5 9"/>';
+    const icon = (isReward && !isValue) ? GIFT : TICKET;
+    const big = isValue ? ('฿'+cap) : isReward ? 'ฟรี' : (c.disc_type==='percent' ? (c.disc_value+'%') : ('฿'+c.disc_value));
     const clickable = _couponMode==='cart' && c.usable;
     const action = _couponMode==='browse'
       ? (c.usable?`<div class="cpn-act"><button class="cpn-use" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
@@ -2063,7 +2091,7 @@ window.openCoupon=async(mode)=>{
       <div class="cpn-stub" style="background:${grad}">
         <svg class="ic" viewBox="0 0 24 24">${icon}</svg>
         <div class="big${big.length>3?' sm':''}">${big}</div>
-        <div class="sub">${isReward?('ไม่เกิน ฿'+cap):'ส่วนลด'}</div>
+        <div class="sub">${(isReward&&!isValue)?('ไม่เกิน ฿'+cap):'ส่วนลด'}</div>
       </div>
       <div class="cpn-perf"></div>
       <div class="cpn-body">
@@ -2567,6 +2595,7 @@ async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabl
   // Owner-uploaded promo (admin on/off + image): shown AFTER the splash clears so it gets its full few
   // seconds over the main page (before, up to ~1s of it was wasted hidden behind the splash), then it's gone.
   if(normal) await maybePromo();
+  if(normal) await maybeFlashSale();  // Phase 4 #4: claim + announce today's flash coupon (await → it's in the wallet before the welcome popup reads it)
   if(normal) maybeCouponWelcome();   // Phase 4A: greet a returning customer who holds an unused coupon
 })().catch(e=>{ hideSplash(); err(e.message); });
 </script>

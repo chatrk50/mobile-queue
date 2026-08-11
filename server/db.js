@@ -735,6 +735,10 @@ for (const stmt of [
   // Stable link to the catalog. order_items joined menu_items BY NAME, so renaming a menu item
   // silently detached every past line from its recipe/stock/history. New lines store the id.
   `ALTER TABLE order_items ADD COLUMN menu_item_id INTEGER`,
+  // Phase 4 #3 daily-streak reward: consecutive Bangkok-days a customer has ordered, and the last
+  // day counted. Drives the "มาต่อเนื่อง N วัน" bonus coupon. Both dormant until streak is enabled.
+  `ALTER TABLE customers ADD COLUMN streak_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE customers ADD COLUMN streak_last_day TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

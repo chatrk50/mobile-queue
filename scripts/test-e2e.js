@@ -1999,6 +1999,41 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   ok(Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback').length === 1, 'INVARIANT 4#2 no stacking — one active bounce-back at a time');
   Q.setBounceBackConfig({ enabled: false });
 }
+{
+  // Phase 4 #3: daily streak — default OFF issues nothing; when on, ordering on N consecutive
+  // Bangkok-days drops ONE bonus coupon, then the streak resets so it can't stack.
+  const SID = 'U' + 's'.repeat(32);
+  const s0 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s0.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 0, 'INVARIANT 4#3 streak OFF by default → no coupon');
+  Q.setStreakConfig({ enabled: true, days: 2, amount: 15 });
+  const s1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s1.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 0, 'INVARIANT 4#3 day 1 of 2 → no coupon yet');
+  // Back-date the last counted day so the next paid order is a consecutive 2nd day.
+  db.prepare(`UPDATE customers SET streak_last_day = date(datetime('now','+7 hours'),'-1 day') WHERE line_user_id=?`).run(SID);
+  const s2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s2.ticket.id, { method: 'cash' });
+  const sw = Q.customerCoupons(SID).filter((c) => c.kind === 'streak');
+  ok(sw.length === 1 && near(sw[0].free_cap, 15), `INVARIANT 4#3 2-day streak issues one ฿15 coupon (got ${sw.length}, cap ${sw[0] && sw[0].free_cap})`);
+  const s3 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s3.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 1, 'INVARIANT 4#3 no stacking — streak resets after award');
+  Q.setStreakConfig({ enabled: false });
+}
+{
+  // Phase 4 #4: flash sale — inactive OFF; an all-day window is active and lets a customer claim ONE
+  // ฿amount value coupon into the wallet, once per Bangkok-day.
+  const FID = 'U' + 'f'.repeat(32);
+  ok(Q.claimFlashSale(FID).issued === false, 'INVARIANT 4#4 flash OFF by default → claim issues nothing');
+  Q.setFlashSaleConfig({ enabled: true, start: 0, end: 24, amount: 20 });
+  ok(Q.flashSaleActive() === true, 'INVARIANT 4#4 window 00–24 is active');
+  const fr = Q.claimFlashSale(FID);
+  const fw = Q.customerCoupons(FID).filter((c) => c.kind === 'flash');
+  ok(fr.issued === true && fw.length === 1 && near(fw[0].free_cap, 20), `INVARIANT 4#4 active window → one ฿20 flash coupon (got ${fw.length}, cap ${fw[0] && fw[0].free_cap})`);
+  ok(Q.claimFlashSale(FID).issued === false && Q.customerCoupons(FID).filter((c) => c.kind === 'flash').length === 1, 'INVARIANT 4#4 one flash coupon per customer per day');
+  Q.setFlashSaleConfig({ enabled: false });
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

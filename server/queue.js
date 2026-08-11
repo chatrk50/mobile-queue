@@ -3320,6 +3320,96 @@ function issueBounceBack(customerKey) {
     return { issued: true, label, expiresAt };
   } catch { return { issued: false, reason: 'error' }; }
 }
+// ---------- Daily streak (Phase 4 #3) ----------
+// Rewards consecutive-day visits: order on N Bangkok-days in a row → a bonus coupon drops into the
+// wallet, then the streak resets so it can be earned again. Default OFF (it's the owner's margin
+// call). Reuses the same wallet/redeem machinery as bounce-back — a "up to ฿X off" value coupon.
+export function streakEnabled() { return getSetting('streak:enabled', '0') === '1'; }
+export function getStreakConfig() {
+  return {
+    enabled: streakEnabled(),
+    days: Math.max(2, Math.min(30, Math.round(Number(getSetting('streak:days', '3')) || 3))),
+    amount: Math.max(1, Math.round(Number(getSetting('streak:amount', '15')) || 15)),
+  };
+}
+export function setStreakConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('streak:enabled', patch.enabled ? '1' : '0');
+  if (patch.days != null) setSetting('streak:days', String(Math.max(2, Math.min(30, Math.round(Number(patch.days) || 3)))));
+  if (patch.amount != null) setSetting('streak:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 15)))));
+  return getStreakConfig();
+}
+// Advance the customer's daily-visit streak on a paid order; award + reset when it reaches the
+// target. Idempotent per Bangkok-day (a 2nd order same day doesn't advance it). Never throws.
+function bumpStreak(customerKey) {
+  try {
+    if (!customerKey || !streakEnabled()) return { issued: false };
+    const days = db.prepare(`SELECT date(datetime('now','+7 hours')) t, date(datetime('now','+7 hours'),'-1 day') y`).get();
+    const row = db.prepare(`SELECT streak_count AS n, streak_last_day AS last FROM customers WHERE line_user_id=?`).get(customerKey);
+    const last = row ? row.last : null;
+    if (last === days.t) return { issued: false, reason: 'counted_today' };   // already advanced today
+    let n = (last === days.y) ? ((row && row.n) || 0) + 1 : 1;                // continue or restart
+    const cfg = getStreakConfig();
+    let out = { issued: false, count: n, target: cfg.days };
+    if (n >= cfg.days && !customerCoupons(customerKey).some((c) => c.kind === 'streak')) {
+      const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d;
+      const label = `มาต่อเนื่อง ${cfg.days} วัน ลด ฿${cfg.amount}`;
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'streak', ?, ?, ?, 'streak')`)
+        .run(customerKey, label, cfg.amount, expiresAt);
+      out = { issued: true, label, expiresAt, count: n, target: cfg.days };
+      n = 0;   // reset — the streak is earned again after another run of N days
+    }
+    db.prepare(`INSERT INTO customers (line_user_id, streak_count, streak_last_day) VALUES (?,?,?)
+                 ON CONFLICT(line_user_id) DO UPDATE SET streak_count=excluded.streak_count, streak_last_day=excluded.streak_last_day`)
+      .run(customerKey, n, days.t);
+    return out;
+  } catch { return { issued: false, reason: 'error' }; }
+}
+// ---------- Flash sale / happy hour (Phase 4 #4) ----------
+// A time-boxed "⚡ ลดทุกออเดอร์" window the owner opens for a slow part of the day. While the window
+// is live a customer claims ONE flash coupon into their wallet (a "up to ฿X off" value coupon on the
+// same machinery as bounce-back). Default OFF; it touches NO menu price, so accounting/VAT/COGS are
+// completely untouched — it's a coupon, not a repricing.
+export function flashSaleActive() {
+  if (getSetting('flash:enabled', '0') !== '1') return false;
+  const h = db.prepare(`SELECT CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get().h;
+  const start = Math.max(0, Math.min(23, Math.round(Number(getSetting('flash:start', '17')) || 0)));
+  let end = Math.max(1, Math.min(24, Math.round(Number(getSetting('flash:end', '19')) || 0)));
+  if (end <= start) end = Math.min(24, start + 1);
+  return h >= start && h < end;
+}
+export function getFlashSaleConfig() {
+  const start = Math.max(0, Math.min(23, Math.round(Number(getSetting('flash:start', '17')) || 0)));
+  let end = Math.max(1, Math.min(24, Math.round(Number(getSetting('flash:end', '19')) || 0)));
+  if (end <= start) end = Math.min(24, start + 1);
+  return {
+    enabled: getSetting('flash:enabled', '0') === '1',
+    start, end,
+    amount: Math.max(1, Math.round(Number(getSetting('flash:amount', '20')) || 20)),
+    active: flashSaleActive(),
+  };
+}
+export function setFlashSaleConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('flash:enabled', patch.enabled ? '1' : '0');
+  if (patch.start != null) setSetting('flash:start', String(Math.max(0, Math.min(23, Math.round(Number(patch.start) || 0)))));
+  if (patch.end != null) setSetting('flash:end', String(Math.max(1, Math.min(24, Math.round(Number(patch.end) || 1)))));
+  if (patch.amount != null) setSetting('flash:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 20)))));
+  return getFlashSaleConfig();
+}
+// Drop today's flash coupon into the customer's wallet. Idempotent per Bangkok-day (one per customer
+// per day). Expires end of TODAY — a flash coupon is a "use it now" nudge. Never throws.
+export function claimFlashSale(customerKey) {
+  try {
+    if (!customerKey || !flashSaleActive()) return { issued: false, reason: 'inactive' };
+    const today = db.prepare(`SELECT date(datetime('now','+7 hours')) d`).get().d;
+    if (db.prepare(`SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='flash' AND date(issued_at,'+7 hours')=? LIMIT 1`).get(customerKey, today))
+      return { issued: false, reason: 'already_today' };
+    const cfg = getFlashSaleConfig();
+    const label = `⚡ Flash Sale ลด ฿${cfg.amount} วันนี้`;
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'flash', ?, ?, ?, 'flash')`)
+      .run(customerKey, label, cfg.amount, today);
+    return { issued: true, label, expiresAt: today, amount: cfg.amount };
+  } catch { return { issued: false, reason: 'error' }; }
+}
 /** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
  *  so it's exact even on UAT where LINE pushes are stubbed). */
 function winbackIssuedThisMonth() {
@@ -4483,6 +4573,8 @@ export function setOrderPaid(ticketId, opts = {}) {
     // Phase 4 #2: drop a come-back coupon into their wallet on purchase (dormant unless the owner
     // enabled it). Mentioned in the confirmation below so it rides the existing push — no extra LINE cost.
     let bounce = null; try { bounce = issueBounceBack(ticket.line_user_id); } catch { /* never block a payment */ }
+    // Phase 4 #3: advance the daily-visit streak; award a bonus coupon on the Nth day in a row.
+    let streak = null; try { streak = bumpStreak(ticket.line_user_id); } catch { /* never block a payment */ }
     // Order-status progress card (LINE-MAN style): stage 2 = order in, being made.
     let sub = `ชำระเงินเรียบร้อย ฿${order.total} · คิวรอก่อนหน้า ${ahead}`;
     if (loyalty && loyalty.awarded != null) {
@@ -4502,6 +4594,7 @@ export function setOrderPaid(ticketId, opts = {}) {
       sub += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
     if (bounce && bounce.issued) sub += `\n🎁 ${bounce.label} — เก็บไว้ในเมนูคูปองแล้ว ใช้ได้ถึง ${bounce.expiresAt}`;
+    if (streak && streak.issued) sub += `\n🔥 มาต่อเนื่อง ${streak.target} วันติด! รับ ${streak.label} — เก็บในเมนูคูปองแล้ว ใช้ได้ถึง ${streak.expiresAt}`;
     pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
