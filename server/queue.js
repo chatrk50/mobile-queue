@@ -2622,6 +2622,10 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
 // Model: 1 stamp per drink cup; collect `stamps_per_reward` cups → 1 free drink (≤49฿).
 // "points" in the DB == stamps. Disabled by default (owner enables later).
 export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
+// Phase 4A: the coupon-arrival popup — greet a customer who opens the LIFF holding an unused coupon
+// with a branded card so it doesn't sit forgotten in the wallet. Owner-toggleable (default ON).
+export function couponPopupEnabled() { return getSetting('coupon:popup', '1') === '1'; }
+export function setCouponPopup(on) { setSetting('coupon:popup', on ? '1' : '0'); return { couponPopup: !!on }; }
 export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
 // Membership system (บัตรสมาชิก + tier + recognition) — SEPARATE from the stamp/points programme. Default ON.
 export function memberEnabled() { return getSetting('member:enabled', '1') === '1'; }

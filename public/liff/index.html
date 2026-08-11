@@ -131,6 +131,28 @@
      often doesn't zoom back out. Force 16px on every text field so focus never triggers a zoom.
      !important is deliberate: it must beat the smaller inline font-sizes on individual inputs. */
   input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
+  /* Phase 4A — YO-DEE coupon template (teal hero ticket) + arrival popup */
+  #cwPop{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(20,42,73,.55);padding:22px}
+  #cwPop.on{display:flex;animation:cwfade .22s ease}
+  @keyframes cwfade{from{opacity:0}to{opacity:1}}
+  @keyframes cwpop{from{transform:scale(.9);opacity:.4}to{transform:scale(1);opacity:1}}
+  .cw-card{width:100%;max-width:338px;background:#fff;border-radius:26px;padding:20px 18px 18px;text-align:center;position:relative;box-shadow:0 26px 44px -16px rgba(20,42,73,.6);animation:cwpop .3s cubic-bezier(.2,.9,.3,1.2)}
+  .cw-pill{display:inline-block;background:var(--butter,#FFF1B8);color:#7a5a00;font-size:11px;font-weight:900;padding:4px 12px;border-radius:999px;margin-bottom:2px;position:relative;z-index:2}
+  .cw-rays{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:150px;height:104px;z-index:0}
+  .cw-cf{position:absolute;width:9px;height:9px;border-radius:2px;z-index:1}
+  .ydc{position:relative;z-index:2;margin:6px auto 4px;width:172px;background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));border-radius:16px;padding:13px 10px 11px;color:#fff;box-shadow:0 12px 24px -10px rgba(0,181,216,.7)}
+  .ydc .lab{font-size:11px;font-weight:800;letter-spacing:.05em;opacity:.95}
+  .ydc .amt{font-size:44px;font-weight:900;line-height:1;margin:1px 0;font-family:'Poppins',inherit}
+  .ydc .amt small{font-size:20px;font-weight:800;vertical-align:7px;margin-right:1px}
+  .ydc .cond{font-size:10px;opacity:.92;margin-top:2px}
+  .ydc .nl,.ydc .nr{position:absolute;top:50%;width:15px;height:15px;background:#fff;border-radius:50%;transform:translateY(-50%)}
+  .ydc .nl{left:-8px}.ydc .nr{right:-8px}
+  .cw-title{font-weight:800;font-size:18px;color:var(--navy);margin:9px 0 3px;position:relative;z-index:2}
+  .cw-desc{font-size:12.5px;color:var(--muted);line-height:1.45;margin-bottom:14px;position:relative;z-index:2}
+  .cw-desc b{color:var(--navy)}
+  .cw-btn{display:block;width:100%;border:none;border-radius:14px;font-weight:800;font-size:15px;padding:13px 0;cursor:pointer;font-family:inherit;position:relative;z-index:2;min-height:48px}
+  .cw-primary{background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:#fff;box-shadow:0 10px 20px -8px rgba(0,181,216,.7);margin-bottom:8px}
+  .cw-later{background:#fff;color:var(--muted);border:1.5px solid var(--line)}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head><body>
@@ -615,6 +637,26 @@
 
 <!-- Basket: header + the whole totals→pay block are PINNED (flex column, overflow:hidden on the
      card) — only the item list scrolls, so ยอดสุทธิ and the pay button never scroll out of reach. -->
+<!-- Phase 4A: coupon-arrival popup — greets a customer holding an unused coupon when they open the app -->
+<div id="cwPop" role="dialog" aria-modal="true" aria-label="คูปองของคุณ">
+  <div class="cw-card">
+    <span class="cw-pill" id="cwPill">🎁 คูปองของคุณ</span>
+    <svg class="cw-rays" viewBox="0 0 150 104" aria-hidden="true"><g fill="none" stroke="var(--accent2,#2fc2a6)" stroke-width="3" stroke-linecap="round" opacity=".32"><path d="M75 50 L75 6"/><path d="M75 50 L40 14"/><path d="M75 50 L110 14"/><path d="M75 50 L20 40"/><path d="M75 50 L130 40"/></g><g fill="var(--accent,#00b5d8)" opacity=".5"><circle cx="46" cy="20" r="3"/><circle cx="104" cy="20" r="3"/></g></svg>
+    <span class="cw-cf" style="left:16px;top:12px;background:#FFF1B8;transform:rotate(20deg)"></span>
+    <span class="cw-cf" style="right:20px;top:9px;background:var(--accent2,#2fc2a6);transform:rotate(-15deg)"></span>
+    <span class="cw-cf" style="right:34px;top:28px;background:var(--danger,#e55b6b);border-radius:50%"></span>
+    <span class="cw-cf" style="left:30px;top:30px;background:var(--accent,#00b5d8);border-radius:50%"></span>
+    <div class="ydc"><span class="nl"></span><span class="nr"></span>
+      <div class="lab" id="cwLab">คูปองส่วนลด</div>
+      <div class="amt" id="cwAmt"><small>฿</small>10</div>
+      <div class="cond" id="cwCond">ไม่มีขั้นต่ำ</div>
+    </div>
+    <div class="cw-title" id="cwTitle">มีคูปองรอคุณอยู่! 💛</div>
+    <div class="cw-desc" id="cwDesc"></div>
+    <button class="cw-btn cw-primary" onclick="cwUse()">ใช้เลย</button>
+    <button class="cw-btn cw-later" onclick="cwLater()">ไว้ทีหลัง</button>
+  </div>
+</div>
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center;padding:0">
   <div class="card" style="max-width:440px;width:100%;height:92vh;max-height:92vh;overflow:hidden;margin:0;border-radius:20px 20px 0 0;display:flex;flex-direction:column">
     <div class="row between" style="flex:none"><h1 style="margin:0">ตะกร้าของฉัน</h1><button class="ghost" style="padding:6px 12px" onclick="closeBasket()" aria-label="ปิด">✕</button></div>
@@ -1858,6 +1900,37 @@ let _couponMode='cart';   // 'cart' = applying to checkout · 'browse' = nav-bar
 window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!c||!c.usable) return;
   if(_couponMode==='browse'){ closeCoupon(); toast('มีคูปองนี้พร้อมใช้ · เลือกใช้ได้ตอนสั่งซื้อในตะกร้า'); return; }
   cartCoupon=c; closeCoupon(); renderBasket(); };
+// Phase 4A: coupon-arrival popup — on app open, greet a customer who already holds an unused coupon
+// with the branded card so it doesn't sit forgotten. Once per day per zone, owner-toggleable, only
+// ever shown when there is a genuinely usable coupon. "ใช้เลย" arms it and jumps to the menu.
+let _cwCoupon=null;
+async function maybeCouponWelcome(){
+  try{
+    if(!cfg.couponPopup) return;
+    if($('promoOvl') && $('promoOvl').style.display && $('promoOvl').style.display!=='none') return;   // don't stack on the promo
+    const today=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
+    const seenKey='cwseen:'+(zoneId||'')+':'+today;
+    if(localStorage.getItem(seenKey)) return;
+    const ck=lineUserId||(guestPhone?('tel:'+guestPhone):''); if(!ck) return;
+    let coupons=[]; try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total=999999'); coupons=r.coupons||[]; }catch(e){ return; }
+    const usable=coupons.filter(c=>c.usable);
+    if(!usable.length) return;
+    const val=(c)=> c.disc_type==='reward'?(c.freeCap||49): c.disc_type==='percent'?((c.disc_value||0)*3):(c.disc_value||0);
+    _cwCoupon=usable.slice().sort((a,b)=>val(b)-val(a))[0];
+    const c=_cwCoupon, isReward=c.disc_type==='reward';
+    $('cwAmt').innerHTML = isReward?'ฟรี': (c.disc_type==='percent'?(c.disc_value+'%'):('<small>฿</small>'+c.disc_value));
+    $('cwLab').textContent = isReward?'ฟรี 1 แก้ว':'คูปองส่วนลด';
+    $('cwCond').textContent = isReward?('ไม่เกิน ฿'+(c.freeCap||49)) : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ');
+    $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):'🎁 คูปองของคุณ';
+    $('cwDesc').innerHTML = esc(c.label)+(c.expires_at?('<br>ใช้ได้ถึง <b>'+esc(c.expires_at)+'</b>'):'');
+    localStorage.setItem(seenKey,'1');
+    $('cwPop').classList.add('on');
+  }catch(e){ /* a welcome must never break the app */ }
+}
+window.cwUse=()=>{ $('cwPop').classList.remove('on'); const c=_cwCoupon; if(!c||!c.code) return;
+  try{ sessionStorage.setItem('armCoupon',c.code); }catch(e){}   // armPendingCoupon applies it when the menu opens
+  showOrderUI({restore:true}); };
+window.cwLater=()=>{ $('cwPop').classList.remove('on'); };
 window.openCoupon=async(mode)=>{
   _couponMode = mode==='browse' ? 'browse' : 'cart';
   if(_couponMode==='browse') closeAllPopups();   // top-level (nav bar) — 'cart' mode is nested INSIDE basketPop, must not close it
@@ -2436,6 +2509,7 @@ async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabl
   // Owner-uploaded promo (admin on/off + image): shown AFTER the splash clears so it gets its full few
   // seconds over the main page (before, up to ~1s of it was wasted hidden behind the splash), then it's gone.
   if(normal) await maybePromo();
+  if(normal) maybeCouponWelcome();   // Phase 4A: greet a returning customer who holds an unused coupon
 })().catch(e=>{ hideSplash(); err(e.message); });
 </script>
 </body></html>
