@@ -1665,7 +1665,7 @@ window.cancelSending=()=>{
 window.confirmBasket=async()=>{
   if(submitting) return;
   if(!cart.length){ toast('กรุณาเลือกเครื่องดื่มก่อน'); return; }
-  if(cfg.promptPay && !cartPayMethod){ toast('เลือกช่องทางชำระเงินก่อนค่ะ'); openPayPicker(); return; }   // must pick a channel first
+  if(cfg.promptPay && !cartPayMethod){ _resumeConfirm=true; openPayPicker('cart'); return; }   // no channel yet → pick one, then the order continues on its own (no second "สั่งเลย" tap)
   if(!cfg.promptPay) cartPayMethod='counter';   // counter-only shop → no choice needed
   submitting=true; const cb=$('basketConfirm'); cb.disabled=true; cb.textContent='⏳ กำลังสั่ง...';
   ['orderCard','basketPop','cartBar'].forEach(id=>$(id).style.display='none');
@@ -1776,7 +1776,7 @@ function renderOrderBlock(v){
     // ONE cancellation message on the screen, not five. The status pill on the order row carries
     // the fact; the payment panel below is hidden entirely (there is nothing left to pay), and the
     // only remaining copy is the reason — which is the one thing the customer doesn't already know.
-    stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} }
+    stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} }
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
     // The whole payment panel goes — there is nothing left to pay. (counterConfirmedMsg lives
     // INSIDE payChoice, so the reason cannot be rendered here; render() puts it in tNotifyNote,
@@ -1784,7 +1784,7 @@ function renderOrderBlock(v){
     show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
     else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
   else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
@@ -1792,7 +1792,12 @@ function renderOrderBlock(v){
     pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
     show('tOrder',true); show('payChoice',true);
+    // Restore a confirmed "จ่ายที่เคาน์เตอร์" across a reload/app-return so the customer keeps their locked
+    // state instead of bouncing back to the payment picker (the round-trip UX loop).
+    if(!counterConfirmed && ticketId){ try{ if(localStorage.getItem('counterOK_'+ticketId)==='1'){ counterConfirmed=true; payMethod='counter'; } }catch(e){} }
     if(counterConfirmed){   // keep the "✅ บันทึกออเดอร์แล้ว" state across polls
+      const refEl=$('counterRefNum'); if(refEl) refEl.textContent = ticketId || '-';   // set on restore too, not just at confirm time
+      const amtEl=$('counterRefAmt'); if(amtEl) amtEl.textContent = _orderTotal || total || 0;
       // Hide the top reassurance — the green confirmed box is now the single source of truth.
       ['payReassure','payChoiceLabel','payBtnRow','payLinePayBtn','counterNote','counterConfirmBtn','ppQrWrap','counterInfo'].forEach(id=>show(id,false));
       show('counterConfirmedMsg',true);
@@ -1818,7 +1823,7 @@ function renderOrderBlock(v){
   }
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
-let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null;
+let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null, _resumeConfirm=false;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
 let cartPayMethod=null;
 const PAY_OPTS=[
@@ -1843,17 +1848,20 @@ window.openPayPicker=(mode)=>{
     + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.onerror=null;this.src=\'/assets/4060.min.png\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
-window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
+window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; _resumeConfirm=false; };   // closed without picking → don't auto-submit later
 window.openOrderDetail=()=>{ $('orderDetailSheet').style.display='flex'; };
 window.closeOrderDetail=()=>{ $('orderDetailSheet').style.display='none'; };
 window.selectPayMethod=(m)=>{
+  const resume=_resumeConfirm;   // capture before closePayPicker() clears it
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
     payMethod=m; counterConfirmed=false;
     if(ticketId){ try{ localStorage.setItem('paymethod_'+ticketId,m); }catch(e){}   // PAY-H1: survive an app-switch/reload
       api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
       if((m==='promptpay'||m==='kbank') && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },400); } }
-  } else { cartPayMethod=m; updateCartPayLabel(); }
+  } else { cartPayMethod=m; updateCartPayLabel();
+    if(resume){ confirmBasket(); }   // came here from "สั่งเลย" → continue the order automatically (no second tap)
+  }
 };
 function updateCartPayLabel(){ const el=$('cartPayVal'); if(!el) return; const o=PAY_OPTS.find(x=>x.m===cartPayMethod);
   const chev='<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg>';
@@ -2132,6 +2140,7 @@ window.openBankApp=async(bank)=>{
 // keep toggling payment methods). Survives polling via the render branch above.
 window.confirmCounter=()=>{
   counterConfirmed=true;
+  if(ticketId){ try{ localStorage.setItem('counterOK_'+ticketId,'1'); }catch(e){} }   // survive a reload/return — don't dump them back to the picker
   // Model B: show the customer their ORDER REF (= ticket id) to tell staff at the counter.
   // The queue number is issued only after the cashier collects payment (pay-first preserved).
   const refEl=$('counterRefNum'); if(refEl) refEl.textContent = ticketId || '-';
@@ -2140,7 +2149,7 @@ window.confirmCounter=()=>{
   show('counterConfirmedMsg',true);
 };
 window.undoCounterConfirm=()=>{ counterConfirmed=false; payMethod='counter'; show('counterConfirmedMsg',false);
-  if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };
+  if(ticketId){ try{ localStorage.removeItem('counterOK_'+ticketId); }catch(e){} api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };
 // LINE Pay: reserve on the server, then redirect to LINE Pay's page. On return, the server
 // confirm callback marks the order paid + awards points (method='linepay').
 window.startLinePay=async()=>{
