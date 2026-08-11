@@ -355,7 +355,7 @@
       <div id="counterInfo" style="display:none;text-align:center;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div>
         <div class="muted" style="font-size:13px;margin:4px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div>
-        <img id="counterPoster" src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display='none'">
+        <img id="counterPoster" src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.onerror=null;this.src='/assets/4060.min.png'">
       </div>
       <!-- paid online but can't come — request a refund (cashier processes it) -->
       <button id="refundReqBtn" class="ghost" style="width:100%;display:none;margin-top:10px;font-size:13px;color:var(--danger);border-color:var(--danger)" onclick="requestRefund()">ขอคืนเงิน (จ่ายแล้วแต่มารับไม่ได้)</button>
@@ -547,7 +547,7 @@
     </div>
     <!-- STAMP/REWARD CARD: visual punch-card art (10 slots) — filled stars = progress toward a free redeem. -->
     <div id="memberStampCard" style="display:none;margin-top:11px;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(14,40,55,.4)">
-      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" loading="lazy" decoding="async" style="width:100%;display:block">
+      <img src="/assets/card-reward.webp" alt="บัตรสะสมแต้ม" loading="lazy" decoding="async" style="width:100%;display:block" onerror="this.onerror=null;this.src='/assets/card-reward.min.png'">
       <div id="stampName" style="position:absolute;top:4.5%;left:4.8%;width:28%;height:18%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9.5px;font-weight:800;color:#8a5a12;line-height:1.15;padding:0 3px;overflow:hidden"></div>
       <div id="stampGrid" style="position:absolute;top:47%;left:12%;width:76%;height:26%;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr)"></div>
       <div id="stampMsg1" style="position:absolute;bottom:3%;left:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
@@ -1750,7 +1750,7 @@ window.openPayPicker=(mode)=>{
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('')
-    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.onerror=null;this.src=\'/assets/4060.min.png\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
