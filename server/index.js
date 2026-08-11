@@ -503,7 +503,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -527,6 +527,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    if (req.body?.bounceBack != null) out.bounceBack = Q.setBounceBackConfig(req.body.bounceBack);   // Phase 4 #2
+
     // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
     // on or move the prize amount.
     if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }

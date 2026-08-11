@@ -1982,6 +1982,23 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   ok(Q.taxInvoiceForOrder(v1.ticket.id).invoiceNo === inv1.invoiceNo, 'INVARIANT 3D invoice number is stable per order (idempotent)');
   Q.setVatConfig({ enabled: false });   // leave VAT off for the rest of the suite
 }
+{
+  // Phase 4 #2: bounce-back — default OFF issues nothing; when on, a paid LINE order drops ONE come-back
+  // coupon (฿amount cap, +days expiry) into the wallet; back-to-back purchases don't stack.
+  const UID = 'U' + 'd'.repeat(32);
+  const o0 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o0.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback').length === 0, 'INVARIANT 4#2 bounce-back OFF by default → no coupon');
+  Q.setBounceBackConfig({ enabled: true, amount: 10, days: 3 });
+  const o1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o1.ticket.id, { method: 'cash' });
+  const w1 = Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback');
+  ok(w1.length === 1 && accNear2(w1[0].free_cap, 10), `INVARIANT 4#2 paid LINE order issues one ฿10 come-back coupon (got ${w1.length}, cap ${w1[0] && w1[0].free_cap})`);
+  const o2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o2.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback').length === 1, 'INVARIANT 4#2 no stacking — one active bounce-back at a time');
+  Q.setBounceBackConfig({ enabled: false });
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));

@@ -3277,6 +3277,40 @@ export function autoWinbackEnabled() { return getSetting('winback:auto', '0') ==
 export function setAutoWinback(on) { setSetting('winback:auto', on ? '1' : '0'); return { autoWinback: !!on }; }
 export function getAutoWinbackCap() { return Math.max(0, Math.round(Number(getSetting('winback:cap', '100')) || 0)); }
 export function setAutoWinbackCap(n) { const v = Math.max(0, Math.min(5000, Math.round(Number(n) || 0))); setSetting('winback:cap', String(v)); return { autoWinbackCap: v }; }
+
+// ---------- Bounce-back (Phase 4 #2) ----------
+// A "come back soon" coupon dropped into the customer's wallet the moment they pay — to pull the hard
+// SECOND visit. Default OFF (it discounts a future sale, so it's the owner's margin call). Reuses the
+// exact wallet + expiry-nudge machinery as win-back, but fires on PURCHASE instead of on going quiet.
+// One active at a time per customer, so a daily regular can't stack a pile of ฿10s.
+export function bounceBackEnabled() { return getSetting('bounceback:enabled', '0') === '1'; }
+export function getBounceBackConfig() {
+  return {
+    enabled: bounceBackEnabled(),
+    amount: Math.max(1, Math.round(Number(getSetting('bounceback:amount', '10')) || 10)),
+    days: Math.max(1, Math.min(60, Math.round(Number(getSetting('bounceback:days', '3')) || 3))),
+  };
+}
+export function setBounceBackConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('bounceback:enabled', patch.enabled ? '1' : '0');
+  if (patch.amount != null) setSetting('bounceback:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 10)))));
+  if (patch.days != null) setSetting('bounceback:days', String(Math.max(1, Math.min(60, Math.round(Number(patch.days) || 3)))));
+  return getBounceBackConfig();
+}
+// Best-effort — NEVER throws (must not break a sale). Skips if the customer already holds an active
+// bounce-back, so back-to-back purchases don't stack coupons.
+function issueBounceBack(customerKey) {
+  try {
+    if (!customerKey || !bounceBackEnabled()) return { issued: false };
+    if (customerCoupons(customerKey).some((c) => c.kind === 'bounceback')) return { issued: false, reason: 'already_active' };
+    const cfg = getBounceBackConfig();
+    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cfg.days).d;
+    const label = `กลับมาใน ${cfg.days} วัน ลด ฿${cfg.amount}`;
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'bounceback', ?, ?, ?, 'bounceback')`)
+      .run(customerKey, label, cfg.amount, expiresAt);
+    return { issued: true, label, expiresAt };
+  } catch { return { issued: false, reason: 'error' }; }
+}
 /** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
  *  so it's exact even on UAT where LINE pushes are stubbed). */
 function winbackIssuedThisMonth() {
@@ -4433,6 +4467,9 @@ export function setOrderPaid(ticketId, opts = {}) {
   if (!skipLoyalty) { try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ } }
   if (ticket && ticket.line_user_id) {
     const ahead = aheadCount(ticket);
+    // Phase 4 #2: drop a come-back coupon into their wallet on purchase (dormant unless the owner
+    // enabled it). Mentioned in the confirmation below so it rides the existing push — no extra LINE cost.
+    let bounce = null; try { bounce = issueBounceBack(ticket.line_user_id); } catch { /* never block a payment */ }
     // Order-status progress card (LINE-MAN style): stage 2 = order in, being made.
     let sub = `ชำระเงินเรียบร้อย ฿${order.total} · คิวรอก่อนหน้า ${ahead}`;
     if (loyalty && loyalty.awarded != null) {
@@ -4451,6 +4488,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     } else {
       sub += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
+    if (bounce && bounce.issued) sub += `\n🎁 ${bounce.label} — เก็บไว้ในเมนูคูปองแล้ว ใช้ได้ถึง ${bounce.expiresAt}`;
     pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }

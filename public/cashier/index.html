@@ -4825,6 +4825,19 @@ window.showFeatures=async()=>{
       <input id="winbackCapInp" type="number" min="0" value="${f.autoWinbackCap!=null?f.autoWinbackCap:100}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center" onchange="saveWinbackCap()"></div>`+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>
+          <div><b>คูปองชวนกลับมา (Bounce-back)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.bounceBack&&f.bounceBack.enabled?`เปิดอยู่ — จ่ายเงินเสร็จ ลูกค้า LINE ได้คูปอง <b>ลด ฿${f.bounceBack.amount}</b> เข้ากระเป๋าทันที ใช้ได้ <b>${f.bounceBack.days} วัน</b> ดันให้กลับมาไว (คนละ 1 ใบต่อครั้ง ไม่ซ้อน)`:'ปิดอยู่ — เปิดเพื่อแจกคูปองส่วนลดตอนจ่ายเงิน ดึงลูกค้าให้กลับมาครั้งที่ 2'}</div></div></div>
+        <button class="tgl ${f.bounceBack&&f.bounceBack.enabled?'on':'off'}" style="flex:none;margin-top:2px" onclick="toggleBounceBack(${f.bounceBack&&f.bounceBack.enabled?0:1})" role="switch" aria-checked="${f.bounceBack&&f.bounceBack.enabled?'true':'false'}" aria-label="เปิด/ปิด bounce-back"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">ลด <input id="bbAmtInp" type="number" inputmode="numeric" min="1" max="1000" value="${(f.bounceBack&&f.bounceBack.amount)||10}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> บาท</label>
+        <label class="muted" style="font-size:12.5px">ใช้ได้ภายใน <input id="bbDaysInp" type="number" inputmode="numeric" min="1" max="60" value="${(f.bounceBack&&f.bounceBack.days)||3}" style="width:64px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> วัน</label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveBounceBack()">บันทึก</button>
+      </div>
+    </div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
         <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span><div><b>พักสิทธิ์ลูกค้าไม่มารับ (no-show)</b>
           <div class="muted" style="font-size:12px;margin-top:2px">${f.noshow&&f.noshow.on?`เปิดอยู่ — ไม่มารับครบ <b>${f.noshow.limit}</b> ครั้งใน ${f.noshow.windowDays} วัน ยังสั่งผ่าน LINE ได้แต่<b>ต้องจ่ายก่อน</b> (ไม่ได้เลขคิวจนกว่าจะจ่าย) · ถ้ายังไม่มารับอีกจนครบ <b>${f.noshow.blockLimit}</b> ครั้ง จะ<b>ปิดช่องทางออนไลน์</b> · ซื้อหน้าร้านได้ปกติเสมอ · ครั้งเก่าหมดอายุเองเมื่อพ้นช่วงนับ`:'ปิดอยู่ — เปิดเพื่อให้ลูกค้าที่ไม่มารับซ้ำๆ ต้องจ่ายก่อน และปิดช่องทางออนไลน์ถ้ายังเป็นอีก'}</div></div></div>
         <button class="tgl ${f.noshow&&f.noshow.on?'on':'off'}" style="flex:none;margin-top:2px" aria-label="${f.noshow&&f.noshow.on?'ปิด':'เปิด'}พักสิทธิ์ no-show" onclick="toggleNoshow(${f.noshow&&f.noshow.on?0:1})"></button>
@@ -4905,6 +4918,13 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
+// Bounce-back come-back coupon (Phase 4 #2)
+window.toggleBounceBack=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bounceBack:{enabled:!!on}})});
+    toast(on?'เปิดคูปองชวนกลับมาแล้ว':'ปิดแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.saveBounceBack=async()=>{
+  const bounceBack={ amount:Math.max(1,Math.floor(Number($('bbAmtInp').value)||10)), days:Math.max(1,Math.min(60,Math.floor(Number($('bbDaysInp').value)||3))) };
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bounceBack})}); toast('บันทึกแล้ว — ลด ฿'+bounceBack.amount+' ใช้ได้ '+bounceBack.days+' วัน'); showFeatures(); }catch(e){ toast(err(e)); } };
 // ถาม LINE ตรงๆ ว่า "token ของเซิร์ฟเวอร์นี้เป็นของ OA ไหน" และ "รหัส U… ที่บันทึกไว้เป็นคนของ OA นั้นไหม"
 // — userId ของ LINE ผูกกับ OA เดียว รหัสที่ก๊อปมาจาก OA ทดสอบจึงส่งไม่ได้ตลอดกาล ทั้งที่เพิ่มเพื่อนแล้ว
 window.checkLine=async()=>{
