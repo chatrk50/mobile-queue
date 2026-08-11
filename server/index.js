@@ -125,12 +125,17 @@ app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + prom
 // runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
 app.use((req, res, next) => {
   try {
-    const tok = parseCookies(req).sess;
+    const jar = parseCookies(req);
+    const tok = jar.sess;
     const p = tok ? verifySession(tok) : null;
     if (p && p.staffId) {
       const s = db.prepare('SELECT id, name, role, tenant_id, active FROM staff WHERE id=?').get(p.staffId);
       if (s && s.active) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
     }
+    // A customer's LIFF identity: set once by /api/liff/session after LINE vouches for the
+    // access token, so per-customer reads (history/points) don't re-ask LINE every call.
+    const lp = jar.liff ? verifySession(jar.liff) : null;
+    if (lp && lp.liff) req.liffUser = String(lp.liff);
   } catch { /* ignore bad cookie */ }
   next();
 });
@@ -280,6 +285,23 @@ app.post('/api/staff/logout', (req, res) => {
   res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${secure}`);
   res.json({ ok: true });
 });
+// A customer's LIFF proves identity ONCE per session: LINE vouches for the access token, then we mint
+// a signed cookie so later per-customer reads (history/points/suggestions) skip the LINE round-trip.
+// With LINE stubbed (UAT/dev) there is no LINE to ask — accept the demo id at face value.
+const LIFF_SESSION_DAYS = 30;
+app.post('/api/liff/session', async (req, res) => {
+  let uid = String(req.body?.lineUserId || '').trim();
+  if (LINE_ENABLED) {
+    const verified = await verifyLiffToken(String(req.body?.accessToken || ''));
+    if (!verified) return res.status(401).json({ error: 'line_verify_failed' });
+    uid = verified;  // trust only what LINE confirmed the token belongs to
+  }
+  if (!uid) return res.status(400).json({ error: 'no_customer' });
+  const token = signSession({ liff: uid, exp: Date.now() + LIFF_SESSION_DAYS * 86400 * 1000 });
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `liff=${token}; HttpOnly; Path=/; Max-Age=${LIFF_SESSION_DAYS * 86400}; SameSite=Lax${secure}`);
+  res.json({ ok: true, userId: uid });
+});
 // Who am I (frontend reads this to show the logged-in staff + role).
 // pinOK, not the silent pinValueOK: a wrong explicit PIN here must cost an attempt like everywhere
 // else, otherwise this route is an unthrottled oracle for brute-forcing the legacy admin PIN.
@@ -397,7 +419,13 @@ app.get('/api/tender-recon', (req, res) => {
 // it works as a bearer token — the model the LIFF has always used) or `tel:<phone>`. A phone number
 // is guessable in seconds, so every route keyed by one is staff-only: without this, walking
 // tel:08xxxxxxxx returned strangers' order history, spend, points and birthday.
-const customerKeyOK = (req, key) => !String(key || '').startsWith('tel:') || pinOK(req);
+const customerKeyOK = (req, key) => {
+  const k = String(key || '');
+  if (k.startsWith('tel:')) return pinOK(req);   // phone is guessable in seconds → staff only
+  if (!LINE_ENABLED) return true;                // UAT/dev: no LINE to verify identity against
+  if (pinOK(req)) return true;                   // staff legitimately view a customer's data
+  return !!req.liffUser && req.liffUser === k;   // else must BE that very LINE customer (SEC-H1)
+};
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.

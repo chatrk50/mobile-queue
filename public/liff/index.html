@@ -734,6 +734,13 @@ async function initLiff(){
     localStorage.setItem('demoUid', lineUserId);
     $('liffNote').textContent = 'Test mode (LINE not enabled) — demo user '+lineUserId;
   }
+  // Prove who we are to the server ONCE (LINE vouches for the access token) → signed identity cookie.
+  // Every later per-customer read (history/points/suggestions) rides that cookie (SEC-H1). Awaited so
+  // the cookie exists before the first such read fires.
+  try{
+    let accessToken=null; try{ if(inLine && window.liff) accessToken=liff.getAccessToken(); }catch(e){}
+    await fetch('/api/liff/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,accessToken})});
+  }catch(e){}
 }
 
 // PDPA consent: ask once, remember locally so it never nags, and tell the server so the shop has
