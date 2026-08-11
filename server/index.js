@@ -18,7 +18,10 @@ import generatePayload from 'promptpay-qr';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set('trust proxy', true); // Render is behind a proxy — needed for a real req.ip
+app.set('trust proxy', 1); // Render is behind exactly ONE proxy. Trusting only the last hop means
+// req.ip is the real client IP and a spoofed X-Forwarded-For (which an attacker prepends) is ignored —
+// so the PIN-lockout + rate limiters key off an IP the client can't forge. (`true` trusted the leftmost,
+// attacker-controlled, entry and let XFF rotation bypass the lockout entirely — SEC-C1.)
 // ---- Baseline security headers. A real CSP is off the table while the app ships as two
 // inline-script single-file bundles, but these close the cheap holes: MIME sniffing,
 // clickjacking, referrer leakage, and stray browser features. camera stays self — the
@@ -122,12 +125,17 @@ app.use(express.json({ limit: '2mb' })); // room for uploaded menu photos + prom
 // runs before routes; legacy x-cashier-pin auth is untouched and still works. ----
 app.use((req, res, next) => {
   try {
-    const tok = parseCookies(req).sess;
+    const jar = parseCookies(req);
+    const tok = jar.sess;
     const p = tok ? verifySession(tok) : null;
     if (p && p.staffId) {
       const s = db.prepare('SELECT id, name, role, tenant_id, active FROM staff WHERE id=?').get(p.staffId);
       if (s && s.active) req.staff = { id: s.id, name: s.name, role: s.role, tenantId: s.tenant_id, branchIds: p.branchIds || [] };
     }
+    // A customer's LIFF identity: set once by /api/liff/session after LINE vouches for the
+    // access token, so per-customer reads (history/points) don't re-ask LINE every call.
+    const lp = jar.liff ? verifySession(jar.liff) : null;
+    if (lp && lp.liff) req.liffUser = String(lp.liff);
   } catch { /* ignore bad cookie */ }
   next();
 });
@@ -267,12 +275,32 @@ app.post('/api/staff/login', rateLimit('auth', 20, 60e3), (req, res) => {
   const branchIds = staff.role === 'owner' ? []
     : db.prepare('SELECT branch_id FROM staff_branches WHERE staff_id=?').all(staff.id).map((r) => r.branch_id);
   const token = signSession({ staffId: staff.id, role: staff.role, tenantId: staff.tenant_id, branchIds, exp: Date.now() + SESSION_HOURS * 3600 * 1000 });
-  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax`);
+  // Secure on https (prod) so the session cookie never rides plain HTTP; omitted on local http dev.
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sess=${token}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Lax${secure}`);
   res.json({ ok: true, staff: { id: staff.id, name: staff.name, role: staff.role } });
 });
 app.post('/api/staff/logout', (req, res) => {
-  res.setHeader('Set-Cookie', 'sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sess=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${secure}`);
   res.json({ ok: true });
+});
+// A customer's LIFF proves identity ONCE per session: LINE vouches for the access token, then we mint
+// a signed cookie so later per-customer reads (history/points/suggestions) skip the LINE round-trip.
+// With LINE stubbed (UAT/dev) there is no LINE to ask — accept the demo id at face value.
+const LIFF_SESSION_DAYS = 30;
+app.post('/api/liff/session', async (req, res) => {
+  let uid = String(req.body?.lineUserId || '').trim();
+  if (LINE_ENABLED) {
+    const verified = await verifyLiffToken(String(req.body?.accessToken || ''));
+    if (!verified) return res.status(401).json({ error: 'line_verify_failed' });
+    uid = verified;  // trust only what LINE confirmed the token belongs to
+  }
+  if (!uid) return res.status(400).json({ error: 'no_customer' });
+  const token = signSession({ liff: uid, exp: Date.now() + LIFF_SESSION_DAYS * 86400 * 1000 });
+  const secure = (req.secure || req.get('x-forwarded-proto') === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `liff=${token}; HttpOnly; Path=/; Max-Age=${LIFF_SESSION_DAYS * 86400}; SameSite=Lax${secure}`);
+  res.json({ ok: true, userId: uid });
 });
 // Who am I (frontend reads this to show the logged-in staff + role).
 // pinOK, not the silent pinValueOK: a wrong explicit PIN here must cost an attempt like everywhere
@@ -391,7 +419,13 @@ app.get('/api/tender-recon', (req, res) => {
 // it works as a bearer token — the model the LIFF has always used) or `tel:<phone>`. A phone number
 // is guessable in seconds, so every route keyed by one is staff-only: without this, walking
 // tel:08xxxxxxxx returned strangers' order history, spend, points and birthday.
-const customerKeyOK = (req, key) => !String(key || '').startsWith('tel:') || pinOK(req);
+const customerKeyOK = (req, key) => {
+  const k = String(key || '');
+  if (k.startsWith('tel:')) return pinOK(req);   // phone is guessable in seconds → staff only
+  if (!LINE_ENABLED) return true;                // UAT/dev: no LINE to verify identity against
+  if (pinOK(req)) return true;                   // staff legitimately view a customer's data
+  return !!req.liffUser && req.liffUser === k;   // else must BE that very LINE customer (SEC-H1)
+};
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
@@ -595,7 +629,9 @@ app.post('/api/admin/owner-summary', async (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner "start fresh": wipe TEST transaction data (orders/sales/queue/loyalty/cash/audit) and
-// reset queue numbers, KEEPING all config (menu/stores/staff/settings/recipes/stock/rewards).
+// reset queue numbers, KEEPING config (menu/stores/staff/settings/recipes/suppliers/rewards) and the
+// current stock ON-HAND + costing (ingredients.stock_qty / avg_cost). The transactional stock LEDGER
+// (stock_moves + purchase orders) is cleared with the sales — leaving it behind haunted COGS (ACC-F9).
 // Owner-only + the client requires a typed "CLEAR" confirmation. Irreversible.
 app.post('/api/admin/reset-transactions', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1165,7 +1201,7 @@ app.post('/api/orders/pay-multi', (req, res) => {
 app.post('/api/tickets/:ticketId/pay-partial', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.payPartial(req.params.ticketId, req.body?.amount, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const r = Q.payPartial(req.params.ticketId, req.body?.amount, { actorId: req.staff?.id || null, method: req.body?.method || null, clientToken: req.body?.clientToken || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     if (r.settled) notifyLoyalty(r);
@@ -1210,9 +1246,18 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
-    Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock });
+    // ของเสียบนบิลที่จ่ายแล้ว = ทำใหม่ให้ลูกค้า (เก็บเงินเดิม + บันทึกของเสีย) — NOT a refund/cancel
+    // (CASH-4). Only an UNPAID waste, or an explicit refund/cancel, goes through cancelOrderTicket.
+    const o = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(req.params.ticketId);
+    let result = { ok: true };
+    if (req.body?.kind === 'waste' && o && o.payment_status === 'paid') {
+      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 120) || null, byShop: !!req.body?.byShop });
+      result.wasteRemake = true;
+    } else {
+      Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
+    }
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
-    res.json({ ok: true });
+    res.json(result);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -1685,7 +1730,10 @@ setInterval(() => {
 
 // Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose
 // saved birthday is today. Hourly + once at boot; idempotent per customer per calendar year.
-const birthdaySweep = () => { try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ } };
+const birthdaySweep = () => {
+  try { Q.issueBirthdayCoupons(); } catch { /* best-effort */ }
+  try { Q.nudgeExpiringCoupons(); } catch { /* best-effort — self-gates to once/day after 10:00 */ }
+};
 birthdaySweep();
 setInterval(birthdaySweep, 60 * 60 * 1000);
 

@@ -394,6 +394,24 @@ CREATE TABLE IF NOT EXISTS cash_moves (
   at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_cash_moves_day ON cash_moves(branch_id, at);
+-- Per-leg payment ledger: one row per tender leg (a split bill = 2+ rows), so the drawer/tender
+-- reconciliation is derived from what was ACTUALLY collected per method, not orders.payment_method
+-- (a single column that only kept the LAST method — split-tender cash then vanished). Refunds are
+-- negative rows carrying the method the money was RETURNED in. Backfilled for pre-existing orders.
+CREATE TABLE IF NOT EXISTS order_payments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id     INTEGER NOT NULL,
+  branch_id    INTEGER,
+  method       TEXT NOT NULL,                    -- cash | promptpay | kplus | online | linepay | reward | ...
+  amount       REAL NOT NULL,                    -- + = collected, - = refunded
+  kind         TEXT NOT NULL DEFAULT 'payment',  -- payment | refund
+  client_token TEXT,                             -- idempotency for pay-partial retries (unique when set)
+  actor_id     INTEGER,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_payments_day ON order_payments(branch_id, method, at);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_order_payments_token ON order_payments(client_token) WHERE client_token IS NOT NULL;
 -- Inventory: raw materials/ingredients + a movement log (purchases / stock counts / usage).
 CREATE TABLE IF NOT EXISTS ingredients (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -648,6 +666,8 @@ for (const stmt of [
   // column only marks the moment a cashier forgave the customer, so counting restarts from there.
   `ALTER TABLE customers ADD COLUMN noshow_forgiven_at TEXT`,
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
+  `ALTER TABLE customer_coupons ADD COLUMN nudged_at TEXT`,   // expiry-nudge LINE push sent (once per coupon)
+  `ALTER TABLE stock_moves ADD COLUMN unit_cost REAL`,        // per-unit cost FROZEN at move time → COGS of a closed day never re-prices when new stock is bought (ACC-F1)
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
@@ -759,6 +779,43 @@ try {
                                      ELSE order_items.name END)
              WHERE menu_item_id IS NULL`);
     db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('mig:oi_menu_item_id','1')`).run();
+  }
+} catch { /* pre-migration DB */ }
+
+// Backfill order_payments from existing orders, ONCE. Historical paid orders get a single leg for
+// (payment_method, total-discount) at paid_at; refunded orders get a negative leg at voided_at. This
+// is the best fidelity possible for old data (per-leg splits weren't recorded); NEW orders write real
+// per-leg rows. Guarded by a settings marker so a later manual payment can't be double-counted.
+try {
+  const done = db.prepare(`SELECT value FROM settings WHERE key='mig:order_payments'`).get();
+  if (!done) {
+    db.exec(`INSERT INTO order_payments (order_id, branch_id, method, amount, kind, at)
+             SELECT o.id, o.branch_id, COALESCE(o.payment_method,'cash'), ROUND(o.total - COALESCE(o.discount,0),2), 'payment', o.paid_at
+               FROM orders o
+              WHERE o.paid_at IS NOT NULL AND o.payment_status='paid'
+                AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')`);
+    db.exec(`INSERT INTO order_payments (order_id, branch_id, method, amount, kind, at)
+             SELECT o.id, o.branch_id, COALESCE(o.payment_method,'cash'), -ROUND(o.total - COALESCE(o.discount,0),2), 'refund', o.voided_at
+               FROM orders o
+              WHERE o.void_kind='refund' AND o.voided_at IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='refund')`);
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('mig:order_payments','1')`).run();
+  }
+} catch { /* pre-migration DB */ }
+
+// Backfill stock_moves.unit_cost, ONCE. Historical moves get the ingredient's CURRENT avg_cost — the
+// best available for old rows (their true cost-at-the-time is unrecoverable). New moves freeze the
+// real cost at insert. For a purchase row that carried a total `cost`, derive its unit price.
+try {
+  const done = db.prepare(`SELECT value FROM settings WHERE key='mig:sm_unit_cost'`).get();
+  if (!done) {
+    db.exec(`UPDATE stock_moves SET unit_cost = (
+               SELECT CASE WHEN stock_moves.kind='purchase' AND stock_moves.qty>0 AND stock_moves.cost IS NOT NULL
+                           THEN ROUND(stock_moves.cost / stock_moves.qty, 4)
+                           ELSE i.avg_cost END
+                 FROM ingredients i WHERE i.id = stock_moves.ingredient_id)
+             WHERE unit_cost IS NULL`);
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('mig:sm_unit_cost','1')`).run();
   }
 } catch { /* pre-migration DB */ }
 

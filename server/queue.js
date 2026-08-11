@@ -132,8 +132,16 @@ export function callNext(zoneId, threshold) {
   ).run(next.id);
   db.prepare('UPDATE zones SET last_called = ? WHERE id = ?').run(next.number, zoneId);
 
-  pushStage(next.line_user_id, { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
-    subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
+  // Stage depends on payment: an UNPAID call means "come pay" — showing the full stage-3 bar
+  // (พร้อมรับ) would then REGRESS to stage 2 when the paid push fires minutes later, which reads
+  // as the system going backwards. Paid orders keep the original "ready" presentation.
+  const nextOrder = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(next.id);
+  const nextPaid = !nextOrder || nextOrder.payment_status === 'paid';
+  pushStage(next.line_user_id, nextPaid
+    ? { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+        subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
+    : { stage: 2, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
+        subtitle: 'กรุณามาชำระเงินที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
   evaluateSoonNotifications(zoneId, threshold);
   return { called: next };
@@ -790,7 +798,10 @@ export function dailyReport(branchId = null, dateStr = null) {
             SUM(oi.qty*oi.price) AS revenue
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
+     -- Category comes from the item's pinned catalog id (rename-proof), falling back to name only for
+     -- legacy rows with no menu_item_id. Matching by name meant renaming a menu item restated the
+     -- drink/topping split of every CLOSED day (ACC-F4).
+     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id OR (oi.menu_item_id IS NULL AND mi.name = oi.name)
      WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours')=${TODAY} AND (? IS NULL OR o.branch_id=?)   -- SALES = paid TODAY only (pay-first); optional branch
      GROUP BY oi.name ORDER BY revenue DESC`
   ).all(...B);
@@ -847,7 +858,11 @@ export function dailyReport(branchId = null, dateStr = null) {
     } catch { /* stock module empty */ }
   }
   const ingredientVariance = ingredientActual != null ? Math.round((ingredientActual - ingredientPlan) * 100) / 100 : 0;
-  const packaging = f.packagingPerCup * cups;
+  // Packaging: a PLAN-mode estimate (perCup × cups). In ACTUAL mode the real cups/lids/straws consumed
+  // by sold drinks are already inside cogsActual (their stock 'use' moves fired at payment), so adding
+  // the estimate on top double-counts the whole packaging line (ACC-F2) → 0. A shop that doesn't track
+  // packaging in stock should add it to the recipe so it lands in real COGS.
+  const packaging = ingredientActual != null ? 0 : f.packagingPerCup * cups;
   const freight = perDay(f.freight);              // freight-in belongs to COGS, not to opex
   const cogs = ingredient + packaging + freight;
   const grossProfit = revenue - cogs;
@@ -886,7 +901,16 @@ export function dailyReport(branchId = null, dateStr = null) {
   // takings. The drawer reconciliation already expects it to be gone, but until now it never
   // reached the P&L — so net profit was overstated by exactly the amount spent.
   const drawerPayOut = payOutForDay(branchId || 1, validDay ? dateStr : null);
-  const ebitda = grossProfit - wasteCost - dailyOpex - drawerPayOut;
+  // Delivery-platform commission (Grab/LINE MAN/Shopee take ~30% of each order) is a real cost of the
+  // sale — it was computed for the channel report but never reached the profit line, so net profit was
+  // overstated by the whole fee (ACC-F3). Same basis as channelsReport: net-of-discount × commission%.
+  const commission = Math.round((db.prepare(
+    `SELECT COALESCE(SUM((o.total - COALESCE(o.discount,0)) * COALESCE(c.commission_pct,0) / 100), 0) v
+       FROM orders o LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = COALESCE(?, date('now','+7 hours'))
+        AND (? IS NULL OR o.branch_id = ?)`
+  ).get(dateStr, branchId, branchId).v || 0) * 100) / 100;
+  const ebitda = grossProfit - commission - wasteCost - dailyOpex - drawerPayOut;
   const depreciation = perDay(f.depreciation);
   const ebit = ebitda - depreciation;
   const interest = perDay(f.interest);
@@ -906,7 +930,7 @@ export function dailyReport(branchId = null, dateStr = null) {
     ingredient, ingredientPlan, ingredientActual, ingredientVariance, packaging, freight, cogs, wasteCost,
     grossProfit, grossMargin: revenue ? grossProfit / revenue : 0,
     opexDaily: dailyOpex, opexMonthly: monthlyOpex, opexLines, opexGroups,
-    labor, wagesPlanDaily, laborVariance, drawerPayOut,
+    labor, wagesPlanDaily, laborVariance, drawerPayOut, commission,
     ebitda, depreciation, ebit, interest, preTax, taxRate, incomeTax, fixedDaily,
     netProfit, netMargin: revenue ? netProfit / revenue : 0,
     avgPerCup: cups ? drinkSales / cups : 0,
@@ -1117,22 +1141,36 @@ export function detailedReports({ date = null, branchId = null } = {}) {
 // ---------- Cash drawer / Z-report (end-of-day cash-up) ----------
 const r2 = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
 function cashComponents(branchId, sinceAt) {
-  // Cash physically collected = every order paid by cash in the window — INCLUDING any
-  // later refunded (paid_at persists after a void), so the refund isn't double-removed.
-  const cashIn = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND o.paid_at >= ?`).get(branchId, sinceAt).v || 0;
-  // Cash paid back out = refunds (paid-then-voided) that had been paid by cash.
-  const cashRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?`).get(branchId, sinceAt).v || 0;
+  // Cash IN/OUT come from the per-leg ledger (order_payments), NOT orders.payment_method — a split
+  // bill records a cash leg + a card leg, so cash-half-of-a-split and unsettled partial cash are now
+  // counted (CASH-1). Positive 'payment' legs = collected; negative 'refund' legs = paid back out.
+  // Fallback (defense-in-depth): a paid order with NO leg at all — a raw insert, or a boot before the
+  // backfill ran — is synthesized from payment_method so no money is ever silently dropped. NOT
+  // EXISTS keeps it from double-counting an order that already has a leg.
+  const legCash = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='payment' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  const noLegCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND o.paid_at >= ?
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')`).get(branchId, sinceAt).v || 0;
+  const cashIn = legCash + noLegCash;
+  const legRefund = db.prepare(`SELECT COALESCE(-SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='refund' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
+  const noLegRefund = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.void_kind='refund' AND o.payment_method='cash' AND o.branch_id=? AND o.voided_at >= ?
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='refund')`).get(branchId, sinceAt).v || 0;
+  const cashRefund = legRefund + noLegRefund;
   // Manual drawer movements in the window: pay_in adds cash, pay_out removes it.
   const payIn = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_in' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   const payOut = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM cash_moves WHERE kind='pay_out' AND branch_id=? AND at >= ?`).get(branchId, sinceAt).v || 0;
   // ALL cash taken this Bangkok day, regardless of when the round was opened. cashIn only counts
   // sales made AFTER the round opened; the difference is money rung up before the round existed —
   // the single most common reason "over/short" looks wrong (owner opened the round mid-day).
-  const dayCash = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v
-    FROM orders o WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=?
-      AND date(o.paid_at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const dayCashLeg = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM order_payments
+    WHERE method='cash' AND kind='payment' AND branch_id=? AND date(at,'+7 hours')=date('now','+7 hours')`).get(branchId).v || 0;
+  const dayCashNoLeg = db.prepare(`SELECT COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS v FROM orders o
+    WHERE o.payment_method='cash' AND o.paid_at IS NOT NULL AND o.branch_id=? AND date(o.paid_at,'+7 hours')=date('now','+7 hours')
+      AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')`).get(branchId).v || 0;
+  const dayCash = dayCashLeg + dayCashNoLeg;
   const preRoundCash = r2(Math.max(0, dayCash - cashIn));
   return { cashIn: r2(cashIn), cashRefund: r2(cashRefund), payIn: r2(payIn), payOut: r2(payOut), dayCash: r2(dayCash), preRoundCash };
 }
@@ -1283,13 +1321,22 @@ export function cashSessionDetail(branchId, sessionId) {
   const until = s.closed_at || db.prepare("SELECT datetime('now') t").get().t;
   // Every tender taken while this round was open, grouped by method (what was in the drawer +
   // what came in electronically), so the round's money is fully explained after the fact.
+  // Per-leg ledger: a split bill contributes to EACH method it used (payment legs +, refund legs −),
+  // so cash-half-of-a-split shows under cash and card-half under card — not the whole bill under the
+  // last method (the split-tender reconciliation bug).
   const payments = db.prepare(
-    `SELECT COALESCE(o.payment_method,'other') AS method, COUNT(*) AS orders,
-            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
-       FROM orders o
-      WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
-      GROUP BY method ORDER BY amount DESC`
-  ).all(branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
+    `SELECT method, COUNT(DISTINCT order_id) AS orders, COALESCE(SUM(amount),0) AS amount FROM (
+        SELECT method, order_id, amount FROM order_payments WHERE branch_id=? AND at >= ? AND at <= ?
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'other'), o.id, ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.payment_status='paid' AND o.branch_id=? AND o.paid_at >= ? AND o.paid_at <= ?
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'other'), o.id, -ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.void_kind='refund' AND o.branch_id=? AND o.voided_at >= ? AND o.voided_at <= ?
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='refund')
+      ) GROUP BY method HAVING amount <> 0 ORDER BY amount DESC`
+  ).all(branchId, s.opened_at, until, branchId, s.opened_at, until, branchId, s.opened_at, until).map((p) => ({ ...p, amount: r2(p.amount) }));
   const moves = db.prepare(
     `SELECT kind, amount, remark, at FROM cash_moves WHERE branch_id=? AND at >= ? AND at <= ? ORDER BY at`
   ).all(branchId, s.opened_at, until);
@@ -1620,10 +1667,16 @@ export function recordStockMove(ingredientId, { kind, qty, cost = null, note = n
     q = Math.max(0, q); moveQty = -q; newStock = Math.max(0, round2i(ing.stock_qty - q));
   }
   const exp = (kind === 'purchase' && /^\d{4}-\d{2}-\d{2}$/.test(String(expiry || ''))) ? expiry : null;
+  // Freeze the per-unit cost on the move (ACC-F1): a purchase carries its own unit price; a
+  // consumption/adjustment is valued at the weighted-average cost AS IT STANDS NOW, so a later
+  // purchase that shifts avg_cost can never re-price a day that was already closed.
+  const unitCost = (kind === 'purchase')
+    ? ((q > 0 && Number(cost) > 0) ? round2i(Number(cost) / q) : ing.avg_cost)
+    : ing.avg_cost;
   const tx = db.transaction(() => {
     db.prepare('UPDATE ingredients SET stock_qty=?, avg_cost=? WHERE id=?').run(newStock, newAvg, ingredientId);
-    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, note ? note.toString().slice(0, 200) : null, actorId,
+    db.prepare('INSERT INTO stock_moves (ingredient_id, branch_id, kind, qty, cost, unit_cost, note, actor, supplier_id, expiry, po_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(ingredientId, ing.branch_id, kind, moveQty, kind === 'purchase' ? (Number(cost) || null) : null, unitCost, note ? note.toString().slice(0, 200) : null, actorId,
         kind === 'purchase' ? (Number(supplierId) || null) : null, exp, kind === 'purchase' ? (Number(poId) || null) : null);
   });
   tx();
@@ -2008,16 +2061,18 @@ export function menuMargins() {
  *  cost — an approximation (moves don't snapshot unit cost), stated as such in the UI. */
 export function cogsForDay(date = null) {
   const day = date || db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  // Value consumption at the cost FROZEN on each move (COALESCE to the ingredient's current avg only
+  // for un-backfilled legacy rows), NOT the live avg_cost — so buying stock after a day closed can no
+  // longer restate that day's COGS (ACC-F1). Sum per row (each carries its own unit_cost).
   const rows = db.prepare(
-    `SELECT sm.kind, SUM(sm.qty) q, i.avg_cost
+    `SELECT sm.qty q, COALESCE(sm.unit_cost, i.avg_cost) uc
        FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
-      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')
-      GROUP BY sm.ingredient_id, sm.kind`
+      WHERE date(sm.at,'+7 hours')=? AND sm.kind IN ('use','return')`
   ).all(day);
   // use rows carry negative qty (deduction); return rows positive — netting both gives real consumption.
-  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.avg_cost) || 0), 0);
+  const cogs = rows.reduce((s, r) => s + (-(Number(r.q) || 0)) * (Number(r.uc) || 0), 0);
   const wasteRows = db.prepare(
-    `SELECT SUM(-sm.qty * i.avg_cost) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
+    `SELECT SUM(-sm.qty * COALESCE(sm.unit_cost, i.avg_cost)) v FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
       WHERE date(sm.at,'+7 hours')=? AND sm.kind='waste'`
   ).get(day);
   return { date: day, cogsActual: r2(Math.max(0, cogs)), wasteCost: r2(Math.max(0, wasteRows?.v || 0)) };
@@ -2238,26 +2293,34 @@ export function createCoupon(c = {}) {
   if (!code) throw new Error('code_required');
   if (_couponByCode(code)) throw new Error('code_exists');
   const label = (c.label || '').toString().trim().slice(0, 60) || code;
-  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
-      c.disc_type === 'percent' ? 'percent' : 'baht', Math.max(0, Number(c.disc_value) || 0),
+  const type = c.disc_type === 'percent' ? 'percent' : 'baht';
+  // percent is capped at 100 — a typo like "500%" otherwise silently means "free order"
+  const value = Math.min(type === 'percent' ? 100 : 1e7, Math.max(0, Number(c.disc_value) || 0));
+  const info = db.prepare(`INSERT INTO coupons (code,label,disc_type,disc_value,max_disc,min_spend,valid_from,expires_at,usage_limit,per_customer,stackable,audience,valid_days,active)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(code, label,
+      type, value,
       Math.max(0, Number(c.max_disc) || 0), Math.max(0, Number(c.min_spend) || 0),
       (c.valid_from || null) && String(c.valid_from).slice(0, 10),
       (c.expires_at || null) && String(c.expires_at).slice(0, 10),
-      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all');
+      Math.max(0, parseInt(c.usage_limit) || 0), Math.max(0, parseInt(c.per_customer ?? 1)), c.stackable ? 1 : 0, c.audience === 'new' ? 'new' : 'all',
+      // days-after-receipt expiry — used by claim links AND targeted sends (sendCampaign reads it)
+      Math.max(0, Math.min(365, parseInt(c.valid_days) || 0)));
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(info.lastInsertRowid);
 }
 export function updateCoupon(id, c = {}) {
   const cur = db.prepare('SELECT * FROM coupons WHERE id=?').get(id); if (!cur) throw new Error('coupon_not_found');
   const g = (k, d) => (c[k] != null ? c[k] : d);
-  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,active=? WHERE id=?`)
-    .run((g('label', cur.label) || '').toString().slice(0, 60), c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type),
-      Math.max(0, Number(g('disc_value', cur.disc_value)) || 0), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
+  const newType = c.disc_type === 'percent' ? 'percent' : (c.disc_type === 'baht' ? 'baht' : cur.disc_type);
+  db.prepare(`UPDATE coupons SET label=?,disc_type=?,disc_value=?,max_disc=?,min_spend=?,valid_from=?,expires_at=?,usage_limit=?,per_customer=?,stackable=?,audience=?,valid_days=?,active=? WHERE id=?`)
+    .run((g('label', cur.label) || '').toString().slice(0, 60), newType,
+      Math.min(newType === 'percent' ? 100 : 1e7, Math.max(0, Number(g('disc_value', cur.disc_value)) || 0)), Math.max(0, Number(g('max_disc', cur.max_disc)) || 0),
       Math.max(0, Number(g('min_spend', cur.min_spend)) || 0),
       (c.valid_from !== undefined ? (c.valid_from ? String(c.valid_from).slice(0, 10) : null) : cur.valid_from),
       (c.expires_at !== undefined ? (c.expires_at ? String(c.expires_at).slice(0, 10) : null) : cur.expires_at),
       Math.max(0, parseInt(g('usage_limit', cur.usage_limit)) || 0), Math.max(0, parseInt(g('per_customer', cur.per_customer))),
-      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')), c.active != null ? (c.active ? 1 : 0) : cur.active, id);
+      c.stackable != null ? (c.stackable ? 1 : 0) : cur.stackable, (c.audience != null ? (c.audience === 'new' ? 'new' : 'all') : (cur.audience || 'all')),
+      Math.max(0, Math.min(365, parseInt(g('valid_days', cur.valid_days)) || 0)),
+      c.active != null ? (c.active ? 1 : 0) : cur.active, id);
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 export function deleteCoupon(id) { db.prepare('DELETE FROM coupons WHERE id=?').run(Number(id)); return { ok: true }; }
@@ -2504,13 +2567,22 @@ export function applyCouponToOrder(ticketId, code, customerKey = null) {
 export function tenderRecon({ date = null, branchId = null } = {}) {
   const DAY = "COALESCE(?, date('now','+7 hours'))";
   const BR = "(? IS NULL OR o.branch_id = ?)";
+  // Net-of-discount takings per tender code, split across each method a bill actually used. Attributed
+  // by the ORDER's paid_at day (JOIN to orders) — NOT the leg's own timestamp — so a bill partially
+  // paid before midnight and settled after lands entirely on its settlement day, matching the revenue
+  // report exactly. Only PAID orders' payment legs count (refunds are a separate report). Fallback
+  // synthesizes a leg for any paid order that has none (raw insert / pre-backfill).
   const rows = db.prepare(
-    `SELECT COALESCE(o.payment_method,'unspecified') AS code, COUNT(*) AS orders,
-            COALESCE(SUM(o.total - COALESCE(o.discount,0)),0) AS amount
-       FROM orders o
-      WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND ${BR}
-      GROUP BY code`
-  ).all(date, branchId, branchId);
+    `SELECT code, COUNT(DISTINCT order_id) AS orders, COALESCE(SUM(amount),0) AS amount FROM (
+        SELECT p.method AS code, p.order_id, p.amount
+          FROM order_payments p JOIN orders o ON o.id=p.order_id
+         WHERE p.kind='payment' AND o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND (? IS NULL OR o.branch_id = ?)
+        UNION ALL
+        SELECT COALESCE(o.payment_method,'unspecified'), o.id, ROUND(o.total-COALESCE(o.discount,0),2)
+          FROM orders o WHERE o.payment_status='paid' AND date(o.paid_at,'+7 hours') = ${DAY} AND (? IS NULL OR o.branch_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM order_payments p WHERE p.order_id=o.id AND p.kind='payment')
+      ) GROUP BY code`
+  ).all(date, branchId, branchId, date, branchId, branchId);
   const byCode = Object.fromEntries(rows.map((r) => [r.code, r]));
   const tenders = listTenders();
   const lines = tenders.map((t) => {
@@ -3639,6 +3711,31 @@ export function awardPoints(orderId) {
 /** Issue this year's birthday coupon (free drink, value/expiry from the birthday template) to every
  *  customer whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic
  *  sweep; idempotent per customer per calendar year. */
+/** Expiry nudge: once a day (after 10:00 BKK), remind holders of unused wallet coupons that
+ *  expire within `coupon:nudge_days` days (default 2, 0 = off). One push per coupon, ever
+ *  (nudged_at), capped per run so a big backlog can't blow the LINE message budget. */
+export function nudgeExpiringCoupons() {
+  const days = Math.max(0, Math.min(14, parseInt(getSetting('coupon:nudge_days', '2')) || 0));
+  if (!days) return { nudged: 0 };
+  const now = db.prepare(`SELECT date(datetime('now','+7 hours')) d, CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get();
+  if (now.h < 10) return { nudged: 0 };                                       // never push at night
+  if (getSetting('coupon:nudge_last_day', '') === now.d) return { nudged: 0 }; // once per day
+  const rows = db.prepare(
+    `SELECT id, customer_key, label, expires_at FROM customer_coupons
+      WHERE used_at IS NULL AND state != 'cancelled' AND nudged_at IS NULL
+        AND expires_at >= ? AND expires_at <= date(?, '+${days} days')
+        AND customer_key LIKE 'U%' LIMIT 60`).all(now.d, now.d);
+  setSetting('coupon:nudge_last_day', now.d);
+  const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  for (const r of rows) {
+    db.prepare(`UPDATE customer_coupons SET nudged_at=datetime('now') WHERE id=?`).run(r.id);
+    pushQueue(r.customer_key,
+      `⏰ คูปอง "${r.label}" ของคุณจะหมดอายุ ${r.expires_at} นี้แล้วนะคะ\n` +
+      `อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛` + (base ? `\nสั่งเลย: ${base}/liff/` : ''), null);
+  }
+  return { nudged: rows.length };
+}
+
 export function issueBirthdayCoupons() {
   const tpl = couponTemplate('birthday');
   if (!loyaltyEnabled() || !tpl.on) return { issued: 0 };
@@ -4003,10 +4100,29 @@ export function createOrder(zoneId, items, opts = {}) {
   // Cashier lines keep the submitted price on purpose: a till operator legitimately overrides
   // (staff drink, replacement cup, agreed discount) and is authenticated, PIN-gated and audited.
   if (source === 'customer') {
+    // A sold-out drink was orderable + payable via reorder / stale cart because catalogPrice only
+    // checked active+enabled, never soldout or BOM stock (CUS-C2). The disabled dish-card was the
+    // ONLY guard. Re-check both here — the same server-side gate that re-prices the line.
+    const makeable = menuMakeable();
+    const soldByBranch = new Map(
+      db.prepare('SELECT item_id, soldout FROM branch_menu WHERE branch_id=?').all(zone.store_id).map((r) => [r.item_id, r.soldout])
+    );
+    const needByItem = new Map();   // cumulative qty per item across the cart (2 lines of the same drink)
     for (const it of lines) {
+      const base = String(it.name || '').split(' · ')[0].trim();
       const p = catalogPrice(it.name, { channelId, branchId: zone.store_id });
       if (p == null) throw new Error('item_unavailable');
       it.price = p;
+      const mi = db.prepare('SELECT id, soldout FROM menu_items WHERE name=? AND active=1').get(base);
+      if (mi) {
+        const soldout = soldByBranch.has(mi.id) ? soldByBranch.get(mi.id) : mi.soldout;
+        if (soldout) throw new Error('item_soldout');
+        if (makeable.has(mi.id)) {
+          const need = (needByItem.get(mi.id) || 0) + (Number(it.qty) || 1);
+          needByItem.set(mi.id, need);
+          if (makeable.get(mi.id) < need) throw new Error('item_soldout');
+        }
+      }
     }
   }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
@@ -4170,8 +4286,25 @@ export function assignQueueNumber(ticketId) {
 /** Cashier marks a ticket's order paid (collected cash / PromptPay at the counter).
  *  opts.actorId = staff who took payment; opts.method = cash|promptpay|slip|other.
  *  Under the pay-first model this is also what ISSUES the queue number. */
+/** Record one tender leg (a split bill = several rows). kind='payment' stores +amount, 'refund'
+ *  stores -amount. A client_token makes a retried leg idempotent (pay-partial double-tap on flaky
+ *  wifi). Returns true if a row was written, false if it was a duplicate token. */
+function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, kind = 'payment', actorId = null, clientToken = null }) {
+  const amt = Math.round(Math.abs(Number(amount) || 0) * 100) / 100;
+  if (!amt) return false;
+  try {
+    const r = db.prepare(
+      `INSERT INTO order_payments (order_id, branch_id, method, amount, kind, client_token, actor_id) VALUES (?,?,?,?,?,?,?)`
+    ).run(orderId, branchId, method || 'cash', kind === 'refund' ? -amt : amt, kind === 'refund' ? 'refund' : 'payment', clientToken, actorId);
+    return r.changes > 0;
+  } catch (e) {
+    if (String(e.message || '').includes('UNIQUE')) return false;   // duplicate token = already applied, not an error
+    throw e;
+  }
+}
+
 export function setOrderPaid(ticketId, opts = {}) {
-  const { actorId = null, method = null, skipLoyalty = false } = opts;
+  const { actorId = null, method = null, skipLoyalty = false, _skipLeg = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   // Idempotent: an already-paid order returns its existing result unchanged, so a retried
@@ -4188,6 +4321,9 @@ export function setOrderPaid(ticketId, opts = {}) {
   const paidNow = db.prepare(`UPDATE orders SET payment_status='paid', paid_at=datetime('now'), paid_by=?, payment_method=COALESCE(?, payment_method), paid_amount=ROUND(total - COALESCE(discount,0), 2) WHERE id=? AND payment_status NOT IN ('paid','void')`)
     .run(actorId, method, order.id);
   if (!paidNow.changes) throw new Error('order_void');
+  // Record the tender leg for the drawer/tender reconciliation. Skipped when called from payPartial's
+  // settle (the partial legs already cover the full net — else the settling amount is double-counted).
+  if (!_skipLeg) recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: order.total - (order.discount || 0), kind: 'payment', actorId });
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
@@ -4244,7 +4380,7 @@ export function payMulti(ticketIds, opts = {}) {
  *  covers the net (total − discount), settle in full via setOrderPaid (issue queue number etc.).
  *  Returns the running paid + remaining so the cashier keeps collecting until the balance is 0. */
 export function payPartial(ticketId, amount, opts = {}) {
-  const { actorId = null, method = null } = opts;
+  const { actorId = null, method = null, clientToken = null } = opts;
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   if (amt <= 0) throw new Error('bad_amount');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4252,18 +4388,30 @@ export function payPartial(ticketId, amount, opts = {}) {
   if (order.payment_status === 'paid') return { ok: true, settled: true, alreadyPaid: true, remaining: 0 };
   if (order.payment_status === 'void') throw new Error('order_void');
   const net = Math.round(((order.total || 0) - (order.discount || 0)) * 100) / 100;
-  const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
-  if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
-    // both writes or neither: a throw inside setOrderPaid must not leave paid_amount=net on an unpaid order
-    const r = db.transaction(() => {
+  // Leg + paid_amount move atomically. Record the tender leg FIRST: with a clientToken, a retried tap
+  // (flaky wifi) inserts a duplicate token → recordPaymentLeg returns false → we return the current
+  // state without re-accumulating (CASH-3: a double-tap used to settle the bill for half the money).
+  return db.transaction(() => {
+    // The leg records only the money the drawer KEEPS: on an overpaying final slice the change is
+    // handed back, so cap the leg at the remaining balance (else cash is over by the change).
+    const remaining = Math.round((net - (order.paid_amount || 0)) * 100) / 100;
+    const applied = Math.min(amt, Math.max(0, remaining));
+    const legWritten = recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: applied, kind: 'payment', actorId, clientToken });
+    if (clientToken && !legWritten) {
+      const cur = db.prepare('SELECT paid_amount, payment_status FROM orders WHERE id=?').get(order.id);
+      const settled = cur.payment_status === 'paid';
+      return { ok: true, settled, duplicate: true, paid: cur.paid_amount || 0, remaining: settled ? 0 : Math.round((net - (cur.paid_amount || 0)) * 100) / 100 };
+    }
+    const newPaid = Math.round(((order.paid_amount || 0) + amt) * 100) / 100;
+    if (newPaid >= net - 0.001) {                 // covered (1-satang slack) → settle fully
       db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
-      return setOrderPaid(ticketId, { actorId, method });
-    })();
-    return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
-  }
-  db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
-  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'partial', amount: amt, actor: actorId, meta: { method: method || 'cash', paid: newPaid, net } });
-  return { ok: true, settled: false, paid: newPaid, remaining: Math.round((net - newPaid) * 100) / 100 };
+      const r = setOrderPaid(ticketId, { actorId, method, _skipLeg: true });   // leg already recorded above
+      return { ok: true, settled: true, paid: net, remaining: 0, change: Math.round((newPaid - net) * 100) / 100, code: r.code || null, number: r.number || null };
+    }
+    db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(newPaid, order.id);   // balance remains → stay unpaid
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'partial', amount: amt, actor: actorId, meta: { method: method || 'cash', paid: newPaid, net } });
+    return { ok: true, settled: false, paid: newPaid, remaining: Math.round((net - newPaid) * 100) / 100 };
+  })();
 }
 
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
@@ -4333,6 +4481,11 @@ export function setOrderDiscount(ticketId, { amount, reason = null, actorId = nu
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'void') throw new Error('order_void');
+  // A discount AFTER payment silently erased revenue + expected cash (the money was already in the
+  // drawer). Post-payment price changes must go through refund + re-ring. The UI hides the button
+  // on a paid card, but a two-till stale-card race could still reach here (CASH-2). Reward/lucky/
+  // birthday redemptions all guard `paid` before calling this, so they're unaffected.
+  if (order.payment_status === 'paid') throw new Error('order_already_paid');
   let amt = Math.max(0, Number(amount) || 0);
   amt = Math.min(amt, order.total);
   amt = Math.round(amt * 100) / 100;
@@ -4471,6 +4624,39 @@ function returnStockForOrder(order) {
     }
   } catch { /* stock return must never break a void */ }
 }
+/** ของเสีย + ทำใหม่ on a PAID order (CASH-4). The drink was made, spoiled, and is being remade —
+ *  so the SALE stands (revenue kept, drawer untouched) and the wasted first attempt is booked as a
+ *  waste cost: its recipe ingredients are posted as 'waste' stock moves (a second consumption on top
+ *  of the sale's). byShop only flavours the reason (ความผิดร้าน vs ลูกค้า) — the money is identical
+ *  either way. Does NOT cancel the ticket. Returns the wasted cup count + ingredient cost. */
+export function recordWaste(ticketId, { reason = null, byShop = false, actorId = null } = {}) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status !== 'paid') throw new Error('order_not_paid');   // waste-of-unpaid = cancel-with-waste path
+  const code = db.prepare('SELECT code FROM tickets WHERE id=?').get(order.ticket_id)?.code || ('#' + order.id);
+  const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
+  let cups = 0, cost = 0;
+  const rsn = (byShop ? 'ของเสีย (ความผิดร้าน)' : 'ของเสีย (ไม่ใช่ความผิดร้าน)') + (reason ? ` — ${String(reason).slice(0, 120)}` : '');
+  db.transaction(() => {
+    for (const it of items) {
+      cups += Number(it.qty) || 1;
+      let miId = it.menu_item_id;
+      if (!miId) { const base = String(it.name).split(' · ')[0]; miId = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base)?.id; }
+      if (!miId) continue;
+      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(miId)) {
+        const q = (Number(r.qty) || 0) * (Number(it.qty) || 1);
+        if (q > 0) try {
+          const ing = db.prepare('SELECT avg_cost FROM ingredients WHERE id=?').get(r.ingredient_id);
+          cost += q * (Number(ing?.avg_cost) || 0);
+          recordStockMove(r.ingredient_id, { kind: 'waste', qty: q, note: 'ของเสีย/ทำใหม่ ' + code, actorId });
+        } catch { /* a missing ingredient must never block booking the waste */ }
+      }
+    }
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'waste_remake', amount: order.total, actor: actorId, meta: { reason: rsn, byShop, cups } });
+  })();
+  return { ok: true, cups, cost: Math.round(cost * 100) / 100, byShop, reason: rsn };
+}
+
 /** Undo an order's loyalty effects when it's voided: returns redeemed stamps to the customer
  *  and removes any stamps it earned, keeping the ledger consistent. Returns net points returned
  *  to the ticket's own customer (positive = points given back). */
@@ -4502,7 +4688,7 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
 }
 
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null, kind: kindOpt = null, restock = false } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod = null } = opts;
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4530,7 +4716,13 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
     // if the drink wasn't already served. Once served, the product cost is incurred and the free
     // drink was handed over, so points are never returned (owner rule).
     const pts = (order && t.status !== 'served' && !alreadyVoid) ? reverseLoyaltyForOrder(order.id, t.line_user_id) : 0;
-    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts } });
+    // Refund tender leg: the money left the drawer in refundMethod (the cashier says HOW it was
+    // returned — a K PLUS sale can be refunded in cash). Defaults to the original method. This is
+    // what makes a cash refund of a non-cash sale reduce the drawer (CASH-5).
+    if (order && wasPaid && kind === 'refund' && !alreadyVoid) {
+      recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: refundMethod || order.payment_method || 'cash', amount: order.total - (order.discount || 0), kind: 'refund', actorId });
+    }
+    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts, refundMethod: (kind === 'refund' ? (refundMethod || order.payment_method || 'cash') : undefined) } });
     db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
     return pts;
   })();
@@ -4568,6 +4760,16 @@ export function recoverOrderTicket(ticketId, opts = {}) {
     // created_at is refreshed so the stale-pending sweep doesn't instantly re-void the ticket
     // (its original created_at is already past the timeout) — and the customer re-queues from now.
     db.prepare(`UPDATE tickets SET status=?, closed_at=NULL, cancel_requested=0, created_at=datetime('now') WHERE id=?`).run(backTo, ticketId);
+    // The void handed the coupon back; the recovered order still carries its discount, so
+    // re-consume the code coupon (best-effort) or the discount would be double-spendable.
+    const cm = /คูปอง (\S+)/.exec(order.discount_reason || '');
+    if (cm && !db.prepare('SELECT 1 FROM coupon_uses WHERE order_id=?').get(order.id)) {
+      const cp = db.prepare('SELECT id, usage_limit, used_count FROM coupons WHERE UPPER(code)=UPPER(?)').get(cm[1]);
+      if (cp && db.prepare('UPDATE coupons SET used_count=used_count+1 WHERE id=? AND (usage_limit<=0 OR used_count<usage_limit)').run(cp.id).changes) {
+        db.prepare('INSERT INTO coupon_uses (coupon_id, order_id, customer_key, discount) VALUES (?,?,?,?)')
+          .run(cp.id, order.id, t.line_user_id || t.customer_key || null, order.discount || 0);
+      }
+    }
     logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'recover', amount: order.total, actor: actorId, meta: { was: order.void_reason || null } });
   })();
   if (t.line_user_id) {
@@ -4586,10 +4788,15 @@ export function recoverOrderTicket(ticketId, opts = {}) {
  *  price tiers, channels, tenders. Used once after test runs before real trading begins.
  *  Atomic; returns the row count removed per table. */
 export function clearTransactions() {
-  // order matters for FKs: order_items → orders → tickets; the rest are independent.
-  // customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset that deletes customers
-  // but left their wallet coupons behind kept those coupons REDEEMABLE with no owner (audit #8).
-  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  // order matters for FKs: order_items → orders → tickets; purchase_order_lines → purchase_orders;
+  // the rest are independent. customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset
+  // that deleted customers but left their wallet coupons behind kept those coupons REDEEMABLE with
+  // no owner (audit #8). stock_moves + purchase_orders ride along too (ACC-F9): leaving the stock
+  // LEDGER behind while deleting the sales it belonged to haunted every day's COGS forever with
+  // "cost of goods" that had no revenue. We clear the transactional ledger but KEEP the current
+  // on-hand (ingredients.stock_qty) and weighted-avg cost — physical stock + costing are config-like
+  // and survive the reset, so COGS simply starts clean from the current inventory.
+  const tables = ['order_items', 'orders', 'tickets', 'order_payments', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips', 'purchase_order_lines', 'purchase_orders', 'stock_moves'];
   return db.transaction(() => {
     const removed = {};
     for (const t of tables) {
@@ -4617,13 +4824,16 @@ export function sweepStalePending({ actorId = null } = {}) {
     for (const r of rows) {
       db.prepare(`UPDATE orders SET payment_status='void', void_kind='void', void_reason='auto: หมดเวลาชำระ', voided_at=datetime('now'), voided_by=? WHERE id=?`).run(actorId, r.order_id);
       db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(r.id);
+      // Same reversal as a manual void: hand back the wallet coupon and the code-coupon
+      // quota/allowance — a timed-out order used to burn them permanently.
+      try { reverseLoyaltyForOrder(r.order_id, r.line_user_id); } catch { /* never break the sweep */ }
       logSaleEvent({ branchId: r.branch_id, ticketId: r.id, orderId: r.order_id, type: 'void', amount: r.total, actor: actorId, meta: { reason: 'auto_timeout' } });
       zones.add(r.zone_id);
     }
   })();
   // Best-effort: tell each customer their unpaid order expired (graceful no-op without a token).
   for (const r of rows) {
-    if (r.line_user_id) pushQueue(r.line_user_id, '⌛ ออเดอร์ของคุณหมดเวลาชำระและถูกยกเลิกอัตโนมัติ\nสั่งใหม่ได้ตลอดเลยค่ะ 🙂', null);
+    if (r.line_user_id) pushQueue(r.line_user_id, '⌛ ออเดอร์ของคุณหมดเวลาชำระและถูกยกเลิกอัตโนมัติ\nยังต้องการอยู่ไหมคะ? แจ้งพนักงานที่ร้านให้กู้คืนออเดอร์เดิมได้เลย หรือสั่งใหม่ได้ตลอดค่ะ 🙂', null);
   }
   return { voided: rows.length, zones: [...zones] };
 }
@@ -4824,5 +5034,13 @@ export function ticketView(ticketId) {
     // Lucky-number prize. Only present on a winning ticket; the LIFF shows the congratulations
     // sheet while state is 'won' and the order is still unpaid (a paid order can't be discounted).
     lucky: t.lucky_state ? { state: t.lucky_state, value: t.lucky_value || 0, number: getLuckyNumber() } : null,
+    // PAY-H2: the REAL auto-void moment (ticket created_at + pending:void_min), as epoch ms, so the
+    // LIFF's QR countdown reflects true time left even after a reload/app-switch — not a fresh 30:00
+    // that lies. Only while the order is still unpaid & auto-void is armed. sweepStalePending keys off
+    // t.created_at (stored UTC), so we parse it as UTC here.
+    payDeadline: (['pending', 'waiting'].includes(t.status) && o && o.payment_status !== 'paid'
+                  && getPendingVoidMinutes() > 0 && t.created_at)
+      ? Date.parse(String(t.created_at).replace(' ', 'T') + 'Z') + getPendingVoidMinutes() * 60000
+      : null,
   };
 }

@@ -80,11 +80,11 @@ ok(near(p.cogs, p.ingredient + p.packaging), `INVARIANT P&L COGS == ingredient+p
 ok(near(p.grossProfit, rep.revenue - p.cogs), `INVARIANT P&L grossProfit == revenue−COGS (${p.grossProfit})`);
 const dailyOpex = (f.rent + f.wages + f.utilities + f.supplies + f.marketing) / f.daysPerMonth;
 ok(near(p.opexDaily, dailyOpex), `INVARIANT P&L opexDaily == Σopex/days (${p.opexDaily})`);
-ok(near(p.netProfit, p.grossProfit - p.opexDaily - p.wasteCost), `INVARIANT P&L netProfit == grossProfit−opexDaily−waste (${p.netProfit})`);
+ok(near(p.netProfit, p.grossProfit - p.commission - p.opexDaily - p.wasteCost), `INVARIANT P&L netProfit == grossProfit−opexDaily−waste (${p.netProfit})`);
 ok(near(p.grossMargin, rep.revenue ? p.grossProfit / rep.revenue : 0), `INVARIANT P&L grossMargin == grossProfit/revenue (${p.grossMargin})`);
 // Full statement chain: gross → EBITDA → EBIT → pre-tax → net. Every step must be exactly the
 // step above minus one named cost, and the opex groups must add back up to the opex total.
-ok(near(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily - p.drawerPayOut), `INVARIANT EBITDA == gross−waste−opex−drawerPayOut (${p.ebitda})`);
+ok(near(p.ebitda, p.grossProfit - p.commission - p.wasteCost - p.opexDaily - p.drawerPayOut), `INVARIANT EBITDA == gross−waste−opex−drawerPayOut (${p.ebitda})`);
 ok(near(p.ebit, p.ebitda - p.depreciation), `INVARIANT EBIT == EBITDA−depreciation (${p.ebit})`);
 ok(near(p.preTax, p.ebit - p.interest), `INVARIANT preTax == EBIT−interest (${p.preTax})`);
 ok(near(p.netProfit, p.preTax - p.incomeTax), `INVARIANT netProfit == preTax−tax (${p.netProfit})`);
@@ -102,7 +102,7 @@ ok(near(p.fixedDaily, p.opexDaily + p.depreciation + p.interest), `INVARIANT fix
   ok(near(p2.netProfit, p2.preTax - p2.incomeTax), 'net profit still closes the chain with every line switched on');
   Q.setFinanceSettings({ depreciation: 0, interest: 0, taxPct: 0, freight: 0 });
   const p3 = Q.dailyReport().pnl;
-  ok(near(p3.netProfit, before ? p3.grossProfit - p3.opexDaily - p3.wasteCost : 0), 'with the new lines at 0 the P&L is byte-identical to the old formula');
+  ok(near(p3.netProfit, before ? p3.grossProfit - p3.commission - p3.opexDaily - p3.wasteCost : 0), 'with the new lines at 0 the P&L is byte-identical to the old formula');
 }
 
 // ---- Two reporting defects found in the back-office audit: the hourly chart summed GROSS while
@@ -120,7 +120,7 @@ console.log('\n== Report consistency: hourly net + drawer pay-out ==');
   const after = Q.dailyReport().pnl;
   ok(near(after.drawerPayOut, before.drawerPayOut + 500), `INVARIANT a drawer pay-out is reported in the P&L (${after.drawerPayOut})`);
   ok(near(after.netProfit, before.netProfit - 500), `INVARIANT ฿500 out of the drawer reduces net profit by exactly ฿500 (${before.netProfit} → ${after.netProfit})`);
-  ok(near(after.ebitda, after.grossProfit - after.wasteCost - after.opexDaily - after.drawerPayOut), 'INVARIANT the pay-out sits in the EBITDA chain, not bolted on after tax');
+  ok(near(after.ebitda, after.grossProfit - after.commission - after.wasteCost - after.opexDaily - after.drawerPayOut), 'INVARIANT the pay-out sits in the EBITDA chain, not bolted on after tax');
   // Remove the probe: a pay-out also lowers expected drawer cash, which would skew the cash-drawer
   // fixture below. (That coupling is itself the proof the two views share one source of truth.)
   db.prepare("DELETE FROM cash_moves WHERE remark='ซื้อน้ำแข็ง (ทดสอบ)'").run();
@@ -1880,7 +1880,7 @@ console.log('\n== Finance report ties out ==');
   // 3) P&L arithmetic identities — every subtotal derives from its parts, no hidden drift
   ok(near2(p.cogs, p.ingredient + p.packaging + p.freight), 'INVARIANT COGS = ingredient + packaging + freight');
   ok(near2(p.grossProfit, rep.revenue - p.cogs), 'INVARIANT gross profit = revenue − COGS');
-  ok(near2(p.ebitda, p.grossProfit - p.wasteCost - p.opexDaily - p.drawerPayOut), 'INVARIANT EBITDA = GP − waste − opex − drawer pay-outs');
+  ok(near2(p.ebitda, p.grossProfit - p.commission - p.wasteCost - p.opexDaily - p.drawerPayOut), 'INVARIANT EBITDA = GP − waste − opex − drawer pay-outs');
   ok(near2(p.netProfit, p.preTax - p.incomeTax), 'INVARIANT net profit = pre-tax − income tax');
   // 4) Actual-over-plan: with recipes deducting stock in this suite, the P&L ingredient line must
   //    BE the stock ledger figure (not the % guess), and the variance must be the difference.
@@ -1891,6 +1891,56 @@ console.log('\n== Finance report ties out ==');
   } else {
     ok(near2(p.ingredient, p.ingredientPlan), 'INVARIANT with no stock moves the P&L keeps the planned % figure');
   }
+}
+
+// ── Phase 1c accounting fixes (ACC-F1..F4) ─────────────────────────────────────
+const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
+{
+  // ACC-F1: buying stock AFTER a day closed must NOT restate that day's COGS (frozen unit_cost).
+  const ing = Q.addIngredient({ name: 'F1_milk', unit: 'kg', costPrice: 20 });
+  Q.recordStockMove(ing.id, { kind: 'purchase', qty: 10, cost: 200 });   // 10kg @20 → avg 20
+  Q.recordStockMove(ing.id, { kind: 'use', qty: 2 });                    // consume 2 @ frozen 20
+  const cogsBefore = Q.cogsForDay().cogsActual;
+  Q.recordStockMove(ing.id, { kind: 'purchase', qty: 10, cost: 600 });   // avg jumps toward ~46.7
+  const cogsAfter = Q.cogsForDay().cogsActual;
+  ok(accNear2(cogsBefore, cogsAfter), `INVARIANT ACC-F1 buying stock later does NOT restate a closed day's COGS (${cogsBefore} vs ${cogsAfter})`);
+  const uc = db.prepare(`SELECT unit_cost FROM stock_moves WHERE ingredient_id=? AND kind='use' ORDER BY id DESC LIMIT 1`).get(ing.id).unit_cost;
+  ok(accNear2(uc, 20), `INVARIANT ACC-F1 the 'use' move froze its unit_cost at 20 (got ${uc})`);
+}
+{
+  // ACC-F2: in actual mode packaging is inside cogsActual → the P&L packaging line is 0 (no double count).
+  const pr = Q.dailyReport().pnl;
+  if (pr.ingredientActual != null) ok(pr.packaging === 0, `INVARIANT ACC-F2 actual mode charges packaging once (line=${pr.packaging})`);
+  ok(accNear2(pr.cogs, pr.ingredient + pr.packaging + pr.freight), 'INVARIANT ACC-F2 COGS = ingredient + packaging + freight');
+  // ACC-F3: platform commission is exposed and sits in the EBITDA chain (chain identity checked above).
+  ok(typeof pr.commission === 'number' && pr.commission >= 0, `INVARIANT ACC-F3 P&L exposes a commission line (${pr.commission})`);
+}
+{
+  // ACC-F4: renaming a menu item must NOT restate a closed day's drink/topping split (join by id).
+  const rn = db.prepare(`SELECT mi.id, mi.name FROM menu_items mi JOIN order_items oi ON oi.menu_item_id=mi.id
+                          JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' AND mi.category='drink' LIMIT 1`).get();
+  if (rn) {
+    const before = Q.dailyReport().pnl.drinkSales;
+    db.prepare(`UPDATE menu_items SET name=? WHERE id=?`).run(rn.name + ' (สูตรใหม่)', rn.id);
+    const after = Q.dailyReport().pnl.drinkSales;
+    db.prepare(`UPDATE menu_items SET name=? WHERE id=?`).run(rn.name, rn.id);   // restore
+    ok(accNear2(before, after), `INVARIANT ACC-F4 renaming a menu item does not restate closed-day drink sales (${before} vs ${after})`);
+  }
+}
+{
+  // CASH-4: ของเสีย + ทำใหม่ on a PAID order keeps the money (revenue + drawer untouched) and books
+  // a waste cost — it must NOT become a refund/void.
+  const zc = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(zc.ticket.id, { method: 'cash' });
+  const revBefore = Q.dailyReport().revenue;
+  const cashBefore = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM order_payments WHERE method='cash' AND kind='payment'`).get().v;
+  const wr = Q.recordWaste(zc.ticket.id, { byShop: true, reason: 'ทำหก' });
+  const oRow = db.prepare('SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(zc.ticket.id);
+  ok(oRow.payment_status === 'paid', 'INVARIANT CASH-4 waste-remake keeps the order PAID (not voided)');
+  ok(accNear2(Q.dailyReport().revenue, revBefore), 'INVARIANT CASH-4 waste-remake does not reduce revenue');
+  ok(accNear2(db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM order_payments WHERE method='cash' AND kind='payment'`).get().v, cashBefore), 'INVARIANT CASH-4 waste-remake never touches the cash drawer (no refund leg)');
+  ok(db.prepare(`SELECT COUNT(*) n FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) AND kind='refund'`).get(zc.ticket.id).n === 0, 'INVARIANT CASH-4 waste-remake writes no refund leg');
+  ok(wr.cups >= 1, `INVARIANT CASH-4 waste-remake reports the wasted cups (${wr.cups})`);
 }
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }

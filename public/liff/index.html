@@ -355,7 +355,7 @@
       <div id="counterInfo" style="display:none;text-align:center;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div>
         <div class="muted" style="font-size:13px;margin:4px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div>
-        <img id="counterPoster" src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.style.display='none'">
+        <img id="counterPoster" src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="max-width:100%;border-radius:12px;border:1px solid var(--line)" onerror="this.onerror=null;this.src='/assets/4060.min.png'">
       </div>
       <!-- paid online but can't come — request a refund (cashier processes it) -->
       <button id="refundReqBtn" class="ghost" style="width:100%;display:none;margin-top:10px;font-size:13px;color:var(--danger);border-color:var(--danger)" onclick="requestRefund()">ขอคืนเงิน (จ่ายแล้วแต่มารับไม่ได้)</button>
@@ -398,7 +398,11 @@
     <button id="goHomeBtn" class="ok" style="width:100%;margin-top:12px;display:none" onclick="goHome()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>กลับหน้าหลัก · สั่งใหม่</button>
   </div>
 
-  <div id="errCard" class="card" style="display:none"><b id="errMsg"></b></div>
+  <div id="errCard" class="card" style="display:none;text-align:center;padding:28px 20px">
+    <img src="/assets/logo.png" alt="" style="height:44px;width:44px;border-radius:11px;object-fit:cover;margin-bottom:10px" onerror="this.style.display='none'">
+    <b id="errMsg" style="display:block;color:var(--navy);font-size:16px"></b>
+    <button class="ok" style="width:100%;margin-top:16px" onclick="location.reload()">ลองใหม่อีกครั้ง</button>
+  </div>
 </div>
 <div id="toast" class="toast"></div>
 
@@ -543,7 +547,7 @@
     </div>
     <!-- STAMP/REWARD CARD: visual punch-card art (10 slots) — filled stars = progress toward a free redeem. -->
     <div id="memberStampCard" style="display:none;margin-top:11px;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(14,40,55,.4)">
-      <img src="/assets/card-reward.png?v=1" alt="บัตรสะสมแต้ม" loading="lazy" decoding="async" style="width:100%;display:block">
+      <img src="/assets/card-reward.webp" alt="บัตรสะสมแต้ม" loading="lazy" decoding="async" style="width:100%;display:block" onerror="this.onerror=null;this.src='/assets/card-reward.min.png'">
       <div id="stampName" style="position:absolute;top:4.5%;left:4.8%;width:28%;height:18%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9.5px;font-weight:800;color:#8a5a12;line-height:1.15;padding:0 3px;overflow:hidden"></div>
       <div id="stampGrid" style="position:absolute;top:47%;left:12%;width:76%;height:26%;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr)"></div>
       <div id="stampMsg1" style="position:absolute;bottom:3%;left:3%;width:46%;height:16%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;color:#c2410c;line-height:1.15;padding:0 4px"></div>
@@ -700,7 +704,11 @@ applyBrand();
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=await r.json().catch(()=>({}));const err=new Error(e.error||r.status);err.data=e;throw err;}return r.json();}
-function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=msg;}
+// Map raw server codes / fetch failures to friendly Thai — a bare "zone_not_found" or "Failed to
+// fetch" as the whole screen (CUS-C3) reads as a broken app. Unknown codes get a generic line.
+const ERR_TH={zone_not_found:'ไม่พบสาขา/โซนนี้ค่ะ — กรุณาสแกน QR ที่หน้าร้านอีกครั้ง',ไม่พบโซนใน:'ไม่พบโซนใน QR code — กรุณาสแกน QR ที่หน้าร้านค่ะ',store_not_found:'ไม่พบร้านค้าค่ะ',Failed:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ',NetworkError:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ'};
+function errTH(msg){ const m=String(msg||''); if(ERR_TH[m]) return ERR_TH[m]; for(const k in ERR_TH){ if(m.indexOf(k)===0||m.indexOf(k)>-1&&/[A-Za-z]/.test(m)) return ERR_TH[k]; } return /[A-Za-z]{4}/.test(m)?'ขออภัยค่ะ เปิดหน้านี้ไม่สำเร็จ — ลองใหม่อีกครั้งนะคะ':m; }
+function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=errTH(msg);}
 
 async function initLiff(){
   cfg = await api('/api/config');
@@ -726,6 +734,13 @@ async function initLiff(){
     localStorage.setItem('demoUid', lineUserId);
     $('liffNote').textContent = 'Test mode (LINE not enabled) — demo user '+lineUserId;
   }
+  // Prove who we are to the server ONCE (LINE vouches for the access token) → signed identity cookie.
+  // Every later per-customer read (history/points/suggestions) rides that cookie (SEC-H1). Awaited so
+  // the cookie exists before the first such read fires.
+  try{
+    let accessToken=null; try{ if(inLine && window.liff) accessToken=liff.getAccessToken(); }catch(e){}
+    await fetch('/api/liff/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,accessToken})});
+  }catch(e){}
 }
 
 // PDPA consent: ask once, remember locally so it never nags, and tell the server so the shop has
@@ -881,7 +896,14 @@ function couponValueText(i){
   if(i.discType==='percent') return 'ลด '+i.discValue+'%'+(i.maxDisc?(' (สูงสุด ฿'+i.maxDisc+')'):'');
   return 'ลด ฿'+i.discValue;
 }
-function couponScreen(html){ document.querySelector('.wrap').innerHTML='<div class="card" style="text-align:center;padding:26px 20px">'+html+'</div>'; }
+function couponScreen(html){
+  // Brand-standard claim layout: shop identity on top, then the offer — the customer must know
+  // WHO the coupon is from before what it's worth (The1/Shopee/LINE all lead with the brand).
+  const brandName=(window.cfg&&cfg.brand)||'YO-DEE Yogurt';
+  const head='<div style="display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px">'
+    +'<img src="/assets/logo.png" alt="" style="height:38px;width:38px;border-radius:10px;object-fit:cover" onerror="this.style.display=\'none\'">'
+    +'<div style="font-weight:800;font-size:15px;color:var(--navy)">'+esc(brandName)+'</div></div>';
+  document.querySelector('.wrap').innerHTML='<div class="card" style="text-align:center;padding:22px 20px 26px;max-width:400px;margin:0 auto">'+head+html+'</div>'; }
 window.goCouponWallet=()=>{ location.href='/liff/'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''); };
 async function doCouponClaim(){
   let info=null; try{ info=await (await fetch('/api/claim/'+encodeURIComponent(couponTok)+(lineUserId?('?u='+encodeURIComponent(lineUserId)):''))).json(); }catch(e){}
@@ -890,6 +912,10 @@ async function doCouponClaim(){
       +'<button class="ok" style="width:100%;margin-top:16px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
   const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12px;margin-top:3px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
+  // Expiry ON the card — the single most-read line on any voucher (drives urgency + trust).
+  const life=(info.validDays>0)?('ใช้ได้ '+info.validDays+' วันหลังกดรับ')
+            :(info.expiresAt?('ใช้ได้ถึง '+info.expiresAt):'ไม่มีวันหมดอายุ');
+  const lifeRow='<div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#8a5c00;margin-top:6px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+life+'</div>';
   // Perforated-ticket voucher (same language as the coupon wallet): value stub, tear line with
   // punched notches, details on the right.
   const big=info.discType==='percent'?(info.discValue+'%'):('฿'+info.discValue);
@@ -901,7 +927,8 @@ async function doCouponClaim(){
     +'<div style="font-size:9.5px;font-weight:700;color:#8a5c00;opacity:.8">ส่วนลด</div></div>'
     +'<div style="position:relative;flex:1;min-width:0;border-left:1.5px dashed #ecd9a0;padding:14px 12px 14px 14px">'+notch('top')+notch('bottom')
     +'<div style="font-weight:800;font-size:15px;color:var(--navy);line-height:1.35">'+esc(info.label||'คูปอง')+'</div>'
-    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+'</div></div>';
+    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+lifeRow+'</div></div>';
+  const terms='<p class="muted" style="font-size:11px;line-height:1.5;margin:2px 0 0">รับได้ 1 สิทธิ์ต่อบัญชี · เฉพาะเจ้าของสิทธิ์ โอนต่อไม่ได้ · ใช้จากเมนู "คูปองของฉัน"</p>';
   if(info.state==='already'){
     couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
       +'<p class="muted" style="font-size:12.5px">อยู่ในเมนู "คูปองของฉัน" พร้อมใช้ได้เลย</p>'
@@ -917,8 +944,8 @@ async function doCouponClaim(){
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
   const left=(info.remaining!=null&&info.remaining<=50)?('<div style="font-weight:800;color:#c2410c;font-size:13px;margin-bottom:6px">เหลืออีก '+info.remaining+' สิทธิ์เท่านั้น!</div>'):'';
-  couponScreen('<div style="font-size:44px">🎁</div><h1 style="margin:8px 0;color:var(--navy)">คูปองพิเศษสำหรับคุณ</h1>'+left+card
-    +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:50px;font-size:16px" onclick="doCouponClaimGo()">รับคูปอง</button>');
+  couponScreen('<h1 style="margin:6px 0 2px;color:var(--navy);font-size:20px">คูปองพิเศษสำหรับคุณ 🎁</h1>'+left+card
+    +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:52px;font-size:17px;font-weight:800" onclick="doCouponClaimGo()">เก็บคูปอง</button>'+terms);
 }
 window.doCouponClaimGo=async()=>{
   const b=$('cpClaimBtn'); if(b){ b.disabled=true; b.textContent='กำลังรับ…'; }
@@ -1194,7 +1221,8 @@ function itemImg(m){
   if(m.image) return `<img src="${esc(m.image)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.style.fontSize='34px';this.parentNode.textContent='${fb}'">`;
   return fb;
 }
-async function loadMenu(){ try{ MENU=await api('/api/menu'); }catch(e){ MENU=[]; }
+let menuLoadFailed=false;
+async function loadMenu(){ try{ MENU=await api('/api/menu'); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
   // Which items THIS customer has hearted (paints the ❤️ filled). Real LINE ids only — the demo
   // fallback ids can't like, which is what keeps the public counts honest.
   try{ if(/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ const r=await api('/api/menu-likes?u='+encodeURIComponent(lineUserId)); MY_LIKES=new Set(r.ids||[]); } }catch(e){}
@@ -1259,7 +1287,10 @@ function paintMenu(){
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div class="dpr" style="margin-top:0">${out?'<span class="pill closed">หมด</span>':'฿'+m.price}</div>${cnr}</div></div></button>`; };
-  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>` : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>';
+  $('menuButtons').innerHTML = drinks.length ? `<div class="menu-grid">${drinks.map(btn).join('')}</div>`
+    : (menuLoadFailed
+        ? '<div style="text-align:center;padding:18px 8px"><p class="muted" style="margin-bottom:12px">เชื่อมต่อไม่ได้ค่ะ — โหลดเมนูไม่สำเร็จ</p><button class="ok" onclick="loadMenu().then(paintMenu)">ลองโหลดเมนูอีกครั้ง</button></div>'
+        : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>');
 };
 window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
   // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
@@ -1578,11 +1609,13 @@ window.confirmBasket=async()=>{
       storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
     } else if(_err==='online_orders_off'||_err==='pos_offline'){   // channel paused mid-checkout
       storeOpen=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
-    } else if(_err==='item_unavailable'){   // the menu changed under an old cart / reorder — reload it
-      cart=[]; cartCoupon=null; toast('มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
+    } else if(_err==='item_unavailable'||_err==='item_soldout'){   // menu changed / sold out under an old cart or reorder — reload it
+      cart=[]; cartCoupon=null;
+      toast(_err==='item_soldout'?'ขออภัยค่ะ มีเมนูในตะกร้าที่ของหมดแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏':'มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
       try{ await loadZone(); }catch(_){} show('orderCard',true); renderBasketCount();
-    } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine
-      toast('ขออภัยค่ะ ระบบพักการสั่งผ่าน LINE ชั่วคราว เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏');
+    } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine — restore a screen (CUS-C1) so the customer isn't left on a blank page
+      cart=[]; renderBasketCount(); show('orderCard',true);
+      appConfirm({title:'พักการสั่งผ่าน LINE ชั่วคราว',message:'เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\n\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏',okText:'เข้าใจแล้ว',cancelText:''});
     } else { show('orderCard',true); openBasket(); renderBasketCount(); toast('สั่งไม่สำเร็จ: '+_err); }
   }
 };
@@ -1657,7 +1690,7 @@ function renderOrderBlock(v){
     // ONE cancellation message on the screen, not five. The status pill on the order row carries
     // the fact; the payment panel below is hidden entirely (there is nothing left to pay), and the
     // only remaining copy is the reason — which is the one thing the customer doesn't already know.
-    stopQrCountdown();
+    stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} }
     pill.className='pill'; pill.style.background='rgba(229,91,107,.16)'; pill.style.color='var(--danger)'; pill.textContent='ยกเลิกแล้ว';
     // The whole payment panel goes — there is nothing left to pay. (counterConfirmedMsg lives
     // INSIDE payChoice, so the reason cannot be rendered here; render() puts it in tNotifyNote,
@@ -1665,7 +1698,7 @@ function renderOrderBlock(v){
     show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
     else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
   else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
@@ -1679,6 +1712,10 @@ function renderOrderBlock(v){
       show('counterConfirmedMsg',true);
     } else {
       show('counterConfirmedMsg',false);
+      // PAY-H1: a customer who app-switched to their bank and had the LINE webview killed loses the
+      // in-memory payMethod. Restore the channel they'd picked (persisted per ticket) so they land
+      // back on their QR, not on the chooser again.
+      if(!payMethod && ticketId){ try{ const sm=localStorage.getItem('paymethod_'+ticketId); if(sm==='promptpay'||sm==='kbank'||sm==='counter') payMethod=sm; }catch(e){} }
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
@@ -1695,7 +1732,7 @@ function renderOrderBlock(v){
   }
   else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
-let payMethod=null, counterConfirmed=false, _orderTotal=0;
+let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
 let cartPayMethod=null;
 const PAY_OPTS=[
@@ -1717,7 +1754,7 @@ window.openPayPicker=(mode)=>{
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div><div class="muted" style="font-size:12px">${o.s}</div></span></span>
       <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </div>`;}).join('')
-    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.png" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.style.display=\'none\'"></div>' : '');
+    + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.onerror=null;this.src=\'/assets/4060.min.png\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
 window.closePayPicker=()=>{ $('payPickerPop').style.display='none'; };
@@ -1727,7 +1764,8 @@ window.selectPayMethod=(m)=>{
   closePayPicker();
   if(_payPickMode==='ticket'){   // re-choosing on the ticket → set it + re-render so ONLY that method's detail shows (no inline chooser)
     payMethod=m; counterConfirmed=false;
-    if(ticketId){ api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
+    if(ticketId){ try{ localStorage.setItem('paymethod_'+ticketId,m); }catch(e){}   // PAY-H1: survive an app-switch/reload
+      api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{});
       if((m==='promptpay'||m==='kbank') && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },400); } }
   } else { cartPayMethod=m; updateCartPayLabel(); }
 };
@@ -1870,19 +1908,28 @@ window.openCoupon=async(mode)=>{
 // Guarded per-ticket — never re-fires on background poll re-renders.
 const _qrAutoSaved=new Set();
 window.choosePay=(m)=>{ if(counterConfirmed) return; payMethod=m; applyPayChoice();
+  if(ticketId){ try{ localStorage.setItem('paymethod_'+ticketId,m); }catch(e){} }   // PAY-H1: survive an app-switch/reload
   if((m==='promptpay'||m==='kbank') && ticketId && !_qrAutoSaved.has(ticketId)){ _qrAutoSaved.add(ticketId); setTimeout(()=>{ try{ saveQR(); }catch(e){} },300); } };
-// Phase 7: soft countdown nudge (visual only — no auto-cancel) shown while the QR is up.
-// Starts once per ticket when the QR first appears; stops once payChoice is no longer relevant.
-let _qrTimer=null; const _qrStarted=new Set();
+// PAY-H2: countdown bound to the server's REAL auto-void moment (_payDeadline, epoch ms). Recomputing
+// from Date.now() every tick keeps it honest across a reload or an app-switch to the bank — a fresh
+// full 30:00 on every return was a lie, then the order died later anyway. At 00:00 we pull the ticket
+// so the customer lands on the cancelled screen + reason (PAY-H3) instead of a dead QR.
+let _qrTimer=null, _qrTimerDl=null;
 function startQrCountdown(){
-  if(!ticketId || _qrStarted.has(ticketId)) return; _qrStarted.add(ticketId);
-  let left=15*60;
-  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return; const m=Math.floor(left/60), s=left%60; el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); };
+  const w=$('qrCountdown');
+  if(!_payDeadline){ stopQrCountdown(); if(w) w.style.display='none'; return; }
+  if(w) w.style.display='';
+  if(_qrTimer && _qrTimerDl===_payDeadline) return;   // already ticking to this exact deadline
+  _qrTimerDl=_payDeadline;
+  const tick=()=>{ const el=$('qrCountdownTxt'); if(!el) return;
+    const left=Math.max(0,Math.round((_payDeadline-Date.now())/1000));
+    el.textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');
+    if(left<=0){ stopQrCountdown(); if(ticketId) api('/api/tickets/'+ticketId).then(v=>render(v)).catch(()=>{}); } };
   tick();
   if(_qrTimer) clearInterval(_qrTimer);
-  _qrTimer=setInterval(()=>{ left=Math.max(0,left-1); tick(); if(left<=0){ clearInterval(_qrTimer); _qrTimer=null; } },1000);
+  _qrTimer=setInterval(tick,1000);
 }
-function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } }
+function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; } _qrTimerDl=null; }
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
 // then the attached slip is checked by SlipOK against the order total.
@@ -2117,6 +2164,7 @@ function render(v){
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
   const isPending = v.status==='pending';
+  _payDeadline = v.payDeadline || null;   // PAY-H2: real auto-void moment, so the QR countdown can't lie across reloads
   $('tCode').textContent = isPending ? '💳' : v.code;
   $('tCodeLabel').textContent = isPending ? 'ชำระเงินเพื่อรับหมายเลขคิว' : 'หมายเลขคิวของคุณ';
   $('tStore').textContent = v.zone;
