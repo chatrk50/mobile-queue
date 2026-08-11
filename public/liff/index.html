@@ -229,7 +229,7 @@
          (บัตรสมาชิก ›) instead of a duplicate card here — loadLoyalty() still runs (for the
          order-screen chip + cart nudge), it just no longer renders a visible card on the home screen. -->
     <!-- Referral (filled by loadReferral): own invite code + enter-a-friend's-code -->
-    <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI()">
+    <button id="orderNowBtn" style="width:100%;display:none" onclick="showOrderUI({restore:true})">
       <svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span id="orderNowLbl">สั่งเลย</span></button>
     <div id="closedMsg" class="closed-note" style="display:none">
       <b>🚫 ปิดรับคิว</b><br>
@@ -562,12 +562,12 @@
       <svg viewBox="0 0 24 24" style="width:46px;height:46px;fill:none;stroke:currentColor;stroke-width:1.4;opacity:.5"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 11h20M6 15.5h4"/></svg>
       <div style="font-size:14.5px;font-weight:700;color:var(--navy);margin-top:10px">ยังไม่มีบัตรสมาชิก</div>
       <div style="font-size:12.5px;margin-top:5px;line-height:1.6">ทางร้านยังไม่ได้เปิดใช้บัตรสมาชิกและบัตรสะสมแต้ม<br>สั่งเมนูได้ตามปกติเลยค่ะ</div>
-      <button class="ok" style="margin-top:16px;padding:11px 22px" onclick="closeMember();showOrderUI()">ดูเมนู</button>
+      <button class="ok" style="margin-top:16px;padding:11px 22px" onclick="closeMember();showOrderUI({restore:true})">ดูเมนู</button>
     </div>
     <div id="loyBdayMember" style="margin-top:11px"></div>
     <div id="memberFav" class="muted" style="font-size:13px;text-align:center;margin-top:11px"></div>
     <button id="memberReorder" class="ok" style="width:100%;display:none;margin-top:8px" onclick="memberReorder()">สั่งซ้ำเมนูโปรด</button>
-    <button id="memberOrderBtn" class="ghost" style="width:100%;margin-top:8px" onclick="closeMember();showOrderUI()">สั่งเมนูอื่น</button>
+    <button id="memberOrderBtn" class="ghost" style="width:100%;margin-top:8px" onclick="closeMember();showOrderUI({restore:true})">สั่งเมนูอื่น</button>
     <div id="referralCard" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin:12px 0 0;text-align:left"><div id="referralBody"></div></div>
   </div>
 </div>
@@ -1203,6 +1203,11 @@ window.applyRef=async()=>{ const el=$('refInp'), v=el&&el.value.trim().toUpperCa
 
 // ---------- Self-order: pick a drink -> choose toppings (or skip) -> cart ----------
 let MENU=[], cart=[], pendingDrink=null, pendingTops={};
+// CUS-H7: the cart used to live only in memory, so a reload — or the device Back button leaving and
+// re-entering the LIFF — dropped everything the customer had added. Mirror it into sessionStorage
+// (per zone) so it survives the round trip, and restore it when the menu re-opens.
+function persistCart(){ try{ sessionStorage.setItem('cart_'+zoneId, JSON.stringify(cart)); }catch(e){} }
+function loadSavedCart(){ try{ const a=JSON.parse(sessionStorage.getItem('cart_'+zoneId)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
 function itemIcon(m){
   const t=((m.name||'')+' '+(m.name_en||'')).toLowerCase();
   const map=[[['มะม่วง','mango'],'🥭'],[['สตรอ','strawberry'],'🍓'],[['กล้วย','banana'],'🍌'],[['อโวคาโด','avocado'],'🥑'],
@@ -1257,7 +1262,9 @@ window.showOrderUI=async(opts={})=>{
   closeAllPopups();
   // cartCoupon deliberately SURVIVES re-opening the menu: the customer just armed it from the
   // wallet or a claim link; it is only cleared when the order is actually placed.
-  await loadMenu(); if(!opts.keepCart) cart=[];
+  // CUS-H7: a normal menu open (opts.restore) brings back a cart left behind on a prior visit/reload;
+  // the reorder flows pass neither flag and still get a clean cart to build their single order on.
+  await loadMenu(); if(!opts.keepCart) cart = opts.restore ? loadSavedCart() : [];
   counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
   renderBasketCount(); show('getCard',false); show('orderCard',true);
@@ -1424,7 +1431,7 @@ function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.t
   const orderOpen = oc && oc.style.display!=='none';
   if(bar){ if(n && orderOpen){ $('cartBarCount').textContent=n+' '+unit(); $('cartBarTotal').textContent='฿'+cartNet(); bar.style.display='block'; if(sp) sp.style.display=''; }
     else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
-  updateNudges(); }
+  updateNudges(); persistCart(); }   // CUS-H7: mirror every cart change to sessionStorage
 // Step 4: review basket -> confirm or cancel.
 window.openBasket=()=>{ closeAllPopups(); renderBasket(); $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
