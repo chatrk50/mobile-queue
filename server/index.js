@@ -259,6 +259,26 @@ const legacyAdminPin = (req) => (req.get('x-cashier-pin') || req.query.pin || re
 const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
 // Manager-level = owner/manager session OR legacy admin PIN (reports, finance).
 const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || legacyAdminPin(req);
+// SEC-M3 / 3C: which branch a request may read. Owner (or the legacy master PIN) sees all branches
+// (null) or a chosen one; a non-owner is PINNED to their assigned branch(es) — asking for a branch
+// they don't belong to yields -1 (a non-existent id → empty results), never another branch's numbers.
+// branchIds were stored on the session but never enforced, so a branch cashier could read HQ's whole
+// financials by omitting ?branchId. Needed before a 2nd branch opens.
+function scopedBranch(req, requested) {
+  const ids = req.staff?.branchIds || [];
+  const want = (requested != null && requested !== '') ? Number(requested) : null;
+  if (req.staff?.role === 'owner' || legacyAdminPin(req)) return want;   // all (null) or the owner's pick
+  if (!ids.length) return -1;                                           // non-owner, no branch → see nothing
+  if (want != null) return ids.includes(want) ? want : -1;              // only their own branch(es)
+  return ids[0];                                                        // default to their branch (never "all")
+}
+// A concrete branch for cash-drawer ops (a session must belong to ONE branch, so never null/all).
+const cashBranch = (req) => {
+  const ids = req.staff?.branchIds || [];
+  const req0 = Number(req.query.branchId || req.body?.branchId) || 0;
+  if (req.staff?.role === 'owner' || legacyAdminPin(req) || !ids.length) return req0 || 1;  // owner/legacy: pick or default 1
+  return (req0 && ids.includes(req0)) ? req0 : ids[0];                  // cashier pinned to their branch
+};
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
@@ -412,7 +432,7 @@ app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => 
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
+  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: scopedBranch(req, req.query.branchId) }));
 });
 
 // A customer key is either a LINE userId (32 hex LINE hands only to that customer's own LIFF, so
@@ -1319,14 +1339,14 @@ app.get('/api/report', (req, res) => {
   // ?date=YYYY-MM-DD → P&L for that past Bangkok day (recomputed from the durable orders table);
   // omitted/invalid → today. dailyReport validates the date format itself.
   const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : null;
-  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null, date));
+  res.json(Q.dailyReport(scopedBranch(req, req.query.branchId), date));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
 app.get('/api/reports/detailed', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const branchId = scopedBranch(req, req.query.branchId);
   res.json(Q.detailedReports({ date, branchId }));
 });
 app.get('/api/reports/insights', (req, res) => {
@@ -1340,7 +1360,7 @@ app.get('/api/reports/margins', (req, res) => {
   res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
-const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+// cashBranch is defined with the auth helpers above (branch-scoped for non-owner staff, 3C).
 // Past closed rounds (Z-reports) — daily list + monthly rollup + last round's float.
 app.get('/api/cash/history', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1423,11 +1443,11 @@ app.post('/api/admin/run-daily-reset', (req, res) => {
 // Financial settings used by the P&L (manager/owner): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.getFinanceSettings(req.query.branchId ? Number(req.query.branchId) : null));
+  res.json(Q.getFinanceSettings(scopedBranch(req, req.query.branchId)));
 });
 app.post('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.setFinanceSettings(req.body || {}, req.body?.branchId ? Number(req.body.branchId) : null));
+  res.json(Q.setFinanceSettings(req.body || {}, scopedBranch(req, req.body?.branchId)));
 });
 // ---------- Branch management (owner) ----------
 app.get('/api/branches', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranches()); });
@@ -1582,7 +1602,7 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-    const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+    const branchId = scopedBranch(req, req.query.branchId);
     const { buildDetailedWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
     const data = Q.detailedReports({ date, branchId });
