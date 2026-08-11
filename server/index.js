@@ -629,7 +629,9 @@ app.post('/api/admin/owner-summary', async (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner "start fresh": wipe TEST transaction data (orders/sales/queue/loyalty/cash/audit) and
-// reset queue numbers, KEEPING all config (menu/stores/staff/settings/recipes/stock/rewards).
+// reset queue numbers, KEEPING config (menu/stores/staff/settings/recipes/suppliers/rewards) and the
+// current stock ON-HAND + costing (ingredients.stock_qty / avg_cost). The transactional stock LEDGER
+// (stock_moves + purchase orders) is cleared with the sales — leaving it behind haunted COGS (ACC-F9).
 // Owner-only + the client requires a typed "CLEAR" confirmation. Irreversible.
 app.post('/api/admin/reset-transactions', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });

@@ -4788,10 +4788,15 @@ export function recoverOrderTicket(ticketId, opts = {}) {
  *  price tiers, channels, tenders. Used once after test runs before real trading begins.
  *  Atomic; returns the row count removed per table. */
 export function clearTransactions() {
-  // order matters for FKs: order_items → orders → tickets; the rest are independent.
-  // customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset that deletes customers
-  // but left their wallet coupons behind kept those coupons REDEEMABLE with no owner (audit #8).
-  const tables = ['order_items', 'orders', 'tickets', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips'];
+  // order matters for FKs: order_items → orders → tickets; purchase_order_lines → purchase_orders;
+  // the rest are independent. customer_coupons/coupon_uses/cash_moves/push_log ride along: a reset
+  // that deleted customers but left their wallet coupons behind kept those coupons REDEEMABLE with
+  // no owner (audit #8). stock_moves + purchase_orders ride along too (ACC-F9): leaving the stock
+  // LEDGER behind while deleting the sales it belonged to haunted every day's COGS forever with
+  // "cost of goods" that had no revenue. We clear the transactional ledger but KEEP the current
+  // on-hand (ingredients.stock_qty) and weighted-avg cost — physical stock + costing are config-like
+  // and survive the reset, so COGS simply starts clean from the current inventory.
+  const tables = ['order_items', 'orders', 'tickets', 'order_payments', 'sale_events', 'loyalty_moves', 'customer_coupons', 'coupon_uses', 'cash_moves', 'push_log', 'cash_sessions', 'daily_stats', 'sales_history', 'customers', 'slips', 'purchase_order_lines', 'purchase_orders', 'stock_moves'];
   return db.transaction(() => {
     const removed = {};
     for (const t of tables) {
