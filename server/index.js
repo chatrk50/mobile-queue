@@ -3,7 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, DURABLE, reconnectDb } from './db.js';
+import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { seedDemo, seedBlank } from '../scripts/seed.js';
 import { seedMockData } from '../scripts/mock-seed.js';
 import * as Q from './queue.js';
@@ -235,7 +235,7 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -259,6 +259,26 @@ const legacyAdminPin = (req) => (req.get('x-cashier-pin') || req.query.pin || re
 const ownerOK = (req) => req.staff?.role === 'owner' || legacyAdminPin(req);
 // Manager-level = owner/manager session OR legacy admin PIN (reports, finance).
 const managerOK = (req) => ['owner', 'manager'].includes(req.staff?.role) || legacyAdminPin(req);
+// SEC-M3 / 3C: which branch a request may read. Owner (or the legacy master PIN) sees all branches
+// (null) or a chosen one; a non-owner is PINNED to their assigned branch(es) — asking for a branch
+// they don't belong to yields -1 (a non-existent id → empty results), never another branch's numbers.
+// branchIds were stored on the session but never enforced, so a branch cashier could read HQ's whole
+// financials by omitting ?branchId. Needed before a 2nd branch opens.
+function scopedBranch(req, requested) {
+  const ids = req.staff?.branchIds || [];
+  const want = (requested != null && requested !== '') ? Number(requested) : null;
+  if (req.staff?.role === 'owner' || legacyAdminPin(req)) return want;   // all (null) or the owner's pick
+  if (!ids.length) return -1;                                           // non-owner, no branch → see nothing
+  if (want != null) return ids.includes(want) ? want : -1;              // only their own branch(es)
+  return ids[0];                                                        // default to their branch (never "all")
+}
+// A concrete branch for cash-drawer ops (a session must belong to ONE branch, so never null/all).
+const cashBranch = (req) => {
+  const ids = req.staff?.branchIds || [];
+  const req0 = Number(req.query.branchId || req.body?.branchId) || 0;
+  if (req.staff?.role === 'owner' || legacyAdminPin(req) || !ids.length) return req0 || 1;  // owner/legacy: pick or default 1
+  return (req0 && ids.includes(req0)) ? req0 : ids[0];                  // cashier pinned to their branch
+};
 const SESSION_HOURS = 12;
 
 // Staff PIN login -> signed httpOnly session cookie identifying who is at the till.
@@ -412,7 +432,7 @@ app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => 
 // Per-tender daily settlement totals (reconcile each app/bank payout).
 app.get('/api/tender-recon', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: req.query.branchId ? Number(req.query.branchId) : null }));
+  res.json(Q.tenderRecon({ date: req.query.date || null, branchId: scopedBranch(req, req.query.branchId) }));
 });
 
 // A customer key is either a LINE userId (32 hex LINE hands only to that customer's own LIFF, so
@@ -453,6 +473,13 @@ app.post('/api/loyalty/:key/birthday', (req, res) => {
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Phase 4 #4: claim today's flash-sale coupon into the wallet (one per customer per day, only while
+// the window is live). Customer-identity gated like every other wallet write.
+app.post('/api/flash/:key/claim', (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.claimFlashSale(req.params.key)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Referral: this customer's own invite code + whether they can still enter a friend's code.
 app.get('/api/loyalty/:key/referral', (req, res) => {
   if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
@@ -483,7 +510,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() } });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -491,6 +518,9 @@ app.post('/api/admin/features', (req, res) => {
     const out = {};
     if (req.body?.slipAuto != null) Object.assign(out, Q.setSlipAuto(!!req.body.slipAuto));
     if (req.body?.printEnabled != null) Object.assign(out, Q.setPrintEnabled(!!req.body.printEnabled));
+    // VAT/tax-invoice config is owner-only — it carries the shop's tax id and controls the legal
+    // invoice sequence; a manager must not be able to change either (3D).
+    if (req.body?.vat != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); out.vat = Q.setVatConfig(req.body.vat); }
     // Where the daily revenue/profit summary is pushed — only the OWNER may redirect it. A manager
     // could otherwise point the owner's financials at their own LINE (audit finding #6).
     if (req.body?.ownerLineId != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setOwnerLineId(req.body.ownerLineId)); }
@@ -504,6 +534,11 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    if (req.body?.bounceBack != null) out.bounceBack = Q.setBounceBackConfig(req.body.bounceBack);   // Phase 4 #2
+    if (req.body?.streak != null) out.streak = Q.setStreakConfig(req.body.streak);   // Phase 4 #3
+    if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
+    if (req.body?.couponPopup != null) Object.assign(out, Q.setCouponPopup(!!req.body.couponPopup));   // Phase 4A
+
     // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
     // on or move the prize amount.
     if (req.body?.luckyOn != null) { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); Object.assign(out, Q.setLucky(!!req.body.luckyOn)); }
@@ -1224,11 +1259,19 @@ app.post('/api/tickets/:ticketId/pay-items', (req, res) => {
 app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.editOrderItems(req.params.ticketId, req.body?.items);
+    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Abbreviated tax invoice (ใบกำกับภาษีอย่างย่อ) for a paid order — the VAT split + assigned invoice
+// number, for the cashier to show/print when the customer asks (3D). Staff-gated.
+app.get('/api/tickets/:ticketId/tax-invoice', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const inv = Q.taxInvoiceForOrder(req.params.ticketId);
+  if (!inv) return res.status(404).json({ error: 'order_not_found' });
+  res.json(inv);
 });
 // Cashier revives a timed-out (auto-voided, unpaid) order when the customer shows up late:
 // back into the queue → รับเงิน → เสิร์ฟ as normal. Refunds are rejected server-side.
@@ -1299,7 +1342,7 @@ app.post('/api/store/:storeId/open', (req, res) => {
 // Reset the whole queue to start from 0 (manager+; also run by the daily scheduler).
 app.post('/api/reset', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  doDailyReset();
+  doDailyReset(true);   // owner asked explicitly → bypass the same-day guard
   res.json({ ok: true });
 });
 // Daily report for the cashier (PIN-protected): sales mix + P&L + per-zone breakdown.
@@ -1308,14 +1351,14 @@ app.get('/api/report', (req, res) => {
   // ?date=YYYY-MM-DD → P&L for that past Bangkok day (recomputed from the durable orders table);
   // omitted/invalid → today. dailyReport validates the date format itself.
   const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : null;
-  res.json(Q.dailyReport(req.query.branchId ? Number(req.query.branchId) : null, date));
+  res.json(Q.dailyReport(scopedBranch(req, req.query.branchId), date));
 });
 // Detailed read-only reports for a date (manager/owner): transaction log, payment,
 // void/refund, addon, hourly. ?date=YYYY-MM-DD (default today), ?branchId=N (default all).
 app.get('/api/reports/detailed', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const branchId = scopedBranch(req, req.query.branchId);
   res.json(Q.detailedReports({ date, branchId }));
 });
 app.get('/api/reports/insights', (req, res) => {
@@ -1329,7 +1372,7 @@ app.get('/api/reports/margins', (req, res) => {
   res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
-const cashBranch = (req) => Number(req.query.branchId || req.body?.branchId) || 1;
+// cashBranch is defined with the auth helpers above (branch-scoped for non-owner staff, 3C).
 // Past closed rounds (Z-reports) — daily list + monthly rollup + last round's float.
 app.get('/api/cash/history', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -1412,11 +1455,11 @@ app.post('/api/admin/run-daily-reset', (req, res) => {
 // Financial settings used by the P&L (manager/owner): read + update COGS %, opex, target.
 app.get('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.getFinanceSettings(req.query.branchId ? Number(req.query.branchId) : null));
+  res.json(Q.getFinanceSettings(scopedBranch(req, req.query.branchId)));
 });
 app.post('/api/finance', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json(Q.setFinanceSettings(req.body || {}, req.body?.branchId ? Number(req.body.branchId) : null));
+  res.json(Q.setFinanceSettings(req.body || {}, scopedBranch(req, req.body?.branchId)));
 });
 // ---------- Branch management (owner) ----------
 app.get('/api/branches', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranches()); });
@@ -1571,7 +1614,7 @@ app.get('/api/reports/detailed.xlsx', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-    const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+    const branchId = scopedBranch(req, req.query.branchId);
     const { buildDetailedWorkbook } = await import('./report-excel.js');
     const stores = db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
     const data = Q.detailedReports({ date, branchId });
@@ -1675,11 +1718,20 @@ function resetAllZonesResilient() {
     throw e;
   }
 }
-function doDailyReset() {
+function bangkokToday() { return db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d; }
+// INF-R4: a free-tier instance asleep at Bangkok midnight never fires the scheduled setTimeout, so the
+// queue would keep yesterday's numbers into the new day. Guard the reset by the last day it actually
+// ran (reset:last_day) and drive it from boot + a periodic check too — so a woke-from-sleep instance
+// catches up on the first tick. `force` = the manual owner reset (POST /api/reset), which must always
+// run and must not be blocked by the same-day guard.
+function doDailyReset(force = false) {
+  const today = bangkokToday();
+  if (!force && getSetting('reset:last_day', '') === today) return;   // already reset this Bangkok day
   try {
     const zoneIds = resetAllZonesResilient();
     for (const id of zoneIds) emit(id, 'update', (reveal) => Q.zoneSnapshot(id, { reveal }));
-    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones`);
+    try { setSetting('reset:last_day', today); } catch { /* marker best-effort */ }
+    console.log(`[reset] queue reset to 0 for ${zoneIds.length} zones (day ${today})`);
   } catch (e) {
     // Never let a reset failure crash the process or stop the next night from being scheduled.
     console.error('[reset] failed:', e && e.message);
@@ -1718,6 +1770,7 @@ function scheduleDailyReset() {
   setTimeout(() => { doDailyReset(); scheduleDailyReset(); }, msUntilBangkokMidnight());
 }
 scheduleDailyReset();
+doDailyReset();   // boot catch-up: if the instance slept through midnight, reset now (guarded, no-op same day)
 
 // Background sweep: void abandoned (unpaid) pending orders so they don't pile up on the till.
 // Controlled by the owner's "pending:void_min" setting (0 = off). Refreshes any zone it touches.
@@ -1726,6 +1779,9 @@ setInterval(() => {
     const r = Q.sweepStalePending();
     if (r.voided > 0) for (const z of r.zones) emit(z, 'update', (reveal) => Q.zoneSnapshot(z, { reveal }));
   } catch { /* never let the sweep crash the server */ }
+  // INF-R4 catch-up: if the day rolled over while this instance was asleep, the scheduled midnight
+  // timer never fired — reset now (guarded, so it's a no-op once done for the day).
+  try { doDailyReset(); } catch { /* never let the reset guard crash the sweep */ }
 }, 60 * 1000);
 
 // Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose

@@ -63,8 +63,11 @@ if (USE_TURSO && Database) {
     timer = setTimeout(() => { timer = null; if (dirty) { dirty = false; doSync(); } }, 800);
     if (timer.unref) timer.unref();
   };
-  // Safety net: periodic sync even if writes are quiet, + flush on shutdown.
-  const iv = setInterval(doSync, 60_000); if (iv.unref) iv.unref();
+  // Safety net: periodic sync even if writes are quiet, + flush on shutdown. Every write already
+  // flushes within 800ms (scheduleSync), so this only pulls remote changes when idle — on a single
+  // instance that is near-redundant, so 5 min (not 60s) is plenty and cuts the Turso read quota ~5×
+  // (INF-R1: repeated quota exhaustion killed deploys at boot pull).
+  const iv = setInterval(doSync, 300_000); if (iv.unref) iv.unref();
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => { try { raw.sync(); } catch { /* best effort */ } process.exit(0); });
   }
@@ -668,6 +671,7 @@ for (const stmt of [
   `ALTER TABLE customer_coupons ADD COLUMN coupon_id INTEGER`,
   `ALTER TABLE customer_coupons ADD COLUMN nudged_at TEXT`,   // expiry-nudge LINE push sent (once per coupon)
   `ALTER TABLE stock_moves ADD COLUMN unit_cost REAL`,        // per-unit cost FROZEN at move time → COGS of a closed day never re-prices when new stock is bought (ACC-F1)
+  `ALTER TABLE orders ADD COLUMN invoice_no TEXT`,            // sequential tax-invoice number, assigned at payment when VAT is on (3D). Unbroken sequence per Thai tax law.
   `ALTER TABLE customer_coupons ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'`,
   `ALTER TABLE customer_coupons ADD COLUMN source TEXT`,
   `ALTER TABLE stock_moves ADD COLUMN supplier_id INTEGER`, // purchases only: who it was bought from (→ price history / planning)
@@ -731,6 +735,10 @@ for (const stmt of [
   // Stable link to the catalog. order_items joined menu_items BY NAME, so renaming a menu item
   // silently detached every past line from its recipe/stock/history. New lines store the id.
   `ALTER TABLE order_items ADD COLUMN menu_item_id INTEGER`,
+  // Phase 4 #3 daily-streak reward: consecutive Bangkok-days a customer has ordered, and the last
+  // day counted. Drives the "มาต่อเนื่อง N วัน" bonus coupon. Both dormant until streak is enabled.
+  `ALTER TABLE customers ADD COLUMN streak_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE customers ADD COLUMN streak_last_day TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

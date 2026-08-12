@@ -216,6 +216,75 @@ export async function pushStage(userId, opts, kind = 'queue') {
     } catch (e) { logPush(userId, kind, false); return false; }
   }
 }
+/** The coupon card a customer receives in LINE (win-back / birthday / targeted sends). Phase 4A
+ *  design: a teal YO-DEE hero with the value, a congrats/message line + expiry, and one button into
+ *  the LIFF. `msg` (optional) lets a campaign carry its own line instead of the generic congrats, so
+ *  the whole thing is ONE Flex message — no extra LINE cost over the old text push. */
+function buildCouponFlex(c, link, msg) {
+  const NAVY = '#284B63', MUTED = '#5C7187', TEAL = '#00B5D8', HAIR = '#EEF1F5';
+  const isReward = c.isReward || c.disc_type === 'reward';
+  const kind = c.couponKind || c.kind || (isReward ? 'reward' : 'discount');
+  // Per-kind gradient hero, mirroring the in-app .cpn / .cw-ticket value stub.
+  const GRAD = {
+    birthday: ['#F68CAE', '#E0608F'], winback: ['#F7C458', '#EF9C2A'],
+    reward: ['#33C9AC', '#10A582'], discount: ['#00B5D8', '#2FC2A6'],
+  };
+  const [g0, g1] = GRAD[kind] || GRAD.discount;
+  const big = isReward ? 'ฟรี 1 แก้ว'
+    : (c.disc_type === 'percent' ? `ส่วนลด ${c.disc_value}%` : `ส่วนลด ฿${c.disc_value ?? c.amount ?? c.cap ?? ''}`);
+  const cond = isReward ? `ไม่เกิน ฿${c.freeCap || c.cap || 49}` : (c.min_spend > 0 ? `ขั้นต่ำ ฿${c.min_spend}` : 'ไม่มีขั้นต่ำ · ทุกเมนู');
+  const kicker = kind === 'birthday' ? '🎂 ของขวัญวันเกิด' : kind === 'winback' ? '💛 ยินดีต้อนรับกลับ' : kind === 'reward' ? '🎁 รางวัลสะสมครบ' : '🎟️ คูปองส่วนลด';
+  const bodyLine = (msg && String(msg).trim()) || 'ยินดีด้วย! 🎉 คุณได้รับคูปองจาก YO-DEE';
+  return {
+    type: 'flex', altText: `🎁 คุณได้รับคูปอง YO-DEE — ${big}${c.expiresAt ? ` · ใช้ได้ถึง ${c.expiresAt}` : ''}`.slice(0, 390),
+    contents: {
+      type: 'bubble', size: 'mega',
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '0px', backgroundColor: '#FFFFFF',
+        contents: [
+          { type: 'box', layout: 'horizontal', paddingStart: '20px', paddingEnd: '20px', paddingTop: '18px', paddingBottom: '10px',
+            contents: [
+              { type: 'text', text: 'YO-DEE Yogurt', size: 'sm', weight: 'bold', color: NAVY, flex: 1, gravity: 'center' },
+              { type: 'text', text: 'คูปอง', size: 'xs', color: '#8A9299', align: 'end', gravity: 'center' },
+            ] },
+          { type: 'box', layout: 'vertical', paddingAll: '22px',
+            background: { type: 'linearGradient', angle: '135deg', startColor: g0, endColor: g1 },
+            contents: [
+              { type: 'text', text: kicker, size: 'xs', color: '#FFFFFF', weight: 'bold' },
+              { type: 'text', text: big, size: '3xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' },
+              { type: 'text', text: cond, size: 'xxs', color: '#FFFFFF', margin: 'sm' },
+            ] },
+          { type: 'box', layout: 'vertical', paddingAll: '18px',
+            contents: [
+              { type: 'text', text: bodyLine, weight: 'bold', size: 'md', color: NAVY, wrap: true },
+              { type: 'text', text: c.label || big, size: 'sm', color: MUTED, wrap: true, margin: 'sm' },
+              { type: 'separator', margin: 'lg', color: HAIR },
+              ...(c.expiresAt ? [{ type: 'box', layout: 'baseline', margin: 'lg', contents: [
+                { type: 'text', text: '⏳', flex: 0, size: 'sm' },
+                { type: 'text', text: `ใช้ได้ถึง ${c.expiresAt}`, size: 'xs', color: '#8A9299', margin: 'sm' },
+              ] }] : []),
+              { type: 'button', style: 'primary', color: TEAL, margin: 'lg', height: 'sm',
+                action: { type: 'uri', label: 'เปิดคูปอง · ใช้เลย', uri: link || 'https://line.me' } },
+            ] },
+        ] },
+    },
+  };
+}
+export async function pushCouponFlex(userId, coupon, link, msg, kind = 'coupon') {
+  if (!userId) return false;
+  const big = (coupon.isReward || coupon.disc_type === 'reward') ? 'ฟรี 1 แก้ว'
+    : (coupon.disc_type === 'percent' ? `ส่วนลด ${coupon.disc_value}%` : `ส่วนลด ฿${coupon.disc_value ?? coupon.amount ?? coupon.cap ?? ''}`);
+  const fallback = `🎁 ${(msg && String(msg).trim()) || 'คุณได้รับคูปองจาก YO-DEE'}\n${big}${coupon.label ? ` — ${coupon.label}` : ''}${coupon.expiresAt ? `\nใช้ได้ถึง ${coupon.expiresAt}` : ''}${link ? `\n👉 ${link}` : ''}`;
+  if (!LINE_ENABLED) { console.log(`\n[LINE-STUB coupon] -> ${userId}\n${fallback}\n`); return false; }
+  try {
+    await client.pushMessage({ to: userId, messages: [buildCouponFlex(coupon, link, msg)] });
+    logPush(userId, kind, true); return true;
+  } catch (err) {
+    console.error('[LINE] coupon flex failed, falling back to text:', err?.statusMessage || err?.message || err);
+    try { await client.pushMessage({ to: userId, messages: [{ type: 'text', text: fallback }] }); logPush(userId, kind, true); return true; }
+    catch (e) { logPush(userId, kind, false); return false; }
+  }
+}
 /** The owner's end-of-day summary as a Flex card. The plain-text version was a wall of 15+ emoji
  *  lines that had to be re-read every night to find the two numbers that matter; this leads with
  *  ยอดขาย/กำไร, groups the rest, and always carries the same text as altText so a notification

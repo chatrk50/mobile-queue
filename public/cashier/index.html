@@ -4783,6 +4783,7 @@ window.showFeatures=async()=>{
     row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
     row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
     row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
+    row('couponPopup', f.couponPopup!==false, '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></svg>', 'เด้งคูปองตอนลูกค้าเข้าแอป', (f.couponPopup!==false)?'เปิดอยู่ — ลูกค้าที่มีคูปองค้างในกระเป๋าจะเห็นการ์ดคูปองเด้งทักทายตอนเปิดแอป (วันละครั้ง) ให้รีบใช้':'ปิดอยู่ — เปิดเพื่อเด้งการ์ดคูปองต้อนรับให้ลูกค้าที่มีคูปองค้างอยู่', false)+
     row('pdpaNotice', f.pdpaNotice, IC.shield, 'แถบขอความยินยอม PDPA', f.pdpaNotice?'เปิดอยู่ — ลูกค้าใหม่เห็นแถบแจ้งการเก็บข้อมูล + ปุ่มยินยอม (ครั้งเดียวต่อคน)':'ปิดอยู่ — ไม่แสดงแถบบนหน้าลูกค้า · ความยินยอมที่เคยกดไว้ยังถูกเก็บ', false)+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
@@ -4823,6 +4824,46 @@ window.showFeatures=async()=>{
     `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
       <div style="flex:1"><b>เพดานข้อความดึงลูกค้ากลับ/เดือน</b><div class="muted" style="font-size:12px;margin-top:2px">คุมต้นทุน LINE — ส่งได้ไม่เกินนี้ต่อเดือน (นับคูปองที่ออกให้)</div></div>
       <input id="winbackCapInp" type="number" min="0" value="${f.autoWinbackCap!=null?f.autoWinbackCap:100}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center" onchange="saveWinbackCap()"></div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>
+          <div><b>คูปองชวนกลับมา (Bounce-back)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.bounceBack&&f.bounceBack.enabled?`เปิดอยู่ — จ่ายเงินเสร็จ ลูกค้า LINE ได้คูปอง <b>ลด ฿${f.bounceBack.amount}</b> เข้ากระเป๋าทันที ใช้ได้ <b>${f.bounceBack.days} วัน</b> ดันให้กลับมาไว (คนละ 1 ใบต่อครั้ง ไม่ซ้อน)`:'ปิดอยู่ — เปิดเพื่อแจกคูปองส่วนลดตอนจ่ายเงิน ดึงลูกค้าให้กลับมาครั้งที่ 2'}</div></div></div>
+        <button class="tgl ${f.bounceBack&&f.bounceBack.enabled?'on':'off'}" style="flex:none;margin-top:2px" onclick="toggleBounceBack(${f.bounceBack&&f.bounceBack.enabled?0:1})" role="switch" aria-checked="${f.bounceBack&&f.bounceBack.enabled?'true':'false'}" aria-label="เปิด/ปิด bounce-back"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">ลด <input id="bbAmtInp" type="number" inputmode="numeric" min="1" max="1000" value="${(f.bounceBack&&f.bounceBack.amount)||10}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> บาท</label>
+        <label class="muted" style="font-size:12.5px">ใช้ได้ภายใน <input id="bbDaysInp" type="number" inputmode="numeric" min="1" max="60" value="${(f.bounceBack&&f.bounceBack.days)||3}" style="width:64px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> วัน</label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveBounceBack()">บันทึก</button>
+      </div>
+    </div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2.3 6.9H21l-5.3 4.1L17.6 21 12 16.9 6.4 21l1.9-7L3 9.9h6.7z"/></svg></span>
+          <div><b>รางวัลมาต่อเนื่อง (Streak)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.streak&&f.streak.enabled?`เปิดอยู่ — ลูกค้า LINE ที่สั่ง <b>${f.streak.days} วันติด</b> รับคูปอง <b>ลด ฿${f.streak.amount}</b> เข้ากระเป๋า แล้วเริ่มนับใหม่ (คนละ 1 ใบต่อรอบ)`:'ปิดอยู่ — เปิดเพื่อให้รางวัลลูกค้าที่กลับมาสั่งติดต่อกันหลายวัน สร้างนิสัยการซื้อ'}</div></div></div>
+        <button class="tgl ${f.streak&&f.streak.enabled?'on':'off'}" style="flex:none;margin-top:2px" onclick="toggleStreak(${f.streak&&f.streak.enabled?0:1})" role="switch" aria-checked="${f.streak&&f.streak.enabled?'true':'false'}" aria-label="เปิด/ปิด streak"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">สั่งครบ <input id="stDaysInp" type="number" inputmode="numeric" min="2" max="30" value="${(f.streak&&f.streak.days)||3}" style="width:64px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> วันติด</label>
+        <label class="muted" style="font-size:12.5px">ลด <input id="stAmtInp" type="number" inputmode="numeric" min="1" max="1000" value="${(f.streak&&f.streak.amount)||15}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> บาท</label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveStreak()">บันทึก</button>
+      </div>
+    </div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span>
+          <div><b>Flash Sale (ช่วงเวลาพิเศษ)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.flashSale&&f.flashSale.enabled?`เปิดอยู่ — ช่วง <b>${String(f.flashSale.start).padStart(2,'0')}:00–${String(f.flashSale.end).padStart(2,'0')}:00</b> ลูกค้า LINE ที่เปิดแอปรับคูปอง <b>ลด ฿${f.flashSale.amount}</b> ใช้วันนี้ (คนละ 1 ใบ/วัน) · ไม่แตะราคาสินค้า จึงไม่กระทบบัญชี/VAT`:'ปิดอยู่ — เปิดเพื่อดันยอดช่วงเวลาที่ร้านว่าง แจกคูปองส่วนลดเฉพาะช่วงเวลานั้น'}</div></div></div>
+        <button class="tgl ${f.flashSale&&f.flashSale.enabled?'on':'off'}" style="flex:none;margin-top:2px" onclick="toggleFlash(${f.flashSale&&f.flashSale.enabled?0:1})" role="switch" aria-checked="${f.flashSale&&f.flashSale.enabled?'true':'false'}" aria-label="เปิด/ปิด flash sale"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:center;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px">เริ่ม <input id="fsStartInp" type="number" inputmode="numeric" min="0" max="23" value="${(f.flashSale&&f.flashSale.start)!=null?f.flashSale.start:17}" style="width:58px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> น.</label>
+        <label class="muted" style="font-size:12.5px">ถึง <input id="fsEndInp" type="number" inputmode="numeric" min="1" max="24" value="${(f.flashSale&&f.flashSale.end)!=null?f.flashSale.end:19}" style="width:58px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> น.</label>
+        <label class="muted" style="font-size:12.5px">ลด <input id="fsAmtInp" type="number" inputmode="numeric" min="1" max="1000" value="${(f.flashSale&&f.flashSale.amount)||20}" style="width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"> บาท</label>
+        <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveFlash()">บันทึก</button>
+      </div>
+    </div>`+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
         <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span><div><b>พักสิทธิ์ลูกค้าไม่มารับ (no-show)</b>
@@ -4866,6 +4907,27 @@ window.showFeatures=async()=>{
       <button class="ghost" style="width:100%;padding:9px" onclick="downloadBackup()">ดาวน์โหลดไฟล์สำรองข้อมูล</button>
     </div>`+
     `<div class="muted" style="font-size:12px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px">เวลาเปิด-ปิดร้าน ย้ายไปตั้งแยกรายสาขาที่ <b>เมนู "สาขา"</b> แล้ว</div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg></span>
+          <div><b>ภาษีมูลค่าเพิ่ม / ใบกำกับภาษี (VAT)</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">${f.vat&&f.vat.enabled?`เปิดอยู่ — ทุกบิลที่ชำระได้<b>เลขที่ใบกำกับภาษีต่อเนื่อง</b> (ล่าสุด #${String(f.vat.seq||0).padStart(6,'0')}) · กด "ใบกำกับภาษี" ที่บิลจ่ายแล้วเพื่อดู/พิมพ์`:'ปิดอยู่ — เปิดเมื่อจดทะเบียน VAT แล้ว · ระบบจะออกเลขที่ใบกำกับต่อเนื่องให้อัตโนมัติ'}</div></div></div>
+        <button class="tgl ${f.vat&&f.vat.enabled?'on':'off'}" style="flex:none;margin-top:2px" onclick="toggleVat(${f.vat&&f.vat.enabled?0:1})" role="switch" aria-checked="${f.vat&&f.vat.enabled?'true':'false'}" aria-label="เปิด/ปิด VAT"></button>
+      </div>
+      <div class="row" style="gap:8px;align-items:flex-end;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px;flex:1;min-width:180px">เลขประจำตัวผู้เสียภาษี (13 หลัก) — <b>ใส่ทีหลังได้</b><input id="vatTaxIdInp" inputmode="numeric" maxlength="13" placeholder="ยังไม่ต้องใส่ก็ได้" value="${esc((f.vat&&f.vat.taxId)||'')}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px"></label>
+        <label class="muted" style="font-size:12.5px;width:96px">VAT %<input id="vatRateInp" type="number" min="0" max="30" value="${(f.vat&&f.vat.rate)!=null?f.vat.rate:7}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
+      </div>
+      <label class="muted" style="font-size:12.5px;width:100%">ชื่อร้าน/นิติบุคคล (หัวใบกำกับ)<input id="vatBizNameInp" placeholder="เช่น บริษัท โยดี จำกัด" value="${esc((f.vat&&f.vat.bizName)||'')}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px"></label>
+      <label class="muted" style="font-size:12.5px;width:100%">ที่อยู่ (หัวใบกำกับ)<input id="vatBizAddrInp" placeholder="ที่อยู่ตามที่จดทะเบียน" value="${esc((f.vat&&f.vat.bizAddress)||'')}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px"></label>
+      <div class="row" style="gap:8px;align-items:flex-end;width:100%;flex-wrap:wrap">
+        <label class="muted" style="font-size:12.5px;width:140px">คำนำหน้าเลขที่<input id="vatPrefixInp" maxlength="12" placeholder="เช่น INV" value="${esc((f.vat&&f.vat.prefix)||'')}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px"></label>
+        <label class="muted" style="font-size:12.5px;width:140px">เริ่มนับเลขที่ที่<input id="vatSeqInp" type="number" min="0" value="${(f.vat&&f.vat.seq)||0}" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center"></label>
+        <label class="row" style="font-size:12.5px;gap:6px;align-items:center;color:var(--muted);padding-bottom:8px"><input id="vatInclusiveChk" type="checkbox" ${(!f.vat||f.vat.inclusive!==false)?'checked':''} style="width:18px;height:18px"> ราคารวม VAT แล้ว</label>
+      </div>
+      <button class="ok" style="width:100%;padding:9px" onclick="saveVat()">บันทึกการตั้งค่าภาษี</button>
+      <div class="muted" style="font-size:11.5px;width:100%">ℹ️ ตั้งค่าล่วงหน้าได้ — พอจดทะเบียน VAT เสร็จค่อยใส่เลขผู้เสียภาษีแล้วเปิดสวิตช์ · เลขที่ใบกำกับเดินต่อเนื่องไม่ข้าม (กฎหมายกำหนด) · เลขเริ่มนับปรับขึ้นได้อย่างเดียว กันเลขซ้ำ</div>
+    </div>`+
     `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start;color:var(--danger)"><span style="flex:none">${IC.trash}</span><div><b style="color:var(--danger)">ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div></div></div>
@@ -4884,6 +4946,27 @@ window.resetTransactions=async()=>{
   }catch(e){ const m=err(e); toast(m==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':(m==='confirm_required'?'ต้องยืนยันด้วย CLEAR':m)); } };
 window.saveWinbackCap=async()=>{ const cap=Math.max(0,Math.floor(Number($('winbackCapInp').value)||0));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoWinbackCap:cap})}); toast('ตั้งเพดาน '+cap+' ข้อความ/เดือน'); }catch(e){ toast(err(e)); } };
+// Bounce-back come-back coupon (Phase 4 #2)
+window.toggleBounceBack=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bounceBack:{enabled:!!on}})});
+    toast(on?'เปิดคูปองชวนกลับมาแล้ว':'ปิดแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.saveBounceBack=async()=>{
+  const bounceBack={ amount:Math.max(1,Math.floor(Number($('bbAmtInp').value)||10)), days:Math.max(1,Math.min(60,Math.floor(Number($('bbDaysInp').value)||3))) };
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bounceBack})}); toast('บันทึกแล้ว — ลด ฿'+bounceBack.amount+' ใช้ได้ '+bounceBack.days+' วัน'); showFeatures(); }catch(e){ toast(err(e)); } };
+// Streak reward (Phase 4 #3)
+window.toggleStreak=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({streak:{enabled:!!on}})});
+    toast(on?'เปิดรางวัลมาต่อเนื่องแล้ว':'ปิดแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.saveStreak=async()=>{
+  const streak={ days:Math.max(2,Math.min(30,Math.floor(Number($('stDaysInp').value)||3))), amount:Math.max(1,Math.floor(Number($('stAmtInp').value)||15)) };
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({streak})}); toast('บันทึกแล้ว — '+streak.days+' วันติด ลด ฿'+streak.amount); showFeatures(); }catch(e){ toast(err(e)); } };
+// Flash sale / happy hour (Phase 4 #4)
+window.toggleFlash=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flashSale:{enabled:!!on}})});
+    toast(on?'เปิด Flash Sale แล้ว':'ปิดแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };
+window.saveFlash=async()=>{
+  const flashSale={ start:Math.max(0,Math.min(23,Math.floor(Number($('fsStartInp').value)||0))), end:Math.max(1,Math.min(24,Math.floor(Number($('fsEndInp').value)||1))), amount:Math.max(1,Math.floor(Number($('fsAmtInp').value)||20)) };
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flashSale})}); toast('บันทึกแล้ว — '+String(flashSale.start).padStart(2,'0')+':00–'+String(flashSale.end).padStart(2,'0')+':00 ลด ฿'+flashSale.amount); showFeatures(); }catch(e){ toast(err(e)); } };
 // ถาม LINE ตรงๆ ว่า "token ของเซิร์ฟเวอร์นี้เป็นของ OA ไหน" และ "รหัส U… ที่บันทึกไว้เป็นคนของ OA นั้นไหม"
 // — userId ของ LINE ผูกกับ OA เดียว รหัสที่ก๊อปมาจาก OA ทดสอบจึงส่งไม่ได้ตลอดกาล ทั้งที่เพิ่มเพื่อนแล้ว
 window.checkLine=async()=>{
@@ -4936,6 +5019,19 @@ window.savePendVoid=async()=>{ const m=Math.max(0,Math.floor(Number($('pendVoidI
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pendingVoidMinutes:m})}); try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(m?('ยกเลิกค้างชำระอัตโนมัติที่ '+m+' นาที'):'ปิดการยกเลิกค้างชำระอัตโนมัติ'); }catch(e){ toast(err(e)); } };
 window.downloadBackup=()=>{ toast('กำลังเตรียมไฟล์สำรอง…');
   window.open('/api/admin/backup.json'+(PIN?('?pin='+encodeURIComponent(PIN)):''),'_blank'); };
+// VAT/tax-invoice settings (owner-only). Toggle is separate so the owner can prep the details now and
+// flip it on the day they register (3D).
+window.toggleVat=async(on)=>{
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vat:{enabled:!!on}})});
+    toast(on?'เปิด VAT แล้ว — บิลใหม่จะได้เลขที่ใบกำกับต่อเนื่อง':'ปิด VAT แล้ว'); showFeatures(); }
+  catch(e){ toast(err(e)==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':err(e)); } };
+window.saveVat=async()=>{
+  const vat={ taxId:$('vatTaxIdInp').value, rate:Number($('vatRateInp').value)||7, bizName:$('vatBizNameInp').value,
+    bizAddress:$('vatBizAddrInp').value, prefix:$('vatPrefixInp').value, seq:Math.max(0,Math.floor(Number($('vatSeqInp').value)||0)),
+    inclusive:$('vatInclusiveChk').checked };
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vat})});
+    toast('บันทึกการตั้งค่าภาษีแล้ว'); showFeatures(); }
+  catch(e){ toast(err(e)==='forbidden'?'เฉพาะเจ้าของร้านเท่านั้น':err(e)); } };
 window.savePosOffline=async()=>{ const m=Math.max(0,Math.min(180,Math.floor(Number($('posOffInp').value)||0)));
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({posOfflineMinutes:m})});
     toast(m?('ปิดรับออนไลน์เองเมื่อเครื่องเงียบเกิน '+m+' นาที'):'ปิดการปิดรับอัตโนมัติแล้ว'); showFeatures(); }catch(e){ toast(err(e)); } };

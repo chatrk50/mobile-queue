@@ -10,7 +10,7 @@ services:
     region: singapore        # closest Render region to Thailand
     branch: main
     buildCommand: npm install
-    startCommand: npm run seed && npm start
+    startCommand: npm run seed ; npm start   # ';' not '&&' — a seed hiccup must never block boot (INF)
     healthCheckPath: /cashier/
     envVars:
       - key: NODE_VERSION

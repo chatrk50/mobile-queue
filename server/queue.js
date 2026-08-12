@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, pushSummary, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 
 const pad = (n) => String(n).padStart(3, '0');
@@ -543,10 +543,15 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
     : (cp.fixedExpiry || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
   let sent = 0, failed = 0, issuedCoupons = 0;
   for (const key of targets) {
-    let text = msg;
-    if (cp) text += `\n\n🎁 แนบคูปอง "${cp.label}" ให้แล้ว — อยู่ในเมนูคูปองของคุณ ใช้ได้ถึง ${expiresAt}`;
     let ok = false;
-    try { ok = (await pushQueue(key, text, shopLink(), 'สั่งเลย', 'winback')) !== false; } catch { ok = false; }
+    try {
+      // A coupon campaign now goes out as the branded YO-DEE coupon card (Phase 4A) — ONE Flex message
+      // carrying the owner's message + the coupon; no attachment, no extra send. Message-only campaigns
+      // stay a plain text push.
+      ok = cp
+        ? (await pushCouponFlex(key, { label: cp.label, disc_type: 'amount', disc_value: cp.cap, expiresAt }, shopLink(), msg, 'winback')) !== false
+        : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
+    } catch { ok = false; }
     if (ok) sent++; else failed++;
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
@@ -2523,6 +2528,17 @@ export function availableCoupons(customerKey, orderNet, lines = null) {
         isReward: true, ccId: cc.id, freeCap: cc.free_cap, couponKind: cc.kind });
     }
   }
+  // CUS-H6: surface what's usable NOW. Order = the customer's earned rewards, then usable coupons
+  // (biggest discount first), then anything not-yet-usable (expired / min-spend / used up) at the
+  // bottom — a valuable usable coupon must never sit buried below an expired one. Array.sort is
+  // stable in V8, so rewards keep their claim order and unusable rows keep newest-first.
+  const rank = (c) => (c.usable ? (c.isReward ? 0 : 1) : 2);
+  list.sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 1) return (b.discount || 0) - (a.discount || 0);
+    return 0;
+  });
   return list;
 }
 /** Apply a coupon to an order at creation: re-validate SERVER-SIDE, add its discount (respecting any
@@ -2611,6 +2627,10 @@ export function tenderRecon({ date = null, branchId = null } = {}) {
 // Model: 1 stamp per drink cup; collect `stamps_per_reward` cups → 1 free drink (≤49฿).
 // "points" in the DB == stamps. Disabled by default (owner enables later).
 export function loyaltyEnabled() { return getSetting('loyalty:enabled', '0') === '1'; }
+// Phase 4A: the coupon-arrival popup — greet a customer who opens the LIFF holding an unused coupon
+// with a branded card so it doesn't sit forgotten in the wallet. Owner-toggleable (default ON).
+export function couponPopupEnabled() { return getSetting('coupon:popup', '1') === '1'; }
+export function setCouponPopup(on) { setSetting('coupon:popup', on ? '1' : '0'); return { couponPopup: !!on }; }
 export function setLoyaltyEnabled(on) { setSetting('loyalty:enabled', on ? '1' : '0'); return { enabled: !!on }; }
 // Membership system (บัตรสมาชิก + tier + recognition) — SEPARATE from the stamp/points programme. Default ON.
 export function memberEnabled() { return getSetting('member:enabled', '1') === '1'; }
@@ -3266,6 +3286,130 @@ export function autoWinbackEnabled() { return getSetting('winback:auto', '0') ==
 export function setAutoWinback(on) { setSetting('winback:auto', on ? '1' : '0'); return { autoWinback: !!on }; }
 export function getAutoWinbackCap() { return Math.max(0, Math.round(Number(getSetting('winback:cap', '100')) || 0)); }
 export function setAutoWinbackCap(n) { const v = Math.max(0, Math.min(5000, Math.round(Number(n) || 0))); setSetting('winback:cap', String(v)); return { autoWinbackCap: v }; }
+
+// ---------- Bounce-back (Phase 4 #2) ----------
+// A "come back soon" coupon dropped into the customer's wallet the moment they pay — to pull the hard
+// SECOND visit. Default OFF (it discounts a future sale, so it's the owner's margin call). Reuses the
+// exact wallet + expiry-nudge machinery as win-back, but fires on PURCHASE instead of on going quiet.
+// One active at a time per customer, so a daily regular can't stack a pile of ฿10s.
+export function bounceBackEnabled() { return getSetting('bounceback:enabled', '0') === '1'; }
+export function getBounceBackConfig() {
+  return {
+    enabled: bounceBackEnabled(),
+    amount: Math.max(1, Math.round(Number(getSetting('bounceback:amount', '10')) || 10)),
+    days: Math.max(1, Math.min(60, Math.round(Number(getSetting('bounceback:days', '3')) || 3))),
+  };
+}
+export function setBounceBackConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('bounceback:enabled', patch.enabled ? '1' : '0');
+  if (patch.amount != null) setSetting('bounceback:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 10)))));
+  if (patch.days != null) setSetting('bounceback:days', String(Math.max(1, Math.min(60, Math.round(Number(patch.days) || 3)))));
+  return getBounceBackConfig();
+}
+// Best-effort — NEVER throws (must not break a sale). Skips if the customer already holds an active
+// bounce-back, so back-to-back purchases don't stack coupons.
+function issueBounceBack(customerKey) {
+  try {
+    if (!customerKey || !bounceBackEnabled()) return { issued: false };
+    if (customerCoupons(customerKey).some((c) => c.kind === 'bounceback')) return { issued: false, reason: 'already_active' };
+    const cfg = getBounceBackConfig();
+    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cfg.days).d;
+    const label = `กลับมาใน ${cfg.days} วัน ลด ฿${cfg.amount}`;
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'bounceback', ?, ?, ?, 'bounceback')`)
+      .run(customerKey, label, cfg.amount, expiresAt);
+    return { issued: true, label, expiresAt };
+  } catch { return { issued: false, reason: 'error' }; }
+}
+// ---------- Daily streak (Phase 4 #3) ----------
+// Rewards consecutive-day visits: order on N Bangkok-days in a row → a bonus coupon drops into the
+// wallet, then the streak resets so it can be earned again. Default OFF (it's the owner's margin
+// call). Reuses the same wallet/redeem machinery as bounce-back — a "up to ฿X off" value coupon.
+export function streakEnabled() { return getSetting('streak:enabled', '0') === '1'; }
+export function getStreakConfig() {
+  return {
+    enabled: streakEnabled(),
+    days: Math.max(2, Math.min(30, Math.round(Number(getSetting('streak:days', '3')) || 3))),
+    amount: Math.max(1, Math.round(Number(getSetting('streak:amount', '15')) || 15)),
+  };
+}
+export function setStreakConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('streak:enabled', patch.enabled ? '1' : '0');
+  if (patch.days != null) setSetting('streak:days', String(Math.max(2, Math.min(30, Math.round(Number(patch.days) || 3)))));
+  if (patch.amount != null) setSetting('streak:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 15)))));
+  return getStreakConfig();
+}
+// Advance the customer's daily-visit streak on a paid order; award + reset when it reaches the
+// target. Idempotent per Bangkok-day (a 2nd order same day doesn't advance it). Never throws.
+function bumpStreak(customerKey) {
+  try {
+    if (!customerKey || !streakEnabled()) return { issued: false };
+    const days = db.prepare(`SELECT date(datetime('now','+7 hours')) t, date(datetime('now','+7 hours'),'-1 day') y`).get();
+    const row = db.prepare(`SELECT streak_count AS n, streak_last_day AS last FROM customers WHERE line_user_id=?`).get(customerKey);
+    const last = row ? row.last : null;
+    if (last === days.t) return { issued: false, reason: 'counted_today' };   // already advanced today
+    let n = (last === days.y) ? ((row && row.n) || 0) + 1 : 1;                // continue or restart
+    const cfg = getStreakConfig();
+    let out = { issued: false, count: n, target: cfg.days };
+    if (n >= cfg.days && !customerCoupons(customerKey).some((c) => c.kind === 'streak')) {
+      const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d;
+      const label = `มาต่อเนื่อง ${cfg.days} วัน ลด ฿${cfg.amount}`;
+      db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'streak', ?, ?, ?, 'streak')`)
+        .run(customerKey, label, cfg.amount, expiresAt);
+      out = { issued: true, label, expiresAt, count: n, target: cfg.days };
+      n = 0;   // reset — the streak is earned again after another run of N days
+    }
+    db.prepare(`INSERT INTO customers (line_user_id, streak_count, streak_last_day) VALUES (?,?,?)
+                 ON CONFLICT(line_user_id) DO UPDATE SET streak_count=excluded.streak_count, streak_last_day=excluded.streak_last_day`)
+      .run(customerKey, n, days.t);
+    return out;
+  } catch { return { issued: false, reason: 'error' }; }
+}
+// ---------- Flash sale / happy hour (Phase 4 #4) ----------
+// A time-boxed "⚡ ลดทุกออเดอร์" window the owner opens for a slow part of the day. While the window
+// is live a customer claims ONE flash coupon into their wallet (a "up to ฿X off" value coupon on the
+// same machinery as bounce-back). Default OFF; it touches NO menu price, so accounting/VAT/COGS are
+// completely untouched — it's a coupon, not a repricing.
+export function flashSaleActive() {
+  if (getSetting('flash:enabled', '0') !== '1') return false;
+  const h = db.prepare(`SELECT CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get().h;
+  const start = Math.max(0, Math.min(23, Math.round(Number(getSetting('flash:start', '17')) || 0)));
+  let end = Math.max(1, Math.min(24, Math.round(Number(getSetting('flash:end', '19')) || 0)));
+  if (end <= start) end = Math.min(24, start + 1);
+  return h >= start && h < end;
+}
+export function getFlashSaleConfig() {
+  const start = Math.max(0, Math.min(23, Math.round(Number(getSetting('flash:start', '17')) || 0)));
+  let end = Math.max(1, Math.min(24, Math.round(Number(getSetting('flash:end', '19')) || 0)));
+  if (end <= start) end = Math.min(24, start + 1);
+  return {
+    enabled: getSetting('flash:enabled', '0') === '1',
+    start, end,
+    amount: Math.max(1, Math.round(Number(getSetting('flash:amount', '20')) || 20)),
+    active: flashSaleActive(),
+  };
+}
+export function setFlashSaleConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('flash:enabled', patch.enabled ? '1' : '0');
+  if (patch.start != null) setSetting('flash:start', String(Math.max(0, Math.min(23, Math.round(Number(patch.start) || 0)))));
+  if (patch.end != null) setSetting('flash:end', String(Math.max(1, Math.min(24, Math.round(Number(patch.end) || 1)))));
+  if (patch.amount != null) setSetting('flash:amount', String(Math.max(1, Math.min(1000, Math.round(Number(patch.amount) || 20)))));
+  return getFlashSaleConfig();
+}
+// Drop today's flash coupon into the customer's wallet. Idempotent per Bangkok-day (one per customer
+// per day). Expires end of TODAY — a flash coupon is a "use it now" nudge. Never throws.
+export function claimFlashSale(customerKey) {
+  try {
+    if (!customerKey || !flashSaleActive()) return { issued: false, reason: 'inactive' };
+    const today = db.prepare(`SELECT date(datetime('now','+7 hours')) d`).get().d;
+    if (db.prepare(`SELECT 1 FROM customer_coupons WHERE customer_key=? AND kind='flash' AND date(issued_at,'+7 hours')=? LIMIT 1`).get(customerKey, today))
+      return { issued: false, reason: 'already_today' };
+    const cfg = getFlashSaleConfig();
+    const label = `⚡ Flash Sale ลด ฿${cfg.amount} วันนี้`;
+    db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'flash', ?, ?, ?, 'flash')`)
+      .run(customerKey, label, cfg.amount, today);
+    return { issued: true, label, expiresAt: today, amount: cfg.amount };
+  } catch { return { issued: false, reason: 'error' }; }
+}
 /** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
  *  so it's exact even on UAT where LINE pushes are stubbed). */
 function winbackIssuedThisMonth() {
@@ -3755,7 +3899,11 @@ export function issueBirthdayCoupons() {
   for (const r of rows) {
     db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'birthday', ?, ?, ?, 'birthday')`)
       .run(r.key, bdayLabel, tpl.value, expiresAt);
-    try { pushQueue(r.key, `🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้\nรับฟรีเครื่องดื่ม 1 แก้ว (ไม่เกิน ฿${tpl.value}) — กดใช้ได้เองในเมนูคูปอง ภายใน ${tpl.days} วันนะคะ 💛`, null, 'ดูคิวของฉัน', 'birthday'); } catch { /* push is best-effort */ }
+    try {
+      pushCouponFlex(r.key,
+        { isReward: true, disc_type: 'reward', couponKind: 'birthday', freeCap: tpl.value, label: bdayLabel, expiresAt },
+        shopLink(), '🎂 สุขสันต์วันเกิดค่ะ! ทางร้านมีของขวัญให้คุณ 💛', 'birthday');
+    } catch { /* push is best-effort */ }
   }
   return { issued: rows.length };
 }
@@ -3991,7 +4139,8 @@ export function customerSuggestions(lineUserId) {
 /** Edit a still-unpaid order's items in place (change drink / sweetness / toppings) instead of
  *  cancel-and-rekey. Replaces all order_items + recomputes total. Guarded: not paid, not void, and
  *  nothing collected yet (paid_amount 0). Stock isn't touched here — it deducts at payment. */
-export function editOrderItems(ticketId, items) {
+export function editOrderItems(ticketId, items, opts = {}) {
+  const { actorId = null } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') throw new Error('already_paid');
@@ -4016,7 +4165,7 @@ export function editOrderItems(ticketId, items) {
     db.prepare('UPDATE orders SET total=?, discount=?, discount_reason=? WHERE id=?').run(total, newDisc, newReason, order.id);
   });
   tx();
-  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, meta: {} });
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, actor: actorId, meta: {} });
   return { ok: true, total, ticketId: Number(ticketId) };
 }
 
@@ -4289,6 +4438,19 @@ export function assignQueueNumber(ticketId) {
 /** Record one tender leg (a split bill = several rows). kind='payment' stores +amount, 'refund'
  *  stores -amount. A client_token makes a retried leg idempotent (pay-partial double-tap on flaky
  *  wifi). Returns true if a row was written, false if it was a duplicate token. */
+// CASH-10: a client can POST any string as the pay method; an unknown one (e.g. 'banana') would slip
+// into the ledger + orders.payment_method and never match a tender bucket, silently breaking the
+// drawer/tender reconciliation. Collapse anything that isn't a configured tender code (dynamic — never
+// rejects a real tender the owner set up) or an always-valid built-in down to 'other'. null/''
+// is preserved so "keep the existing payment_method" (COALESCE on update) still works.
+const BUILTIN_METHODS = new Set(['cash', 'other', 'reward', 'slip']);
+function normalizeMethod(m) {
+  if (m == null || m === '') return m;
+  const k = String(m).trim().toLowerCase().slice(0, 24);
+  if (BUILTIN_METHODS.has(k)) return k;
+  try { if (db.prepare('SELECT 1 FROM tenders WHERE code=?').get(k)) return k; } catch { /* fall through to other */ }
+  return 'other';
+}
 function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, kind = 'payment', actorId = null, clientToken = null }) {
   const amt = Math.round(Math.abs(Number(amount) || 0) * 100) / 100;
   if (!amt) return false;
@@ -4303,8 +4465,77 @@ function recordPaymentLeg({ orderId, branchId = null, method = 'cash', amount, k
   }
 }
 
+// ---------- VAT / tax invoice (3D) ----------
+// Dormant until the owner switches it on (they fill the tax id after registering for VAT). When on,
+// every paid order takes the next number in an UNBROKEN sequence (Thai tax law) and can print an
+// abbreviated tax invoice (ใบกำกับภาษีอย่างย่อ) with the VAT split out. Prices are treated as
+// VAT-INCLUSIVE by default — the Thai retail norm (the shelf price already contains the 7%).
+export function vatEnabled() { return getSetting('vat:enabled', '0') === '1'; }
+export function getVatConfig() {
+  return {
+    enabled: vatEnabled(),
+    taxId: getSetting('vat:tax_id', '') || '',
+    rate: Number(getSetting('vat:rate', '7')) || 7,
+    inclusive: getSetting('vat:inclusive', '1') === '1',
+    bizName: getSetting('vat:biz_name', '') || '',
+    bizAddress: getSetting('vat:biz_address', '') || '',
+    prefix: getSetting('vat:prefix', '') || '',
+    seq: Number(getSetting('vat:seq', '0')) || 0,
+  };
+}
+export function setVatConfig(patch = {}) {
+  if (patch.enabled != null) setSetting('vat:enabled', patch.enabled ? '1' : '0');
+  if (patch.taxId != null) setSetting('vat:tax_id', String(patch.taxId).replace(/\D/g, '').slice(0, 13));  // 13-digit Thai tax id, digits only
+  if (patch.rate != null) setSetting('vat:rate', String(Math.max(0, Math.min(30, Number(patch.rate) || 0))));
+  if (patch.inclusive != null) setSetting('vat:inclusive', patch.inclusive ? '1' : '0');
+  if (patch.bizName != null) setSetting('vat:biz_name', String(patch.bizName).slice(0, 200));
+  if (patch.bizAddress != null) setSetting('vat:biz_address', String(patch.bizAddress).slice(0, 400));
+  if (patch.prefix != null) setSetting('vat:prefix', String(patch.prefix).replace(/[^\w\-/]/g, '').slice(0, 12));
+  // seq lets the owner align with an existing paper book, but can never go BELOW what's been issued
+  // (that would reuse a number — illegal). It only ever moves forward.
+  if (patch.seq != null) setSetting('vat:seq', String(Math.max(Number(getSetting('vat:seq', '0')) || 0, Math.floor(Number(patch.seq) || 0))));
+  return getVatConfig();
+}
+// Atomic, unbroken increment — single-writer SQLite + a transaction guarantee no sale gets a
+// duplicate number and none is skipped.
+function nextInvoiceNo() {
+  return db.transaction(() => {
+    const n = (Number(getSetting('vat:seq', '0')) || 0) + 1;
+    setSetting('vat:seq', String(n));
+    return `${getSetting('vat:prefix', '') || ''}${String(n).padStart(6, '0')}`;
+  })();
+}
+// Assign a number to a paid order ONCE (idempotent). Never throws — invoicing must not break a sale.
+function assignInvoiceForOrder(orderId) {
+  try {
+    const o = db.prepare('SELECT invoice_no FROM orders WHERE id=?').get(orderId);
+    if (!o || o.invoice_no) return o ? o.invoice_no : null;
+    const no = nextInvoiceNo();
+    db.prepare('UPDATE orders SET invoice_no=? WHERE id=? AND invoice_no IS NULL').run(no, orderId);
+    return no;
+  } catch { return null; }
+}
+// Abbreviated-tax-invoice payload for a paid order: VAT split out of the amount actually charged
+// (order total net of discount).
+export function taxInvoiceForOrder(ticketId) {
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) return null;
+  const cfg = getVatConfig();
+  const charged = r2((order.total || 0) - (order.discount || 0));
+  const vat = cfg.inclusive ? r2(charged * cfg.rate / (100 + cfg.rate)) : r2(charged * cfg.rate / 100);
+  const net = cfg.inclusive ? r2(charged - vat) : charged;
+  const total = cfg.inclusive ? charged : r2(charged + vat);
+  const items = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+  return {
+    invoiceNo: order.invoice_no || null, issued: !!order.invoice_no, paid: order.payment_status === 'paid',
+    dateTime: order.paid_at || null, taxId: cfg.taxId, bizName: cfg.bizName, bizAddress: cfg.bizAddress,
+    rate: cfg.rate, inclusive: cfg.inclusive, items, net, vat, total,
+  };
+}
+
 export function setOrderPaid(ticketId, opts = {}) {
-  const { actorId = null, method = null, skipLoyalty = false, _skipLeg = false } = opts;
+  const { actorId = null, method: rawMethod = null, skipLoyalty = false, _skipLeg = false } = opts;
+  const method = normalizeMethod(rawMethod);   // CASH-10: reject garbage methods before they hit the ledger
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   // Idempotent: an already-paid order returns its existing result unchanged, so a retried
@@ -4325,6 +4556,8 @@ export function setOrderPaid(ticketId, opts = {}) {
   // settle (the partial legs already cover the full net — else the settling amount is double-counted).
   if (!_skipLeg) recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: order.total - (order.discount || 0), kind: 'payment', actorId });
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'paid', amount: order.total, actor: actorId, meta: { method: method || 'cash' } });
+  if (vatEnabled()) assignInvoiceForOrder(order.id);   // 3D: unbroken tax-invoice number, tied to the sale
+
   // Now that payment is confirmed, issue the queue number (idempotent) and tell the customer.
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
   // without a number; falls back to the current ticket row if numbering ultimately fails.
@@ -4337,6 +4570,11 @@ export function setOrderPaid(ticketId, opts = {}) {
   if (!skipLoyalty) { try { loyalty = awardPoints(order.id); } catch { /* never block a payment on loyalty */ } }
   if (ticket && ticket.line_user_id) {
     const ahead = aheadCount(ticket);
+    // Phase 4 #2: drop a come-back coupon into their wallet on purchase (dormant unless the owner
+    // enabled it). Mentioned in the confirmation below so it rides the existing push — no extra LINE cost.
+    let bounce = null; try { bounce = issueBounceBack(ticket.line_user_id); } catch { /* never block a payment */ }
+    // Phase 4 #3: advance the daily-visit streak; award a bonus coupon on the Nth day in a row.
+    let streak = null; try { streak = bumpStreak(ticket.line_user_id); } catch { /* never block a payment */ }
     // Order-status progress card (LINE-MAN style): stage 2 = order in, being made.
     let sub = `ชำระเงินเรียบร้อย ฿${order.total} · คิวรอก่อนหน้า ${ahead}`;
     if (loyalty && loyalty.awarded != null) {
@@ -4355,6 +4593,8 @@ export function setOrderPaid(ticketId, opts = {}) {
     } else {
       sub += `\nเราจะแจ้งเตือนเมื่อเครื่องดื่มใกล้พร้อมค่ะ`;
     }
+    if (bounce && bounce.issued) sub += `\n🎁 ${bounce.label} — เก็บไว้ในเมนูคูปองแล้ว ใช้ได้ถึง ${bounce.expiresAt}`;
+    if (streak && streak.issued) sub += `\n🔥 มาต่อเนื่อง ${streak.target} วันติด! รับ ${streak.label} — เก็บในเมนูคูปองแล้ว ใช้ได้ถึง ${streak.expiresAt}`;
     pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
@@ -4380,7 +4620,8 @@ export function payMulti(ticketIds, opts = {}) {
  *  covers the net (total − discount), settle in full via setOrderPaid (issue queue number etc.).
  *  Returns the running paid + remaining so the cashier keeps collecting until the balance is 0. */
 export function payPartial(ticketId, amount, opts = {}) {
-  const { actorId = null, method = null, clientToken = null } = opts;
+  const { actorId = null, method: rawMethod = null, clientToken = null } = opts;
+  const method = normalizeMethod(rawMethod);   // CASH-10
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   if (amt <= 0) throw new Error('bad_amount');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
@@ -4688,7 +4929,8 @@ function reverseLoyaltyForOrder(orderId, ownerKey) {
 }
 
 export function cancelOrderTicket(ticketId, threshold, opts = {}) {
-  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod = null } = opts;
+  const { actorId = null, reason = null, kind: kindOpt = null, restock = false, refundMethod: rawRefundMethod = null } = opts;
+  const refundMethod = normalizeMethod(rawRefundMethod);   // CASH-10
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);

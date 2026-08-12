@@ -1942,6 +1942,98 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   ok(db.prepare(`SELECT COUNT(*) n FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) AND kind='refund'`).get(zc.ticket.id).n === 0, 'INVARIANT CASH-4 waste-remake writes no refund leg');
   ok(wr.cups >= 1, `INVARIANT CASH-4 waste-remake reports the wasted cups (${wr.cups})`);
 }
+{
+  // CASH-10: a garbage pay method must normalize to 'other' (it would otherwise create a phantom
+  // tender bucket that never reconciles); a real configured tender code passes through untouched.
+  const gz = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(gz.ticket.id, { method: 'banana' });
+  const go = db.prepare('SELECT id, payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(gz.ticket.id);
+  const gl = db.prepare("SELECT method FROM order_payments WHERE order_id=? AND kind='payment' ORDER BY id DESC LIMIT 1").get(go.id);
+  ok(go.payment_method === 'other', `INVARIANT CASH-10 garbage method → orders.payment_method 'other' (got ${go.payment_method})`);
+  ok(gl && gl.method === 'other', `INVARIANT CASH-10 garbage method → ledger leg 'other' (got ${gl && gl.method})`);
+  const cz = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(cz.ticket.id, { method: 'cash' });
+  ok(db.prepare('SELECT payment_method FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(cz.ticket.id).payment_method === 'cash',
+    'INVARIANT CASH-10 a real tender code (cash) passes through unchanged');
+}
+{
+  // ACC-F7: editing an unpaid bill must record WHO edited it in the audit trail (anti-fraud).
+  const ez = Q.createOrder(1, [{ name: 'Drink49', price: 49, qty: 1 }], { source: 'cashier' });
+  Q.editOrderItems(ez.ticket.id, [{ name: 'Drink49', price: 49, qty: 2 }], { actorId: 77 });
+  await new Promise((r) => setImmediate(r));   // sale_events flush on a setImmediate tick — let it fire
+  const ev = db.prepare("SELECT actor FROM sale_events WHERE type='order_edited' AND order_id=(SELECT id FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1) ORDER BY id DESC LIMIT 1").get(ez.ticket.id);
+  ok(ev && ev.actor === 77, `INVARIANT ACC-F7 order_edited records the acting cashier (got ${ev && ev.actor})`);
+}
+{
+  // 3D VAT: with VAT on, each paid order takes the next UNBROKEN invoice number, and the abbreviated
+  // tax invoice splits VAT out of the (inclusive) charged amount so net + vat == total.
+  Q.setVatConfig({ enabled: true, rate: 7, inclusive: true, prefix: 'INV' });
+  const seq0 = Q.getVatConfig().seq;
+  const v1 = Q.createOrder(1, [{ name: 'Drink107', price: 107, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(v1.ticket.id, { method: 'cash' });
+  const v2 = Q.createOrder(1, [{ name: 'Drink53', price: 53, qty: 1 }], { source: 'cashier' });
+  Q.setOrderPaid(v2.ticket.id, { method: 'cash' });
+  const inv1 = Q.taxInvoiceForOrder(v1.ticket.id), inv2 = Q.taxInvoiceForOrder(v2.ticket.id);
+  ok(inv1.invoiceNo === 'INV' + String(seq0 + 1).padStart(6, '0'), `INVARIANT 3D first invoice = prefix+seq+1 (got ${inv1.invoiceNo})`);
+  ok(inv2.invoiceNo === 'INV' + String(seq0 + 2).padStart(6, '0'), `INVARIANT 3D invoice numbers are sequential + unbroken (got ${inv2.invoiceNo})`);
+  ok(accNear2(inv1.net + inv1.vat, inv1.total) && accNear2(inv1.total, 107), `INVARIANT 3D net+vat==total (${inv1.net}+${inv1.vat}==${inv1.total})`);
+  ok(accNear2(inv1.vat, 107 * 7 / 107), `INVARIANT 3D VAT split out of inclusive price (${inv1.vat} == 7)`);
+  // re-reading the same order returns the SAME number (idempotent, never re-issued)
+  ok(Q.taxInvoiceForOrder(v1.ticket.id).invoiceNo === inv1.invoiceNo, 'INVARIANT 3D invoice number is stable per order (idempotent)');
+  Q.setVatConfig({ enabled: false });   // leave VAT off for the rest of the suite
+}
+{
+  // Phase 4 #2: bounce-back — default OFF issues nothing; when on, a paid LINE order drops ONE come-back
+  // coupon (฿amount cap, +days expiry) into the wallet; back-to-back purchases don't stack.
+  const UID = 'U' + 'd'.repeat(32);
+  const o0 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o0.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback').length === 0, 'INVARIANT 4#2 bounce-back OFF by default → no coupon');
+  Q.setBounceBackConfig({ enabled: true, amount: 10, days: 3 });
+  const o1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o1.ticket.id, { method: 'cash' });
+  const w1 = Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback');
+  ok(w1.length === 1 && accNear2(w1[0].free_cap, 10), `INVARIANT 4#2 paid LINE order issues one ฿10 come-back coupon (got ${w1.length}, cap ${w1[0] && w1[0].free_cap})`);
+  const o2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: UID });
+  Q.setOrderPaid(o2.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(UID).filter((c) => c.kind === 'bounceback').length === 1, 'INVARIANT 4#2 no stacking — one active bounce-back at a time');
+  Q.setBounceBackConfig({ enabled: false });
+}
+{
+  // Phase 4 #3: daily streak — default OFF issues nothing; when on, ordering on N consecutive
+  // Bangkok-days drops ONE bonus coupon, then the streak resets so it can't stack.
+  const SID = 'U' + 's'.repeat(32);
+  const s0 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s0.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 0, 'INVARIANT 4#3 streak OFF by default → no coupon');
+  Q.setStreakConfig({ enabled: true, days: 2, amount: 15 });
+  const s1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s1.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 0, 'INVARIANT 4#3 day 1 of 2 → no coupon yet');
+  // Back-date the last counted day so the next paid order is a consecutive 2nd day.
+  db.prepare(`UPDATE customers SET streak_last_day = date(datetime('now','+7 hours'),'-1 day') WHERE line_user_id=?`).run(SID);
+  const s2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s2.ticket.id, { method: 'cash' });
+  const sw = Q.customerCoupons(SID).filter((c) => c.kind === 'streak');
+  ok(sw.length === 1 && near(sw[0].free_cap, 15), `INVARIANT 4#3 2-day streak issues one ฿15 coupon (got ${sw.length}, cap ${sw[0] && sw[0].free_cap})`);
+  const s3 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: SID });
+  Q.setOrderPaid(s3.ticket.id, { method: 'cash' });
+  ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 1, 'INVARIANT 4#3 no stacking — streak resets after award');
+  Q.setStreakConfig({ enabled: false });
+}
+{
+  // Phase 4 #4: flash sale — inactive OFF; an all-day window is active and lets a customer claim ONE
+  // ฿amount value coupon into the wallet, once per Bangkok-day.
+  const FID = 'U' + 'f'.repeat(32);
+  ok(Q.claimFlashSale(FID).issued === false, 'INVARIANT 4#4 flash OFF by default → claim issues nothing');
+  Q.setFlashSaleConfig({ enabled: true, start: 0, end: 24, amount: 20 });
+  ok(Q.flashSaleActive() === true, 'INVARIANT 4#4 window 00–24 is active');
+  const fr = Q.claimFlashSale(FID);
+  const fw = Q.customerCoupons(FID).filter((c) => c.kind === 'flash');
+  ok(fr.issued === true && fw.length === 1 && near(fw[0].free_cap, 20), `INVARIANT 4#4 active window → one ฿20 flash coupon (got ${fw.length}, cap ${fw[0] && fw[0].free_cap})`);
+  ok(Q.claimFlashSale(FID).issued === false && Q.customerCoupons(FID).filter((c) => c.kind === 'flash').length === 1, 'INVARIANT 4#4 one flash coupon per customer per day');
+  Q.setFlashSaleConfig({ enabled: false });
+}
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
