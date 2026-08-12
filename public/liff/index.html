@@ -154,8 +154,6 @@
   .cd-cond{color:var(--accent2,#2fc2a6);font-weight:800;font-size:13.5px}
   .cd-exp{color:var(--muted);font-size:12px;margin-top:6px}
   .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#d8497a;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
-  .cd-code{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:13px;color:var(--muted);font-size:11px;letter-spacing:.06em;font-weight:700}
-  .cd-code .bars{display:inline-block;height:22px;width:104px;background:repeating-linear-gradient(90deg,#16314f 0 2px,#fff 2px 4px,#16314f 4px 5px,#fff 5px 9px)}
   .cw-acts{padding-top:14px}
   /* Wallet coupon ticket — shared template for "คูปองของฉัน" list + cart picker.
      Clean dotted perforation (no floating notches), brand-gradient value stub, one clear action. */
@@ -694,7 +692,6 @@
         <div class="cd-cond" id="cwCond">ไม่มีขั้นต่ำ · ทุกเมนู</div>
         <div class="cd-exp" id="cwExp"></div>
         <div class="cd-urg" id="cwUrg">⏳ รีบใช้ก่อนหมดเขต!</div>
-        <div class="cd-code"><span class="bars"></span><span id="cwCode">YO-DEE</span></div>
       </div>
     </div>
     <div class="cw-acts">
@@ -2012,7 +2009,6 @@ async function maybeCouponWelcome(){
       : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ · ทุกเมนู');
     $('cwExp').textContent = c.expires_at?('ใช้ได้ถึง '+c.expires_at):'';
     $('cwUrg').style.display = c.expires_at ? 'inline-flex' : 'none';
-    $('cwCode').textContent = c.code ? String(c.code).replace(/^CCOUP:/,'YO-DEE·').slice(0,16) : 'YO-DEE';
     $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):(isReward&&!isValue?'🎁 รางวัลของคุณ':'🎁 คูปองของคุณ');
     localStorage.setItem(seenKey,'1');
     $('cwPop').classList.add('on');
