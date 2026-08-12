@@ -136,22 +136,27 @@
   #cwPop.on{display:flex;animation:cwfade .22s ease}
   @keyframes cwfade{from{opacity:0}to{opacity:1}}
   @keyframes cwpop{from{transform:scale(.9);opacity:.4}to{transform:scale(1);opacity:1}}
-  .cw-card{width:100%;max-width:338px;background:#fff;border-radius:26px;padding:20px 18px 18px;text-align:center;position:relative;box-shadow:0 26px 44px -16px rgba(20,42,73,.6);animation:cwpop .3s cubic-bezier(.2,.9,.3,1.2)}
-  .cw-pill{display:inline-block;background:var(--butter,#FFF1B8);color:#7a5a00;font-size:11px;font-weight:900;padding:4px 12px;border-radius:999px;margin-bottom:2px;position:relative;z-index:2}
-  .cw-rays{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:150px;height:104px;z-index:0}
-  .cw-cf{position:absolute;width:9px;height:9px;border-radius:2px;z-index:1}
-  /* Arrival-popup premium ticket (mirrors the wallet-list .cpn ticket for one consistent look). */
-  .cw-ticket{display:flex;background:#fff;border:1px solid #eef1f5;border-radius:16px;overflow:hidden;box-shadow:0 12px 26px -14px rgba(20,42,73,.42);margin:12px 2px 15px;position:relative;z-index:2;text-align:left}
-  .cw-tstub{flex:none;width:106px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:16px 8px;color:#fff;text-align:center}
-  .cw-tstub .ic{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.9;opacity:.92}
-  .cw-tstub .big{font-family:'Poppins',inherit;font-weight:800;font-size:30px;line-height:1;letter-spacing:-.01em}
-  .cw-tstub .big small{font-size:.5em;font-weight:800;vertical-align:.28em;margin-right:1px}
-  .cw-tstub .sub{font-size:10px;font-weight:800;opacity:.95;letter-spacing:.03em}
-  .cw-tperf{flex:none;border-left:2px dotted #d3dbe3;margin:12px 0}
-  .cw-tbody{flex:1;min-width:0;padding:13px 12px 13px 15px;display:flex;flex-direction:column;justify-content:center}
-  .cw-tname{font-weight:800;color:var(--navy);font-size:15px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .cw-tcond{color:var(--accent2,#2fc2a6);font-weight:700;font-size:12px;margin-top:3px}
-  .cw-texp{color:var(--muted);font-size:11.5px;margin-top:4px}
+  /* Coupon-drop arrival popup — a bold, energetic "you got a coupon!" moment (Kakao/LINE style),
+     kept on the YO-DEE palette. Saturated hero + huge value + confetti + celebratory badge. */
+  .cw-card{width:100%;max-width:330px;position:relative;text-align:center;animation:cwpop .34s cubic-bezier(.2,.9,.3,1.25);filter:drop-shadow(0 28px 46px rgba(20,42,73,.55))}
+  .cd{border-radius:24px;overflow:hidden;background:#fff}
+  .cd-hero{position:relative;background:linear-gradient(150deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));padding:24px 20px 22px;color:#fff;overflow:hidden}
+  .cd-cf{position:absolute;z-index:1;width:9px;height:9px;border-radius:2px;opacity:.95}
+  .cd-cf.r{border-radius:50%}
+  .cd-pill{display:inline-block;background:rgba(255,255,255,.24);color:#fff;font-size:11.5px;font-weight:900;letter-spacing:.02em;padding:5px 14px;border-radius:999px;position:relative;z-index:3}
+  .cd-amt{font-family:'Poppins',inherit;font-weight:800;font-size:68px;line-height:.94;letter-spacing:-.02em;margin:10px 0 2px;position:relative;z-index:3;text-shadow:0 8px 18px rgba(4,40,60,.22)}
+  .cd-amt small{font-size:.4em;font-weight:800;vertical-align:.6em;margin-right:2px}
+  .cd-lab{font-weight:800;font-size:15px;opacity:.97;position:relative;z-index:3;line-height:1.3;padding:0 6px}
+  .cd-badge{position:absolute;top:12px;right:11px;width:70px;height:70px;border-radius:50%;background:#FFE24D;color:#16314f;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:10.5px;line-height:1.1;box-shadow:0 10px 20px -6px rgba(4,40,60,.4);transform:rotate(9deg);z-index:4}
+  .cd-badge b{font-size:17px;line-height:1}
+  .cd-perf{height:0;border-top:2px dashed #d6dee6;margin:0 16px}
+  .cd-body{padding:16px 22px 18px;text-align:center}
+  .cd-cond{color:var(--accent2,#2fc2a6);font-weight:800;font-size:13.5px}
+  .cd-exp{color:var(--muted);font-size:12px;margin-top:6px}
+  .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#d8497a;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
+  .cd-code{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:13px;color:var(--muted);font-size:11px;letter-spacing:.06em;font-weight:700}
+  .cd-code .bars{display:inline-block;height:22px;width:104px;background:repeating-linear-gradient(90deg,#16314f 0 2px,#fff 2px 4px,#16314f 4px 5px,#fff 5px 9px)}
+  .cw-acts{padding-top:14px}
   /* Wallet coupon ticket — shared template for "คูปองของฉัน" list + cart picker.
      Clean dotted perforation (no floating notches), brand-gradient value stub, one clear action. */
   .cpn{position:relative;display:flex;background:#fff;border-radius:18px;margin-bottom:13px;box-shadow:0 8px 20px -12px rgba(20,42,73,.32);border:1px solid #eef1f5;overflow:hidden}
@@ -671,28 +676,31 @@
 <!-- Phase 4A: coupon-arrival popup — greets a customer holding an unused coupon when they open the app -->
 <div id="cwPop" role="dialog" aria-modal="true" aria-label="คูปองของคุณ">
   <div class="cw-card">
-    <span class="cw-pill" id="cwPill">🎁 คูปองของคุณ</span>
-    <svg class="cw-rays" viewBox="0 0 150 104" aria-hidden="true"><g fill="none" stroke="var(--accent2,#2fc2a6)" stroke-width="3" stroke-linecap="round" opacity=".32"><path d="M75 50 L75 6"/><path d="M75 50 L40 14"/><path d="M75 50 L110 14"/><path d="M75 50 L20 40"/><path d="M75 50 L130 40"/></g><g fill="var(--accent,#00b5d8)" opacity=".5"><circle cx="46" cy="20" r="3"/><circle cx="104" cy="20" r="3"/></g></svg>
-    <span class="cw-cf" style="left:16px;top:12px;background:#FFF1B8;transform:rotate(20deg)"></span>
-    <span class="cw-cf" style="right:20px;top:9px;background:var(--accent2,#2fc2a6);transform:rotate(-15deg)"></span>
-    <span class="cw-cf" style="right:34px;top:28px;background:var(--danger,#e55b6b);border-radius:50%"></span>
-    <span class="cw-cf" style="left:30px;top:30px;background:var(--accent,#00b5d8);border-radius:50%"></span>
-    <div class="cw-title" id="cwTitle">คุณได้รับคูปอง! 💛</div>
-    <div class="cw-ticket">
-      <div class="cw-tstub" id="cwStub" style="background:linear-gradient(150deg,#00b5d8,#2fc2a6)">
-        <svg class="ic" id="cwIcon" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>
-        <div class="big" id="cwAmt"><small>฿</small>10</div>
-        <div class="sub" id="cwSub">ส่วนลด</div>
+    <div class="cd">
+      <div class="cd-hero" id="cwStub" style="background:linear-gradient(150deg,#00b5d8,#2fc2a6)">
+        <span class="cd-cf" style="left:18px;top:16px;background:#FFF1B8;transform:rotate(22deg)"></span>
+        <span class="cd-cf r" style="left:40px;top:46px;background:#fff;opacity:.85"></span>
+        <span class="cd-cf" style="left:24px;bottom:20px;background:#FFE24D;transform:rotate(-18deg)"></span>
+        <span class="cd-cf r" style="right:96px;top:14px;background:#e55b6b"></span>
+        <span class="cd-cf" style="right:60px;bottom:16px;background:#fff;transform:rotate(35deg);opacity:.8"></span>
+        <span class="cd-cf r" style="right:120px;bottom:30px;background:#FFE24D"></span>
+        <div class="cd-badge"><b>✨</b>พิเศษ</div>
+        <span class="cd-pill" id="cwPill">🎁 คูปองของคุณ</span>
+        <div class="cd-amt" id="cwAmt"><small>฿</small>20</div>
+        <div class="cd-lab" id="cwLab">ส่วนลดต้อนรับ</div>
       </div>
-      <div class="cw-tperf"></div>
-      <div class="cw-tbody">
-        <div class="cw-tname" id="cwLab">คูปองส่วนลด</div>
-        <div class="cw-tcond" id="cwCond">ไม่มีขั้นต่ำ</div>
-        <div class="cw-texp" id="cwExp"></div>
+      <div class="cd-perf"></div>
+      <div class="cd-body">
+        <div class="cd-cond" id="cwCond">ไม่มีขั้นต่ำ · ทุกเมนู</div>
+        <div class="cd-exp" id="cwExp"></div>
+        <div class="cd-urg" id="cwUrg">⏳ รีบใช้ก่อนหมดเขต!</div>
+        <div class="cd-code"><span class="bars"></span><span id="cwCode">YO-DEE</span></div>
       </div>
     </div>
-    <button class="cw-btn cw-primary" onclick="cwUse()">ใช้เลย</button>
-    <button class="cw-btn cw-later" onclick="cwLater()">ไว้ก่อน</button>
+    <div class="cw-acts">
+      <button class="cw-btn cw-primary" onclick="cwUse()">ใช้เลย</button>
+      <button class="cw-btn cw-later" onclick="cwLater()">ไว้ก่อน</button>
+    </div>
   </div>
 </div>
 <div id="basketPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:52;align-items:flex-end;justify-content:center;padding:0">
@@ -1979,23 +1987,26 @@ async function maybeCouponWelcome(){
     const val=(c)=> c.disc_type==='reward'?(c.freeCap||49): c.disc_type==='percent'?((c.disc_value||0)*3):(c.disc_value||0);
     _cwCoupon=usable.slice().sort((a,b)=>val(b)-val(a))[0];
     const c=_cwCoupon, isReward=c.disc_type==='reward';
-    const grad = isReward
-      ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
-        : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
-        : 'linear-gradient(150deg,#33c9ac,#10a582)')
-      : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
+    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash';
+    const cap = c.freeCap||49;
+    const grad = c.couponKind==='streak' ? 'linear-gradient(150deg,#7c83e0,#5560c8)'
+      : c.couponKind==='bounceback' ? 'linear-gradient(150deg,#12b8b0,#0a8f9c)'
+      : c.couponKind==='flash' ? 'linear-gradient(150deg,#ff9a3d,#f2683b)'
+      : isReward
+        ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
+          : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
+          : 'linear-gradient(150deg,#33c9ac,#10a582)')
+        : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
     $('cwStub').style.background = grad;
-    // ticket icon for a discount, gift icon for any reward/gift coupon
-    $('cwIcon').innerHTML = isReward
-      ? '<rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M4 13h16M12 9v11"/><path d="M8.5 9C6 9 6 5.5 8.5 5.5 10.6 5.5 12 9 12 9s1.4-3.5 3.5-3.5C18 5.5 18 9 15.5 9"/>'
-      : '<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/>';
-    $('cwAmt').innerHTML = isReward?'ฟรี': (c.disc_type==='percent'?(c.disc_value+'%'):('<small>฿</small>'+c.disc_value));
-    $('cwSub').textContent = isReward?('ไม่เกิน ฿'+(c.freeCap||49)):'ส่วนลด';
-    $('cwLab').textContent = c.label || (isReward?'ฟรี 1 แก้ว':'คูปองส่วนลด');
-    $('cwCond').textContent = isReward?'ฟรี 1 แก้ว · ทุกเมนู' : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ · ทุกเมนู');
+    $('cwAmt').innerHTML = isValue ? ('<small>฿</small>'+cap) : isReward ? 'ฟรี' : (c.disc_type==='percent'?(c.disc_value+'%'):('<small>฿</small>'+c.disc_value));
+    $('cwLab').textContent = c.label || (isReward&&!isValue?'ฟรี 1 แก้ว':'คูปองส่วนลด');
+    $('cwCond').textContent = (isReward&&!isValue) ? 'ฟรี 1 แก้ว · ทุกเมนู'
+      : isValue ? ('ลดสูงสุด ฿'+cap+' · หรือราคาแก้วนั้น')
+      : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ · ทุกเมนู');
     $('cwExp').textContent = c.expires_at?('ใช้ได้ถึง '+c.expires_at):'';
-    $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):'🎁 คูปองของคุณ';
-    $('cwTitle').textContent = isReward?'คุณได้รับรางวัล! 🎁':'คุณได้รับคูปอง! 💛';
+    $('cwUrg').style.display = c.expires_at ? 'inline-flex' : 'none';
+    $('cwCode').textContent = c.code ? String(c.code).replace(/^CCOUP:/,'YO-DEE·').slice(0,16) : 'YO-DEE';
+    $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):(isReward&&!isValue?'🎁 รางวัลของคุณ':'🎁 คูปองของคุณ');
     localStorage.setItem(seenKey,'1');
     $('cwPop').classList.add('on');
   }catch(e){ /* a welcome must never break the app */ }
