@@ -2495,7 +2495,12 @@ window.saveScope=async()=>{
     toast(_scopeSel.size?('จำกัด '+_scopeSel.size+' เมนูแล้ว ✓'):'ใช้ได้ทั้งบิลแล้ว ✓'); closeScope(); loadCoupons(); }
   catch(e){ toast(err(e)); } };
 window.copyClaimLink=(tok)=>{ if(!tok){ toast('ยังไม่มีลิงก์'); return; }
-  const url=location.origin+'/liff/?coupon='+encodeURIComponent(tok);
+  // Prefer a liff.line.me link — LINE preserves the ?coupon= param through login there; a raw
+  // endpoint URL can lose it on the login redirect (customer lands on "ไม่พบโซน"). Falls back to
+  // the raw URL if the LIFF id isn't configured (e.g. UAT).
+  const url=(CFG&&CFG.liffId)
+    ? ('https://liff.line.me/'+CFG.liffId+'?coupon='+encodeURIComponent(tok))
+    : (location.origin+'/liff/?coupon='+encodeURIComponent(tok));
   try{ navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว ✓ ส่งให้ลูกค้าได้เลย'); }
   catch(e){ appConfirm({title:'ลิงก์รับคูปอง',message:url,okText:'ปิด',cancelText:''}); } };
 window.toggleCoupon=async(id,active)=>{ try{ await api('/api/coupons/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:active?1:0})}); toast(active?'เปิดใช้แล้ว':'ปิดแล้ว'); loadCoupons(); }catch(e){ toast(err(e)); loadCoupons(); } };
