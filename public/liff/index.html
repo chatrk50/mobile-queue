@@ -154,8 +154,6 @@
   .cd-cond{color:var(--accent2,#2fc2a6);font-weight:800;font-size:13.5px}
   .cd-exp{color:var(--muted);font-size:12px;margin-top:6px}
   .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#d8497a;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
-  .cd-code{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:13px;color:var(--muted);font-size:11px;letter-spacing:.06em;font-weight:700}
-  .cd-code .bars{display:inline-block;height:22px;width:104px;background:repeating-linear-gradient(90deg,#16314f 0 2px,#fff 2px 4px,#16314f 4px 5px,#fff 5px 9px)}
   .cw-acts{padding-top:14px}
   /* Wallet coupon ticket — shared template for "คูปองของฉัน" list + cart picker.
      Clean dotted perforation (no floating notches), brand-gradient value stub, one clear action. */
@@ -694,7 +692,6 @@
         <div class="cd-cond" id="cwCond">ไม่มีขั้นต่ำ · ทุกเมนู</div>
         <div class="cd-exp" id="cwExp"></div>
         <div class="cd-urg" id="cwUrg">⏳ รีบใช้ก่อนหมดเขต!</div>
-        <div class="cd-code"><span class="bars"></span><span id="cwCode">YO-DEE</span></div>
       </div>
     </div>
     <div class="cw-acts">
@@ -1004,23 +1001,30 @@ async function doCouponClaim(){
     couponScreen('<div style="font-size:44px">🔍</div><h1 style="margin:8px 0;color:var(--navy)">ไม่พบคูปองนี้</h1><p class="muted">ลิงก์อาจหมดอายุหรือถูกยกเลิกแล้ว</p>'
       +'<button class="ok" style="width:100%;margin-top:16px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
-  const val=couponValueText(info), cond=info.minSpend>0?('<div class="muted" style="font-size:12px;margin-top:3px">เมื่อซื้อครบ ฿'+info.minSpend+'</div>'):'';
+  const val=couponValueText(info);
   // Expiry ON the card — the single most-read line on any voucher (drives urgency + trust).
   const life=(info.validDays>0)?('ใช้ได้ '+info.validDays+' วันหลังกดรับ')
             :(info.expiresAt?('ใช้ได้ถึง '+info.expiresAt):'ไม่มีวันหมดอายุ');
-  const lifeRow='<div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#8a5c00;margin-top:6px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+life+'</div>';
-  // Perforated-ticket voucher (same language as the coupon wallet): value stub, tear line with
-  // punched notches, details on the right.
-  const big=info.discType==='percent'?(info.discValue+'%'):('฿'+info.discValue);
-  const notch=(pos)=>'<div style="position:absolute;left:-8px;'+pos+':-9.5px;width:15px;height:15px;border-radius:50%;background:#fff;border:1.5px solid #f3cb55"></div>';
-  const card='<div style="position:relative;display:flex;background:#fff;border:1.5px solid #f3cb55;border-radius:16px;margin:14px 0;text-align:left">'
-    +'<div style="flex:none;width:96px;border-radius:14.5px 0 0 14.5px;background:#fff7dc;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:16px 6px">'
-    +'<div style="font-size:18px;line-height:1">🎟️</div>'
-    +'<div style="font-size:'+(String(big).length>4?'17':'22')+'px;font-weight:900;color:#8a5c00;line-height:1.1">'+big+'</div>'
-    +'<div style="font-size:9.5px;font-weight:700;color:#8a5c00;opacity:.8">ส่วนลด</div></div>'
-    +'<div style="position:relative;flex:1;min-width:0;border-left:1.5px dashed #ecd9a0;padding:14px 12px 14px 14px">'+notch('top')+notch('bottom')
-    +'<div style="font-weight:800;font-size:15px;color:var(--navy);line-height:1.35">'+esc(info.label||'คูปอง')+'</div>'
-    +'<div style="font-weight:800;color:#c2410c;font-size:13px;margin-top:3px">'+val+'</div>'+cond+lifeRow+'</div></div>';
+  // Coupon-drop voucher — same bold language as the in-app arrival popup (teal hero + big value +
+  // confetti + celebratory badge), so the claim page and the popup feel like one brand moment.
+  const big=info.discType==='percent'?(info.discValue+'%'):('<small>฿</small>'+info.discValue);
+  const cf='<span class="cd-cf" style="left:18px;top:16px;background:#FFF1B8;transform:rotate(22deg)"></span>'
+    +'<span class="cd-cf r" style="left:40px;top:46px;background:#fff;opacity:.85"></span>'
+    +'<span class="cd-cf" style="left:24px;bottom:18px;background:#FFE24D;transform:rotate(-18deg)"></span>'
+    +'<span class="cd-cf r" style="right:96px;top:14px;background:#e55b6b"></span>'
+    +'<span class="cd-cf" style="right:58px;bottom:16px;background:#fff;transform:rotate(35deg);opacity:.8"></span>';
+  const card='<div class="cd" style="margin:14px 0;box-shadow:0 14px 30px -16px rgba(20,42,73,.5)">'
+    +'<div class="cd-hero" style="background:linear-gradient(150deg,#00b5d8,#2fc2a6)">'+cf
+    +'<div class="cd-badge"><b>✨</b>พิเศษ</div>'
+    +'<span class="cd-pill">🎟️ คูปองส่วนลด</span>'
+    +'<div class="cd-amt">'+big+'</div>'
+    +'<div class="cd-lab">'+esc(info.label||'คูปองส่วนลด')+'</div></div>'
+    +'<div class="cd-perf"></div>'
+    +'<div class="cd-body">'
+    +'<div class="cd-cond">'+val+'</div>'
+    +'<div class="cd-exp">'+(info.minSpend>0?('เมื่อซื้อครบ ฿'+info.minSpend):'ไม่มีขั้นต่ำ · ทุกเมนู')+'</div>'
+    +'<div class="cd-exp" style="display:flex;align-items:center;justify-content:center;gap:5px"><svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+life+'</div>'
+    +'</div></div>';
   const terms='<p class="muted" style="font-size:11px;line-height:1.5;margin:2px 0 0">รับได้ 1 สิทธิ์ต่อบัญชี · เฉพาะเจ้าของสิทธิ์ โอนต่อไม่ได้ · ใช้จากเมนู "คูปองของฉัน"</p>';
   if(info.state==='already'){
     couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
@@ -1049,7 +1053,7 @@ window.doCouponClaimGo=async()=>{
   if(r && r.ok){
     try{ sessionStorage.setItem('armCoupon','CCOUP:'+r.id); }catch(e){}   // สั่งเลย reloads → arm it on the other side
     couponScreen('<div style="font-size:52px">🎉</div><h1 style="margin:8px 0;color:var(--navy)">รับคูปองแล้ว!</h1>'
-      +'<div style="background:#fffbea;border:1px solid #f3cb55;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
+      +'<div style="background:#e9fbfd;border:1px solid #b6e9f1;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
       +'<div class="muted" style="font-size:12.5px;margin-top:4px">ใช้ได้ถึง '+esc(r.expiresAt||'')+'</div></div>'
       +'<p class="muted" style="font-size:12.5px">เก็บไว้ในเมนู "คูปองของฉัน" แล้ว</p>'
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">สั่งเลย</button>');
@@ -2005,7 +2009,6 @@ async function maybeCouponWelcome(){
       : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ · ทุกเมนู');
     $('cwExp').textContent = c.expires_at?('ใช้ได้ถึง '+c.expires_at):'';
     $('cwUrg').style.display = c.expires_at ? 'inline-flex' : 'none';
-    $('cwCode').textContent = c.code ? String(c.code).replace(/^CCOUP:/,'YO-DEE·').slice(0,16) : 'YO-DEE';
     $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):(isReward&&!isValue?'🎁 รางวัลของคุณ':'🎁 คูปองของคุณ');
     localStorage.setItem(seenKey,'1');
     $('cwPop').classList.add('on');
