@@ -1051,22 +1051,32 @@ window.doCouponClaimGo=async()=>{
   let accessToken=null; try{ if(inLine && window.liff) accessToken=liff.getAccessToken(); }catch(e){}
   let r=null; try{ r=await (await fetch('/api/claim/'+encodeURIComponent(couponTok),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineUserId,accessToken})})).json(); }catch(e){}
   if(r && r.ok){
-    try{ sessionStorage.setItem('armCoupon','CCOUP:'+r.id); }catch(e){}   // สั่งเลย reloads → arm it on the other side
+    // Arm it for auto-apply AND flag the wallet to open on the next load, so the customer lands
+    // straight on "คูปองของฉัน" and can see the coupon really is in their wallet.
+    try{ sessionStorage.setItem('armCoupon','CCOUP:'+r.id); sessionStorage.setItem('openWallet','1'); }catch(e){}
     couponScreen('<div style="font-size:52px">🎉</div><h1 style="margin:8px 0;color:var(--navy)">รับคูปองแล้ว!</h1>'
       +'<div style="background:#e9fbfd;border:1px solid #b6e9f1;border-radius:16px;padding:16px;margin:14px 0"><div style="font-weight:800;font-size:17px;color:var(--navy)">'+esc(r.label||'คูปอง')+'</div>'
       +'<div class="muted" style="font-size:12.5px;margin-top:4px">ใช้ได้ถึง '+esc(r.expiresAt||'')+'</div></div>'
       +'<p class="muted" style="font-size:12.5px">เก็บไว้ในเมนู "คูปองของฉัน" แล้ว</p>'
-      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">สั่งเลย</button>');
+      +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ดูคูปองของฉัน</button>');
     try{ if(window.confetti) confetti(); }catch(e){}
+    setTimeout(()=>{ try{ goCouponWallet(); }catch(e){} }, 1400);   // auto-forward after the celebration
     return;
   }
-  if(r && r.error==='line_verify_failed'){
-    couponScreen('<div style="font-size:44px">🔐</div><h1 style="margin:8px 0;color:var(--navy)">ยืนยันตัวตนไม่สำเร็จ</h1>'
-      +'<p class="muted" style="font-size:13px">กรุณาเปิดลิงก์นี้จากแอป LINE แล้วลองอีกครั้งนะคะ</p>'
+  if(r && (r.error==='line_verify_failed'||r.error==='no_customer')){
+    // no_customer = we don't know who's claiming (link opened outside LINE, or identity not resolved);
+    // line_verify_failed = LINE didn't confirm the token. Both are fixed by opening inside the LINE app.
+    couponScreen('<div style="font-size:44px">📱</div><h1 style="margin:8px 0;color:var(--navy)">เปิดจากแอป LINE นะคะ</h1>'
+      +'<p class="muted" style="font-size:13px;line-height:1.6">คูปองจะถูกเก็บเข้าบัญชี LINE ของคุณ<br>กรุณาเปิดลิงก์นี้ในแอป LINE แล้วกดรับอีกครั้งค่ะ</p>'
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="location.reload()">ลองอีกครั้ง</button>');
     return;
   }
-  await doCouponClaim();   // re-render with the honest state (already / sold_out / ended)
+  if(!r){   // network / server hiccup — restore the button instead of silently blanking out
+    const bb=$('cpClaimBtn'); if(bb){ bb.disabled=false; bb.textContent='เก็บคูปอง'; }
+    if(window.toast) toast('เชื่อมต่อไม่สำเร็จ ลองอีกครั้งนะคะ');
+    return;
+  }
+  await doCouponClaim();   // honest state (already / sold_out / ended)
 };
 // QR check-in: the customer scanned the cashier's per-order QR → link their LINE identity to it.
 async function doClaim(){
@@ -2610,7 +2620,11 @@ async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabl
   // seconds over the main page (before, up to ~1s of it was wasted hidden behind the splash), then it's gone.
   if(normal) await maybePromo();
   if(normal) await maybeFlashSale();  // Phase 4 #4: claim + announce today's flash coupon (await → it's in the wallet before the welcome popup reads it)
-  if(normal) maybeCouponWelcome();   // Phase 4A: greet a returning customer who holds an unused coupon
+  // Just claimed a coupon via a claim link? Land straight on "คูปองของฉัน" so they can see it, and
+  // skip the arrival popup (it would be redundant right after claiming).
+  let _openedWallet=false;
+  if(normal){ try{ if(sessionStorage.getItem('openWallet')){ sessionStorage.removeItem('openWallet'); _openedWallet=true; openCoupon('browse'); } }catch(e){} }
+  if(normal && !_openedWallet) maybeCouponWelcome();   // Phase 4A: greet a returning customer who holds an unused coupon
 })().catch(e=>{ hideSplash(); err(e.message); });
 </script>
 </body></html>
