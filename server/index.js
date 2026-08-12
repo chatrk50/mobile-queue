@@ -419,11 +419,14 @@ app.get('/api/claim/:token', (req, res) => {
 });
 app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => {
   const key = String(req.body?.lineUserId || '').trim();
-  if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
-  // The id format alone is fabricable — with LINE live, the claimer must present a LIFF access
-  // token that LINE says belongs to that very userId, or a script could drain the campaign's
-  // quota with synthetic customers. With LINE stubbed (UAT/dev) there is no LINE to ask; skip.
+  if (!key) return res.status(400).json({ error: 'no_customer' });
+  // The id format alone is fabricable — with LINE live, the claimer must be a real LINE userId
+  // (U… ) AND present a LIFF access token that LINE says belongs to that very id, or a script could
+  // drain the campaign's quota with synthetic customers. With LINE stubbed (UAT/dev) there is no
+  // LINE to ask and the LIFF hands out demo ids, so accept any stable key there — mirrors
+  // customerKeyOK's `!LINE_ENABLED → true`, so claim links are actually testable on UAT.
   if (LINE_ENABLED) {
+    if (!/^U[0-9a-f]{32}$/i.test(key)) return res.status(400).json({ error: 'no_customer' });
     const verified = await verifyLiffToken(String(req.body?.accessToken || ''));
     if (!verified || verified !== key) return res.status(403).json({ error: 'line_verify_failed' });
   }
