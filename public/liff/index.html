@@ -748,7 +748,7 @@
 const qs = new URLSearchParams(location.search);
 const zoneId = qs.get('zone');
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
-const couponTok = qs.get('coupon');                        // claim-a-coupon link (?coupon=TOKEN)
+let couponTok = qs.get('coupon');                          // claim-a-coupon link (?coupon=TOKEN); `let` so we can restore it after a login redirect drops the query
 let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
@@ -807,8 +807,16 @@ async function initLiff(){
   if (cfg.liffId && window.liff){
     try{
       await liff.init({ liffId: cfg.liffId });
-      if(!liff.isLoggedIn()){ liff.login(); return; }
+      if(!liff.isLoggedIn()){
+        // The LINE login redirect can drop the ?coupon= query (esp. when a RAW endpoint URL is
+        // opened rather than a liff.line.me link) — stash the token so the claim resumes on return.
+        try{ if(couponTok) sessionStorage.setItem('pendingCoupon', couponTok); }catch(e){}
+        liff.login(); return;
+      }
       inLine = true;
+      // Restore a coupon token dropped by that redirect. Consume it either way so it can never leak
+      // into a later normal open.
+      try{ const pc=sessionStorage.getItem('pendingCoupon'); if(pc){ sessionStorage.removeItem('pendingCoupon'); if(!couponTok) couponTok=pc; } }catch(e){}
       const p = await liff.getProfile();
       lineUserId = p.userId; displayName = p.displayName; pictureUrl = p.pictureUrl||null;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
