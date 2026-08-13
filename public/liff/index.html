@@ -746,7 +746,7 @@
 
 <script type="module">
 const qs = new URLSearchParams(location.search);
-const zoneId = qs.get('zone');
+let zoneId = qs.get('zone');   // `let` so a marketing link with no ?zone= can fall back to the shop's open zone (cfg.defaultZone)
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
 let couponTok = qs.get('coupon');                          // claim-a-coupon link (?coupon=TOKEN); `let` so we can restore it after a login redirect drops the query
 let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
@@ -1107,7 +1107,10 @@ async function doClaim(){
 }
 let storeOpen=true;   // set by loadZone — the single source of truth for "can we take an order now"
 async function loadZone(){
-  if(!zoneId) return err('ไม่พบโซนใน QR code');
+  // A LINE marketing/nudge link may arrive with no ?zone= — fall back to the shop's open zone so it
+  // lands on the menu instead of dead-ending on "ไม่พบโซน". (In-store QR always carries its own zone.)
+  if(!zoneId && cfg && cfg.defaultZone) zoneId = String(cfg.defaultZone);
+  if(!zoneId) return err('ไม่พบโซนใน QR code — กรุณาสแกน QR ที่หน้าร้านค่ะ');
   const z = await api('/api/zones/'+zoneId);
   const snap = await api('/api/zones/'+zoneId+'/snapshot');
   const stores = await api('/api/stores');

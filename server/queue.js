@@ -40,10 +40,14 @@ const queueLink = (zoneId) =>
  *  falling back to the first zone at all. Without this a campaign went out as PLAIN TEXT — the
  *  'สั่งเลย' label was passed to pushQueue but buildQueueMessage drops the button when the URL is
  *  null, so the customer was told to order with no way back into the app. */
-export function shopLink() {
+export function defaultZoneId() {
   const z = db.prepare('SELECT id FROM zones WHERE is_open=1 ORDER BY id LIMIT 1').get()
          || db.prepare('SELECT id FROM zones ORDER BY id LIMIT 1').get();
-  return z ? queueLink(z.id) : null;
+  return z ? z.id : null;
+}
+export function shopLink() {
+  const id = defaultZoneId();
+  return id ? queueLink(id) : null;
 }
 
 export function getZone(zoneId) {
@@ -3870,12 +3874,12 @@ export function nudgeExpiringCoupons() {
         AND expires_at >= ? AND expires_at <= date(?, '+${days} days')
         AND customer_key LIKE 'U%' LIMIT 60`).all(now.d, now.d);
   setSetting('coupon:nudge_last_day', now.d);
-  const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  const link = shopLink();   // liff.line.me/<id>?zone=… — a bare /liff/ has no zone and dead-ends on "ไม่พบโซน"
   for (const r of rows) {
     db.prepare(`UPDATE customer_coupons SET nudged_at=datetime('now') WHERE id=?`).run(r.id);
     pushQueue(r.customer_key,
       `⏰ คูปอง "${r.label}" ของคุณจะหมดอายุ ${r.expires_at} นี้แล้วนะคะ\n` +
-      `อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛` + (base ? `\nสั่งเลย: ${base}/liff/` : ''), null);
+      `อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛` + (link ? `\nสั่งเลย: ${link}` : ''), null);
   }
   return { nudged: rows.length };
 }
