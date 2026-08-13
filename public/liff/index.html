@@ -1616,7 +1616,7 @@ function renderUpsell(){
   box.innerHTML = '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:0 0 6px">🥄 เพิ่มอีกนิด?</div>'
     + '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">'
     + picks.map(m=>`<div style="flex:none;display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:4px 5px 4px 4px;background:#fff">
-        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;flex:none;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1">${itemImg(m)}</div>
+        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;flex:none;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center"><img src="/assets/logo.png" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover"></div>
         <div style="min-width:0"><div style="font-size:11.5px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:98px">${esc(m.name)}</div>
           <div style="font-size:11px;font-weight:800;color:var(--accent2);line-height:1.1">฿${m.price}</div></div>
         <button class="ok" style="flex:none;width:32px;height:32px;min-height:32px;padding:0;border-radius:50%;font-size:18px;font-weight:800;line-height:1" aria-label="เพิ่ม ${esc(m.name)}" onclick="upsellAdd(${m.id})">+</button>
