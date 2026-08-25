@@ -413,6 +413,13 @@ app.post('/api/coupons/:id/claim-link', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCouponClaim(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Short claim link: /c/<token> 302s to the full LIFF claim URL. Keeps the link shared in LINE short
+// and hides the liffId; LINE still launches the LIFF properly from the liff.line.me redirect.
+app.get('/c/:token', (req, res) => {
+  const tok = String(req.params.token || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  if (!tok) return res.redirect(302, '/liff/');
+  res.redirect(302, LIFF_ID ? `https://liff.line.me/${LIFF_ID}?coupon=${encodeURIComponent(tok)}` : `/liff/?coupon=${encodeURIComponent(tok)}`);
+});
 // PUBLIC: the customer taps a claim link. GET = what the landing page should say; POST = collect it.
 app.get('/api/claim/:token', (req, res) => {
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));

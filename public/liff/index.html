@@ -685,7 +685,7 @@
         <span class="cd-cf" style="right:60px;bottom:16px;background:#fff;transform:rotate(35deg);opacity:.8"></span>
         <span class="cd-cf r" style="right:120px;bottom:30px;background:#FFE24D"></span>
         <div class="cd-badge"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 6.1 6.1 1.9-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg>พิเศษ</div>
-        <span class="cd-pill"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg><span id="cwPill">คูปองของคุณ</span></span>
+        <span class="cd-pill"><span id="cwPill">คูปองของคุณ</span></span>
         <div class="cd-amt" id="cwAmt"><small>฿</small>20</div>
         <div class="cd-lab" id="cwLab">ส่วนลดต้อนรับ</div>
       </div>
@@ -1026,7 +1026,7 @@ async function doCouponClaim(){
   const card='<div class="cd" style="margin:14px 0;box-shadow:0 14px 30px -16px rgba(20,42,73,.5)">'
     +'<div class="cd-hero" style="background:linear-gradient(150deg,#00b5d8,#2fc2a6)">'+cf
     +'<div class="cd-badge"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 6.1 6.1 1.9-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg>พิเศษ</div>'
-    +'<span class="cd-pill"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>คูปองส่วนลด</span>'
+    +'<span class="cd-pill">คูปองส่วนลด</span>'
     +'<div class="cd-amt">'+big+'</div>'
     +'<div class="cd-lab">'+esc(info.label||'คูปองส่วนลด')+'</div></div>'
     +'<div class="cd-perf"></div>'
