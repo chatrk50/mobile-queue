@@ -413,8 +413,16 @@ app.post('/api/coupons/:id/claim-link', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCouponClaim(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Short claim link: /c/<token> 302s to the full LIFF claim URL. Keeps the link shared in LINE short
+// and hides the liffId; LINE still launches the LIFF properly from the liff.line.me redirect.
+app.get('/c/:token', (req, res) => {
+  const tok = String(req.params.token || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  if (!tok) return res.redirect(302, '/liff/');
+  res.redirect(302, LIFF_ID ? `https://liff.line.me/${LIFF_ID}?coupon=${encodeURIComponent(tok)}` : `/liff/?coupon=${encodeURIComponent(tok)}`);
+});
 // PUBLIC: the customer taps a claim link. GET = what the landing page should say; POST = collect it.
 app.get('/api/claim/:token', (req, res) => {
+  Q.recordClaimView(req.params.token);   // interest stat: every landing-page open counts
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
 });
 app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => {
@@ -513,7 +521,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -541,6 +549,7 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.streak != null) out.streak = Q.setStreakConfig(req.body.streak);   // Phase 4 #3
     if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
     if (req.body?.couponPopup != null) Object.assign(out, Q.setCouponPopup(!!req.body.couponPopup));   // Phase 4A
+    if (req.body?.pickupNudge != null) out.pickupNudge = Q.setPickupNudgeConfig(req.body.pickupNudge);   // pickup reminder
 
     // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
     // on or move the prize amount.
@@ -1785,6 +1794,8 @@ setInterval(() => {
   // INF-R4 catch-up: if the day rolled over while this instance was asleep, the scheduled midnight
   // timer never fired — reset now (guarded, so it's a no-op once done for the day).
   try { doDailyReset(); } catch { /* never let the reset guard crash the sweep */ }
+  // Pickup reminder: called orders unclaimed past the owner's window get one LINE nudge.
+  try { Q.nudgePickupWaiting(); } catch { /* best-effort */ }
 }, 60 * 1000);
 
 // Birthday-morning gift: issue this year's birthday coupon (+ LINE greeting) to customers whose

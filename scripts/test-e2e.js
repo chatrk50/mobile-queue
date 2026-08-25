@@ -1035,6 +1035,11 @@ console.log('\n== Coupon claim links ==');
   const want = db.prepare("SELECT date(datetime('now','+7 hours'),'+7 days') d").get().d;
   ok(exp === want, `INVARIANT valid_days sets expiry relative to the claim (${exp} vs ${want})`);
   ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
+  // View counter (interest stat): opens count; internal pre-checks (claimCoupon calls claimInfo)
+  // must NOT have inflated it — all activity above involved zero recordClaimView calls.
+  ok(db.prepare('SELECT view_count v FROM coupons WHERE id=?').get(cid).v === 0, 'INVARIANT internal claimInfo calls never count as views');
+  Q.recordClaimView(tok); Q.recordClaimView(tok); Q.recordClaimView('nosuchtoken000000');
+  ok(db.prepare('SELECT view_count v FROM coupons WHERE id=?').get(cid).v === 2, 'INVARIANT each landing-page open counts one view (2 opens = 2)');
   // Quota integrity: the raw code path must be CLOSED for claim-link coupons. Otherwise anyone who
   // saw the code bypasses the quota, and a claimer double-dips (wallet voucher + code discount).
   const vClaim = Q.validateCoupon('CLAIM50', k(1), 100);
@@ -2020,6 +2025,24 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   Q.setOrderPaid(s3.ticket.id, { method: 'cash' });
   ok(Q.customerCoupons(SID).filter((c) => c.kind === 'streak').length === 1, 'INVARIANT 4#3 no stacking — streak resets after award');
   Q.setStreakConfig({ enabled: false });
+}
+{
+  // Pickup reminder: a called LINE order unclaimed past N minutes gets exactly ONE nudge; 0 = off;
+  // served/walk-in tickets are never nudged.
+  const PUID = 'U' + 'p'.repeat(32);
+  const p1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: PUID });
+  Q.setOrderPaid(p1.ticket.id, { method: 'cash' });
+  db.prepare(`UPDATE tickets SET status='called', called_at=datetime('now','-15 minutes') WHERE id=?`).run(p1.ticket.id);
+  Q.setPickupNudgeConfig({ minutes: 0 });
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT pickup-nudge 0 minutes = off');
+  Q.setPickupNudgeConfig({ minutes: 10 });
+  ok(Q.nudgePickupWaiting().nudged === 1, 'INVARIANT called 15min ago + 10min window → one nudge');
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT never nudges the same ticket twice');
+  const p2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: PUID });
+  Q.setOrderPaid(p2.ticket.id, { method: 'cash' });
+  db.prepare(`UPDATE tickets SET status='called', called_at=datetime('now','-3 minutes') WHERE id=?`).run(p2.ticket.id);
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT inside the window (3min < 10min) → not yet nudged');
+  Q.setPickupNudgeConfig({ minutes: 0 });   // leave off for the rest of the suite
 }
 {
   // Phase 4 #4: flash sale — inactive OFF; an all-day window is active and lets a customer claim ONE

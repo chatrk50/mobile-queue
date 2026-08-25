@@ -2401,6 +2401,11 @@ export function setCouponClaim(id, { issueLimit = 0, claimStart = null, claimEnd
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 /** Public view of a claim link — powers the landing page BEFORE the customer taps รับคูปอง. */
+/** Count one OPEN of the claim landing page (interest stat). Separate from claimInfo so internal
+ *  calls (claimCoupon's pre-check) never inflate the number — only the GET route counts. */
+export function recordClaimView(token) {
+  try { db.prepare("UPDATE coupons SET view_count = view_count + 1 WHERE claim_token=? AND distribution='claim'").run(String(token || '')); } catch { /* stat only */ }
+}
 export function claimInfo(token, customerKey = null) {
   const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
   if (!c) return { state: 'not_found' };
@@ -3413,6 +3418,38 @@ export function claimFlashSale(customerKey) {
       .run(customerKey, label, cfg.amount, today);
     return { issued: true, label, expiresAt: today, amount: cfg.amount };
   } catch { return { issued: false, reason: 'error' }; }
+}
+// ---------- Pickup reminder ----------
+// A called (พร้อมรับ) LINE order still unclaimed after N minutes gets ONE "มารับได้เลยนะคะ"
+// reminder — the drink is melting and the customer may have missed the ready push. One per ticket
+// ever (pickup_nudged_at), minutes settable by the owner (0 = off). Runs from the 60s sweep.
+export function getPickupNudgeConfig() {
+  return { minutes: Math.max(0, Math.min(120, Math.round(Number(getSetting('pickup:nudge_min', '10')) || 0))) };
+}
+export function setPickupNudgeConfig(patch = {}) {
+  if (patch.minutes != null) setSetting('pickup:nudge_min', String(Math.max(0, Math.min(120, Math.round(Number(patch.minutes) || 0)))));
+  return getPickupNudgeConfig();
+}
+export function nudgePickupWaiting() {
+  const { minutes } = getPickupNudgeConfig();
+  if (!minutes) return { nudged: 0 };
+  // Today-only guard: a stale called ticket left over from a crashed day must not fire at boot.
+  const rows = db.prepare(
+    `SELECT id, code, zone_id, line_user_id, called_at FROM tickets
+      WHERE status='called' AND line_user_id IS NOT NULL AND pickup_nudged_at IS NULL
+        AND called_at IS NOT NULL AND called_at <= datetime('now', ?)
+        AND date(called_at,'+7 hours') = date(datetime('now','+7 hours')) LIMIT 30`
+  ).all(`-${minutes} minutes`);
+  for (const r of rows) {
+    db.prepare(`UPDATE tickets SET pickup_nudged_at=datetime('now') WHERE id=?`).run(r.id);
+    try {
+      pushQueue(r.line_user_id,
+        `🔔 คิว ${r.code} ของคุณพร้อมแล้ว รอที่เคาน์เตอร์นะคะ\n` +
+        `เครื่องดื่มทำเสร็จเกิน ${minutes} นาทีแล้ว รีบมารับก่อนละลายนะคะ 🍦\n` +
+        `ถ้าไม่สะดวกแล้ว แจ้งยกเลิกได้จากหน้าคิวของคุณค่ะ`, queueLink(r.zone_id), 'ดูคิวของฉัน');
+    } catch { /* one bad push must not stop the rest */ }
+  }
+  return { nudged: rows.length };
 }
 /** Count auto-winback coupons issued this Bangkok month (the monthly cap counts issued coupons,
  *  so it's exact even on UAT where LINE pushes are stubbed). */
