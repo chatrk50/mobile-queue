@@ -2433,7 +2433,7 @@ function cpCard(c){
           ${c.stackable?chip('ใช้ร่วมโปรฯ อื่นได้','#f3f0ff','#5b21b6'):''}
           <div class="muted" style="font-size:11.5px;margin-top:3px">โค้ด <b>${esc(c.code)}</b> · ขั้นต่ำ ฿${c.min_spend} · ${win}</div>
           <div class="muted" style="font-size:11.5px;margin-top:1px">ใช้แล้ว ${c.used_count}${c.usage_limit>0?('/'+c.usage_limit):' (ไม่จำกัด)'} · ต่อคน ${c.per_customer>0?c.per_customer+' ครั้ง':'ไม่จำกัด'}</div>
-          ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:2px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}</div>`:''}
+          ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:2px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}<span style="color:var(--muted);font-weight:600"> · <svg viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg> เปิดดู ${c.view_count||0} ครั้ง${(c.view_count>0)?` · สนใจ→รับ ${Math.round((c.issued_count/(c.view_count||1))*100)}%`:''}</span></div>`:''}
         </div>
         <span class="row" style="gap:6px;flex:none;align-items:center;padding:5px 0">
           <button class="tgl sm ${c.active?'on':'off'}" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" title="${c.active?'ปิดใช้':'เปิดใช้'}" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>

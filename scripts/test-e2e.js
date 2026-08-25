@@ -1035,6 +1035,11 @@ console.log('\n== Coupon claim links ==');
   const want = db.prepare("SELECT date(datetime('now','+7 hours'),'+7 days') d").get().d;
   ok(exp === want, `INVARIANT valid_days sets expiry relative to the claim (${exp} vs ${want})`);
   ok(Q.claimInfo('nosuchtoken000000').state === 'not_found', 'INVARIANT an unknown token is not_found, never a crash');
+  // View counter (interest stat): opens count; internal pre-checks (claimCoupon calls claimInfo)
+  // must NOT have inflated it — all activity above involved zero recordClaimView calls.
+  ok(db.prepare('SELECT view_count v FROM coupons WHERE id=?').get(cid).v === 0, 'INVARIANT internal claimInfo calls never count as views');
+  Q.recordClaimView(tok); Q.recordClaimView(tok); Q.recordClaimView('nosuchtoken000000');
+  ok(db.prepare('SELECT view_count v FROM coupons WHERE id=?').get(cid).v === 2, 'INVARIANT each landing-page open counts one view (2 opens = 2)');
   // Quota integrity: the raw code path must be CLOSED for claim-link coupons. Otherwise anyone who
   // saw the code bypasses the quota, and a claimer double-dips (wallet voucher + code discount).
   const vClaim = Q.validateCoupon('CLAIM50', k(1), 100);

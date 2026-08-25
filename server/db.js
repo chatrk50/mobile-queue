@@ -742,6 +742,9 @@ for (const stmt of [
   // Pickup reminder: when a called (พร้อมรับ) LINE order sits unclaimed past the owner's window,
   // we push ONE "มารับได้เลยนะคะ" reminder and stamp it here so it can never spam.
   `ALTER TABLE tickets ADD COLUMN pickup_nudged_at TEXT`,
+  // Claim-link interest stat: how many times the landing page was OPENED (vs issued_count = actually
+  // claimed) → the coupon card can show views + conversion so the owner sees what catches interest.
+  `ALTER TABLE coupons ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

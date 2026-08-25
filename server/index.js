@@ -422,6 +422,7 @@ app.get('/c/:token', (req, res) => {
 });
 // PUBLIC: the customer taps a claim link. GET = what the landing page should say; POST = collect it.
 app.get('/api/claim/:token', (req, res) => {
+  Q.recordClaimView(req.params.token);   // interest stat: every landing-page open counts
   res.json(Q.claimInfo(req.params.token, req.query.u ? String(req.query.u) : null));
 });
 app.post('/api/claim/:token', rateLimit('claim', 15, 60e3), async (req, res) => {

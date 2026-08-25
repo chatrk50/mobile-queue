@@ -2401,6 +2401,11 @@ export function setCouponClaim(id, { issueLimit = 0, claimStart = null, claimEnd
   return db.prepare('SELECT * FROM coupons WHERE id=?').get(id);
 }
 /** Public view of a claim link — powers the landing page BEFORE the customer taps รับคูปอง. */
+/** Count one OPEN of the claim landing page (interest stat). Separate from claimInfo so internal
+ *  calls (claimCoupon's pre-check) never inflate the number — only the GET route counts. */
+export function recordClaimView(token) {
+  try { db.prepare("UPDATE coupons SET view_count = view_count + 1 WHERE claim_token=? AND distribution='claim'").run(String(token || '')); } catch { /* stat only */ }
+}
 export function claimInfo(token, customerKey = null) {
   const c = db.prepare("SELECT * FROM coupons WHERE claim_token=? AND distribution='claim'").get(String(token || ''));
   if (!c) return { state: 'not_found' };
