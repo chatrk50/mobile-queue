@@ -143,17 +143,19 @@
   .cd-hero{position:relative;background:linear-gradient(150deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));padding:24px 20px 22px;color:#fff;overflow:hidden}
   .cd-cf{position:absolute;z-index:1;width:9px;height:9px;border-radius:2px;opacity:.95}
   .cd-cf.r{border-radius:50%}
-  .cd-pill{display:inline-block;background:rgba(255,255,255,.24);color:#fff;font-size:11.5px;font-weight:900;letter-spacing:.02em;padding:5px 14px;border-radius:999px;position:relative;z-index:3}
+  .cd-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.24);color:#fff;font-size:11.5px;font-weight:900;letter-spacing:.02em;padding:5px 13px;border-radius:999px;position:relative;z-index:3}
+  .cd-pill svg{width:13px;height:13px;flex:none;fill:none;stroke:#fff;stroke-width:2}
   .cd-amt{font-family:'Poppins',inherit;font-weight:800;font-size:68px;line-height:.94;letter-spacing:-.02em;margin:10px 0 2px;position:relative;z-index:3;text-shadow:0 8px 18px rgba(4,40,60,.22)}
   .cd-amt small{font-size:.4em;font-weight:800;vertical-align:.6em;margin-right:2px}
   .cd-lab{font-weight:800;font-size:15px;opacity:.97;position:relative;z-index:3;line-height:1.3;padding:0 6px}
   .cd-badge{position:absolute;top:12px;right:11px;width:70px;height:70px;border-radius:50%;background:#FFE24D;color:#16314f;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:10.5px;line-height:1.1;box-shadow:0 10px 20px -6px rgba(4,40,60,.4);transform:rotate(9deg);z-index:4}
-  .cd-badge b{font-size:17px;line-height:1}
+  .cd-badge svg{width:21px;height:21px;fill:#16314f;margin-bottom:1px}
   .cd-perf{height:0;border-top:2px dashed #d6dee6;margin:0 16px}
   .cd-body{padding:16px 22px 18px;text-align:center}
   .cd-cond{color:var(--accent2,#2fc2a6);font-weight:800;font-size:13.5px}
   .cd-exp{color:var(--muted);font-size:12px;margin-top:6px}
   .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#d8497a;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
+  .cd-urg svg{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2}
   .cw-acts{padding-top:14px}
   /* Wallet coupon ticket — shared template for "คูปองของฉัน" list + cart picker.
      Clean dotted perforation (no floating notches), brand-gradient value stub, one clear action. */
@@ -682,8 +684,8 @@
         <span class="cd-cf r" style="right:96px;top:14px;background:#e55b6b"></span>
         <span class="cd-cf" style="right:60px;bottom:16px;background:#fff;transform:rotate(35deg);opacity:.8"></span>
         <span class="cd-cf r" style="right:120px;bottom:30px;background:#FFE24D"></span>
-        <div class="cd-badge"><b>✨</b>พิเศษ</div>
-        <span class="cd-pill" id="cwPill">🎁 คูปองของคุณ</span>
+        <div class="cd-badge"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 6.1 6.1 1.9-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg>พิเศษ</div>
+        <span class="cd-pill"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg><span id="cwPill">คูปองของคุณ</span></span>
         <div class="cd-amt" id="cwAmt"><small>฿</small>20</div>
         <div class="cd-lab" id="cwLab">ส่วนลดต้อนรับ</div>
       </div>
@@ -691,7 +693,7 @@
       <div class="cd-body">
         <div class="cd-cond" id="cwCond">ไม่มีขั้นต่ำ · ทุกเมนู</div>
         <div class="cd-exp" id="cwExp"></div>
-        <div class="cd-urg" id="cwUrg">⏳ รีบใช้ก่อนหมดเขต!</div>
+        <div class="cd-urg" id="cwUrg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>รีบใช้ก่อนหมดเขต!</div>
       </div>
     </div>
     <div class="cw-acts">
@@ -1023,8 +1025,8 @@ async function doCouponClaim(){
     +'<span class="cd-cf" style="right:58px;bottom:16px;background:#fff;transform:rotate(35deg);opacity:.8"></span>';
   const card='<div class="cd" style="margin:14px 0;box-shadow:0 14px 30px -16px rgba(20,42,73,.5)">'
     +'<div class="cd-hero" style="background:linear-gradient(150deg,#00b5d8,#2fc2a6)">'+cf
-    +'<div class="cd-badge"><b>✨</b>พิเศษ</div>'
-    +'<span class="cd-pill">🎟️ คูปองส่วนลด</span>'
+    +'<div class="cd-badge"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 6.1 6.1 1.9-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg>พิเศษ</div>'
+    +'<span class="cd-pill"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>คูปองส่วนลด</span>'
     +'<div class="cd-amt">'+big+'</div>'
     +'<div class="cd-lab">'+esc(info.label||'คูปองส่วนลด')+'</div></div>'
     +'<div class="cd-perf"></div>'
@@ -1049,7 +1051,7 @@ async function doCouponClaim(){
       +'<button class="ok" style="width:100%;margin-top:14px" onclick="goCouponWallet()">ไปหน้าสั่งเมนู</button>'); return;
   }
   const left=(info.remaining!=null&&info.remaining<=50)?('<div style="font-weight:800;color:#c2410c;font-size:13px;margin-bottom:6px">เหลืออีก '+info.remaining+' สิทธิ์เท่านั้น!</div>'):'';
-  couponScreen('<h1 style="margin:6px 0 2px;color:var(--navy);font-size:20px">คูปองพิเศษสำหรับคุณ 🎁</h1>'+left+card
+  couponScreen('<h1 style="margin:6px 0 2px;color:var(--navy);font-size:20px">คูปองพิเศษสำหรับคุณ</h1>'+left+card
     +'<button class="ok" id="cpClaimBtn" style="width:100%;min-height:52px;font-size:17px;font-weight:800" onclick="doCouponClaimGo()">เก็บคูปอง</button>'+terms);
 }
 window.doCouponClaimGo=async()=>{
@@ -2034,7 +2036,7 @@ async function maybeCouponWelcome(){
       : (c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ · ทุกเมนู');
     $('cwExp').textContent = c.expires_at?('ใช้ได้ถึง '+c.expires_at):'';
     $('cwUrg').style.display = c.expires_at ? 'inline-flex' : 'none';
-    $('cwPill').textContent = usable.length>1?('🎁 คุณมี '+usable.length+' คูปอง'):(isReward&&!isValue?'🎁 รางวัลของคุณ':'🎁 คูปองของคุณ');
+    $('cwPill').textContent = usable.length>1?('คุณมี '+usable.length+' คูปอง'):(isReward&&!isValue?'รางวัลของคุณ':'คูปองของคุณ');
     localStorage.setItem(seenKey,'1');
     $('cwPop').classList.add('on');
   }catch(e){ /* a welcome must never break the app */ }
