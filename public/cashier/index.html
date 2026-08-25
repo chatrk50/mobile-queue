@@ -4866,6 +4866,9 @@ window.showFeatures=async()=>{
         <button class="ok" style="padding:8px 14px;margin-left:auto" onclick="saveFlash()">บันทึก</button>
       </div>
     </div>`+
+    `<div class="feat-row" style="align-items:center"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+      <div style="flex:1"><b>เตือนลูกค้ามารับเครื่องดื่ม</b><div class="muted" style="font-size:12px;margin-top:2px">เรียกคิวแล้วลูกค้า LINE ยังไม่มารับเกินกี่นาที → ส่งข้อความเตือนอีกครั้ง (ครั้งเดียวต่อออเดอร์ · 0 = ปิด)</div></div>
+      <input id="puNudgeInp" type="number" inputmode="numeric" min="0" max="120" value="${(f.pickupNudge&&f.pickupNudge.minutes)!=null?f.pickupNudge.minutes:10}" style="width:70px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:center" onchange="savePickupNudge()"> <span class="muted" style="font-size:12.5px">นาที</span></div>`+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div class="row" style="width:100%;align-items:flex-start;gap:12px;justify-content:space-between">
         <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span><div><b>พักสิทธิ์ลูกค้าไม่มารับ (no-show)</b>
@@ -4955,6 +4958,9 @@ window.toggleBounceBack=async(on)=>{
 window.saveBounceBack=async()=>{
   const bounceBack={ amount:Math.max(1,Math.floor(Number($('bbAmtInp').value)||10)), days:Math.max(1,Math.min(60,Math.floor(Number($('bbDaysInp').value)||3))) };
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bounceBack})}); toast('บันทึกแล้ว — ลด ฿'+bounceBack.amount+' ใช้ได้ '+bounceBack.days+' วัน'); showFeatures(); }catch(e){ toast(err(e)); } };
+// Pickup reminder: called order unclaimed past N minutes → one LINE nudge (0 = off)
+window.savePickupNudge=async()=>{ const m=Math.max(0,Math.min(120,Math.floor(Number($('puNudgeInp').value)||0)));
+  try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pickupNudge:{minutes:m}})}); toast(m?('เตือนมารับเมื่อเกิน '+m+' นาที'):'ปิดการเตือนมารับแล้ว'); }catch(e){ toast(err(e)); } };
 // Streak reward (Phase 4 #3)
 window.toggleStreak=async(on)=>{
   try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({streak:{enabled:!!on}})});

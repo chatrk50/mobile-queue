@@ -2022,6 +2022,24 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   Q.setStreakConfig({ enabled: false });
 }
 {
+  // Pickup reminder: a called LINE order unclaimed past N minutes gets exactly ONE nudge; 0 = off;
+  // served/walk-in tickets are never nudged.
+  const PUID = 'U' + 'p'.repeat(32);
+  const p1 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: PUID });
+  Q.setOrderPaid(p1.ticket.id, { method: 'cash' });
+  db.prepare(`UPDATE tickets SET status='called', called_at=datetime('now','-15 minutes') WHERE id=?`).run(p1.ticket.id);
+  Q.setPickupNudgeConfig({ minutes: 0 });
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT pickup-nudge 0 minutes = off');
+  Q.setPickupNudgeConfig({ minutes: 10 });
+  ok(Q.nudgePickupWaiting().nudged === 1, 'INVARIANT called 15min ago + 10min window → one nudge');
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT never nudges the same ticket twice');
+  const p2 = Q.createOrder(1, [{ name: 'Drink50', price: 50, qty: 1 }], { source: 'cashier', lineUserId: PUID });
+  Q.setOrderPaid(p2.ticket.id, { method: 'cash' });
+  db.prepare(`UPDATE tickets SET status='called', called_at=datetime('now','-3 minutes') WHERE id=?`).run(p2.ticket.id);
+  ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT inside the window (3min < 10min) → not yet nudged');
+  Q.setPickupNudgeConfig({ minutes: 0 });   // leave off for the rest of the suite
+}
+{
   // Phase 4 #4: flash sale — inactive OFF; an all-day window is active and lets a customer claim ONE
   // ฿amount value coupon into the wallet, once per Bangkok-day.
   const FID = 'U' + 'f'.repeat(32);
