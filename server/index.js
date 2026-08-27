@@ -360,7 +360,10 @@ app.get('/api/menu', (req, res) => {
   res.json(Q.listMenu(req.query.channelId ? Number(req.query.channelId) : null, branchId));
 });
 // Active sales channels (for the cashier order-channel picker).
-app.get('/api/channels', (req, res) => res.json(Q.listChannels().filter((c) => c.active !== 0)));
+app.get('/api/channels', (req, res) => {
+  const rows = Q.listChannels().filter((c) => c.active !== 0);
+  res.json(req.staff || legacyAdminPin(req) ? rows : rows.map(({ commission_pct, tier_id, ...c }) => c));
+});
 // ---------- Pricing management (owner): tier markup, channel commission, item prices ----------
 app.get('/api/price-tiers', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listPriceTiers()); });
 app.post('/api/price-tiers/:id', (req, res) => {
@@ -374,7 +377,10 @@ app.post('/api/channels/:id', (req, res) => {
 });
 // ---------- Payment tenders (how money is collected) ----------
 // Active tenders for the cashier/customer payment picker (any signed-in staff).
-app.get('/api/tenders', (req, res) => res.json(Q.listTenders(false)));
+app.get('/api/tenders', (req, res) => {
+  const rows = Q.listTenders(false);
+  res.json(req.staff || legacyAdminPin(req) ? rows : rows.map(({ fee_pct, ...t }) => t));
+});
 // Owner: manage tenders (rename / toggle / fee%).
 app.get('/api/tenders/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listTenders(true)); });
 app.post('/api/tenders', (req, res) => {   // create (before /:id so it isn't captured as an id)

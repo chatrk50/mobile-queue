@@ -2940,7 +2940,7 @@ function renderHome(d){
   // 1) Money today
   const net=p.netProfit||0;
   const kpis=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${rep.cupsSold||0} ${unit()}`))}
+      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${(rep.pnl&&rep.pnl.cups)||0} ${unit()}`))}
       ${tile('กำไรสุทธิ',money(net),(p.netMargin!=null?('อัตรากำไร '+pctf(p.netMargin)):''),net>=0?'#0f6e56':'var(--danger)')}
       ${tile('ขายแล้ว',(p.cups||0)+' '+unit(),(det.paidOrders!=null?det.paidOrders+' ออเดอร์':''))}
       ${tile('คะแนนร้าน',rep.avgRating!=null?('★ '+rep.avgRating):'—',(rep.ratingCount?rep.ratingCount+' รีวิววันนี้':'ยังไม่มีรีวิววันนี้'))}

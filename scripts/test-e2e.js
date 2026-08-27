@@ -2229,6 +2229,55 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   ok(near(tot, 88), `INVARIANT the assigned branch orders it at ITS price, not HQ's (got ${tot})`);
 }
 
+{
+  // An order line is stored with the sweetness the barista has to read appended to the drink name
+  // ("Latte · หวาน 50%"). Everything that matches a past line back to the live menu has to strip it
+  // first, or the customer who ever changed sweetness quietly loses both reorder paths.
+  console.log('\n== Reorder: sweetness suffix + toppings ==');
+  const SU = 'U' + 'de'.repeat(16);
+  const swId = db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('SweetDrink', 45, 'drink')").run().lastInsertRowid;
+  db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('SweetTop', 12, 'topping')").run();
+  const st = Q.createOrder(1, [
+    { name: 'SweetDrink · หวาน 50%', price: 45, qty: 2 },
+    { name: 'SweetTop', price: 12, qty: 2 },
+  ], { source: 'customer', lineUserId: SU });
+  Q.setOrderPaid(st.ticket.id, { method: 'cash' });
+
+  const favs = Q.customerSuggestions(SU, { branchId: 1 }).favourites || [];
+  const f = favs.find((x) => x.name === 'SweetDrink');
+  ok(!!f, 'INVARIANT a favourite is grouped under the DRINK, not "drink · หวาน 50%"');
+  ok(f && f.itemId === swId && near(f.price, 45), `INVARIANT the favourite resolves to the live menu item (id ${f && f.itemId}, price ${f && f.price})`);
+  // Second order, different sweetness — still ONE favourite, not two. (One open order per
+  // customer, so the first has to be handed over before the next can be taken.)
+  Q.setStatus(st.ticket.id, 'served');
+  const st2 = Q.createOrder(1, [{ name: 'SweetDrink · หวาน 25%', price: 45, qty: 1 }], { source: 'customer', lineUserId: SU });
+  Q.setOrderPaid(st2.ticket.id, { method: 'cash' });
+  const favs2 = (Q.customerSuggestions(SU, { branchId: 1 }).favourites || []).filter((x) => x.name === 'SweetDrink');
+  ok(favs2.length === 1 && favs2[0].qty === 3, `INVARIANT two sweetness choices are one favourite, 3 cups (got ${favs2.length} row(s), qty ${favs2[0] && favs2[0].qty})`);
+
+  // History fed "สั่งอีกครั้ง"; dropping addons meant it rebuilt a cart the customer never ordered,
+  // and the listed lines did not add up to the total printed above them.
+  const hist = Q.customerOrders(SU, 5);
+  const h = hist.find((o) => o.ticketId === st.ticket.id);
+  ok(h && h.items.some((i) => i.kind === 'addon' && i.name === 'SweetTop'), 'INVARIANT order history keeps the toppings that were paid for');
+  const lineSum = h ? h.items.reduce((s2, i) => s2 + i.price * i.qty, 0) : 0;
+  ok(near(lineSum, h && h.total), `INVARIANT the history lines add up to the total shown (${lineSum} vs ${h && h.total})`);
+}
+{
+  // The owner's end-of-day card counts cups. cupsSold counts SERVED TICKETS, so a 3-cup order read
+  // as "1 แก้ว" and anything paid-but-not-handed-over read as 0 next to a revenue that included it.
+  console.log('\n== End-of-day: แก้ว means cups ==');
+  db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('EodDrink', 30, 'drink')").run();
+  const e1 = Q.createOrder(1, [{ name: 'EodDrink', price: 30, qty: 3 }]); Q.setOrderPaid(e1.ticket.id, { method: 'cash' });
+  const e2 = Q.createOrder(1, [{ name: 'EodDrink', price: 30, qty: 2 }]); Q.setOrderPaid(e2.ticket.id, { method: 'cash' });
+  Q.setStatus(e1.ticket.id, 'served');   // one order handed over, one still on the counter
+  const rep = Q.dailyReport(), card = Q.dailySummaryData();
+  ok(card.cups >= 5, `INVARIANT the summary counts CUPS from paid orders, not served tickets (got ${card.cups})`);
+  ok(card.cups === rep.pnl.cups, `INVARIANT the card and the P&L agree on cups (${card.cups} vs ${rep.pnl.cups})`);
+  ok(card.served === rep.cupsSold, 'INVARIANT served tickets are still reported, under their own name');
+  ok(Q.composeDailySummary().includes(String(card.cups) + ' '), 'INVARIANT the LINE message quotes the same cup count');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

@@ -3044,7 +3044,7 @@ export function composeDailySummary(branchId = null, dateStr = null) {
   const lines = [
     `📊 สรุปยอด${validDay ? '' : 'วันนี้'} — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
     `🗓️ ${dateTh}`,
-    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
+    `💰 ยอดขาย ฿${r.revenue} (${r.pnl?.cups || 0} ${UNIT})`,
     `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
@@ -3094,7 +3094,8 @@ export function dailySummaryData(branchId = null, dateStr = null) {
     shopName: process.env.BRAND_NAME || 'YO-DEE Yogurt',
     dateTh: `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`,
     unit: UNIT,
-    revenue: r.revenue, cups: r.cupsSold || 0,
+    revenue: r.revenue, cups: r.pnl?.cups || 0,   // drink units from PAID orders (cupsSold counts served TICKETS — different question, different answer)
+    served: r.cupsSold || 0,
     netProfit: Math.round(r.pnl?.netProfit || 0),
     cancelled: v.cancelled?.orders || 0, refunded: v.refunded?.orders || 0, wasteCups: v.waste?.cups || 0,
     rating: r.avgRating, ratingCount: r.ratingCount || 0,
@@ -3702,7 +3703,7 @@ export function customerOrders(key, limit = 20) {
       WHERE (t.line_user_id=? OR t.customer_key=?)
       ORDER BY o.id DESC LIMIT ?`
   ).all(key, key, lim);
-  const itemStmt = db.prepare("SELECT name, qty, price FROM order_items WHERE order_id=? AND kind='base'");
+  const itemStmt = db.prepare('SELECT name, qty, price, kind FROM order_items WHERE order_id=? ORDER BY id');
   return orders.map((o) => {
     const status = o.payment_status === 'void' ? (o.void_kind === 'refund' ? 'คืนเงินแล้ว' : 'ยกเลิกแล้ว')
       : o.payment_status === 'paid' ? (o.tstatus === 'served' ? 'รับแล้ว' : 'ชำระแล้ว')
@@ -3712,7 +3713,7 @@ export function customerOrders(key, limit = 20) {
       ticketId: o.ticket_id, code: o.code || null, status, kind,
       at: o.paid_at || o.created_at,
       total: r2((o.total || 0) - (o.discount || 0)), discount: r2(o.discount || 0),
-      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price, kind: i.kind })),
     };
   });
 }
@@ -4281,17 +4282,23 @@ export function customerSuggestions(lineUserId, opts = {}) {
   if (!lineUserId) return { known: false };
   const branchId = Number(opts.branchId) || 0;
   const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=?').get(lineUserId);
+  // The stored line carries the chosen sweetness ("Latte · หวาน 50%"). Joining the menu on that
+  // raw string matched nothing, so every favourite came back with itemId null — and the LIFF only
+  // offers favourites that HAVE an itemId, which is why "สั่งเหมือนเดิม" never appeared for anyone
+  // who had changed sweetness. Group and join on the drink itself; sweetness is a per-order choice,
+  // not a different drink.
+  const BASE = `TRIM(CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END)`;
   const favourites = db.prepare(
-    `SELECT oi.name,
+    `SELECT ${BASE} AS name,
             SUM(oi.qty) AS qty,
             COUNT(DISTINCT o.id) AS times,
             mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active, mi.scope AS scope
      FROM order_items oi
      JOIN orders o  ON o.id = oi.order_id
      JOIN tickets t ON t.id = o.ticket_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
+     LEFT JOIN menu_items mi ON mi.name = ${BASE}
      WHERE t.line_user_id = ? AND oi.kind = 'base' AND o.payment_status != 'void'
-     GROUP BY oi.name
+     GROUP BY ${BASE}
      ORDER BY qty DESC, times DESC
      LIMIT 5`
   ).all(lineUserId).filter((f) => f.active == null || f.active === 1);
