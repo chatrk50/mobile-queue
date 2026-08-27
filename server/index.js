@@ -913,6 +913,12 @@ app.get('/api/reports/coupons', (req, res) => {
                lucky: Q.luckyReport({ from: req.query.from, to: req.query.to, days: req.query.days }) });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Spreadsheet detail behind the summary: per-coupon-name rows + each individual redemption.
+app.get('/api/reports/coupons/sheet', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.couponReportSheet({ from: req.query.from, to: req.query.to })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Coupon templates: the ONE place ฿ values / expiry of automatic giveaways are defined.
 // Reading is manager material; changing a giveaway's value is a pricing decision → owner only.
 app.get('/api/admin/coupon-templates', (req, res) => {
@@ -929,7 +935,7 @@ app.post('/api/admin/coupon-templates/:key', (req, res) => {
 // Outstanding wallet coupons (who holds what + total liability) and per-coupon recall.
 app.get('/api/admin/coupons/outstanding', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.outstandingCoupons({ q: req.query.q, limit: Number(req.query.limit) || 50, offset: Number(req.query.offset) || 0 })); }
+  try { res.json(Q.outstandingCoupons({ q: req.query.q, status: req.query.status, limit: Number(req.query.limit) || 50, offset: Number(req.query.offset) || 0 })); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/admin/customer-coupons/:id/cancel', (req, res) => {

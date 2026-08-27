@@ -651,7 +651,8 @@ export function setCouponTemplate(key, { value, days, on, couponId } = {}) {
   if (on != null && d.toggle) setSetting(`tpl:${key}:on`, on ? '1' : '0');
   return couponTemplate(key);
 }
-const COUPON_KIND_TH = { winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', reward: 'สะสมครบ', lucky: 'เลขนำโชค', claim: 'ลิงก์รับคูปอง' };
+const COUPON_KIND_TH = { winback: 'ดึงลูกค้ากลับ', birthday: 'วันเกิด', reward: 'สะสมครบ', lucky: 'เลขนำโชค', claim: 'ลิงก์รับคูปอง',
+                         bounceback: 'ขอบคุณกลับมาอีก', streak: 'ซื้อต่อเนื่อง', flash: 'Flash Sale' };
 /**
  * Coupon performance for a Bangkok date range: how many went out, how many came back, and what it
  * actually cost. Redemptions are counted on the day they were USED (that is when the shop paid for
@@ -708,23 +709,87 @@ export function couponReport({ from = null, to = null, days = null } = {}) {
   };
 }
 
-/** Every live wallet coupon the shop currently owes, with WHO holds it and the total ฿ liability.
- *  This is the number the owner never had: how much free product is promised and still out there. */
-export function outstandingCoupons({ q = '', limit = 50, offset = 0 } = {}) {
+/** Every wallet coupon by lifecycle status, with WHO holds it. Default 'live' answers the number
+ *  the owner never had (฿ liability still out there); the owner also asked to check a SPECIFIC
+ *  customer's coupon — did they use it, when, or did it lapse — so the same list now serves
+ *  redeemed (with the date it was used), expired, and cancelled views behind a status filter. */
+export function outstandingCoupons({ q = '', status = 'live', limit = 50, offset = 0 } = {}) {
   const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
   const term = String(q || '').trim();
   const filter = term ? ` AND (cc.label LIKE ? OR COALESCE(c.name,'') LIKE ? OR cc.customer_key LIKE ?)` : '';
-  const args = term ? [`%${term}%`, `%${term}%`, `%${term}%`] : [];
-  const base = `FROM customer_coupons cc LEFT JOIN customers c ON c.line_user_id = cc.customer_key
-                WHERE cc.used_at IS NULL AND cc.state != 'cancelled' AND cc.expires_at >= ?${filter}`;
-  const tot = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(cc.free_cap),0) liability ${base}`).get(today, ...args);
+  const qArgs = term ? [`%${term}%`, `%${term}%`, `%${term}%`] : [];
+  const WHERE = {
+    live: { sql: `cc.used_at IS NULL AND cc.state != 'cancelled' AND cc.expires_at >= ?`, today: true },
+    redeemed: { sql: `cc.used_at IS NOT NULL`, today: false },
+    expired: { sql: `cc.used_at IS NULL AND cc.state != 'cancelled' AND cc.expires_at < ?`, today: true },
+    cancelled: { sql: `cc.state = 'cancelled' AND cc.used_at IS NULL`, today: false },
+  };
+  const st = WHERE[status] ? status : 'live';
+  const from = `FROM customer_coupons cc LEFT JOIN customers c ON c.line_user_id = cc.customer_key`;
+  const argsFor = (k) => (WHERE[k].today ? [today, ...qArgs] : qArgs);
+  // Chip counts honour the search box too, so "จันทร์แจ่ม" shows her whole coupon history at once.
+  const counts = {};
+  for (const k of Object.keys(WHERE)) {
+    counts[k] = db.prepare(`SELECT COUNT(*) n ${from} WHERE ${WHERE[k].sql}${filter}`).get(...argsFor(k)).n || 0;
+  }
+  // ฿ shown next to the count means: liability for live, real discount given for redeemed,
+  // face value that quietly lapsed for expired/cancelled.
+  const sumExpr = st === 'redeemed' ? 'COALESCE(SUM(cc.used_value),0)' : 'COALESCE(SUM(cc.free_cap),0)';
+  const tot = db.prepare(`SELECT ${sumExpr} amt ${from} WHERE ${WHERE[st].sql}${filter}`).get(...argsFor(st));
+  const order = st === 'redeemed' ? 'cc.used_at DESC, cc.id DESC'
+    : st === 'live' ? 'cc.expires_at, cc.id' : 'cc.id DESC';
   const rows = db.prepare(
     `SELECT cc.id, cc.customer_key AS key, COALESCE(c.name,'') AS name, cc.kind, cc.label,
-            cc.free_cap AS cap, date(cc.issued_at,'+7 hours') AS issued, cc.expires_at AS expires
-       ${base} ORDER BY cc.expires_at, cc.id LIMIT ? OFFSET ?`
-  ).all(today, ...args, Math.max(1, Math.min(200, limit)), Math.max(0, offset));
-  return { total: tot.n || 0, liability: r2(tot.liability || 0), today,
+            cc.free_cap AS cap, cc.used_value AS usedValue, date(cc.issued_at,'+7 hours') AS issued,
+            cc.expires_at AS expires, date(cc.used_at,'+7 hours') AS usedOn
+       ${from} WHERE ${WHERE[st].sql}${filter} ORDER BY ${order} LIMIT ? OFFSET ?`
+  ).all(...argsFor(st), Math.max(1, Math.min(200, limit)), Math.max(0, offset));
+  return { total: counts[st], liability: r2(tot.amt || 0), today, status: st, counts,
            rows: rows.map((r) => ({ ...r, kindTh: COUPON_KIND_TH[r.kind] || r.kind })) };
+}
+
+/** Spreadsheet-style coupon report: one row per coupon NAME (not just kind) with issued/redeemed/
+ *  ฿/rate/expired/last-used, plus the individual redemptions so the owner can see exactly WHO used
+ *  WHAT on WHICH day. Defaults to the last 7 Bangkok days — the window the owner reads daily. */
+export function couponReportSheet({ from = null, to = null } = {}) {
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  let f = from, t = to;
+  if (!f || !t) { t = today; f = db.prepare("SELECT date('now','+7 hours','-6 days') d").get().d; }
+  const bkk = (col) => `date(${col},'+7 hours')`;
+  const issued = db.prepare(
+    `SELECT kind, label, COUNT(*) n, COALESCE(SUM(free_cap),0) face
+       FROM customer_coupons WHERE ${bkk('issued_at')} BETWEEN ? AND ? GROUP BY kind, label`).all(f, t);
+  const used = db.prepare(
+    `SELECT kind, label, COUNT(*) n, COALESCE(SUM(used_value),0) value,
+            MAX(${bkk('used_at')}) lastUsed,
+            ROUND(AVG(julianday(used_at) - julianday(issued_at)), 1) avgDays
+       FROM customer_coupons WHERE used_at IS NOT NULL AND ${bkk('used_at')} BETWEEN ? AND ?
+      GROUP BY kind, label`).all(f, t);
+  const lapsed = db.prepare(
+    `SELECT kind, label, COUNT(*) n FROM customer_coupons
+      WHERE used_at IS NULL AND state != 'cancelled' AND expires_at BETWEEN ? AND ? AND expires_at < ?
+      GROUP BY kind, label`).all(f, t, today);
+  const SEP = String.fromCharCode(0);   // labels contain spaces, so join on a char no label can hold
+  const keys = [...new Set([...issued, ...used, ...lapsed].map((r) => r.kind + SEP + (r.label || '')))];
+  const rows = keys.map((k) => {
+    const [kind, label] = k.split(SEP);
+    const pick = (a) => a.find((x) => x.kind === kind && x.label === label);
+    const i = pick(issued) || { n: 0, face: 0 };
+    const u = pick(used) || { n: 0, value: 0, lastUsed: null, avgDays: null };
+    const e = pick(lapsed) || { n: 0 };
+    return { kind, kindTh: COUPON_KIND_TH[kind] || kind, label,
+             issued: i.n, faceValue: r2(i.face), redeemed: u.n, value: r2(u.value),
+             rate: i.n ? Math.round((u.n / i.n) * 1000) / 10 : null,
+             expired: e.n, lastUsed: u.lastUsed, avgDays: u.avgDays };
+  }).sort((a, b) => b.issued - a.issued || b.redeemed - a.redeemed);
+  const uses = db.prepare(
+    `SELECT ${bkk('cc.used_at')} d, cc.kind, cc.label, COALESCE(c.name,'') name,
+            cc.customer_key key, cc.used_value value
+       FROM customer_coupons cc LEFT JOIN customers c ON c.line_user_id = cc.customer_key
+      WHERE cc.used_at IS NOT NULL AND ${bkk('cc.used_at')} BETWEEN ? AND ?
+      ORDER BY cc.used_at DESC LIMIT 300`).all(f, t)
+    .map((r) => ({ ...r, kindTh: COUPON_KIND_TH[r.kind] || r.kind, value: r.value == null ? null : r2(r.value) }));
+  return { from: f, to: t, rows, uses };
 }
 /** Owner recalls a mis-issued coupon. Only unused coupons can be cancelled; the customer simply
  *  stops seeing it. Issued-count history is kept — the report still shows it went out. */

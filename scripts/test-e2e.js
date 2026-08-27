@@ -1464,6 +1464,52 @@ console.log('\n== Coupon report ==');
   db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
 }
 
+console.log('\n== Wallet coupon status filters + spreadsheet report ==');
+{
+  const K = 'U' + 'd7'.repeat(16);
+  db.prepare('INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?,?)').run(K, 'สถานะทดสอบ');
+  const day = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  const mk = (label, cap) => db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`).run(K, label, cap, day).lastInsertRowid;
+  const idLive = mk('สถานะสด', 40);
+  const idUsed = mk('สถานะใช้', 40);
+  db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), state='redeemed', used_value=22 WHERE id=?`).run(idUsed);
+  const idExp = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', 'สถานะหมด', 40, date('now','-3 days'), 'campaign')`).run(K).lastInsertRowid;
+  const idCan = mk('สถานะยกเลิก', 40);
+  db.prepare(`UPDATE customer_coupons SET state='cancelled' WHERE id=?`).run(idCan);
+
+  const live = Q.outstandingCoupons({ q: 'สถานะ' });
+  ok(live.rows.some((r) => r.id === idLive) && !live.rows.some((r) => r.id === idUsed || r.id === idExp || r.id === idCan),
+     'INVARIANT default (live) filter lists only unused, unexpired, uncancelled coupons');
+  ok(live.counts && live.counts.live >= 1 && live.counts.redeemed >= 1 && live.counts.expired >= 1 && live.counts.cancelled >= 1,
+     `INVARIANT chip counts cover all four states (${JSON.stringify(live.counts)})`);
+  const used = Q.outstandingCoupons({ q: 'สถานะ', status: 'redeemed' });
+  const ur = used.rows.find((r) => r.id === idUsed);
+  ok(!!ur && !!ur.usedOn && ur.usedValue === 22, 'INVARIANT redeemed view shows WHEN it was used and the real ฿ given');
+  ok(near(used.liability, 22), `INVARIANT redeemed ฿ = real discount (22), not the ฿40 face (got ${used.liability})`);
+  const exp = Q.outstandingCoupons({ q: 'สถานะ', status: 'expired' });
+  ok(exp.rows.some((r) => r.id === idExp) && exp.rows.every((r) => r.id !== idLive), 'INVARIANT expired view lists lapsed coupons only');
+  ok(Q.outstandingCoupons({ q: 'สถานะ', status: 'cancelled' }).rows.some((r) => r.id === idCan), 'INVARIANT cancelled view lists recalled coupons');
+  ok(Q.outstandingCoupons({ q: 'สถานะ', status: 'nonsense' }).status === 'live', 'INVARIANT an unknown status falls back to live, never errors');
+
+  const sheet = Q.couponReportSheet({});
+  const rowUsed = sheet.rows.find((r) => r.label === 'สถานะใช้');
+  ok(!!rowUsed && rowUsed.issued === 1 && rowUsed.redeemed === 1 && near(rowUsed.value, 22) && rowUsed.rate === 100,
+     'INVARIANT sheet groups by coupon NAME with issued/redeemed/฿/rate on one row');
+  const rowLive = sheet.rows.find((r) => r.label === 'สถานะสด');
+  ok(!!rowLive && rowLive.redeemed === 0, 'INVARIANT an unused coupon shows 0 redemptions on its own row');
+  const rowExp = sheet.rows.find((r) => r.label === 'สถานะหมด');
+  ok(!!rowExp && rowExp.expired === 1, 'INVARIANT the sheet counts coupons that lapsed inside the range');
+  const use = (sheet.uses || []).find((u) => u.label === 'สถานะใช้');
+  ok(!!use && use.name === 'สถานะทดสอบ' && use.d === day && near(use.value, 22), 'INVARIANT the per-redemption list says WHO used WHAT on WHICH day');
+  const span = (new Date(sheet.to) - new Date(sheet.from)) / 86400e3;
+  ok(span === 6, `INVARIANT sheet defaults to the last 7 days (${sheet.from} → ${sheet.to})`);
+  ok(!Q.couponReportSheet({ from: '2020-01-01', to: '2020-01-31' }).rows.some((r) => String(r.label).startsWith('สถานะ')),
+     'INVARIANT sheet respects the chosen date range');
+
+  db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(K);
+  db.prepare('DELETE FROM customers WHERE line_user_id=?').run(K);
+}
+
 console.log('\n== Win-back attaches a coupon BUILT ON THE COUPON PAGE (define once, use everywhere) ==');
 {
   const cid = Q.createCoupon({ code: 'WBGIFT', label: 'ของขวัญคิดถึง', disc_type: 'baht', disc_value: 35 }).id;
