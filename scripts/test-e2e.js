@@ -2090,6 +2090,51 @@ const accNear2 = (a, b) => Math.abs(a - b) < 0.01;
   ok(Q.nudgePickupWaiting().nudged === 0, 'INVARIANT inside the window (3min < 10min) → not yet nudged');
   Q.setPickupNudgeConfig({ minutes: 0 });   // leave off for the rest of the suite
 }
+
+console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
+{
+  // force:true skips the "after 10:00, once a day" clock gates so the suite passes at any hour;
+  // production always calls it bare.
+  const day = (n) => db.prepare("SELECT date('now','+7 hours', ?) d").get((n >= 0 ? '+' : '') + n + ' days').d;
+  const EK = (s) => 'U' + s.repeat(32).slice(0, 32);
+  const mkc = (key, label, exp, extra = {}) => {
+    db.prepare('INSERT OR IGNORE INTO customers (line_user_id, name) VALUES (?,?)').run(key, 'หมดอายุ' + label);
+    const id = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, 30, ?, 'campaign')`).run(key, label, exp).lastInsertRowid;
+    if (extra.used) db.prepare(`UPDATE customer_coupons SET used_at=datetime('now'), state='redeemed', used_value=30 WHERE id=?`).run(id);
+    if (extra.cancelled) db.prepare(`UPDATE customer_coupons SET state='cancelled' WHERE id=?`).run(id);
+    return id;
+  };
+  const nudgedOf = (id) => !!db.prepare('SELECT nudged_at FROM customer_coupons WHERE id=?').get(id).nudged_at;
+
+  ok(Q.setCouponNudgeConfig({ days: 99 }).days === 14 && Q.setCouponNudgeConfig({ days: -5 }).days === 0,
+     'INVARIANT expiry-nudge lead time clamps to 0–14 days');
+  const three = ['ใบA', 'ใบB', 'ใบC'].map((l) => mkc(EK('e'), l, day(1)));
+  Q.setCouponNudgeConfig({ days: 0 });
+  ok(Q.nudgeExpiringCoupons({ force: true }).messages === 0, 'INVARIANT 0 days = reminder off');
+  ok(!nudgedOf(three[0]), 'INVARIANT an off reminder does not silently burn the once-ever flag');
+
+  Q.setCouponNudgeConfig({ days: 2 });
+  const inWindow = mkc(EK('g'), 'ขอบพอดี', day(2));
+  const outside = mkc(EK('h'), 'นอกช่วง', day(3));
+  const lapsed = mkc(EK('i'), 'หมดไปแล้ว', day(-1));
+  const used = mkc(EK('j'), 'ใช้แล้ว', day(1), { used: true });
+  const cancelled = mkc(EK('k'), 'ยกเลิก', day(1), { cancelled: true });
+  db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES ('0899999999','winback','ไม่มีไลน์',30,?,'campaign')`).run(day(1));
+
+  const r1 = Q.nudgeExpiringCoupons({ force: true });
+  ok(three.every(nudgedOf) , 'INVARIANT all of one holder\'s lapsing coupons are marked in the same run');
+  ok(r1.nudged >= 4 && r1.messages < r1.nudged, `INVARIANT 3 coupons of one holder cost ONE message, not three (coupons ${r1.nudged}, messages ${r1.messages})`);
+  ok(nudgedOf(inWindow), 'INVARIANT a coupon expiring exactly on the window edge is reminded');
+  ok(!nudgedOf(outside) && !nudgedOf(lapsed) && !nudgedOf(used) && !nudgedOf(cancelled),
+     'INVARIANT never reminds outside the window, already-lapsed, used, or cancelled coupons');
+  ok(!db.prepare("SELECT nudged_at FROM customer_coupons WHERE customer_key='0899999999'").get().nudged_at,
+     'INVARIANT a customer with no LINE id is never pushed');
+  ok(Q.nudgeExpiringCoupons({ force: true }).messages === 0, 'INVARIANT a second run the same day reminds nobody twice');
+
+  Q.setCouponNudgeConfig({ days: 2 });   // leave at the shipped default
+  for (const k of ['e', 'g', 'h', 'i', 'j', 'k']) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(EK(k)); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(EK(k)); }
+  db.prepare("DELETE FROM customer_coupons WHERE customer_key='0899999999'").run();
+}
 {
   // Phase 4 #4: flash sale — inactive OFF; an all-day window is active and lets a customer claim ONE
   // ฿amount value coupon into the wallet, once per Bangkok-day.

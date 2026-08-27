@@ -3958,33 +3958,79 @@ export function awardPoints(orderId) {
   return { key, name, awarded: pts, bonus, bdayBonus, refBonus, firstOrder: isFirst, balance: loyaltyBalance(key).points, coupons };
 }
 
+// ---------- Expiry reminder ----------
+// Owner-settable lead time: remind holders of unused wallet coupons this many days before they
+// lapse. 0 = off, 14 max. Read/written through the same ⚙ features API as the pickup reminder.
+export function getCouponNudgeConfig() {
+  return { days: Math.max(0, Math.min(14, Math.round(Number(getSetting('coupon:nudge_days', '2')) || 0))) };
+}
+export function setCouponNudgeConfig(patch = {}) {
+  if (patch.days != null) setSetting('coupon:nudge_days', String(Math.max(0, Math.min(14, Math.round(Number(patch.days) || 0)))));
+  return getCouponNudgeConfig();
+}
+/** Expiry nudge: once a day (after 10:00 BKK), remind holders of unused wallet coupons that expire
+ *  within the configured lead time. Sends the SAME coupon Flex card birthday/win-back use — it used
+ *  to send the generic queue card with the URL pasted into the body as raw text (no button).
+ *  One message PER CUSTOMER, not per coupon: someone holding three lapsing coupons cost three LINE
+ *  pushes and read as spam. Each coupon is still nudged only once ever (nudged_at); the per-run cap
+ *  now counts messages, and the most urgent customers are served first so the cap can never strand
+ *  a coupon that expires today. `force` bypasses the clock gates for tests only — never wired to a route. */
+export function nudgeExpiringCoupons({ force = false } = {}) {
+  const { days } = getCouponNudgeConfig();
+  if (!days) return { nudged: 0, messages: 0 };
+  const now = db.prepare(`SELECT date(datetime('now','+7 hours')) d, CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get();
+  if (!force) {
+    if (now.h < 10) return { nudged: 0, messages: 0 };                                       // never push at night
+    if (getSetting('coupon:nudge_last_day', '') === now.d) return { nudged: 0, messages: 0 }; // once per day
+  }
+  const rows = db.prepare(
+    `SELECT id, customer_key, kind, label, free_cap, expires_at FROM customer_coupons
+      WHERE used_at IS NULL AND state != 'cancelled' AND nudged_at IS NULL
+        AND expires_at >= ? AND expires_at <= date(?, '+${days} days')
+        AND customer_key LIKE 'U%'
+      ORDER BY expires_at, free_cap DESC, id LIMIT 400`).all(now.d, now.d);
+  if (!force) setSetting('coupon:nudge_last_day', now.d);
+
+  // Group per holder, then serve whoever expires soonest first — with a message cap, the customer
+  // whose coupon dies today must not lose their slot to one that still has two days left.
+  const byCustomer = new Map();
+  for (const r of rows) {
+    if (!byCustomer.has(r.customer_key)) byCustomer.set(r.customer_key, []);
+    byCustomer.get(r.customer_key).push(r);
+  }
+  const groups = [...byCustomer.values()].sort((a, b) => (a[0].expires_at < b[0].expires_at ? -1 : a[0].expires_at > b[0].expires_at ? 1 : 0)).slice(0, 60);
+
+  const link = shopLink();   // liff.line.me/<id>?zone=… — a bare /liff/ has no zone and dead-ends on "ไม่พบโซน"
+  let nudged = 0;
+  for (const list of groups) {
+    const first = list[0], n = list.length;   // first = soonest to lapse, biggest value on a tie
+    for (const r of list) db.prepare(`UPDATE customer_coupons SET nudged_at=datetime('now') WHERE id=?`).run(r.id);
+    nudged += n;
+    const isFree = first.kind === 'reward';
+    try {
+      pushCouponFlex(first.customer_key, {
+        ...(isFree ? { isReward: true, disc_type: 'reward', freeCap: first.free_cap }
+                   : { disc_type: 'amount', disc_value: first.free_cap }),
+        couponKind: first.kind,
+        label: n > 1 ? `${first.label} และอีก ${n - 1} ใบ` : first.label,
+        expiresAt: first.expires_at,
+        kicker: '⏰ ใกล้หมดอายุ',
+        emoji: '⏰',
+        altText: n > 1
+          ? `⏰ คูปอง ${n} ใบของคุณใกล้หมดอายุ — ใบแรก ${first.expires_at}`
+          : `⏰ คูปอง "${first.label}" ของคุณจะหมดอายุ ${first.expires_at}`,
+      }, link,
+        n > 1 ? `คุณมีคูปอง ${n} ใบกำลังจะหมดอายุนะคะ อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛`
+              : `คูปองของคุณจะหมดอายุ ${first.expires_at} นี้แล้วนะคะ อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛`,
+        'expiry');
+    } catch { /* one bad push must not stop the rest */ }
+  }
+  return { nudged, messages: groups.length };
+}
+
 /** Issue this year's birthday coupon (free drink, value/expiry from the birthday template) to every
  *  customer whose saved birthday is today (Bangkok) — and tell them on LINE. Runs from a periodic
  *  sweep; idempotent per customer per calendar year. */
-/** Expiry nudge: once a day (after 10:00 BKK), remind holders of unused wallet coupons that
- *  expire within `coupon:nudge_days` days (default 2, 0 = off). One push per coupon, ever
- *  (nudged_at), capped per run so a big backlog can't blow the LINE message budget. */
-export function nudgeExpiringCoupons() {
-  const days = Math.max(0, Math.min(14, parseInt(getSetting('coupon:nudge_days', '2')) || 0));
-  if (!days) return { nudged: 0 };
-  const now = db.prepare(`SELECT date(datetime('now','+7 hours')) d, CAST(strftime('%H', datetime('now','+7 hours')) AS INT) h`).get();
-  if (now.h < 10) return { nudged: 0 };                                       // never push at night
-  if (getSetting('coupon:nudge_last_day', '') === now.d) return { nudged: 0 }; // once per day
-  const rows = db.prepare(
-    `SELECT id, customer_key, label, expires_at FROM customer_coupons
-      WHERE used_at IS NULL AND state != 'cancelled' AND nudged_at IS NULL
-        AND expires_at >= ? AND expires_at <= date(?, '+${days} days')
-        AND customer_key LIKE 'U%' LIMIT 60`).all(now.d, now.d);
-  setSetting('coupon:nudge_last_day', now.d);
-  const link = shopLink();   // liff.line.me/<id>?zone=… — a bare /liff/ has no zone and dead-ends on "ไม่พบโซน"
-  for (const r of rows) {
-    db.prepare(`UPDATE customer_coupons SET nudged_at=datetime('now') WHERE id=?`).run(r.id);
-    pushQueue(r.customer_key,
-      `⏰ คูปอง "${r.label}" ของคุณจะหมดอายุ ${r.expires_at} นี้แล้วนะคะ\n` +
-      `อย่าลืมแวะมาใช้ก่อนหมดเขตค่ะ 💛` + (link ? `\nสั่งเลย: ${link}` : ''), null);
-  }
-  return { nudged: rows.length };
-}
 
 export function issueBirthdayCoupons() {
   const tpl = couponTemplate('birthday');
