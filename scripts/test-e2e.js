@@ -2317,6 +2317,25 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   ok(dups.length === 0, `INVARIANT no active ingredient name appears twice (found ${dups.length})`);
 }
 
+{
+  // A purchase row records what was BOUGHT and nothing decrements it as the stock is used, so the
+  // expiry warning told the owner to throw away a whole delivery that had mostly been blended already.
+  console.log("\n== Expiry warning reflects what is actually left ==");
+  const lotIng = Q.addIngredient({ name: 'ผลไม้ล็อตทดสอบ', unit: 'กก.', costPrice: 50 });
+  const soon = db.prepare("SELECT date(datetime('now','+7 hours'),'+2 days') d").get().d;
+  const gone = db.prepare("SELECT date(datetime('now','+7 hours'),'+3 days') d").get().d;
+  db.prepare("INSERT INTO stock_moves (ingredient_id, kind, qty, cost, expiry) VALUES (?,'purchase',10,500,?)").run(lotIng.id, soon);
+  db.prepare("INSERT INTO stock_moves (ingredient_id, kind, qty, cost, expiry) VALUES (?,'purchase',5,250,?)").run(lotIng.id, gone);
+  db.prepare('UPDATE ingredients SET stock_qty=3 WHERE id=?').run(lotIng.id);   // 15 bought, 3 left on the shelf
+  const lots = Q.expiringLots(14).filter((l) => l.name === 'ผลไม้ล็อตทดสอบ');
+  ok(lots.length === 1, `INVARIANT only lots still covered by on-hand stock are warned about (got ${lots.length})`);
+  ok(lots[0] && near(lots[0].qty, 3), `INVARIANT the warned quantity is what is really left, not what was bought (got ${lots[0] && lots[0].qty})`);
+  db.prepare('UPDATE ingredients SET stock_qty=0 WHERE id=?').run(lotIng.id);
+  ok(Q.expiringLots(14).filter((l) => l.name === 'ผลไม้ล็อตทดสอบ').length === 0,
+     'INVARIANT a lot whose stock is gone drops out of the warning entirely');
+  db.prepare('UPDATE ingredients SET active=0 WHERE id=?').run(lotIng.id);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

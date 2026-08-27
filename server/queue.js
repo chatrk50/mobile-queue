@@ -1912,18 +1912,33 @@ export function supplierCatalog(supplierId) {
  *  NOTE: this is a received-lot expiry alert, not remaining-qty-per-lot depletion tracking. */
 export function expiringLots(days = 14) {
   const rows = db.prepare(
-    `SELECT sm.id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
+    `SELECT sm.id, sm.ingredient_id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
        FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
        LEFT JOIN suppliers s ON s.id=sm.supplier_id
       WHERE sm.kind='purchase' AND sm.expiry IS NOT NULL
         AND date(sm.expiry) <= date('now','+7 hours',? )
-      ORDER BY sm.expiry ASC`
+      ORDER BY sm.expiry ASC, sm.id ASC`
   ).all(`+${Math.max(0, Number(days) || 14)} days`);
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
-  return rows.map((r) => ({ id: r.id, name: r.name, unit: r.unit, qty: r.qty, expiry: r.expiry,
-    supplier: r.supplier || null, boughtAt: r.at,
-    daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
-    expired: r.expiry < today }));
+  // A purchase row records what was BOUGHT. Nothing decrements it as the stock gets used, so an old
+  // lot kept claiming its full quantity — "throw away 4 กก." with 1 กก. actually on the shelf, and a
+  // lot fully consumed weeks ago still sitting in the warning. Net each ingredient's lots against
+  // its real on-hand, oldest expiry first (perishables leave first), and drop what is already gone.
+  const onHand = new Map(db.prepare('SELECT id, stock_qty FROM ingredients WHERE active=1').all()
+    .map((r) => [r.id, Math.max(0, Number(r.stock_qty) || 0)]));
+  const out = [];
+  for (const r of rows) {
+    const left = onHand.get(r.ingredient_id);
+    if (left == null) continue;                     // ingredient archived — nothing to warn about
+    const take = Math.min(Math.max(0, Number(r.qty) || 0), left);
+    onHand.set(r.ingredient_id, r2(left - take));
+    if (take <= 0) continue;                        // this lot has already been used up
+    out.push({ id: r.id, name: r.name, unit: r.unit, qty: r2(take), expiry: r.expiry,
+      supplier: r.supplier || null, boughtAt: r.at,
+      daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
+      expired: r.expiry < today });
+  }
+  return out;
 }
 // ---- Purchase orders (ใบสั่งซื้อ) ----
 function poView(id) {
