@@ -3234,7 +3234,7 @@ window.chTab=(i)=>{
   const names=['แคมเปญ','คูปองคงค้าง','รายงาน'];
   $('chTabs').innerHTML=names.map((n,x)=>`<button class="ghost seg${x===i?' on':''}" onclick="chTab(${x})" style="padding:9px 6px;font-size:13px">${n}</button>`).join('');
   [0,1,2].forEach(x=>{ $('chTab'+x).style.display=x===i?'':'none'; });
-  if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(30);
+  if(i===0) chLoadTpl(); else if(i===1) chLoadOut(); else loadCouponRep(7);
 };
 // -------- tab 0: campaign templates (the ONE place giveaway values live) --------
 let _chCoupList=[];
@@ -3335,28 +3335,43 @@ window.chSaveTpl=async(key,hasToggle)=>{
   try{ await api('/api/admin/coupon-templates/'+key,{method:'POST',body:JSON.stringify(body)}); toast('บันทึกแล้ว ✓'); chLoadTpl(); }
   catch(e){ toast('บันทึกไม่สำเร็จ — เฉพาะเจ้าของร้าน'); }
 };
-// -------- tab 1: outstanding wallet coupons (who holds what + total liability) --------
-let _chOutT=null;
+// -------- tab 1: wallet coupons by lifecycle — the owner asked to check a SPECIFIC customer's
+// coupon: still waiting, used (on which day), lapsed, or recalled. One list, four status chips. --------
+let _chOutT=null, _chOutSt='live';
 window.chOutSearch=()=>{ clearTimeout(_chOutT); _chOutT=setTimeout(()=>chLoadOut(0),300); };
+window.chOutFilter=(st)=>{ _chOutSt=st; chLoadOut(0); };
 window.chLoadOut=async(offset=0)=>{
   const list=$('chOutList'), q=($('chOutQ').value||'').trim();
   if(!offset) list.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
-  let r; try{ r=await api('/api/admin/coupons/outstanding?limit=50&offset='+offset+(q?'&q='+encodeURIComponent(q):'')); }
+  let r; try{ r=await api('/api/admin/coupons/outstanding?limit=50&offset='+offset+'&status='+_chOutSt+(q?'&q='+encodeURIComponent(q):'')); }
   catch(e){ list.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:10px 0">ดูหน้านี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
-  $('chOutSum').innerHTML=`<div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
-      <div><div style="font-size:20px;font-weight:800;color:var(--navy)">${r.total}</div><div class="muted" style="font-size:11px">ใบที่ยังไม่ถูกใช้</div></div>
-      <div><div style="font-size:20px;font-weight:800;color:#b45309">฿${r.liability}</div><div class="muted" style="font-size:11px">ภาระรวมถ้าใช้ทั้งหมด</div></div>
+  const C=r.counts||{}, st=r.status||'live';
+  const chip=(k,lbl)=>`<button class="ghost seg${st===k?' on':''}" style="flex:1;padding:8px 2px;font-size:12px" onclick="chOutFilter('${k}')">${lbl}<br><b style="font-size:13px">${C[k]??0}</b></button>`;
+  const sumLbl={live:['ใบที่ยังไม่ถูกใช้','ภาระรวมถ้าใช้ทั้งหมด','#b45309'],
+                redeemed:['ใช้แล้ว (ใบ)','ส่วนลดที่ให้ไปจริง','#16876f'],
+                expired:['หมดอายุโดยไม่ได้ใช้','มูลค่าที่ไม่ต้องจ่าย','#64748b'],
+                cancelled:['ร้านยกเลิก','มูลค่าที่เรียกคืน','#64748b']}[st];
+  $('chOutSum').innerHTML=
+    `<div class="row" style="gap:6px;margin-bottom:8px">${chip('live','คงค้าง')}${chip('redeemed','ใช้แล้ว')}${chip('expired','หมดอายุ')}${chip('cancelled','ยกเลิก')}</div>
+     <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
+      <div><div style="font-size:20px;font-weight:800;color:var(--navy)">${r.total}</div><div class="muted" style="font-size:11px">${sumLbl[0]}</div></div>
+      <div><div style="font-size:20px;font-weight:800;color:${sumLbl[2]}">฿${r.liability}</div><div class="muted" style="font-size:11px">${sumLbl[1]}</div></div>
     </div>`;
   const own=(!ME||ME.role==='owner');
+  const right=(x)=>st==='redeemed'?`<b style="color:#16876f">฿${x.usedValue==null?x.cap:x.usedValue}</b><div class="muted" style="font-size:11px">ใช้เมื่อ ${x.usedOn||'—'}</div>`
+    :st==='expired'?`<b style="color:#64748b">฿${x.cap}</b><div class="muted" style="font-size:11px">หมดอายุ ${x.expires}</div>`
+    :st==='cancelled'?`<b style="color:#64748b">฿${x.cap}</b><div class="muted" style="font-size:11px">ยกเลิกแล้ว</div>`
+    :`<b>฿${x.cap}</b><div class="muted" style="font-size:11px">ถึง ${x.expires}</div>`;
   const rows=(r.rows||[]).map(x=>`<div class="row between" style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;gap:8px;align-items:center">
       <span style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(x.name||x.key.slice(0,10)+'…')}</b>
-        <div class="muted" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.kindTh)} · ${esc(x.label)}</div></span>
-      <span style="flex:none;text-align:right"><b>฿${x.cap}</b><div class="muted" style="font-size:11px">ถึง ${x.expires}</div></span>
-      ${own?`<button class="ghost" style="flex:none;padding:5px 10px;font-size:11.5px;color:#b91c1c;border-color:#f3caca" onclick="chCancelCoupon(${x.id},'${esc(x.label).replace(/'/g,'')}')">ยกเลิก</button>`:''}
+        <div class="muted" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.kindTh)} · ${esc(x.label)} · ได้รับ ${x.issued}</div></span>
+      <span style="flex:none;text-align:right">${right(x)}</span>
+      ${(own&&st==='live')?`<button class="ghost" style="flex:none;padding:5px 10px;font-size:11.5px;color:#b91c1c;border-color:#f3caca" onclick="chCancelCoupon(${x.id},'${esc(x.label).replace(/'/g,'')}')">ยกเลิก</button>`:''}
     </div>`).join('');
   const more=(offset+50<r.total)?`<button id="chOutMoreBtn" class="ghost" style="width:100%;margin-top:8px;padding:9px" onclick="chLoadOut(${offset+50})">ดูเพิ่ม (${r.total-offset-50} ใบ)</button>`:'';
+  const emptyTxt={live:'ไม่มีคูปองคงค้าง 🎉',redeemed:'ยังไม่มีคูปองที่ถูกใช้',expired:'ไม่มีคูปองหมดอายุ',cancelled:'ไม่มีคูปองที่ถูกยกเลิก'}[st];
   if(offset){ const b=$('chOutMoreBtn'); if(b) b.remove(); list.insertAdjacentHTML('beforeend',rows+more); }
-  else list.innerHTML=rows?rows+more:'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">ไม่มีคูปองคงค้าง 🎉</p>';
+  else list.innerHTML=rows?rows+more:'<p class="muted" style="font-size:12.5px;text-align:center;padding:12px 0">'+emptyTxt+'</p>';
 };
 // First open of the coupon box: load the coupons built on the coupon page into the dropdown and
 // prefill the custom fields from the winback template. Both cached — opening again costs nothing.
@@ -3409,12 +3424,13 @@ window.loadCouponRep=async(a,b,l)=>{
   // ปุ่มช่วงเวลาเดียว (rangeBtn) แทนชิป + ช่องวันที่เดิม — รับได้ทั้งเลขวัน (ผู้เรียกเก่า) และ from/to
   if(typeof a==='number'&&!b){ _crSel={from:bkkDate(-(a-1)),to:bkkDate(0),label:a===1?'วันนี้':(a===365?'1 ปีล่าสุด':a+' วันล่าสุด')}; }
   else if(a&&b){ _crSel={from:a,to:b,label:l||(a+' → '+b)}; }
-  else if(!_crSel){ _crSel={from:bkkDate(-29),to:bkkDate(0),label:'30 วันล่าสุด'}; }
+  else if(!_crSel){ _crSel={from:bkkDate(-6),to:bkkDate(0),label:'7 วันล่าสุด'}; }
   const qs='from='+encodeURIComponent(_crSel.from)+'&to='+encodeURIComponent(_crSel.to);
   $('crRange').innerHTML=rangeBtn('crRangeBtn',_crSel.label,crRangeApply);
   body.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
-  let r; try{ r=await api('/api/reports/coupons?'+qs); }
+  let r,sh; try{ [r,sh]=await Promise.all([api('/api/reports/coupons?'+qs),api('/api/reports/coupons/sheet?'+qs)]); }
   catch(e){ body.innerHTML='<p class="muted" style="font-size:12.5px;text-align:center;padding:14px 0">ดูรายงานนี้ได้เฉพาะผู้จัดการขึ้นไป</p>'; return; }
+  _crSheet=sh;
   const c=r.coupons, lk=r.lucky;
   const kpi=(v,l,col)=>`<div><div style="font-size:20px;font-weight:800;color:${col||'var(--navy)'}">${v}</div><div class="muted" style="font-size:11px">${l}</div></div>`;
   const rows=(c.rows||[]).map(x=>`<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
@@ -3426,12 +3442,66 @@ window.loadCouponRep=async(a,b,l)=>{
       ${kpi(c.issued,'ออกให้ (ใบ)')}${kpi(c.redeemed,'กลับมาใช้','#16876f')}${kpi('฿'+c.value,'เป็นเงิน','#16876f')}${kpi(c.redeemRate+'%','อัตราใช้')}
     </div>
     <div class="muted" style="font-size:11.5px;margin-bottom:6px">หมดอายุโดยไม่ได้ใช้ในช่วงนี้ <b>${c.expired}</b> ใบ${c.unpriced?` · <span style="color:#946f00">${c.unpriced} ใบใช้ก่อนระบบเริ่มเก็บมูลค่าจริง จึงไม่นับเป็นเงิน</span>`:''}</div>
-    <h2>แยกตามประเภท</h2>${rows}
+    <div class="row between" style="align-items:center;margin-top:14px"><h2 style="margin:0">ตารางรายคูปอง</h2>
+      <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="crExportCsv()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel (CSV)</button></div>
+    <div id="crSheetWrap" style="margin-top:8px"></div>
     <h2 style="margin-top:14px">แคมเปญเลขนำโชค</h2>
     <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
       ${kpi(lk.won,'ผู้ได้รับ')}${kpi(lk.used,'ใช้สิทธิ์','#16876f')}${kpi(lk.skipped,'ไม่รับสิทธิ์','var(--muted)')}${kpi('฿'+lk.value,'เป็นเงิน','#16876f')}
     </div>
     ${c.codeCoupons&&c.codeCoupons.redeemed?`<div class="muted" style="font-size:11.5px;margin-top:10px">คูปองรหัส (ใส่โค้ดเอง) ใช้ไป ${c.codeCoupons.redeemed} ครั้ง · ฿${c.codeCoupons.value}</div>`:''}`;
+  renderCrSheet();
+};
+// ---- spreadsheet detail: per-coupon-name table (sortable headers) + each redemption + CSV ----
+// Owner: "อยากให้แสดงรายละเอียดเพิ่มเติม ทำ view เป็น spreadsheet เหมือน excel" — default 7 days,
+// same range button as the summary so there is exactly one date filter on the page.
+let _crSheet=null, _crSort={k:'issued',d:-1};
+window.crSortBy=(k)=>{ _crSort=(_crSort.k===k)?{k,d:-_crSort.d}:{k,d:-1}; renderCrSheet(); };
+function renderCrSheet(){
+  const box=$('crSheetWrap'); if(!box||!_crSheet) return;
+  const rows=[..._crSheet.rows||[]].sort((a,b)=>{
+    const va=a[_crSort.k], vb=b[_crSort.k];
+    if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
+    return (typeof va==='string'?va.localeCompare(vb):va-vb)*_crSort.d; });
+  const arr=(k)=>_crSort.k===k?(_crSort.d<0?' ▾':' ▴'):'';
+  const th=(k,l,align)=>`<th onclick="crSortBy('${k}')" style="position:sticky;top:0;background:var(--surface);border:1px solid var(--line);padding:6px 8px;cursor:pointer;white-space:nowrap;font-size:11.5px;text-align:${align||'right'};color:var(--navy)">${l}${arr(k)}</th>`;
+  const td=(v,align,col)=>`<td style="border:1px solid var(--line);padding:6px 8px;white-space:nowrap;text-align:${align||'right'}${col?';color:'+col:''}">${v}</td>`;
+  const body=rows.map(x=>'<tr>'
+    +td(`<b style="color:var(--navy)">${esc(x.label)}</b> <span class="muted" style="font-size:10.5px">${esc(x.kindTh)}</span>`,'left')
+    +td(x.issued)+td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
+    +td(x.rate==null?'—':x.rate+'%')+td(x.expired||0,'right',x.expired?'#b45309':'')
+    +td(x.avgDays==null?'—':x.avgDays+' วัน')+td(x.lastUsed||'—')
+    +'</tr>').join('');
+  const uses=(_crSheet.uses||[]);
+  const useRows=uses.map(u=>'<tr>'+td(u.d,'left')+td(`<b style="color:var(--navy)">${esc(u.name||String(u.key||'').slice(0,10)+'…')}</b>`,'left')
+    +td(esc(u.label),'left')+td(u.value==null?'—':'฿'+u.value,'right','#16876f')+'</tr>').join('');
+  box.innerHTML=rows.length?`
+    <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px">
+        <thead><tr>${th('label','คูปอง','left')}${th('issued','ออก')}${th('redeemed','ใช้')}${th('value','฿ ลดจริง')}${th('rate','อัตราใช้')}${th('expired','หมดอายุ')}${th('avgDays','เฉลี่ยกี่วันถึงใช้')}${th('lastUsed','ใช้ล่าสุด')}</tr></thead>
+        <tbody>${body}</tbody></table></div>
+    <p class="muted" style="font-size:11px;margin:6px 0 0">แตะหัวตารางเพื่อเรียงลำดับ · "ออก" นับตามวันที่แจก ส่วน "ใช้" นับตามวันที่ลูกค้าใช้จริงในช่วงเดียวกัน</p>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--navy)">รายการใช้รายใบ (${uses.length}${uses.length>=300?'+':''} ครั้ง) — ใคร ใช้อะไร วันไหน</summary>
+      <div style="overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px;margin-top:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:480px">
+          <thead><tr><th style="position:sticky;top:0;background:var(--surface);border:1px solid var(--line);padding:6px 8px;text-align:left;font-size:11.5px;color:var(--navy)">วันที่</th><th style="position:sticky;top:0;background:var(--surface);border:1px solid var(--line);padding:6px 8px;text-align:left;font-size:11.5px;color:var(--navy)">ลูกค้า</th><th style="position:sticky;top:0;background:var(--surface);border:1px solid var(--line);padding:6px 8px;text-align:left;font-size:11.5px;color:var(--navy)">คูปอง</th><th style="position:sticky;top:0;background:var(--surface);border:1px solid var(--line);padding:6px 8px;font-size:11.5px;color:var(--navy)">฿</th></tr></thead>
+          <tbody>${useRows||'<tr><td colspan="4" style="padding:10px;text-align:center" class="muted">ยังไม่มีการใช้ในช่วงนี้</td></tr>'}</tbody></table></div>
+    </details>`
+    :'<p class="muted" style="font-size:12px;padding:6px 0">ยังไม่มีคูปองออกหรือถูกใช้ในช่วงนี้</p>';
+}
+window.crExportCsv=()=>{
+  if(!_crSheet) return;
+  const q=(s)=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
+  const L1=[['คูปอง','ประเภท','ออก (ใบ)','ใช้ (ใบ)','฿ ลดจริง','อัตราใช้ %','หมดอายุ (ใบ)','เฉลี่ยกี่วันถึงใช้','ใช้ล่าสุด'],
+    ...(_crSheet.rows||[]).map(x=>[x.label,x.kindTh,x.issued,x.redeemed,x.value,x.rate==null?'':x.rate,x.expired,x.avgDays==null?'':x.avgDays,x.lastUsed||''])];
+  const L2=[[],['รายการใช้รายใบ'],['วันที่','ลูกค้า','คูปอง','฿'],
+    ...(_crSheet.uses||[]).map(u=>[u.d,u.name||u.key,u.label,u.value==null?'':u.value])];
+  const csv='﻿'+[...L1,...L2].map(r=>r.map(q).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='coupon-report_'+_crSheet.from+'_'+_crSheet.to+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
 };
 let _fbDays=30, _fbSel=null, _fbShown=25;   // _fbSel = {from,to,label} จากปุ่มช่วงเวลา
 // ---------- ตั้งค่าหน้าร้าน (แคชเชียร์) ----------
