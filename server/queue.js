@@ -1741,6 +1741,15 @@ export function inventorySummary() {
 export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0, costPrice = 0, branchId = null } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
+  // A duplicate name is never what the owner meant, and it silently splits stock, recipes and cost
+  // between two rows. An archived one of the same name is reactivated instead of duplicated.
+  const same = db.prepare('SELECT id, active FROM ingredients WHERE TRIM(name)=? ORDER BY active DESC LIMIT 1').get(n);
+  if (same && same.active) throw new Error('ingredient_exists');
+  if (same) {
+    db.prepare('UPDATE ingredients SET active=1, unit=?, low_threshold=?, avg_cost=? WHERE id=?')
+      .run((unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), same.id);
+    return db.prepare('SELECT * FROM ingredients WHERE id=?').get(same.id);
+  }
   // costPrice = purchase price per unit (สfor costing). Stock starts at 0 — fill in later.
   const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, avg_cost, branch_id) VALUES (?,?,?,?,?)')
     .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), branchId);
@@ -1750,6 +1759,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
   const cur = db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
   if (!cur) throw new Error('ingredient_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  if (n !== cur.name && db.prepare('SELECT id FROM ingredients WHERE TRIM(name)=? AND id<>? AND active=1').get(n, id)) throw new Error('ingredient_exists');
   const u = unit != null ? (unit.toString().slice(0, 20) || cur.unit) : cur.unit;
   const lt = lowThreshold != null ? Math.max(0, Number(lowThreshold) || 0) : cur.low_threshold;
   const a = active != null ? (active ? 1 : 0) : cur.active;

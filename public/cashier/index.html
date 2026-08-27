@@ -3158,6 +3158,9 @@ window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!
     ${withR.length?withR.map(row).join(''):'<p class="muted" style="font-size:12.5px">ยังไม่มีเมนูที่ใส่สูตร (BOM) — ไปที่ จัดการเมนู → สูตร เพื่อผูกวัตถุดิบก่อน แล้วกำไรต่อเมนูจะคำนวณให้อัตโนมัติ</p>'}
     ${noR.length?`<div class="muted" style="font-size:11px;margin-top:8px">ยังไม่ใส่สูตร ${noR.length} เมนู: ${noR.slice(0,6).map(i=>esc(i.name)).join(', ')}${noR.length>6?' …':''}</div>`:''}`; };
 function renderInsightsBody(d, box){
+  // kpi lives inside showReport(); this function is called from loadInsights() and never had it in
+  // scope, so the whole satisfaction + repeat-customer panel threw and rendered nothing.
+  const kpi=(label,val)=>`<div><div style="font-size:18px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
   const sat=d.satisfaction||{}, cu=d.customers||{}, stars=sat.stars||{};
   const maxN=Math.max(1,...[1,2,3,4,5].map(s=>stars[s]||0));
   // Each bar is a live drill-down: tap "4★" and the customers page opens showing only the people

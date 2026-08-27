@@ -2297,6 +2297,26 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   for (const row of finBack) db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)').run(row.key, row.value);
 }
 
+{
+  // Two ingredient rows with one name split stock, recipes and cost between them: receiving tops up
+  // one while the recipe deducts the other, so a drink reads หมด with a full shelf.
+  console.log("\n== Stock: one row per ingredient ==");
+  const i1 = Q.addIngredient({ name: "นมซ้ำทดสอบ", unit: "ลิตร", costPrice: 20 });
+  ok(!!i1.id, "INVARIANT a new ingredient is created");
+  let dupErr = null;
+  try { Q.addIngredient({ name: " นมซ้ำทดสอบ ", unit: "ลิตร" }); } catch (e) { dupErr = e.message; }
+  ok(dupErr === "ingredient_exists", "INVARIANT the same ingredient name cannot be added twice");
+  Q.updateIngredient(i1.id, { active: 0 });
+  const back = Q.addIngredient({ name: "นมซ้ำทดสอบ", unit: "ลิตร", costPrice: 25 });
+  ok(back.id === i1.id && back.active === 1, "INVARIANT re-adding an archived name reactivates that row, it does not duplicate");
+  const other = Q.addIngredient({ name: "นมอีกตัว", unit: "ลิตร" });
+  let renErr = null;
+  try { Q.updateIngredient(other.id, { name: "นมซ้ำทดสอบ" }); } catch (e) { renErr = e.message; }
+  ok(renErr === "ingredient_exists", "INVARIANT renaming onto an existing ingredient is refused too");
+  const dups = db.prepare("SELECT TRIM(name) nm, COUNT(*) n FROM ingredients WHERE active=1 GROUP BY TRIM(name) HAVING n>1").all();
+  ok(dups.length === 0, `INVARIANT no active ingredient name appears twice (found ${dups.length})`);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
