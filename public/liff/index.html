@@ -1396,7 +1396,9 @@ function itemImg(m){
   return fb;
 }
 let menuLoadFailed=false;
-async function loadMenu(){ try{ MENU=await api('/api/menu'); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
+// ?zone asks for THIS branch's menu and prices: nationwide items look the same at every branch,
+// LSM items only appear at the branches HQ assigned them to.
+async function loadMenu(){ try{ MENU=await api('/api/menu'+(zoneId?('?zone='+encodeURIComponent(zoneId)):'')); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
   // Which items THIS customer has hearted (paints the ❤️ filled). Real LINE ids only — the demo
   // fallback ids can't like, which is what keeps the public counts honest.
   try{ if(/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ const r=await api('/api/menu-likes?u='+encodeURIComponent(lineUserId)); MY_LIKES=new Set(r.ids||[]); } }catch(e){}
@@ -1819,7 +1821,9 @@ window.confirmBasket=async()=>{
       body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
-    cart=[]; cartCoupon=null; hideSending();
+    // renderBasketCount() is what mirrors the cart to sessionStorage — clearing the array alone
+    // left the placed order's items saved, and the NEXT visit restored them into an empty basket.
+    cart=[]; cartCoupon=null; renderBasketCount(); hideSending();
     // Ticket shows before the first poll answers — pulse a placeholder instead of a frozen "—".
     { const tc=$('tCode'); tc.textContent='· · ·'; tc.classList.add('ldg'); }
     _onMenu=false; show('ticketCard',true); startPolling();

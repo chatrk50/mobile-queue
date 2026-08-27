@@ -1567,13 +1567,18 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge FROM menu_items ORDER BY sort, id').all();
-  // Per-branch overrides: drop items this branch disabled; apply the branch's soldout.
+  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
+  // Branch scoping — the HQ rule, applied in ONE place so the storefront, the till and the order
+  // endpoint can never disagree about what a branch sells:
+  //   nationwide -> every branch carries it (a branch cannot drop it), at HQ's single price.
+  //   lsm        -> opt-in: only branches assigned in branch_menu carry it, and they may reprice it.
+  // soldout is operational either way — running out today is the branch's call, not HQ's.
   if (branchId) {
     const ov = new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]));
     for (let i = rows.length - 1; i >= 0; i--) {
-      const o = ov.get(rows[i].id);
-      if (o) { if (!o.enabled) { rows.splice(i, 1); continue; } if (o.soldout) rows[i].soldout = 1; }
+      const r = rows[i], o = ov.get(r.id);
+      if (r.scope === 'lsm' && !(o && o.enabled)) { rows.splice(i, 1); continue; }
+      if (o && o.soldout) r.soldout = 1;
     }
   }
   // Resolve channel/branch pricing (delivery markup, branch price override). base_price
@@ -1670,13 +1675,33 @@ export function renameBranch(id, { name, code }) {
 }
 /** Per-branch menu overrides: list catalog items with this branch's enable/price/soldout. */
 export function listBranchMenu(branchId) {
-  return db.prepare(
-    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category,
-            COALESCE(bm.enabled, 1) AS enabled, bm.price_override,
+  const rows = db.prepare(
+    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category, mi.scope,
+            COALESCE(bm.enabled, 0) AS assigned, bm.price_override,
             COALESCE(bm.soldout, mi.soldout) AS soldout
        FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
       WHERE mi.active = 1 ORDER BY mi.sort, mi.id`
   ).all(branchId);
+  // "carried" is the question the caller actually has (does this branch sell it?). Assignment only
+  // answers it for LSM items; a nationwide item is carried whether or not a row exists.
+  return rows.map((r) => ({ ...r, assigned: r.assigned === 1, carried: r.scope === 'lsm' ? r.assigned === 1 : true }));
+}
+/** Which branches an LSM item is assigned to (HQ view of one item). */
+export function menuItemBranches(itemId) {
+  return db.prepare('SELECT branch_id FROM branch_menu WHERE item_id=? AND enabled=1').all(Number(itemId)).map((r) => r.branch_id);
+}
+/** HQ assigns an LSM item to a set of branches. Rows for the branches that lose it are kept (flipped
+ *  to enabled=0) rather than deleted, so a branch's own soldout / price override survives being
+ *  re-assigned later instead of being silently thrown away. */
+export function setMenuItemBranches(itemId, branchIds = []) {
+  const id = Number(itemId);
+  if (!db.prepare('SELECT id FROM menu_items WHERE id=?').get(id)) throw new Error('item_not_found');
+  const want = new Set((Array.isArray(branchIds) ? branchIds : []).map((b) => Number(b)).filter(Boolean));
+  for (const b of db.prepare('SELECT id FROM stores').all().map((r) => r.id)) {
+    db.prepare(`INSERT INTO branch_menu (branch_id, item_id, enabled) VALUES (?,?,?)
+                ON CONFLICT(branch_id, item_id) DO UPDATE SET enabled=excluded.enabled`).run(b, id, want.has(b) ? 1 : 0);
+  }
+  return { ok: true, itemId: id, branchIds: [...want] };
 }
 export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride, soldout } = {}) {
   const cur = db.prepare('SELECT * FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId) || { enabled: 1, price_override: null, soldout: 0, sort: null };
@@ -4123,8 +4148,11 @@ const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default
  * `channelId` selects the tier (defaults to the storefront tier when absent).
  */
 export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
-  const item = db.prepare('SELECT price FROM menu_items WHERE id=?').get(itemId);
+  const item = db.prepare('SELECT price, scope FROM menu_items WHERE id=?').get(itemId);
   if (!item) return null;
+  // "Nationwide" means one price everywhere: a branch price-book row or storefront override must
+  // not move it, or the flag would only be a label. Branch pricing applies to LSM items only.
+  const priceBranch = item.scope === 'lsm' ? branchId : null;
   let tier = null;
   if (channelId) {
     const ch = db.prepare('SELECT tier_id FROM channels WHERE id=?').get(channelId);
@@ -4133,16 +4161,16 @@ export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
   if (!tier) tier = defaultTier();
   // 1) explicit price book entry for this tier (branch-specific, then all-branch=0)
   if (tier) {
-    let row = branchId
-      ? db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=?').get(itemId, tier.id, branchId)
+    let row = priceBranch
+      ? db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=?').get(itemId, tier.id, priceBranch)
       : null;
     if (!row) row = db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(itemId, tier.id);
     if (row) return Math.round((row.price + Number.EPSILON) * 100) / 100;
   }
   // 2) base price (per-branch storefront override or catalog), optionally × tier markup
   let base = item.price;
-  if (branchId) {
-    const bm = db.prepare('SELECT price_override FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId);
+  if (priceBranch) {
+    const bm = db.prepare('SELECT price_override FROM branch_menu WHERE branch_id=? AND item_id=?').get(priceBranch, itemId);
     if (bm && bm.price_override != null) base = bm.price_override;
   }
   const markup = tier?.markup_pct || 0;
@@ -4177,7 +4205,7 @@ export function priceHistory(itemId = null, limit = 100) {
     ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
     : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }, actor = null) {
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge, scope }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
@@ -4188,7 +4216,8 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const a = active != null ? (active ? 1 : 0) : cur.active;
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, id);
+  const sc = scope != null ? (scope === 'lsm' ? 'lsm' : 'nationwide') : (cur.scope || 'nationwide');
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, sc, id);
   // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
   if (Number(p) !== Number(cur.price)) {
     try {
@@ -4256,7 +4285,7 @@ export function customerSuggestions(lineUserId, opts = {}) {
     `SELECT oi.name,
             SUM(oi.qty) AS qty,
             COUNT(DISTINCT o.id) AS times,
-            mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active
+            mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active, mi.scope AS scope
      FROM order_items oi
      JOIN orders o  ON o.id = oi.order_id
      JOIN tickets t ON t.id = o.ticket_id
@@ -4275,11 +4304,12 @@ export function customerSuggestions(lineUserId, opts = {}) {
     : new Map();
   const mk = menuMakeable();
   const unavailable = (f) => {
-    if (f.soldout === 1) return true;
+    if (f.soldout === 1) return true;                            // HQ pulled it everywhere
     if (f.item_id == null) return false;
     const o = ov.get(f.item_id);
-    if (o && (!o.enabled || o.soldout)) return true;
-    return mk.has(f.item_id) && mk.get(f.item_id) <= 0;
+    if (f.scope === 'lsm' && !(o && o.enabled)) return true;     // this branch does not carry it
+    if (o && o.soldout) return true;                             // sold out at this branch today
+    return mk.has(f.item_id) && mk.get(f.item_id) <= 0;          // out of BOM stock
   };
   // Last order (most recent ticket) grouped into drink + nested toppings, for "reorder the same".
   const lastTicket = db.prepare(
@@ -4360,11 +4390,13 @@ function freeGiveawayDiscount(lines, total) {
 function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
   const base = String(rawName || '').split(' · ')[0].trim();
   if (!base) return null;
-  const item = db.prepare('SELECT id FROM menu_items WHERE name=? AND active=1').get(base);
+  const item = db.prepare('SELECT id, scope FROM menu_items WHERE name=? AND active=1').get(base);
   if (!item) return null;
-  if (branchId) {
+  // The same gate listMenu paints with: an LSM item is orderable only at a branch it was assigned
+  // to. A nationwide item is orderable at every branch, full stop.
+  if (branchId && item.scope === 'lsm') {
     const bm = db.prepare('SELECT enabled FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, item.id);
-    if (bm && !bm.enabled) return null;
+    if (!(bm && bm.enabled)) return null;
   }
   const p = priceFor(item.id, { channelId, branchId });
   return p == null ? null : r2(p);

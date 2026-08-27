@@ -2167,10 +2167,14 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
 
   db.prepare('INSERT INTO branch_menu (branch_id, item_id, enabled, soldout) VALUES (1,?,1,1)').run(rdId);
   ok(fav().soldout === true, 'INVARIANT CUS-C5 sold out at THIS branch is not offered');
-  db.prepare('UPDATE branch_menu SET soldout=0, enabled=0 WHERE branch_id=1 AND item_id=?').run(rdId);
-  ok(fav().soldout === true, 'INVARIANT CUS-C5 a drink this branch does not carry is not offered');
+  db.prepare('UPDATE branch_menu SET soldout=0 WHERE branch_id=1 AND item_id=?').run(rdId);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 clearing the branch sold-out makes it offerable again');
+  Q.updateMenuItem(rdId, { scope: 'lsm' }); Q.setMenuItemBranches(rdId, []);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 an LSM drink this branch was never assigned is not offered');
+  Q.setMenuItemBranches(rdId, [1]);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 assigning the branch makes the LSM drink offerable');
+  Q.updateMenuItem(rdId, { scope: 'nationwide' });
   db.prepare('DELETE FROM branch_menu WHERE branch_id=1 AND item_id=?').run(rdId);
-  ok(fav().soldout === false, 'INVARIANT CUS-C5 clearing the branch override makes it offerable again');
 
   const rdIng = db.prepare("INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบสั่งซ้ำ','กก.', 0, 10)").run().lastInsertRowid;
   db.prepare('INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,1)').run(rdId, rdIng);
@@ -2181,6 +2185,48 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(rdId);
   db.prepare('DELETE FROM ingredients WHERE id=?').run(rdIng);
   db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(rdId);
+}
+
+{
+  // HQ multi-branch menu control. Two rules, and every surface (storefront, price, order endpoint)
+  // must read them the same way or the customer is shown something the till will refuse:
+  //   nationwide → every branch carries it, at ONE price nobody local can move.
+  //   lsm        → only the branches HQ assigned carry it, and those branches may price it.
+  console.log('\n== HQ menu scope: nationwide vs LSM ==');
+  const B2 = db.prepare("INSERT INTO stores (name) VALUES ('Test Shop 2')").run().lastInsertRowid;
+  const Z2 = db.prepare("INSERT INTO zones (store_id, name, prefix) VALUES (?, 'B', 'B')").run(B2).lastInsertRowid;
+  const nwId = db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('NationwideDrink', 60, 'drink')").run().lastInsertRowid;
+  const lsmId = db.prepare("INSERT INTO menu_items (name, price, category, scope) VALUES ('LsmDrink', 70, 'drink', 'lsm')").run().lastInsertRowid;
+  const has = (branchId, name) => Q.listMenu(null, branchId).some((m) => m.name === name);
+
+  ok(has(1, 'NationwideDrink') && has(B2, 'NationwideDrink'), 'INVARIANT a nationwide item is carried by every branch');
+  ok(!has(1, 'LsmDrink') && !has(B2, 'LsmDrink'), 'INVARIANT an LSM item nobody was assigned is carried by nobody');
+  Q.setMenuItemBranches(lsmId, [B2]);
+  ok(!has(1, 'LsmDrink') && has(B2, 'LsmDrink'), 'INVARIANT an LSM item appears only at the branch it was assigned to');
+  ok(Q.listMenu(null, null).some((m) => m.name === 'LsmDrink'), 'INVARIANT HQ still sees the LSM item in the full catalog');
+
+  Q.setBranchMenuOverride(1, nwId, { enabled: 0 });
+  ok(has(1, 'NationwideDrink'), 'INVARIANT a branch cannot drop a nationwide item');
+  Q.setBranchMenuOverride(1, nwId, { enabled: 1 });
+
+  Q.setBranchMenuOverride(1, nwId, { priceOverride: 99 });
+  ok(Q.priceFor(nwId, { branchId: 1 }) === 60, 'INVARIANT a local price override cannot move a nationwide price');
+  const nw1 = Q.listMenu(null, 1).find((m) => m.name === 'NationwideDrink').price;
+  const nw2 = Q.listMenu(null, B2).find((m) => m.name === 'NationwideDrink').price;
+  ok(nw1 === nw2 && nw1 === 60, `INVARIANT a nationwide item shows one price at every branch (${nw1} vs ${nw2})`);
+  Q.setBranchMenuOverride(B2, lsmId, { priceOverride: 88 });
+  ok(Q.priceFor(lsmId, { branchId: B2 }) === 88, 'INVARIANT an LSM item takes its own branch price');
+  ok(Q.priceFor(lsmId, { branchId: null }) === 70, 'INVARIANT the HQ catalog price of an LSM item is unchanged');
+
+  // The storefront and the order endpoint must agree — that disagreement is exactly what stranded
+  // customers on "item_unavailable" after tapping something the menu showed them.
+  let refused = null;
+  try { Q.createOrder(1, [{ name: 'LsmDrink', price: 70, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'a1'.repeat(16) }); }
+  catch (e) { refused = e.message; }
+  ok(refused === 'item_unavailable', 'INVARIANT ordering an LSM item at an unassigned branch is refused');
+  const t2 = Q.createOrder(Z2, [{ name: 'LsmDrink', price: 1, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'a2'.repeat(16) });
+  const tot = db.prepare('SELECT total FROM orders WHERE ticket_id=?').get(t2.ticket.id).total;
+  ok(near(tot, 88), `INVARIANT the assigned branch orders it at ITS price, not HQ's (got ${tot})`);
 }
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }

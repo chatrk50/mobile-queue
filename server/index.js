@@ -351,7 +351,14 @@ app.delete('/api/staff/:id', (req, res) => {
 
 // ---------- Menu (public read; management is PIN-protected below) ----------
 // ?channelId=N resolves channel pricing (e.g. delivery markup) for each item.
-app.get('/api/menu', (req, res) => res.json(Q.listMenu(req.query.channelId ? Number(req.query.channelId) : null, req.query.branchId ? Number(req.query.branchId) : null)));
+app.get('/api/menu', (req, res) => {
+  // ?zone= lets the storefront ask for THIS branch's menu without knowing branch ids — the same
+  // resolution createOrder does, so what the customer is shown is what the till will accept and
+  // charge. No zone (cashier catalog view) = HQ's full catalog.
+  const z = req.query.zone ? db.prepare('SELECT store_id FROM zones WHERE id=?').get(req.query.zone) : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : (z ? z.store_id : null);
+  res.json(Q.listMenu(req.query.channelId ? Number(req.query.channelId) : null, branchId));
+});
 // Active sales channels (for the cashier order-channel picker).
 app.get('/api/channels', (req, res) => res.json(Q.listChannels().filter((c) => c.active !== 0)));
 // ---------- Pricing management (owner): tier markup, channel commission, item prices ----------
@@ -1667,7 +1674,9 @@ app.post('/api/menu/order', (req, res) => {
 });
 app.post('/api/menu/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  try { const item = Q.updateMenuItem(req.params.id, req.body || {}, req.staff || null);
+  const body = { ...(req.body || {}) };
+  if (body.scope != null && !ownerOK(req)) delete body.scope;   // HQ-only decision
+  try { const item = Q.updateMenuItem(req.params.id, body, req.staff || null);
     if (req.body?.priceDelivery !== undefined) Q.setMenuDeliveryPrice(Number(req.params.id), req.body.priceDelivery);
     res.json(item); }
   catch (e) { res.status(400).json({ error: e.message }); }
@@ -1686,6 +1695,15 @@ app.post('/api/menu/:id/move', (req, res) => {
 app.delete('/api/menu/:id', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.deleteMenuItem(req.params.id));
+});
+app.get('/api/menu/:id/branches', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ branchIds: Q.menuItemBranches(req.params.id) });
+});
+app.post('/api/menu/:id/branches', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });   // HQ decides who sells what
+  try { res.json(Q.setMenuItemBranches(req.params.id, req.body?.branchIds || [])); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post('/api/zones/:zoneId/orders', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

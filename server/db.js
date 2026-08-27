@@ -745,6 +745,11 @@ for (const stmt of [
   // Claim-link interest stat: how many times the landing page was OPENED (vs issued_count = actually
   // claimed) → the coupon card can show views + conversion so the owner sees what catches interest.
   `ALTER TABLE coupons ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`,
+  // Multi-branch menu control, decided at HQ. 'nationwide' = every branch carries the item at ONE
+  // price (a branch cannot drop it or reprice it). 'lsm' (local store marketing) = only the branches
+  // explicitly assigned in branch_menu carry it, and those branches may price it themselves.
+  // Existing catalogs migrate to nationwide, which is exactly how they behaved before.
+  `ALTER TABLE menu_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'nationwide'`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
