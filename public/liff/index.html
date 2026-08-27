@@ -841,7 +841,7 @@ async function api(path, opts){const r=await fetch(path,opts);if(!r.ok){const e=
 // fetch" as the whole screen (CUS-C3) reads as a broken app. Unknown codes get a generic line.
 const ERR_TH={zone_not_found:'ไม่พบสาขา/โซนนี้ค่ะ — กรุณาสแกน QR ที่หน้าร้านอีกครั้ง',ไม่พบโซนใน:'ไม่พบโซนใน QR code — กรุณาสแกน QR ที่หน้าร้านค่ะ',store_not_found:'ไม่พบร้านค้าค่ะ',Failed:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ',NetworkError:'เชื่อมต่ออินเทอร์เน็ตไม่ได้ค่ะ — ลองเปิดใหม่อีกครั้งนะคะ'};
 function errTH(msg){ const m=String(msg||''); if(ERR_TH[m]) return ERR_TH[m]; for(const k in ERR_TH){ if(m.indexOf(k)===0||m.indexOf(k)>-1&&/[A-Za-z]/.test(m)) return ERR_TH[k]; } return /[A-Za-z]{4}/.test(m)?'ขออภัยค่ะ เปิดหน้านี้ไม่สำเร็จ — ลองใหม่อีกครั้งนะคะ':m; }
-function err(msg){['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=errTH(msg);}
+function err(msg){_onMenu=false;['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=errTH(msg);}
 
 async function initLiff(){
   cfg = await api('/api/config');
@@ -1148,6 +1148,10 @@ async function doClaim(){
     err(map[m]||('เช็คอินไม่สำเร็จ: '+m));
   }
 }
+// True while the customer is inside the ordering flow (menu / basket / sending). A mid-order
+// refresh (sold-out, shop closed) calls loadZone() again, and loadZone paints the HOME card —
+// which used to reappear UNDERNEATH the still-open menu, showing both screens stacked (CUS-C5).
+let _onMenu=false;
 let storeOpen=true;   // set by loadZone — the single source of truth for "can we take an order now"
 async function loadZone(){
   // A LINE marketing/nudge link may arrive with no ?zone= — fall back to the shop's open zone so it
@@ -1180,7 +1184,7 @@ async function loadZone(){
   show('orderNowBtn', open && cfg.selfOrder);
   show('queueStatus', open);
   show('closedMsg', !open);
-  show('getCard',true);
+  if(!_onMenu) show('getCard',true);   // CUS-C5: never stack home under the ordering screen
   applySocialMascot();      // owner-toggleable social-proof line + mascot greeting (both default off)
   if(open) loadReorder();   // best-effort returning-customer suggestion (never blocks)
   loadMemberStrip();        // auto member recognition for LINE customers (best-effort)
@@ -1239,7 +1243,7 @@ async function loadReorder(){
   if(_onb){ _onb.classList.remove('ghost'); if(_onl) _onl.textContent='สั่งเลย'; }
   if(!lineUserId || !cfg.selfOrder) return;
   try{
-    const s = await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions');
+    const s = await api('/api/customers/'+encodeURIComponent(lineUserId)+'/suggestions'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''));
     if(!s || !s.known) return;
     const fav = (s.favourites||[]).find(f=>!f.soldout && f.itemId);
     if(!fav) return;
@@ -1428,7 +1432,7 @@ window.showOrderUI=async(opts={})=>{
   await loadMenu(); if(!opts.keepCart) cart = opts.restore ? loadSavedCart() : [];
   counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
-  renderBasketCount(); show('getCard',false); show('orderCard',true);
+  _onMenu=true; renderBasketCount(); show('getCard',false); show('orderCard',true);
   armPendingCoupon(); return true; };
 // A claim link ends in a page RELOAD (สั่งเลย → /liff/?zone=…), so the freshly claimed coupon is
 // carried across it in sessionStorage and armed the first time the menu opens.
@@ -1464,7 +1468,7 @@ function paintMenu(){
         ? '<div style="text-align:center;padding:18px 8px"><p class="muted" style="margin-bottom:12px">เชื่อมต่อไม่ได้ค่ะ — โหลดเมนูไม่สำเร็จ</p><button class="ok" onclick="loadMenu().then(paintMenu)">ลองโหลดเมนูอีกครั้ง</button></div>'
         : '<p class="muted">ขณะนี้ยังไม่มีเครื่องดื่ม</p>');
 };
-window.closeOrderUI=()=>{ ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
+window.closeOrderUI=()=>{ _onMenu=false; ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
   // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
   // otherwise home. Prevents getCard and ticketCard ever stacking on screen together.
   const tk=$('ticketCard'); if(tk && tk.style.display!=='none') return; show('getCard',true); };
@@ -1740,13 +1744,17 @@ window.reorderOrder=async(i)=>{
     const commit=()=>{ if(!pending) return; for(let k=0;k<pendingQty;k++) cart.push({name:pending.name,price:pending.price,sweet:100,toppings:pending.toppings.map(t=>({...t}))}); };
     o.items.forEach(it=>{
       const m=MENU.find(x=>x.name===it.name);
-      if(!m){ skipped=true; return; }
+      // Sold out (or out of BOM stock) is just as unorderable as gone: pushing it back into the
+      // cart makes the server reject the WHOLE order with item_soldout (CUS-C5).
+      if(!m || m.soldout || m.stockSoldout){ skipped=true; return; }
       if(m.category==='topping' && pending){ pending.toppings.push({name:it.name,price:it.price,qty:Math.max(1,Math.round((it.qty||1)/pendingQty))}); }
       else { commit(); pending={name:it.name,price:it.price,toppings:[]}; pendingQty=it.qty||1; }
     });
     commit();
-    renderBasketCount(); openBasket();
-    toast(skipped?'เพิ่มลงตะกร้าแล้ว — บางเมนูอาจไม่มีแล้วจึงข้ามไป':'เพิ่มออเดอร์เดิมลงตะกร้าแล้ว — ปรับแก้ได้ก่อนสั่ง');
+    renderBasketCount();
+    if(!cart.length){ toast('ขออภัยค่ะ เมนูในออเดอร์เดิมหมดหรือไม่มีแล้ว — เลือกเมนูอื่นได้เลยค่ะ 🙏'); return; }   // everything was skipped → stay on the menu, don't open an empty basket
+    openBasket();
+    toast(skipped?'เพิ่มลงตะกร้าแล้ว — บางเมนูหมดหรือไม่มีแล้วจึงข้ามไป':'เพิ่มออเดอร์เดิมลงตะกร้าแล้ว — ปรับแก้ได้ก่อนสั่ง');
   }catch(e){ toast('สั่งซ้ำไม่สำเร็จ'); }
 };
 // Remove a single cup from a (possibly consolidated) line.
@@ -1814,24 +1822,25 @@ window.confirmBasket=async()=>{
     cart=[]; cartCoupon=null; hideSending();
     // Ticket shows before the first poll answers — pulse a placeholder instead of a frozen "—".
     { const tc=$('tCode'); tc.textContent='· · ·'; tc.classList.add('ldg'); }
-    show('ticketCard',true); startPolling();
+    _onMenu=false; show('ticketCard',true); startPolling();
   }catch(e){
     hideSending();
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
       toast('คุณมีคิวอยู่แล้ว '+e.data.code);
       ticketId=e.data.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId);
-      show('ticketCard',true); startPolling(); submitting=false; return;
+      _onMenu=false; show('ticketCard',true); startPolling(); submitting=false; return;
     }
     const _err=(e.data&&e.data.error)||e.message;
     submitting=false; cb.disabled=false; cb.textContent='ยืนยันสั่ง';
     if(_err==='store_closed'||_err==='zone_closed'){   // closed between opening the cart and confirming — tell them + refresh the closed banner
-      storeOpen=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
+      storeOpen=false; _onMenu=false; toast('⏰ ขออภัยค่ะ ร้านปิดแล้ว ไม่สามารถสั่งได้'); try{ await loadZone(); }catch(_){}
     } else if(_err==='online_orders_off'||_err==='pos_offline'){   // channel paused mid-checkout
-      storeOpen=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
+      storeOpen=false; _onMenu=false; toast('ขออภัยค่ะ ร้านพักรับออเดอร์ออนไลน์ชั่วคราว — สั่งที่หน้าร้านได้ตามปกติ 🙏'); try{ await loadZone(); }catch(_){}
     } else if(_err==='item_unavailable'||_err==='item_soldout'){   // menu changed / sold out under an old cart or reorder — reload it
       cart=[]; cartCoupon=null;
       toast(_err==='item_soldout'?'ขออภัยค่ะ มีเมนูในตะกร้าที่ของหมดแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏':'มีเมนูในตะกร้าที่ร้านปรับรายการแล้ว — กรุณาเลือกใหม่อีกครั้งนะคะ 🙏');
-      try{ await loadZone(); }catch(_){} show('orderCard',true); renderBasketCount();
+      try{ await loadZone(); await loadMenu(); paintMenu(); }catch(_){}   // repaint the grid too, so the item that just failed now shows หมด instead of staying tappable
+      show('orderCard',true); renderBasketCount();
     } else if(_err==='noshow_blocked'){   // no-show strikes: LINE self-order paused, counter still fine — restore a screen (CUS-C1) so the customer isn't left on a blank page
       cart=[]; renderBasketCount(); show('orderCard',true);
       appConfirm({title:'พักการสั่งผ่าน LINE ชั่วคราว',message:'เนื่องจากมีออเดอร์ที่ไม่ได้มารับ '+((e.data&&e.data.strikes)||'หลาย')+' ครั้ง\n\nสั่งที่หน้าร้านได้ตามปกติ หรือติดต่อพนักงานเพื่อขอเปิดสิทธิ์ค่ะ 🙏',okText:'เข้าใจแล้ว',cancelText:''});

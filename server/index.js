@@ -706,7 +706,12 @@ app.post('/api/item-prices', (req, res) => {
 // ---------- Customer reorder suggestions (LIFF: "order the same as last time?") ----------
 app.get('/api/customers/:lineUserId/suggestions', (req, res) => {
   if (!customerKeyOK(req, req.params.lineUserId)) return res.status(403).json({ error: 'forbidden' });
-  try { res.json(Q.customerSuggestions(req.params.lineUserId)); }
+  try {
+    // ?zone= tells us WHICH branch the customer is standing in, so the reorder suggestion can be
+    // filtered by that branch's sold-out list and stock — not just the global menu flag.
+    const z = req.query.zone ? db.prepare('SELECT store_id FROM zones WHERE id=?').get(req.query.zone) : null;
+    res.json(Q.customerSuggestions(req.params.lineUserId, { branchId: z ? z.store_id : 0 }));
+  }
   catch (e) { res.status(200).json({ known: false, error: e.message }); }
 });
 // Customer's own order history (LIFF "ประวัติการสั่ง") — keyed by their LINE id, read-only.

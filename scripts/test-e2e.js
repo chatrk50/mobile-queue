@@ -2149,6 +2149,40 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   Q.setFlashSaleConfig({ enabled: false });
 }
 
+{
+  // CUS-C5: "สั่งเหมือนเดิม" must only ever offer a drink the ORDER endpoint would accept. It used to
+  // read menu_items.soldout alone, so a branch-level sell-out or an empty BOM stock still got
+  // offered — the customer tapped it, the order was rejected with item_soldout, and their cart was
+  // thrown away. Every gate the order endpoint applies must also gate the suggestion.
+  const RU = 'U' + 'c5'.repeat(16);
+  const rdId = db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('ReorderDrink', 55, 'drink')").run().lastInsertRowid;
+  Q.createOrder(1, [{ name: 'ReorderDrink', price: 55, qty: 1 }], { source: 'customer', lineUserId: RU });
+  const fav = (branchId = 1) => (Q.customerSuggestions(RU, { branchId }).favourites || []).find((f) => f.name === 'ReorderDrink');
+
+  ok(fav() && fav().soldout === false, 'INVARIANT CUS-C5 an orderable favourite is offered');
+
+  db.prepare('UPDATE menu_items SET soldout=1 WHERE id=?').run(rdId);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 a globally sold-out favourite is not offered');
+  db.prepare('UPDATE menu_items SET soldout=0 WHERE id=?').run(rdId);
+
+  db.prepare('INSERT INTO branch_menu (branch_id, item_id, enabled, soldout) VALUES (1,?,1,1)').run(rdId);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 sold out at THIS branch is not offered');
+  db.prepare('UPDATE branch_menu SET soldout=0, enabled=0 WHERE branch_id=1 AND item_id=?').run(rdId);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 a drink this branch does not carry is not offered');
+  db.prepare('DELETE FROM branch_menu WHERE branch_id=1 AND item_id=?').run(rdId);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 clearing the branch override makes it offerable again');
+
+  const rdIng = db.prepare("INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบสั่งซ้ำ','กก.', 0, 10)").run().lastInsertRowid;
+  db.prepare('INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,1)').run(rdId, rdIng);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 out of BOM stock (makeable 0) is not offered');
+  db.prepare('UPDATE ingredients SET stock_qty=10 WHERE id=?').run(rdIng);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 restocking the ingredient makes it offerable again');
+
+  db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(rdId);
+  db.prepare('DELETE FROM ingredients WHERE id=?').run(rdIng);
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(rdId);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

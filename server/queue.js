@@ -4248,8 +4248,9 @@ function recordCustomerOrder(lineUserId, name) {
 
 /** Reorder suggestions for a returning LINE customer: their most-ordered drinks
  *  (with current price/image) + their last order's lines for a one-tap repeat. */
-export function customerSuggestions(lineUserId) {
+export function customerSuggestions(lineUserId, opts = {}) {
   if (!lineUserId) return { known: false };
+  const branchId = Number(opts.branchId) || 0;
   const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=?').get(lineUserId);
   const favourites = db.prepare(
     `SELECT oi.name,
@@ -4265,6 +4266,21 @@ export function customerSuggestions(lineUserId) {
      ORDER BY qty DESC, times DESC
      LIMIT 5`
   ).all(lineUserId).filter((f) => f.active == null || f.active === 1);
+  // "Order the usual?" may only offer what the ORDER endpoint would actually accept. The global
+  // soldout flag alone is not that test: a branch sells out on its own (branch_menu) and a
+  // BOM-costed drink runs out when its ingredients do (menuMakeable). Offering one anyway walks
+  // the customer into item_soldout with a cart that then gets thrown away (CUS-C5).
+  const ov = branchId
+    ? new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]))
+    : new Map();
+  const mk = menuMakeable();
+  const unavailable = (f) => {
+    if (f.soldout === 1) return true;
+    if (f.item_id == null) return false;
+    const o = ov.get(f.item_id);
+    if (o && (!o.enabled || o.soldout)) return true;
+    return mk.has(f.item_id) && mk.get(f.item_id) <= 0;
+  };
   // Last order (most recent ticket) grouped into drink + nested toppings, for "reorder the same".
   const lastTicket = db.prepare(
     `SELECT t.id FROM tickets t JOIN orders o ON o.ticket_id=t.id
@@ -4276,7 +4292,7 @@ export function customerSuggestions(lineUserId) {
     known,
     name: cust?.name || null,
     orderCount: cust?.order_count || 0,
-    favourites: favourites.map((f) => ({ name: f.name, qty: f.qty, times: f.times, itemId: f.item_id, price: f.price, image: f.image, soldout: f.soldout === 1 })),
+    favourites: favourites.map((f) => ({ name: f.name, qty: f.qty, times: f.times, itemId: f.item_id, price: f.price, image: f.image, soldout: unavailable(f) })),
     lastOrder: lastOrder ? { lines: lastOrder.lines, total: lastOrder.total } : null,
   };
 }
