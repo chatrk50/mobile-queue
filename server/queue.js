@@ -395,6 +395,16 @@ export function getFinanceSettings(branchId = null) {
   }
   return out;
 }
+/** Has this shop ever entered its OWN cost figures? Until it has, the fixed-cost half of the P&L is
+ *  starter data, so anything that ASSERTS a net profit has to say so (or show gross instead). */
+export function financeConfigured(branchId = null) {
+  for (const [key, [envKey]] of Object.entries(FIN_KEYS)) {
+    if (branchId && getSetting('fin_' + branchId + '_' + key, null) != null) return true;
+    if (getSetting('fin_' + key, null) != null) return true;
+    if (process.env[envKey] != null) return true;
+  }
+  return false;
+}
 export function setFinanceSettings(patch = {}, branchId = null) {
   const prefix = branchId ? 'fin_' + branchId + '_' : 'fin_';
   for (const key of Object.keys(FIN_KEYS)) {
@@ -3045,7 +3055,9 @@ export function composeDailySummary(branchId = null, dateStr = null) {
     `📊 สรุปยอด${validDay ? '' : 'วันนี้'} — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
     `🗓️ ${dateTh}`,
     `💰 ยอดขาย ฿${r.revenue} (${r.pnl?.cups || 0} ${UNIT})`,
-    `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
+    financeConfigured()
+      ? `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`
+      : `📈 กำไรขั้นต้น ฿${Math.round(r.pnl?.grossProfit || 0)} · ยังไม่ได้ตั้งต้นทุนคงที่ (⚙ การเงิน)`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
@@ -3097,6 +3109,9 @@ export function dailySummaryData(branchId = null, dateStr = null) {
     revenue: r.revenue, cups: r.pnl?.cups || 0,   // drink units from PAID orders (cupsSold counts served TICKETS — different question, different answer)
     served: r.cupsSold || 0,
     netProfit: Math.round(r.pnl?.netProfit || 0),
+    grossProfit: Math.round(r.pnl?.grossProfit || 0),
+    costsSet: financeConfigured(),   // false = rent/wages are still the starter figures, so netProfit is not this shop's
+
     cancelled: v.cancelled?.orders || 0, refunded: v.refunded?.orders || 0, wasteCups: v.waste?.cups || 0,
     rating: r.avgRating, ratingCount: r.ratingCount || 0,
     cashLine: null, lowCount: 0, expiringCount: 0, expired: false,

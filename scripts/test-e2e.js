@@ -2278,6 +2278,25 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   ok(Q.composeDailySummary().includes(String(card.cups) + ' '), 'INVARIANT the LINE message quotes the same cup count');
 }
 
+{
+  // FIN_KEYS ships starter rent/wages/utilities so the P&L has something to show on day one. Until
+  // the owner replaces them, the nightly card must not ASSERT a net profit computed from a shop
+  // that is not theirs — it read 'กำไรสุทธิ ฿-915' on a real trading day.
+  console.log('\n== Daily card: no invented net profit ==');
+  const finBack = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'fin_%'").all();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'fin_%'").run();   // earlier blocks configure finance; this one is about a shop that never did
+  ok(Q.financeConfigured() === false, 'INVARIANT a shop that never entered costs reads as unconfigured');
+  const c0 = Q.dailySummaryData();
+  ok(c0.costsSet === false && c0.grossProfit != null, 'INVARIANT the card says so and carries gross profit instead');
+  ok(/กำไรขั้นต้น/.test(Q.composeDailySummary()) && !/กำไรสุทธิ/.test(Q.composeDailySummary()),
+     'INVARIANT the LINE message shows gross profit, not a net profit nobody set');
+  Q.setFinanceSettings({ rent: 5000 });
+  ok(Q.financeConfigured() === true && Q.dailySummaryData().costsSet === true, 'INVARIANT entering a cost switches it back on');
+  ok(/กำไรสุทธิ/.test(Q.composeDailySummary()), 'INVARIANT the net-profit line returns once the shop owns the numbers');
+  db.prepare("DELETE FROM settings WHERE key LIKE 'fin_%'").run();
+  for (const row of finBack) db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)').run(row.key, row.value);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
