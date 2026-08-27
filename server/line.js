@@ -233,10 +233,12 @@ function buildCouponFlex(c, link, msg) {
   const big = isReward ? 'ฟรี 1 แก้ว'
     : (c.disc_type === 'percent' ? `ส่วนลด ${c.disc_value}%` : `ส่วนลด ฿${c.disc_value ?? c.amount ?? c.cap ?? ''}`);
   const cond = isReward ? `ไม่เกิน ฿${c.freeCap || c.cap || 49}` : (c.min_spend > 0 ? `ขั้นต่ำ ฿${c.min_spend}` : 'ไม่มีขั้นต่ำ · ทุกเมนู');
-  const kicker = kind === 'birthday' ? '🎂 ของขวัญวันเกิด' : kind === 'winback' ? '💛 ยินดีต้อนรับกลับ' : kind === 'reward' ? '🎁 รางวัลสะสมครบ' : '🎟️ คูปองส่วนลด';
+  // A card that isn't announcing a NEW coupon (the expiry reminder) overrides the hero kicker and
+  // the notification preview, so it never reads as "you've won something" for a coupon already held.
+  const kicker = c.kicker || (kind === 'birthday' ? '🎂 ของขวัญวันเกิด' : kind === 'winback' ? '💛 ยินดีต้อนรับกลับ' : kind === 'reward' ? '🎁 รางวัลสะสมครบ' : '🎟️ คูปองส่วนลด');
   const bodyLine = (msg && String(msg).trim()) || 'ยินดีด้วย! 🎉 คุณได้รับคูปองจาก YO-DEE';
   return {
-    type: 'flex', altText: `🎁 คุณได้รับคูปอง YO-DEE — ${big}${c.expiresAt ? ` · ใช้ได้ถึง ${c.expiresAt}` : ''}`.slice(0, 390),
+    type: 'flex', altText: (c.altText || `🎁 คุณได้รับคูปอง YO-DEE — ${big}${c.expiresAt ? ` · ใช้ได้ถึง ${c.expiresAt}` : ''}`).slice(0, 390),
     contents: {
       type: 'bubble', size: 'mega',
       body: {
@@ -274,7 +276,7 @@ export async function pushCouponFlex(userId, coupon, link, msg, kind = 'coupon')
   if (!userId) return false;
   const big = (coupon.isReward || coupon.disc_type === 'reward') ? 'ฟรี 1 แก้ว'
     : (coupon.disc_type === 'percent' ? `ส่วนลด ${coupon.disc_value}%` : `ส่วนลด ฿${coupon.disc_value ?? coupon.amount ?? coupon.cap ?? ''}`);
-  const fallback = `🎁 ${(msg && String(msg).trim()) || 'คุณได้รับคูปองจาก YO-DEE'}\n${big}${coupon.label ? ` — ${coupon.label}` : ''}${coupon.expiresAt ? `\nใช้ได้ถึง ${coupon.expiresAt}` : ''}${link ? `\n👉 ${link}` : ''}`;
+  const fallback = `${coupon.emoji || '🎁'} ${(msg && String(msg).trim()) || 'คุณได้รับคูปองจาก YO-DEE'}\n${big}${coupon.label ? ` — ${coupon.label}` : ''}${coupon.expiresAt ? `\nใช้ได้ถึง ${coupon.expiresAt}` : ''}${link ? `\n👉 ${link}` : ''}`;
   if (!LINE_ENABLED) { console.log(`\n[LINE-STUB coupon] -> ${userId}\n${fallback}\n`); return false; }
   try {
     await client.pushMessage({ to: userId, messages: [buildCouponFlex(coupon, link, msg)] });

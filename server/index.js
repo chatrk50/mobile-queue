@@ -521,7 +521,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -550,6 +550,7 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
     if (req.body?.couponPopup != null) Object.assign(out, Q.setCouponPopup(!!req.body.couponPopup));   // Phase 4A
     if (req.body?.pickupNudge != null) out.pickupNudge = Q.setPickupNudgeConfig(req.body.pickupNudge);   // pickup reminder
+    if (req.body?.couponNudge != null) out.couponNudge = Q.setCouponNudgeConfig(req.body.couponNudge);   // coupon expiry reminder
 
     // แคมเปญเลขนำโชค — owner-only: it gives product away, so a manager must not be able to switch it
     // on or move the prize amount.
