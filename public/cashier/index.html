@@ -2940,7 +2940,7 @@ function renderHome(d){
   // 1) Money today
   const net=p.netProfit||0;
   const kpis=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${rep.cupsSold||0} ${unit()}`))}
+      ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${(rep.pnl&&rep.pnl.cups)||0} ${unit()}`))}
       ${tile('กำไรสุทธิ',money(net),(p.netMargin!=null?('อัตรากำไร '+pctf(p.netMargin)):''),net>=0?'#0f6e56':'var(--danger)')}
       ${tile('ขายแล้ว',(p.cups||0)+' '+unit(),(det.paidOrders!=null?det.paidOrders+' ออเดอร์':''))}
       ${tile('คะแนนร้าน',rep.avgRating!=null?('★ '+rep.avgRating):'—',(rep.ratingCount?rep.ratingCount+' รีวิววันนี้':'ยังไม่มีรีวิววันนี้'))}
@@ -3158,6 +3158,9 @@ window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!
     ${withR.length?withR.map(row).join(''):'<p class="muted" style="font-size:12.5px">ยังไม่มีเมนูที่ใส่สูตร (BOM) — ไปที่ จัดการเมนู → สูตร เพื่อผูกวัตถุดิบก่อน แล้วกำไรต่อเมนูจะคำนวณให้อัตโนมัติ</p>'}
     ${noR.length?`<div class="muted" style="font-size:11px;margin-top:8px">ยังไม่ใส่สูตร ${noR.length} เมนู: ${noR.slice(0,6).map(i=>esc(i.name)).join(', ')}${noR.length>6?' …':''}</div>`:''}`; };
 function renderInsightsBody(d, box){
+  // kpi lives inside showReport(); this function is called from loadInsights() and never had it in
+  // scope, so the whole satisfaction + repeat-customer panel threw and rendered nothing.
+  const kpi=(label,val)=>`<div><div style="font-size:18px;font-weight:800;color:var(--navy)">${val}</div><div class="muted" style="font-size:11px">${label}</div></div>`;
   const sat=d.satisfaction||{}, cu=d.customers||{}, stars=sat.stars||{};
   const maxN=Math.max(1,...[1,2,3,4,5].map(s=>stars[s]||0));
   // Each bar is a live drill-down: tap "4★" and the customers page opens showing only the people
@@ -3752,7 +3755,7 @@ window.calcGoal=()=>{ if(!GOAL) return; const out=$('goalOut'); if(!out) return;
 // ---------- Menu management ----------
 let MENU=[];
 async function loadMenu(channelId){ try{ MENU=await (await fetch('/api/menu'+(channelId?('?channelId='+channelId):''))).json(); }catch(e){ MENU=[]; } }
-window.showMenu=async()=>{ hideAllPanels(); await loadMenu(); renderMenuMgr(); loadPriceMgr();
+window.showMenu=async()=>{ hideAllPanels(); await loadMenu(); await loadBranchesForMenu(); renderMenuMgr(); loadPriceMgr();
   $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('orderCard').style.display='none'; $('reportCard').style.display='none'; $('menuCard').style.display=''; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none'; };
 // Owner-only: set delivery markup % per tier + platform commission % per channel.
 async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
@@ -3769,6 +3772,30 @@ async function loadPriceMgr(){ const box=$('priceMgr'); if(!box) return;
 window.saveTier=async(id)=>{ const mk=Number($('tier_'+id).value); try{ await api('/api/price-tiers/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({markup_pct:mk})}); toast('บันทึกราคาเดลิเวอรี่แล้ว'); }catch(e){ toast(err(e)); } };
 window.saveChan=async(id)=>{ const c=Number($('chan_'+id).value); try{ await api('/api/channels/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commission_pct:c})}); toast('บันทึกค่าคอมแล้ว'); }catch(e){ toast(err(e)); } };
 window.hideMenu=()=>{ $('menuCard').style.display='none'; $('dash').style.display=''; };
+// Multi-branch: HQ decides WHERE each item is sold. Only fetched for the owner (the route is
+// owner-gated) and the whole control only appears once there is more than one branch to choose
+// between — a single-shop owner should never have to look at it.
+// (BRANCHES is the same list the branch screen fills — one source, filled by whichever opens first)
+async function loadBranchesForMenu(){ if(!ME||ME.role!=='owner'){ BRANCHES=[]; return; }
+  try{ BRANCHES=await api('/api/branches'); }catch(e){ BRANCHES=[]; } }
+const multiBranch=()=>BRANCHES.length>1;
+const SCOPE_HINT={
+  nationwide:'ทุกสาขาได้เมนูนี้ · ราคาเดียวกันทั้งหมด (สาขาปิดเองหรือตั้งราคาเองไม่ได้)',
+  lsm:'เฉพาะสาขาที่เลือกด้านล่างเท่านั้น · แต่ละสาขาตั้งราคาของตัวเองได้',
+};
+window.onScopeChange=()=>{ const sel=$('mf_scope'); if(!sel) return;
+  const lsm=sel.value==='lsm';
+  $('mf_scopeHint').textContent=SCOPE_HINT[lsm?'lsm':'nationwide'];
+  $('mf_branches').style.display=lsm?'':'none';
+  if(lsm) loadItemBranches(_selMenuId); };
+async function loadItemBranches(itemId){ const box=$('mf_branches'); if(!box||!itemId||itemId==='new') return;
+  if(box.dataset.forId===String(itemId)) return;   // already painted for this item — keep the ticks the owner just made
+  box.innerHTML='<div class="muted" style="font-size:12px">กำลังโหลดสาขา…</div>';
+  let ids=[]; try{ const r=await api('/api/menu/'+itemId+'/branches'); ids=r.branchIds||[]; }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">โหลดสาขาไม่สำเร็จ</div>'; return; }
+  box.dataset.forId=String(itemId);
+  box.innerHTML='<div class="muted" style="font-size:11.5px;margin-bottom:6px">สาขาที่ขายเมนูนี้</div>'
+    +BRANCHES.map(b=>'<label class="row" style="gap:8px;align-items:center;padding:5px 2px;font-size:13.5px"><input type="checkbox" class="mfBr" value="'+b.id+'"'+(ids.includes(b.id)?' checked':'')+' style="width:17px;height:17px"><span>'+esc(b.name)+(b.code?(' <span class="muted" style="font-size:11.5px">'+esc(b.code)+'</span>'):'')+'</span></label>').join('');
+}
 let _selMenuId=null;
 // Left pane: clickable item list, grouped by Menu (เครื่องดื่ม) and Topping.
 function renderMenuMgr(){
@@ -3777,7 +3804,7 @@ function renderMenuMgr(){
     <div class="ms-item ${m.id===_selMenuId?'sel':''}" data-id="${m.id}" onclick="editMenuForm(${m.id})" style="${m.active?'':'opacity:.55'}">
       <span class="dgrip" title="ลากเพื่อจัดลำดับ" onclick="event.stopPropagation()" style="flex:none;cursor:grab;color:var(--muted);padding:0 6px 0 0;font-size:19px;line-height:1;touch-action:none">⠿</span>
       <div style="width:40px;height:40px;font-size:20px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${m.image?`<img src="${esc(m.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(document.createTextNode('${itemIcon(m)}'))">`:itemIcon(m)}</div>
-      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>${m.soldout?' <span style="background:var(--danger);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;vertical-align:middle">หมด</span>':''}
+      <div style="flex:1;min-width:0"><b>${esc(m.name)}</b>${m.soldout?' <span style="background:var(--danger);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;vertical-align:middle">หมด</span>':''}${(m.scope==='lsm'&&multiBranch())?' <span style="background:#7c3aed;color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;vertical-align:middle">เฉพาะสาขา</span>':''}
         <div class="muted" style="font-size:12px">฿${m.price}${m.active?'':' · ซ่อน'}</div></div>
     </div>`;
   const drinks=MENU.filter(m=>m.category!=='topping'), tops=MENU.filter(m=>m.category==='topping');
@@ -3821,6 +3848,17 @@ window.editMenuForm=(id)=>{
         <label class="ff" style="flex:1">หมวด<select id="mf_cat"><option value="drink"${m.category!=='topping'?' selected':''}>เครื่องดื่ม</option><option value="topping"${m.category==='topping'?' selected':''}>ท็อปปิ้ง</option></select></label>
         <label class="ff" style="flex:1">ป้ายกำกับ<select id="mf_badge"><option value="">— ไม่มี —</option><option value="rec"${m.badge==='rec'?' selected':''}>⭐ แนะนำ</option><option value="new"${m.badge==='new'?' selected':''}>✨ ใหม่</option><option value="promo"${m.badge==='promo'?' selected':''}>🏷️ โปรโมชั่น</option><option value="hot"${m.badge==='hot'?' selected':''}>🔥 ขายดี</option><option value="free"${m.badge==='free'?' selected':''}>🎁 ฟรี</option></select></label>
       </div>
+      ${(!isNew && multiBranch())?`<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)">
+        <div class="row between" style="align-items:center;gap:8px">
+          <b style="font-size:13.5px">ขอบเขตการขาย</b>
+          <select id="mf_scope" onchange="onScopeChange()" style="flex:none;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+            <option value="nationwide"${m.scope==='lsm'?'':' selected'}>ทั่วประเทศ</option>
+            <option value="lsm"${m.scope==='lsm'?' selected':''}>เฉพาะสาขา (LSM)</option>
+          </select>
+        </div>
+        <div class="muted" id="mf_scopeHint" style="font-size:11.5px;margin-top:4px">${SCOPE_HINT[m.scope==='lsm'?'lsm':'nationwide']}</div>
+        <div id="mf_branches" style="display:${m.scope==='lsm'?'':'none'}"></div>
+      </div>`:''}
       <label class="ff">ลิงก์รูป<input id="mf_img" value="${esc(m.image||'')}" placeholder="https://... หรืออัปโหลด"></label>
       ${isNew?'':`<button class="ghost" style="width:100%" onclick="uploadImg(${m.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>อัปโหลดรูปจากเครื่อง</button>
       <div class="row" style="gap:8px">
@@ -3835,6 +3873,7 @@ window.editMenuForm=(id)=>{
       ${isNew?'':'<div id="mf_hist" style="margin-top:4px"></div>'}
     </div>`;
   if(!isNew) loadPriceHistory(m.id);
+  if(!isNew && multiBranch() && m.scope==='lsm') loadItemBranches(m.id);
 };
 // The price trail for the item being edited. Answers "ทำไมกำไรเมนูนี้เปลี่ยนไป" with a date
 // and a name instead of a guess — and shows nothing at all until a price has actually moved.
@@ -3852,9 +3891,18 @@ async function loadPriceHistory(itemId){ const box=$('mf_hist'); if(!box) return
 window.saveMenuForm=async()=>{
   const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value, badge:($('mf_badge')&&$('mf_badge').value)||'' };
   if(!body.name){ toast('กรอกชื่อเมนู (ไทย)'); return; }
+  const scopeSel=$('mf_scope'); if(scopeSel) body.scope=scopeSel.value;
+  // An LSM item with no branch ticked would vanish from every storefront — that is never what the
+  // owner means, so say so instead of silently un-listing it.
+  const brIds=scopeSel&&scopeSel.value==='lsm' ? [...document.querySelectorAll('.mfBr:checked')].map(c=>Number(c.value)) : null;
+  if(brIds && !brIds.length){ toast('เลือกอย่างน้อย 1 สาขา หรือเปลี่ยนเป็น "ทั่วประเทศ"'); return; }
   try{
     if(_selMenuId==='new'){ const r=await api('/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('เพิ่มเมนูแล้ว'); await loadMenu(); editMenuForm(r.id); }
-    else { await api('/api/menu/'+_selMenuId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกแล้ว'); await loadMenu(); editMenuForm(_selMenuId); }
+    else {
+      await api('/api/menu/'+_selMenuId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(scopeSel) await api('/api/menu/'+_selMenuId+'/branches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({branchIds:brIds||[]})});
+      toast('บันทึกแล้ว'); const box=$('mf_branches'); if(box) box.dataset.forId=''; await loadMenu(); editMenuForm(_selMenuId);
+    }
   }catch(e){ toast(err(e)); }
 };
 const _refreshMenu=()=>{ if(_selMenuId&&_selMenuId!=='new') editMenuForm(_selMenuId); else renderMenuMgr(); };

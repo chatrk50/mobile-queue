@@ -1396,7 +1396,9 @@ function itemImg(m){
   return fb;
 }
 let menuLoadFailed=false;
-async function loadMenu(){ try{ MENU=await api('/api/menu'); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
+// ?zone asks for THIS branch's menu and prices: nationwide items look the same at every branch,
+// LSM items only appear at the branches HQ assigned them to.
+async function loadMenu(){ try{ MENU=await api('/api/menu'+(zoneId?('?zone='+encodeURIComponent(zoneId)):'')); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
   // Which items THIS customer has hearted (paints the ❤️ filled). Real LINE ids only — the demo
   // fallback ids can't like, which is what keeps the public counts honest.
   try{ if(/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ const r=await api('/api/menu-likes?u='+encodeURIComponent(lineUserId)); MY_LIKES=new Set(r.ids||[]); } }catch(e){}
@@ -1712,8 +1714,8 @@ let _histOrders=[];
 function renderOrderHistory(orders){ const box=$('historyLiffList'); _histOrders=orders;
   if(!orders.length){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">ยังไม่มีประวัติการสั่ง 🙂</p>'; return; }
   box.innerHTML=orders.map((o,i)=>{
-    const summary=o.items.map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
-    const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0"><span>${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
+    const summary=o.items.filter(it=>it.kind!=='addon').map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
+    const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0${it.kind==='addon'?';padding-left:14px':''}"><span${it.kind==='addon'?' class="muted"':''}>${it.kind==='addon'?'+ ':''}${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
     return `<div style="border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:10px">
       <div class="row" style="align-items:flex-start;gap:11px;cursor:pointer" onclick="toggleHistDetail(${i})">
         <div style="width:40px;height:40px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/></svg></div>
@@ -1736,19 +1738,23 @@ window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=
 // drink-item, then its toppings immediately after (same order confirmBasket() writes them in),
 // so we can regroup toppings under the drink that precedes them. Items no longer on the live
 // MENU are skipped (with a warning) rather than added blind.
+// A past line reads "Latte · หวาน 50%"; the live MENU holds "Latte". Match on the drink and carry
+// the sweetness back into the cart, so re-ordering returns the drink the customer actually drank.
+const baseName=(n)=>String(n||'').split(' · ')[0].trim();
+const sweetOf=(n)=>{ const m=String(n||'').match(/หวาน\s*(\d+)\s*%/); return m?Number(m[1]):100; };
 window.reorderOrder=async(i)=>{
   const o=_histOrders[i]; if(!o) return;
   try{
     await showOrderUI();   // resets cart + loads the live MENU — must run first
     let pending=null, pendingQty=1, skipped=false;
-    const commit=()=>{ if(!pending) return; for(let k=0;k<pendingQty;k++) cart.push({name:pending.name,price:pending.price,sweet:100,toppings:pending.toppings.map(t=>({...t}))}); };
+    const commit=()=>{ if(!pending) return; for(let k=0;k<pendingQty;k++) cart.push({name:pending.name,price:pending.price,sweet:pending.sweet,toppings:pending.toppings.map(t=>({...t}))}); };
     o.items.forEach(it=>{
-      const m=MENU.find(x=>x.name===it.name);
+      const m=MENU.find(x=>x.name===baseName(it.name));
       // Sold out (or out of BOM stock) is just as unorderable as gone: pushing it back into the
       // cart makes the server reject the WHOLE order with item_soldout (CUS-C5).
       if(!m || m.soldout || m.stockSoldout){ skipped=true; return; }
       if(m.category==='topping' && pending){ pending.toppings.push({name:it.name,price:it.price,qty:Math.max(1,Math.round((it.qty||1)/pendingQty))}); }
-      else { commit(); pending={name:it.name,price:it.price,toppings:[]}; pendingQty=it.qty||1; }
+      else { commit(); pending={name:m.name,price:m.price,sweet:sweetOf(it.name),toppings:[]}; pendingQty=it.qty||1; }   // current menu price, not the price it cost last time
     });
     commit();
     renderBasketCount();
@@ -1819,7 +1825,9 @@ window.confirmBasket=async()=>{
       body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
-    cart=[]; cartCoupon=null; hideSending();
+    // renderBasketCount() is what mirrors the cart to sessionStorage — clearing the array alone
+    // left the placed order's items saved, and the NEXT visit restored them into an empty basket.
+    cart=[]; cartCoupon=null; renderBasketCount(); hideSending();
     // Ticket shows before the first poll answers — pulse a placeholder instead of a frozen "—".
     { const tc=$('tCode'); tc.textContent='· · ·'; tc.classList.add('ldg'); }
     _onMenu=false; show('ticketCard',true); startPolling();

@@ -2167,10 +2167,14 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
 
   db.prepare('INSERT INTO branch_menu (branch_id, item_id, enabled, soldout) VALUES (1,?,1,1)').run(rdId);
   ok(fav().soldout === true, 'INVARIANT CUS-C5 sold out at THIS branch is not offered');
-  db.prepare('UPDATE branch_menu SET soldout=0, enabled=0 WHERE branch_id=1 AND item_id=?').run(rdId);
-  ok(fav().soldout === true, 'INVARIANT CUS-C5 a drink this branch does not carry is not offered');
+  db.prepare('UPDATE branch_menu SET soldout=0 WHERE branch_id=1 AND item_id=?').run(rdId);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 clearing the branch sold-out makes it offerable again');
+  Q.updateMenuItem(rdId, { scope: 'lsm' }); Q.setMenuItemBranches(rdId, []);
+  ok(fav().soldout === true, 'INVARIANT CUS-C5 an LSM drink this branch was never assigned is not offered');
+  Q.setMenuItemBranches(rdId, [1]);
+  ok(fav().soldout === false, 'INVARIANT CUS-C5 assigning the branch makes the LSM drink offerable');
+  Q.updateMenuItem(rdId, { scope: 'nationwide' });
   db.prepare('DELETE FROM branch_menu WHERE branch_id=1 AND item_id=?').run(rdId);
-  ok(fav().soldout === false, 'INVARIANT CUS-C5 clearing the branch override makes it offerable again');
 
   const rdIng = db.prepare("INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('วัตถุดิบสั่งซ้ำ','กก.', 0, 10)").run().lastInsertRowid;
   db.prepare('INSERT OR REPLACE INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,1)').run(rdId, rdIng);
@@ -2181,6 +2185,155 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare('DELETE FROM recipes WHERE menu_item_id=?').run(rdId);
   db.prepare('DELETE FROM ingredients WHERE id=?').run(rdIng);
   db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(rdId);
+}
+
+{
+  // HQ multi-branch menu control. Two rules, and every surface (storefront, price, order endpoint)
+  // must read them the same way or the customer is shown something the till will refuse:
+  //   nationwide → every branch carries it, at ONE price nobody local can move.
+  //   lsm        → only the branches HQ assigned carry it, and those branches may price it.
+  console.log('\n== HQ menu scope: nationwide vs LSM ==');
+  const B2 = db.prepare("INSERT INTO stores (name) VALUES ('Test Shop 2')").run().lastInsertRowid;
+  const Z2 = db.prepare("INSERT INTO zones (store_id, name, prefix) VALUES (?, 'B', 'B')").run(B2).lastInsertRowid;
+  const nwId = db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('NationwideDrink', 60, 'drink')").run().lastInsertRowid;
+  const lsmId = db.prepare("INSERT INTO menu_items (name, price, category, scope) VALUES ('LsmDrink', 70, 'drink', 'lsm')").run().lastInsertRowid;
+  const has = (branchId, name) => Q.listMenu(null, branchId).some((m) => m.name === name);
+
+  ok(has(1, 'NationwideDrink') && has(B2, 'NationwideDrink'), 'INVARIANT a nationwide item is carried by every branch');
+  ok(!has(1, 'LsmDrink') && !has(B2, 'LsmDrink'), 'INVARIANT an LSM item nobody was assigned is carried by nobody');
+  Q.setMenuItemBranches(lsmId, [B2]);
+  ok(!has(1, 'LsmDrink') && has(B2, 'LsmDrink'), 'INVARIANT an LSM item appears only at the branch it was assigned to');
+  ok(Q.listMenu(null, null).some((m) => m.name === 'LsmDrink'), 'INVARIANT HQ still sees the LSM item in the full catalog');
+
+  Q.setBranchMenuOverride(1, nwId, { enabled: 0 });
+  ok(has(1, 'NationwideDrink'), 'INVARIANT a branch cannot drop a nationwide item');
+  Q.setBranchMenuOverride(1, nwId, { enabled: 1 });
+
+  Q.setBranchMenuOverride(1, nwId, { priceOverride: 99 });
+  ok(Q.priceFor(nwId, { branchId: 1 }) === 60, 'INVARIANT a local price override cannot move a nationwide price');
+  const nw1 = Q.listMenu(null, 1).find((m) => m.name === 'NationwideDrink').price;
+  const nw2 = Q.listMenu(null, B2).find((m) => m.name === 'NationwideDrink').price;
+  ok(nw1 === nw2 && nw1 === 60, `INVARIANT a nationwide item shows one price at every branch (${nw1} vs ${nw2})`);
+  Q.setBranchMenuOverride(B2, lsmId, { priceOverride: 88 });
+  ok(Q.priceFor(lsmId, { branchId: B2 }) === 88, 'INVARIANT an LSM item takes its own branch price');
+  ok(Q.priceFor(lsmId, { branchId: null }) === 70, 'INVARIANT the HQ catalog price of an LSM item is unchanged');
+
+  // The storefront and the order endpoint must agree — that disagreement is exactly what stranded
+  // customers on "item_unavailable" after tapping something the menu showed them.
+  let refused = null;
+  try { Q.createOrder(1, [{ name: 'LsmDrink', price: 70, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'a1'.repeat(16) }); }
+  catch (e) { refused = e.message; }
+  ok(refused === 'item_unavailable', 'INVARIANT ordering an LSM item at an unassigned branch is refused');
+  const t2 = Q.createOrder(Z2, [{ name: 'LsmDrink', price: 1, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'a2'.repeat(16) });
+  const tot = db.prepare('SELECT total FROM orders WHERE ticket_id=?').get(t2.ticket.id).total;
+  ok(near(tot, 88), `INVARIANT the assigned branch orders it at ITS price, not HQ's (got ${tot})`);
+}
+
+{
+  // An order line is stored with the sweetness the barista has to read appended to the drink name
+  // ("Latte · หวาน 50%"). Everything that matches a past line back to the live menu has to strip it
+  // first, or the customer who ever changed sweetness quietly loses both reorder paths.
+  console.log('\n== Reorder: sweetness suffix + toppings ==');
+  const SU = 'U' + 'de'.repeat(16);
+  const swId = db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('SweetDrink', 45, 'drink')").run().lastInsertRowid;
+  db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('SweetTop', 12, 'topping')").run();
+  const st = Q.createOrder(1, [
+    { name: 'SweetDrink · หวาน 50%', price: 45, qty: 2 },
+    { name: 'SweetTop', price: 12, qty: 2 },
+  ], { source: 'customer', lineUserId: SU });
+  Q.setOrderPaid(st.ticket.id, { method: 'cash' });
+
+  const favs = Q.customerSuggestions(SU, { branchId: 1 }).favourites || [];
+  const f = favs.find((x) => x.name === 'SweetDrink');
+  ok(!!f, 'INVARIANT a favourite is grouped under the DRINK, not "drink · หวาน 50%"');
+  ok(f && f.itemId === swId && near(f.price, 45), `INVARIANT the favourite resolves to the live menu item (id ${f && f.itemId}, price ${f && f.price})`);
+  // Second order, different sweetness — still ONE favourite, not two. (One open order per
+  // customer, so the first has to be handed over before the next can be taken.)
+  Q.setStatus(st.ticket.id, 'served');
+  const st2 = Q.createOrder(1, [{ name: 'SweetDrink · หวาน 25%', price: 45, qty: 1 }], { source: 'customer', lineUserId: SU });
+  Q.setOrderPaid(st2.ticket.id, { method: 'cash' });
+  const favs2 = (Q.customerSuggestions(SU, { branchId: 1 }).favourites || []).filter((x) => x.name === 'SweetDrink');
+  ok(favs2.length === 1 && favs2[0].qty === 3, `INVARIANT two sweetness choices are one favourite, 3 cups (got ${favs2.length} row(s), qty ${favs2[0] && favs2[0].qty})`);
+
+  // History fed "สั่งอีกครั้ง"; dropping addons meant it rebuilt a cart the customer never ordered,
+  // and the listed lines did not add up to the total printed above them.
+  const hist = Q.customerOrders(SU, 5);
+  const h = hist.find((o) => o.ticketId === st.ticket.id);
+  ok(h && h.items.some((i) => i.kind === 'addon' && i.name === 'SweetTop'), 'INVARIANT order history keeps the toppings that were paid for');
+  const lineSum = h ? h.items.reduce((s2, i) => s2 + i.price * i.qty, 0) : 0;
+  ok(near(lineSum, h && h.total), `INVARIANT the history lines add up to the total shown (${lineSum} vs ${h && h.total})`);
+}
+{
+  // The owner's end-of-day card counts cups. cupsSold counts SERVED TICKETS, so a 3-cup order read
+  // as "1 แก้ว" and anything paid-but-not-handed-over read as 0 next to a revenue that included it.
+  console.log('\n== End-of-day: แก้ว means cups ==');
+  db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('EodDrink', 30, 'drink')").run();
+  const e1 = Q.createOrder(1, [{ name: 'EodDrink', price: 30, qty: 3 }]); Q.setOrderPaid(e1.ticket.id, { method: 'cash' });
+  const e2 = Q.createOrder(1, [{ name: 'EodDrink', price: 30, qty: 2 }]); Q.setOrderPaid(e2.ticket.id, { method: 'cash' });
+  Q.setStatus(e1.ticket.id, 'served');   // one order handed over, one still on the counter
+  const rep = Q.dailyReport(), card = Q.dailySummaryData();
+  ok(card.cups >= 5, `INVARIANT the summary counts CUPS from paid orders, not served tickets (got ${card.cups})`);
+  ok(card.cups === rep.pnl.cups, `INVARIANT the card and the P&L agree on cups (${card.cups} vs ${rep.pnl.cups})`);
+  ok(card.served === rep.cupsSold, 'INVARIANT served tickets are still reported, under their own name');
+  ok(Q.composeDailySummary().includes(String(card.cups) + ' '), 'INVARIANT the LINE message quotes the same cup count');
+}
+
+{
+  // FIN_KEYS ships starter rent/wages/utilities so the P&L has something to show on day one. Until
+  // the owner replaces them, the nightly card must not ASSERT a net profit computed from a shop
+  // that is not theirs — it read 'กำไรสุทธิ ฿-915' on a real trading day.
+  console.log('\n== Daily card: no invented net profit ==');
+  const finBack = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'fin_%'").all();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'fin_%'").run();   // earlier blocks configure finance; this one is about a shop that never did
+  ok(Q.financeConfigured() === false, 'INVARIANT a shop that never entered costs reads as unconfigured');
+  const c0 = Q.dailySummaryData();
+  ok(c0.costsSet === false && c0.grossProfit != null, 'INVARIANT the card says so and carries gross profit instead');
+  ok(/กำไรขั้นต้น/.test(Q.composeDailySummary()) && !/กำไรสุทธิ/.test(Q.composeDailySummary()),
+     'INVARIANT the LINE message shows gross profit, not a net profit nobody set');
+  Q.setFinanceSettings({ rent: 5000 });
+  ok(Q.financeConfigured() === true && Q.dailySummaryData().costsSet === true, 'INVARIANT entering a cost switches it back on');
+  ok(/กำไรสุทธิ/.test(Q.composeDailySummary()), 'INVARIANT the net-profit line returns once the shop owns the numbers');
+  db.prepare("DELETE FROM settings WHERE key LIKE 'fin_%'").run();
+  for (const row of finBack) db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)').run(row.key, row.value);
+}
+
+{
+  // Two ingredient rows with one name split stock, recipes and cost between them: receiving tops up
+  // one while the recipe deducts the other, so a drink reads หมด with a full shelf.
+  console.log("\n== Stock: one row per ingredient ==");
+  const i1 = Q.addIngredient({ name: "นมซ้ำทดสอบ", unit: "ลิตร", costPrice: 20 });
+  ok(!!i1.id, "INVARIANT a new ingredient is created");
+  let dupErr = null;
+  try { Q.addIngredient({ name: " นมซ้ำทดสอบ ", unit: "ลิตร" }); } catch (e) { dupErr = e.message; }
+  ok(dupErr === "ingredient_exists", "INVARIANT the same ingredient name cannot be added twice");
+  Q.updateIngredient(i1.id, { active: 0 });
+  const back = Q.addIngredient({ name: "นมซ้ำทดสอบ", unit: "ลิตร", costPrice: 25 });
+  ok(back.id === i1.id && back.active === 1, "INVARIANT re-adding an archived name reactivates that row, it does not duplicate");
+  const other = Q.addIngredient({ name: "นมอีกตัว", unit: "ลิตร" });
+  let renErr = null;
+  try { Q.updateIngredient(other.id, { name: "นมซ้ำทดสอบ" }); } catch (e) { renErr = e.message; }
+  ok(renErr === "ingredient_exists", "INVARIANT renaming onto an existing ingredient is refused too");
+  const dups = db.prepare("SELECT TRIM(name) nm, COUNT(*) n FROM ingredients WHERE active=1 GROUP BY TRIM(name) HAVING n>1").all();
+  ok(dups.length === 0, `INVARIANT no active ingredient name appears twice (found ${dups.length})`);
+}
+
+{
+  // A purchase row records what was BOUGHT and nothing decrements it as the stock is used, so the
+  // expiry warning told the owner to throw away a whole delivery that had mostly been blended already.
+  console.log("\n== Expiry warning reflects what is actually left ==");
+  const lotIng = Q.addIngredient({ name: 'ผลไม้ล็อตทดสอบ', unit: 'กก.', costPrice: 50 });
+  const soon = db.prepare("SELECT date(datetime('now','+7 hours'),'+2 days') d").get().d;
+  const gone = db.prepare("SELECT date(datetime('now','+7 hours'),'+3 days') d").get().d;
+  db.prepare("INSERT INTO stock_moves (ingredient_id, kind, qty, cost, expiry) VALUES (?,'purchase',10,500,?)").run(lotIng.id, soon);
+  db.prepare("INSERT INTO stock_moves (ingredient_id, kind, qty, cost, expiry) VALUES (?,'purchase',5,250,?)").run(lotIng.id, gone);
+  db.prepare('UPDATE ingredients SET stock_qty=3 WHERE id=?').run(lotIng.id);   // 15 bought, 3 left on the shelf
+  const lots = Q.expiringLots(14).filter((l) => l.name === 'ผลไม้ล็อตทดสอบ');
+  ok(lots.length === 1, `INVARIANT only lots still covered by on-hand stock are warned about (got ${lots.length})`);
+  ok(lots[0] && near(lots[0].qty, 3), `INVARIANT the warned quantity is what is really left, not what was bought (got ${lots[0] && lots[0].qty})`);
+  db.prepare('UPDATE ingredients SET stock_qty=0 WHERE id=?').run(lotIng.id);
+  ok(Q.expiringLots(14).filter((l) => l.name === 'ผลไม้ล็อตทดสอบ').length === 0,
+     'INVARIANT a lot whose stock is gone drops out of the warning entirely');
+  db.prepare('UPDATE ingredients SET active=0 WHERE id=?').run(lotIng.id);
 }
 
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }

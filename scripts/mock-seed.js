@@ -187,7 +187,10 @@ function seedStock(storeId, drinks) {
   const ids = [];
   db.transaction(() => {
     for (const [name, unit, stock, cost, low] of ings) {
-      const id = db.prepare('INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES (?,?,?,?,?)').run(name, unit, stock, cost, low).lastInsertRowid;
+      const found = db.prepare('SELECT id FROM ingredients WHERE TRIM(name)=?').get(name);
+      const id = found
+        ? (db.prepare('UPDATE ingredients SET unit=?, stock_qty=?, avg_cost=?, low_threshold=?, active=1 WHERE id=?').run(unit, stock, cost, low, found.id), found.id)
+        : db.prepare('INSERT INTO ingredients (name, unit, stock_qty, avg_cost, low_threshold) VALUES (?,?,?,?,?)').run(name, unit, stock, cost, low).lastInsertRowid;
       ids.push({ id, name, unit, cost });
     }
   })();

@@ -395,6 +395,16 @@ export function getFinanceSettings(branchId = null) {
   }
   return out;
 }
+/** Has this shop ever entered its OWN cost figures? Until it has, the fixed-cost half of the P&L is
+ *  starter data, so anything that ASSERTS a net profit has to say so (or show gross instead). */
+export function financeConfigured(branchId = null) {
+  for (const [key, [envKey]] of Object.entries(FIN_KEYS)) {
+    if (branchId && getSetting('fin_' + branchId + '_' + key, null) != null) return true;
+    if (getSetting('fin_' + key, null) != null) return true;
+    if (process.env[envKey] != null) return true;
+  }
+  return false;
+}
 export function setFinanceSettings(patch = {}, branchId = null) {
   const prefix = branchId ? 'fin_' + branchId + '_' : 'fin_';
   for (const key of Object.keys(FIN_KEYS)) {
@@ -1567,13 +1577,18 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge FROM menu_items ORDER BY sort, id').all();
-  // Per-branch overrides: drop items this branch disabled; apply the branch's soldout.
+  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
+  // Branch scoping — the HQ rule, applied in ONE place so the storefront, the till and the order
+  // endpoint can never disagree about what a branch sells:
+  //   nationwide -> every branch carries it (a branch cannot drop it), at HQ's single price.
+  //   lsm        -> opt-in: only branches assigned in branch_menu carry it, and they may reprice it.
+  // soldout is operational either way — running out today is the branch's call, not HQ's.
   if (branchId) {
     const ov = new Map(db.prepare('SELECT item_id, enabled, soldout FROM branch_menu WHERE branch_id=?').all(branchId).map((r) => [r.item_id, r]));
     for (let i = rows.length - 1; i >= 0; i--) {
-      const o = ov.get(rows[i].id);
-      if (o) { if (!o.enabled) { rows.splice(i, 1); continue; } if (o.soldout) rows[i].soldout = 1; }
+      const r = rows[i], o = ov.get(r.id);
+      if (r.scope === 'lsm' && !(o && o.enabled)) { rows.splice(i, 1); continue; }
+      if (o && o.soldout) r.soldout = 1;
     }
   }
   // Resolve channel/branch pricing (delivery markup, branch price override). base_price
@@ -1670,13 +1685,33 @@ export function renameBranch(id, { name, code }) {
 }
 /** Per-branch menu overrides: list catalog items with this branch's enable/price/soldout. */
 export function listBranchMenu(branchId) {
-  return db.prepare(
-    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category,
-            COALESCE(bm.enabled, 1) AS enabled, bm.price_override,
+  const rows = db.prepare(
+    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category, mi.scope,
+            COALESCE(bm.enabled, 0) AS assigned, bm.price_override,
             COALESCE(bm.soldout, mi.soldout) AS soldout
        FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
       WHERE mi.active = 1 ORDER BY mi.sort, mi.id`
   ).all(branchId);
+  // "carried" is the question the caller actually has (does this branch sell it?). Assignment only
+  // answers it for LSM items; a nationwide item is carried whether or not a row exists.
+  return rows.map((r) => ({ ...r, assigned: r.assigned === 1, carried: r.scope === 'lsm' ? r.assigned === 1 : true }));
+}
+/** Which branches an LSM item is assigned to (HQ view of one item). */
+export function menuItemBranches(itemId) {
+  return db.prepare('SELECT branch_id FROM branch_menu WHERE item_id=? AND enabled=1').all(Number(itemId)).map((r) => r.branch_id);
+}
+/** HQ assigns an LSM item to a set of branches. Rows for the branches that lose it are kept (flipped
+ *  to enabled=0) rather than deleted, so a branch's own soldout / price override survives being
+ *  re-assigned later instead of being silently thrown away. */
+export function setMenuItemBranches(itemId, branchIds = []) {
+  const id = Number(itemId);
+  if (!db.prepare('SELECT id FROM menu_items WHERE id=?').get(id)) throw new Error('item_not_found');
+  const want = new Set((Array.isArray(branchIds) ? branchIds : []).map((b) => Number(b)).filter(Boolean));
+  for (const b of db.prepare('SELECT id FROM stores').all().map((r) => r.id)) {
+    db.prepare(`INSERT INTO branch_menu (branch_id, item_id, enabled) VALUES (?,?,?)
+                ON CONFLICT(branch_id, item_id) DO UPDATE SET enabled=excluded.enabled`).run(b, id, want.has(b) ? 1 : 0);
+  }
+  return { ok: true, itemId: id, branchIds: [...want] };
 }
 export function setBranchMenuOverride(branchId, itemId, { enabled, priceOverride, soldout } = {}) {
   const cur = db.prepare('SELECT * FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId) || { enabled: 1, price_override: null, soldout: 0, sort: null };
@@ -1706,6 +1741,15 @@ export function inventorySummary() {
 export function addIngredient({ name, unit = 'หน่วย', lowThreshold = 0, costPrice = 0, branchId = null } = {}) {
   const n = (name || '').toString().trim().slice(0, 60);
   if (!n) throw new Error('name_required');
+  // A duplicate name is never what the owner meant, and it silently splits stock, recipes and cost
+  // between two rows. An archived one of the same name is reactivated instead of duplicated.
+  const same = db.prepare('SELECT id, active FROM ingredients WHERE TRIM(name)=? ORDER BY active DESC LIMIT 1').get(n);
+  if (same && same.active) throw new Error('ingredient_exists');
+  if (same) {
+    db.prepare('UPDATE ingredients SET active=1, unit=?, low_threshold=?, avg_cost=? WHERE id=?')
+      .run((unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), same.id);
+    return db.prepare('SELECT * FROM ingredients WHERE id=?').get(same.id);
+  }
   // costPrice = purchase price per unit (สfor costing). Stock starts at 0 — fill in later.
   const info = db.prepare('INSERT INTO ingredients (name, unit, low_threshold, avg_cost, branch_id) VALUES (?,?,?,?,?)')
     .run(n, (unit || 'หน่วย').toString().slice(0, 20), Math.max(0, Number(lowThreshold) || 0), Math.max(0, Number(costPrice) || 0), branchId);
@@ -1715,6 +1759,7 @@ export function updateIngredient(id, { name, unit, lowThreshold, active, costPri
   const cur = db.prepare('SELECT * FROM ingredients WHERE id=?').get(id);
   if (!cur) throw new Error('ingredient_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
+  if (n !== cur.name && db.prepare('SELECT id FROM ingredients WHERE TRIM(name)=? AND id<>? AND active=1').get(n, id)) throw new Error('ingredient_exists');
   const u = unit != null ? (unit.toString().slice(0, 20) || cur.unit) : cur.unit;
   const lt = lowThreshold != null ? Math.max(0, Number(lowThreshold) || 0) : cur.low_threshold;
   const a = active != null ? (active ? 1 : 0) : cur.active;
@@ -1867,18 +1912,33 @@ export function supplierCatalog(supplierId) {
  *  NOTE: this is a received-lot expiry alert, not remaining-qty-per-lot depletion tracking. */
 export function expiringLots(days = 14) {
   const rows = db.prepare(
-    `SELECT sm.id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
+    `SELECT sm.id, sm.ingredient_id, sm.expiry, sm.qty, sm.at, i.name, i.unit, s.name AS supplier
        FROM stock_moves sm JOIN ingredients i ON i.id=sm.ingredient_id
        LEFT JOIN suppliers s ON s.id=sm.supplier_id
       WHERE sm.kind='purchase' AND sm.expiry IS NOT NULL
         AND date(sm.expiry) <= date('now','+7 hours',? )
-      ORDER BY sm.expiry ASC`
+      ORDER BY sm.expiry ASC, sm.id ASC`
   ).all(`+${Math.max(0, Number(days) || 14)} days`);
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
-  return rows.map((r) => ({ id: r.id, name: r.name, unit: r.unit, qty: r.qty, expiry: r.expiry,
-    supplier: r.supplier || null, boughtAt: r.at,
-    daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
-    expired: r.expiry < today }));
+  // A purchase row records what was BOUGHT. Nothing decrements it as the stock gets used, so an old
+  // lot kept claiming its full quantity — "throw away 4 กก." with 1 กก. actually on the shelf, and a
+  // lot fully consumed weeks ago still sitting in the warning. Net each ingredient's lots against
+  // its real on-hand, oldest expiry first (perishables leave first), and drop what is already gone.
+  const onHand = new Map(db.prepare('SELECT id, stock_qty FROM ingredients WHERE active=1').all()
+    .map((r) => [r.id, Math.max(0, Number(r.stock_qty) || 0)]));
+  const out = [];
+  for (const r of rows) {
+    const left = onHand.get(r.ingredient_id);
+    if (left == null) continue;                     // ingredient archived — nothing to warn about
+    const take = Math.min(Math.max(0, Number(r.qty) || 0), left);
+    onHand.set(r.ingredient_id, r2(left - take));
+    if (take <= 0) continue;                        // this lot has already been used up
+    out.push({ id: r.id, name: r.name, unit: r.unit, qty: r2(take), expiry: r.expiry,
+      supplier: r.supplier || null, boughtAt: r.at,
+      daysLeft: Math.round((Date.parse(r.expiry) - Date.parse(today)) / 86400000),
+      expired: r.expiry < today });
+  }
+  return out;
 }
 // ---- Purchase orders (ใบสั่งซื้อ) ----
 function poView(id) {
@@ -3019,8 +3079,10 @@ export function composeDailySummary(branchId = null, dateStr = null) {
   const lines = [
     `📊 สรุปยอด${validDay ? '' : 'วันนี้'} — ${process.env.BRAND_NAME || 'YO-DEE Yogurt'}`,
     `🗓️ ${dateTh}`,
-    `💰 ยอดขาย ฿${r.revenue} (${r.cupsSold || 0} ${UNIT})`,
-    `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`,
+    `💰 ยอดขาย ฿${r.revenue} (${r.pnl?.cups || 0} ${UNIT})`,
+    financeConfigured()
+      ? `📈 กำไรสุทธิ ฿${Math.round(r.pnl?.netProfit || 0)}`
+      : `📈 กำไรขั้นต้น ฿${Math.round(r.pnl?.grossProfit || 0)} · ยังไม่ได้ตั้งต้นทุนคงที่ (⚙ การเงิน)`,
     `❌ ยกเลิก ${v.cancelled?.orders || 0} · 💸 คืนเงิน ${v.refunded?.orders || 0} · 🗑️ ของเสีย ${v.waste?.cups || 0} ${UNIT}`,
   ];
   if (r.avgRating != null) lines.push(`⭐ รีวิวเฉลี่ย ${r.avgRating} (${r.ratingCount} รีวิว)`);
@@ -3069,8 +3131,12 @@ export function dailySummaryData(branchId = null, dateStr = null) {
     shopName: process.env.BRAND_NAME || 'YO-DEE Yogurt',
     dateTh: `${THDOW[Number(bk.w)]} ${Number(bk.d)} ${THMON[Number(bk.m) - 1]} ${Number(bk.y) + 543}`,
     unit: UNIT,
-    revenue: r.revenue, cups: r.cupsSold || 0,
+    revenue: r.revenue, cups: r.pnl?.cups || 0,   // drink units from PAID orders (cupsSold counts served TICKETS — different question, different answer)
+    served: r.cupsSold || 0,
     netProfit: Math.round(r.pnl?.netProfit || 0),
+    grossProfit: Math.round(r.pnl?.grossProfit || 0),
+    costsSet: financeConfigured(),   // false = rent/wages are still the starter figures, so netProfit is not this shop's
+
     cancelled: v.cancelled?.orders || 0, refunded: v.refunded?.orders || 0, wasteCups: v.waste?.cups || 0,
     rating: r.avgRating, ratingCount: r.ratingCount || 0,
     cashLine: null, lowCount: 0, expiringCount: 0, expired: false,
@@ -3677,7 +3743,7 @@ export function customerOrders(key, limit = 20) {
       WHERE (t.line_user_id=? OR t.customer_key=?)
       ORDER BY o.id DESC LIMIT ?`
   ).all(key, key, lim);
-  const itemStmt = db.prepare("SELECT name, qty, price FROM order_items WHERE order_id=? AND kind='base'");
+  const itemStmt = db.prepare('SELECT name, qty, price, kind FROM order_items WHERE order_id=? ORDER BY id');
   return orders.map((o) => {
     const status = o.payment_status === 'void' ? (o.void_kind === 'refund' ? 'คืนเงินแล้ว' : 'ยกเลิกแล้ว')
       : o.payment_status === 'paid' ? (o.tstatus === 'served' ? 'รับแล้ว' : 'ชำระแล้ว')
@@ -3687,7 +3753,7 @@ export function customerOrders(key, limit = 20) {
       ticketId: o.ticket_id, code: o.code || null, status, kind,
       at: o.paid_at || o.created_at,
       total: r2((o.total || 0) - (o.discount || 0)), discount: r2(o.discount || 0),
-      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      items: itemStmt.all(o.order_id).map((i) => ({ name: i.name, qty: i.qty, price: i.price, kind: i.kind })),
     };
   });
 }
@@ -4123,8 +4189,11 @@ const defaultTier = () => db.prepare('SELECT * FROM price_tiers WHERE is_default
  * `channelId` selects the tier (defaults to the storefront tier when absent).
  */
 export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
-  const item = db.prepare('SELECT price FROM menu_items WHERE id=?').get(itemId);
+  const item = db.prepare('SELECT price, scope FROM menu_items WHERE id=?').get(itemId);
   if (!item) return null;
+  // "Nationwide" means one price everywhere: a branch price-book row or storefront override must
+  // not move it, or the flag would only be a label. Branch pricing applies to LSM items only.
+  const priceBranch = item.scope === 'lsm' ? branchId : null;
   let tier = null;
   if (channelId) {
     const ch = db.prepare('SELECT tier_id FROM channels WHERE id=?').get(channelId);
@@ -4133,16 +4202,16 @@ export function priceFor(itemId, { branchId = null, channelId = null } = {}) {
   if (!tier) tier = defaultTier();
   // 1) explicit price book entry for this tier (branch-specific, then all-branch=0)
   if (tier) {
-    let row = branchId
-      ? db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=?').get(itemId, tier.id, branchId)
+    let row = priceBranch
+      ? db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=?').get(itemId, tier.id, priceBranch)
       : null;
     if (!row) row = db.prepare('SELECT price FROM item_prices WHERE item_id=? AND tier_id=? AND branch_id=0').get(itemId, tier.id);
     if (row) return Math.round((row.price + Number.EPSILON) * 100) / 100;
   }
   // 2) base price (per-branch storefront override or catalog), optionally × tier markup
   let base = item.price;
-  if (branchId) {
-    const bm = db.prepare('SELECT price_override FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, itemId);
+  if (priceBranch) {
+    const bm = db.prepare('SELECT price_override FROM branch_menu WHERE branch_id=? AND item_id=?').get(priceBranch, itemId);
     if (bm && bm.price_override != null) base = bm.price_override;
   }
   const markup = tier?.markup_pct || 0;
@@ -4177,7 +4246,7 @@ export function priceHistory(itemId = null, limit = 100) {
     ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
     : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge }, actor = null) {
+export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge, scope }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
@@ -4188,7 +4257,8 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const a = active != null ? (active ? 1 : 0) : cur.active;
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, id);
+  const sc = scope != null ? (scope === 'lsm' ? 'lsm' : 'nationwide') : (cur.scope || 'nationwide');
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, sc, id);
   // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
   if (Number(p) !== Number(cur.price)) {
     try {
@@ -4252,17 +4322,23 @@ export function customerSuggestions(lineUserId, opts = {}) {
   if (!lineUserId) return { known: false };
   const branchId = Number(opts.branchId) || 0;
   const cust = db.prepare('SELECT name, order_count, last_order_at FROM customers WHERE line_user_id=?').get(lineUserId);
+  // The stored line carries the chosen sweetness ("Latte · หวาน 50%"). Joining the menu on that
+  // raw string matched nothing, so every favourite came back with itemId null — and the LIFF only
+  // offers favourites that HAVE an itemId, which is why "สั่งเหมือนเดิม" never appeared for anyone
+  // who had changed sweetness. Group and join on the drink itself; sweetness is a per-order choice,
+  // not a different drink.
+  const BASE = `TRIM(CASE WHEN instr(oi.name,' · ')>0 THEN substr(oi.name,1,instr(oi.name,' · ')-1) ELSE oi.name END)`;
   const favourites = db.prepare(
-    `SELECT oi.name,
+    `SELECT ${BASE} AS name,
             SUM(oi.qty) AS qty,
             COUNT(DISTINCT o.id) AS times,
-            mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active
+            mi.id AS item_id, mi.price AS price, mi.image AS image, mi.soldout AS soldout, mi.active AS active, mi.scope AS scope
      FROM order_items oi
      JOIN orders o  ON o.id = oi.order_id
      JOIN tickets t ON t.id = o.ticket_id
-     LEFT JOIN menu_items mi ON mi.name = oi.name
+     LEFT JOIN menu_items mi ON mi.name = ${BASE}
      WHERE t.line_user_id = ? AND oi.kind = 'base' AND o.payment_status != 'void'
-     GROUP BY oi.name
+     GROUP BY ${BASE}
      ORDER BY qty DESC, times DESC
      LIMIT 5`
   ).all(lineUserId).filter((f) => f.active == null || f.active === 1);
@@ -4275,11 +4351,12 @@ export function customerSuggestions(lineUserId, opts = {}) {
     : new Map();
   const mk = menuMakeable();
   const unavailable = (f) => {
-    if (f.soldout === 1) return true;
+    if (f.soldout === 1) return true;                            // HQ pulled it everywhere
     if (f.item_id == null) return false;
     const o = ov.get(f.item_id);
-    if (o && (!o.enabled || o.soldout)) return true;
-    return mk.has(f.item_id) && mk.get(f.item_id) <= 0;
+    if (f.scope === 'lsm' && !(o && o.enabled)) return true;     // this branch does not carry it
+    if (o && o.soldout) return true;                             // sold out at this branch today
+    return mk.has(f.item_id) && mk.get(f.item_id) <= 0;          // out of BOM stock
   };
   // Last order (most recent ticket) grouped into drink + nested toppings, for "reorder the same".
   const lastTicket = db.prepare(
@@ -4360,11 +4437,13 @@ function freeGiveawayDiscount(lines, total) {
 function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
   const base = String(rawName || '').split(' · ')[0].trim();
   if (!base) return null;
-  const item = db.prepare('SELECT id FROM menu_items WHERE name=? AND active=1').get(base);
+  const item = db.prepare('SELECT id, scope FROM menu_items WHERE name=? AND active=1').get(base);
   if (!item) return null;
-  if (branchId) {
+  // The same gate listMenu paints with: an LSM item is orderable only at a branch it was assigned
+  // to. A nationwide item is orderable at every branch, full stop.
+  if (branchId && item.scope === 'lsm') {
     const bm = db.prepare('SELECT enabled FROM branch_menu WHERE branch_id=? AND item_id=?').get(branchId, item.id);
-    if (bm && !bm.enabled) return null;
+    if (!(bm && bm.enabled)) return null;
   }
   const p = priceFor(item.id, { channelId, branchId });
   return p == null ? null : r2(p);

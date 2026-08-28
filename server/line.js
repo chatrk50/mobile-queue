@@ -316,9 +316,15 @@ function buildSummaryFlex(s, fallbackText) {
         { type: 'text', text: money(s.revenue), size: 'xxl', weight: 'bold', color: NAVY },
         { type: 'box', layout: 'horizontal', margin: 'md', contents: [
           { type: 'text', text: `${s.cups || 0} ${s.unit || 'แก้ว'}`, size: 'sm', color: MUTED, flex: 4 },
-          { type: 'text', text: (s.netProfit >= 0 ? 'กำไร ' : 'ขาดทุน ') + money(Math.abs(s.netProfit || 0)),
-            size: 'sm', weight: 'bold', align: 'end', flex: 5, color: s.netProfit >= 0 ? GREEN : RED },
+          // Costs not entered yet → show GROSS profit and label it, instead of a loss figure built
+          // from starter rent and payroll the shop never agreed to.
+          s.costsSet === false
+            ? { type: 'text', text: 'กำไรขั้นต้น ' + money(Math.max(0, s.grossProfit || 0)),
+                size: 'sm', weight: 'bold', align: 'end', flex: 5, color: GREEN }
+            : { type: 'text', text: (s.netProfit >= 0 ? 'กำไร ' : 'ขาดทุน ') + money(Math.abs(s.netProfit || 0)),
+                size: 'sm', weight: 'bold', align: 'end', flex: 5, color: s.netProfit >= 0 ? GREEN : RED },
         ] },
+        ...(s.costsSet === false ? [{ type: 'text', text: 'ยังไม่ได้ตั้งต้นทุนคงที่ · ตั้งที่ ⚙ การเงิน', size: 'xxs', color: MUTED, margin: 'sm', wrap: true }] : []),
       ] },
   ];
   if (s.cancelled || s.refunded || s.wasteCups) {
