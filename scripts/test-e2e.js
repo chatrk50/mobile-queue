@@ -2336,6 +2336,62 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare('UPDATE ingredients SET active=0 WHERE id=?').run(lotIng.id);
 }
 
+{
+  // Coupon abuse: every one of these is the shop giving away money it never agreed to. They all
+  // hold today - this block is here so they keep holding.
+  console.log(String.fromCharCode(10) + '== Coupon rules that must never break ==');
+  const cheap = db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('AbuseCheap',35,'drink')").run().lastInsertRowid;
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('AbuseRich',95,'drink')").run();
+  const UK = (c) => 'U' + c.repeat(32).slice(0, 32);
+  const give = (key, kind, cap, dayOffset) => db.prepare(
+    `INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source)
+     VALUES (?,?,'abuse-probe',?, date('now','+7 hours', ?), 'probe')`
+  ).run(key, kind, cap, (dayOffset >= 0 ? '+' : '') + dayOffset + ' days').lastInsertRowid;
+  const code = (id) => 'CCOUP:' + id;
+  const billOf = (tid) => db.prepare('SELECT total, discount FROM orders WHERE ticket_id=?').get(tid);
+  const buy = (items, key, cc) => Q.createOrder(1, items, { source: 'customer', lineUserId: key, couponCode: cc });
+
+  const k1 = UK('1'), c1 = give(k1, 'reward', 49, 7);
+  const t1 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }, { name: 'AbuseCheap', price: 35, qty: 1 }], k1, code(c1));
+  ok(near(billOf(t1.ticket.id).discount, 35), 'INVARIANT a free-drink reward takes the cheapest cup, not its cap');
+  Q.setOrderPaid(t1.ticket.id, { method: 'cash' }); Q.setStatus(t1.ticket.id, 'served');
+
+  const k2 = UK('2'), c2 = give(k2, 'winback', 20, 7);
+  const t2 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k2, code(c2));
+  Q.setOrderPaid(t2.ticket.id, { method: 'cash' }); Q.setStatus(t2.ticket.id, 'served');
+  let again = 0;
+  try { again = billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k2, code(c2)).ticket.id).discount; } catch { again = 0; }
+  ok(near(again, 0), 'INVARIANT a spent coupon is worth nothing the second time');
+
+  const k3 = UK('3'), c3 = give(k3, 'winback', 200, 7);
+  const b3 = billOf(buy([{ name: 'AbuseCheap', price: 35, qty: 1 }], k3, code(c3)).ticket.id);
+  ok(b3.total - b3.discount >= 0, 'INVARIANT a discount can never exceed the bill');
+
+  const k4 = UK('4'), c4 = give(k4, 'winback', 20, -1);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k4, code(c4)).ticket.id).discount, 0),
+     'INVARIANT an expired coupon gives no discount');
+
+  const owner5 = UK('5'), thief5 = UK('6'), c5 = give(owner5, 'winback', 30, 7);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], thief5, code(c5)).ticket.id).discount, 0),
+     'INVARIANT a coupon only works for the customer it was issued to');
+  ok(!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c5).used_at,
+     'INVARIANT and it stays unspent in its real owner wallet');
+
+  const k7 = UK('7'), c7 = give(k7, 'winback', 25, 7);
+  Q.cancelCustomerCoupon(c7);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k7, code(c7)).ticket.id).discount, 0),
+     'INVARIANT a cancelled coupon gives no discount');
+
+  const k8 = UK('8'), c8 = give(k8, 'winback', 20, 7);
+  const t8 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k8, code(c8));
+  Q.setOrderPaid(t8.ticket.id, { method: 'cash' });
+  ok(!!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c8).used_at, 'INVARIANT paying spends the coupon');
+  Q.cancelOrderTicket(t8.ticket.id, null, { reason: 'probe refund' });
+  ok(!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c8).used_at,
+     'INVARIANT refunding the bill puts the coupon back in the wallet');
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=? OR name=?').run(cheap, 'AbuseRich');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
