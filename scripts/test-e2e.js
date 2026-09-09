@@ -2336,6 +2336,135 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare('UPDATE ingredients SET active=0 WHERE id=?').run(lotIng.id);
 }
 
+{
+  // Coupon abuse: every one of these is the shop giving away money it never agreed to. They all
+  // hold today - this block is here so they keep holding.
+  console.log(String.fromCharCode(10) + '== Coupon rules that must never break ==');
+  const cheap = db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('AbuseCheap',35,'drink')").run().lastInsertRowid;
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('AbuseRich',95,'drink')").run();
+  const UK = (c) => 'U' + c.repeat(32).slice(0, 32);
+  const give = (key, kind, cap, dayOffset) => db.prepare(
+    `INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source)
+     VALUES (?,?,'abuse-probe',?, date('now','+7 hours', ?), 'probe')`
+  ).run(key, kind, cap, (dayOffset >= 0 ? '+' : '') + dayOffset + ' days').lastInsertRowid;
+  const code = (id) => 'CCOUP:' + id;
+  const billOf = (tid) => db.prepare('SELECT total, discount FROM orders WHERE ticket_id=?').get(tid);
+  const buy = (items, key, cc) => Q.createOrder(1, items, { source: 'customer', lineUserId: key, couponCode: cc });
+
+  const k1 = UK('1'), c1 = give(k1, 'reward', 49, 7);
+  const t1 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }, { name: 'AbuseCheap', price: 35, qty: 1 }], k1, code(c1));
+  ok(near(billOf(t1.ticket.id).discount, 35), 'INVARIANT a free-drink reward takes the cheapest cup, not its cap');
+  Q.setOrderPaid(t1.ticket.id, { method: 'cash' }); Q.setStatus(t1.ticket.id, 'served');
+
+  const k2 = UK('2'), c2 = give(k2, 'winback', 20, 7);
+  const t2 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k2, code(c2));
+  Q.setOrderPaid(t2.ticket.id, { method: 'cash' }); Q.setStatus(t2.ticket.id, 'served');
+  let again = 0;
+  try { again = billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k2, code(c2)).ticket.id).discount; } catch { again = 0; }
+  ok(near(again, 0), 'INVARIANT a spent coupon is worth nothing the second time');
+
+  const k3 = UK('3'), c3 = give(k3, 'winback', 200, 7);
+  const b3 = billOf(buy([{ name: 'AbuseCheap', price: 35, qty: 1 }], k3, code(c3)).ticket.id);
+  ok(b3.total - b3.discount >= 0, 'INVARIANT a discount can never exceed the bill');
+
+  const k4 = UK('4'), c4 = give(k4, 'winback', 20, -1);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k4, code(c4)).ticket.id).discount, 0),
+     'INVARIANT an expired coupon gives no discount');
+
+  const owner5 = UK('5'), thief5 = UK('6'), c5 = give(owner5, 'winback', 30, 7);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], thief5, code(c5)).ticket.id).discount, 0),
+     'INVARIANT a coupon only works for the customer it was issued to');
+  ok(!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c5).used_at,
+     'INVARIANT and it stays unspent in its real owner wallet');
+
+  const k7 = UK('7'), c7 = give(k7, 'winback', 25, 7);
+  Q.cancelCustomerCoupon(c7);
+  ok(near(billOf(buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k7, code(c7)).ticket.id).discount, 0),
+     'INVARIANT a cancelled coupon gives no discount');
+
+  const k8 = UK('8'), c8 = give(k8, 'winback', 20, 7);
+  const t8 = buy([{ name: 'AbuseRich', price: 95, qty: 1 }], k8, code(c8));
+  Q.setOrderPaid(t8.ticket.id, { method: 'cash' });
+  ok(!!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c8).used_at, 'INVARIANT paying spends the coupon');
+  Q.cancelOrderTicket(t8.ticket.id, null, { reason: 'probe refund' });
+  ok(!db.prepare('SELECT used_at FROM customer_coupons WHERE id=?').get(c8).used_at,
+     'INVARIANT refunding the bill puts the coupon back in the wallet');
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=? OR name=?').run(cheap, 'AbuseRich');
+}
+
+{
+  // What a customer sees in "คูปองของฉัน". A coupon that is merely not usable YET is a nudge and
+  // stays; one that has expired, been used up, or was never for them is gone for good and must not
+  // sit in the wallet looking like an offer the shop is refusing to honour.
+  console.log(String.fromCharCode(10) + "== The wallet only shows coupons the customer can still act on ==");
+  const WK = "U" + "w".repeat(32);
+  const day = (o) => db.prepare("SELECT date(datetime('now','+7 hours'), ?) d").get((o >= 0 ? "+" : "") + o + " days").d;
+  const wallet = (net) => Q.availableCoupons(WK, net).map((c) => c.code);
+
+  Q.createCoupon({ code: "WLIVE", label: "ลด 20", disc_type: "baht", disc_value: 20, expires_at: day(30) });
+  Q.createCoupon({ code: "WGONE", label: "โปรเก่า", disc_type: "baht", disc_value: 50, expires_at: day(-1) });
+  Q.createCoupon({ code: "WSOON", label: "โปรเดือนหน้า", disc_type: "baht", disc_value: 25, valid_from: day(20) });
+  Q.createCoupon({ code: "WMIN", label: "ลด 30 เมื่อครบ 200", disc_type: "baht", disc_value: 30, min_spend: 200 });
+  const wOut = Q.createCoupon({ code: "WOUT", label: "แจกจำกัด", disc_type: "baht", disc_value: 40, usage_limit: 5 });
+  db.prepare("UPDATE coupons SET used_count=5 WHERE id=?").run(wOut.id);
+  const wOnce = Q.createCoupon({ code: "WONCE", label: "1 ครั้งต่อคน", disc_type: "baht", disc_value: 15, per_customer: 1 });
+  db.prepare("INSERT INTO coupon_uses (coupon_id, customer_key) VALUES (?,?)").run(wOnce.id, WK);
+
+  const shown = wallet(100);
+  ok(shown.includes("WLIVE"), "INVARIANT a live coupon is in the wallet");
+  ok(!shown.includes("WGONE"), "INVARIANT an EXPIRED coupon disappears from the wallet");
+  ok(!shown.includes("WOUT"), "INVARIANT a coupon that has been claimed to its limit disappears");
+  ok(!shown.includes("WONCE"), "INVARIANT a coupon this customer has already used up disappears");
+  ok(shown.includes("WMIN"), "INVARIANT a coupon that only needs a bigger basket STAYS as a nudge");
+  ok(shown.includes("WSOON"), "INVARIANT a coupon that has not started yet STAYS, with its start date");
+
+  // A coupon expiring TODAY is still good all day - dropping it a day early steals it.
+  Q.createCoupon({ code: "WTODAY", label: "วันสุดท้าย", disc_type: "baht", disc_value: 10, expires_at: day(0) });
+  ok(wallet(100).includes("WTODAY"), "INVARIANT a coupon expiring today is still usable today");
+
+  // A window typed in backwards (start date after the expiry date) is still an expired coupon.
+  // Reading the start date first made it report "starts on <date>" forever and never die.
+  Q.createCoupon({ code: "WBACK", label: "ช่วงเวลากลับด้าน", disc_type: "baht", disc_value: 10, valid_from: day(20), expires_at: day(-5) });
+  ok(!wallet(100).includes("WBACK"), "INVARIANT a coupon past its expiry is gone even if its start date is in the future");
+  // The owner keeps the history: an expired coupon is hidden from customers, never deleted.
+  ok(Q.listCoupons(true).some((c) => c.code === "WGONE"), "INVARIANT the expired coupon is still on the owner list");
+  db.prepare("UPDATE coupons SET active=0 WHERE code IN ('WLIVE','WGONE','WSOON','WMIN','WOUT','WONCE','WTODAY','WBACK')").run();
+}
+
+{
+  // The gift path (ดึงลูกค้ากลับ → แนบคูปอง) walked end to end on the cashier + LIFF: create, give,
+  // use, refund, expire. These are the rules that walk-through depended on.
+  console.log(String.fromCharCode(10) + "== A gifted coupon lives and dies correctly ==");
+  const GK = "U" + "g".repeat(32);
+  const gday = (o) => db.prepare("SELECT date(datetime('now','+7 hours'), ?) d").get((o >= 0 ? "+" : "") + o + " days").d;
+  const dead = Q.createCoupon({ code: "GDEAD", label: "โปรที่ตายแล้ว", disc_type: "baht", disc_value: 30, expires_at: gday(-1) });
+  let refused = null;
+  try { await Q.sendCampaign({ keys: [GK], message: "hi", coupon: { couponId: dead.id } }); } catch (e) { refused = e.message; }
+  ok(refused === "coupon_expired", `INVARIANT an expired coupon cannot be gifted into a wallet (${refused})`);
+
+  const sent = await Q.sendCampaign({ keys: [GK], message: "คิดถึงจัง", coupon: { label: "คิดถึงจัง ลด 40 บาท", cap: 40, days: 7 } });
+  ok(sent.issuedCoupons === 1 && sent.sent === 1 && sent.failed === 0, `INVARIANT with LINE stubbed the campaign counts as delivered, coupon issued (${JSON.stringify({ s: sent.sent, f: sent.failed, c: sent.issuedCoupons })})`);
+  const gift = Q.customerCoupons(GK)[0];
+  ok(gift && gift.kind === "winback" && gift.free_cap === 40, "INVARIANT the gift lands in the wallet as a ฿40 win-back coupon");
+
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('GiftCup',49,'drink')").run();
+  const gt = Q.createOrder(1, [{ name: "GiftCup", price: 49, qty: 1 }], { source: "customer", lineUserId: GK, couponCode: "CCOUP:" + gift.id });
+  const gbill = db.prepare("SELECT total, discount, discount_reason FROM orders WHERE ticket_id=?").get(gt.ticket.id);
+  ok(near(gbill.discount, 40) && gbill.total - gbill.discount === 9, `INVARIANT ฿40 gift on a ฿49 cup nets ฿9 (got ${gbill.total - gbill.discount})`);
+  ok(/ของขวัญ/.test(gbill.discount_reason) && !/สะสมครบ/.test(gbill.discount_reason), `INVARIANT the bill names it a gift, not a stamp reward (${gbill.discount_reason})`);
+  const paid = Q.setOrderPaid(gt.ticket.id, { method: "cash" });
+  ok(paid.net === 9 && paid.total === 49, `INVARIANT the till is told net ฿9 as well as gross ฿49 (net ${paid.net})`);
+  ok(Q.customerCoupons(GK).length === 0, "INVARIANT a coupon on a live order is out of the wallet");
+  Q.cancelOrderTicket(gt.ticket.id, null, { reason: "refund" });
+  const back = db.prepare("SELECT used_at, used_value, state FROM customer_coupons WHERE id=?").get(gift.id);
+  ok(!back.used_at && back.used_value == null && back.state === "claimed", `INVARIANT a refund returns the coupon clean (${JSON.stringify(back)})`);
+  ok(Q.customerCoupons(GK).length === 1, "INVARIANT and it is back in the wallet");
+  db.prepare("UPDATE customer_coupons SET expires_at=? WHERE id=?").run(gday(-1), gift.id);
+  ok(Q.customerCoupons(GK).length === 0, "INVARIANT the day after it expires it is gone from the wallet");
+  db.prepare("UPDATE menu_items SET active=0 WHERE name='GiftCup'").run();
+  db.prepare("UPDATE coupons SET active=0 WHERE code='GDEAD'").run();
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

@@ -240,5 +240,5 @@ function seedCoupons() {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`);
   ins.run('WELCOME20', 'ลด 20 บาท ต้อนรับ', 'baht', 20, 0, 0, null, null, 0, 1, 'new');
   ins.run('SAVE10', 'ลด 10% สูงสุด 30', 'percent', 10, 30, 100, null, null, 200, 0, 'all');
-  ins.run('SUMMER50', 'ลด 50 บาท (ยอด 150+)', 'baht', 50, 0, 150, bkkDate(-7), bkkDate(30), 100, 1, 'all');
+  ins.run('SUMMER50', 'ลด 50 บาท (ยอด 150+)', 'baht', 50, 0, 150, bkkDate(7), bkkDate(-30), 100, 1, 'all');
 }

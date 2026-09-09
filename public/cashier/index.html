@@ -2396,8 +2396,8 @@ let COUPONS=[];
 // and two counters whether a campaign is actually running right now.
 function cpStatus(c){ const t=bkkToday();
   if(!c.active) return ['ปิดอยู่','#f1f5f9','#64748b'];
-  if(c.valid_from&&c.valid_from>t) return ['ยังไม่เริ่ม · '+c.valid_from,'#e6f1fb','#185fa5'];
   if(c.expires_at&&c.expires_at<t) return ['หมดอายุแล้ว','#fcebeb','#a32d2d'];
+  if(c.valid_from&&c.valid_from>t) return ['ยังไม่เริ่ม · '+c.valid_from,'#e6f1fb','#185fa5'];
   if(c.usage_limit>0&&c.used_count>=c.usage_limit) return ['ใช้ครบโควตาแล้ว','#fcebeb','#a32d2d'];
   if(c.distribution==='claim'&&c.issue_limit>0&&c.issued_count>=c.issue_limit) return ['แจกครบแล้ว','#faeeda','#854f0b'];
   return ['กำลังใช้งาน','#e1f5ee','#0f6e56'];
@@ -2406,8 +2406,8 @@ function cpStatus(c){ const t=bkkToday();
 // reads as "running / not started / finished / off" instead of one long mixed list (owner ask).
 function cpGroup(c){ const t=bkkToday();
   if(!c.active) return 3;
-  if(c.valid_from&&c.valid_from>t) return 1;
   if((c.expires_at&&c.expires_at<t)||(c.usage_limit>0&&c.used_count>=c.usage_limit)) return 2;
+  if(c.valid_from&&c.valid_from>t) return 1;
   return 0;
 }
 function renderCoupons(list){ COUPONS=list||[];
@@ -3400,7 +3400,7 @@ window.clCoupToggle=async(cb)=>{ $('clCoupBox').style.display=cb.checked?'':'non
     try{ const r=await api('/api/admin/coupon-templates');
       const t=(r.templates||[]).find(x=>x.key==='winback');
       if(t){ $('clCoupCap').value=t.value; $('clCoupDays').value=t.days; } }catch(e){ /* keep HTML defaults */ }
-    try{ _clCoupons=(await api('/api/coupons/all')).filter(c=>c.active); }catch(e){ _clCoupons=[]; }
+    try{ const t=bkkToday(); _clCoupons=(await api('/api/coupons/all')).filter(c=>c.active && !(c.expires_at&&c.expires_at<t) && !(c.usage_limit>0&&c.used_count>=c.usage_limit)); }catch(e){ _clCoupons=[]; }
     const opts=_clCoupons.map(c=>`<option value="${c.id}">${esc(c.label)} (${esc(c.code)})</option>`).join('');
     $('clCoupPick').innerHTML=(opts?`<option value="">— เลือกคูปองจากหน้าคูปอง (แนะนำ) —</option>${opts}`:'')
       +`<option value="custom" ${opts?'':'selected'}>✏️ ของขวัญด่วน — ตั้งแค่มูลค่า+อายุ (เงื่อนไขละเอียดต้องสร้างที่หน้าคูปอง)</option>`;
@@ -4744,7 +4744,7 @@ window.markPaid=async(tid,status,amount)=>{
     method=await pickPayMethod(amount);
     if(method===null) return;   // cashier cancelled
   }
-  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+r.total);
+  try{ const r=await api('/api/tickets/'+tid+'/paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})}); toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+ (method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ') +') · ฿'+(r.net!=null?r.net:r.total));   // net of the discount = what the till took
     if(CFG.printEnabled) printKitchen(tid); }catch(e){ toast(err(e)); } };
 // ---------- รวมบิล (merge pay): tick ≥2 pending bills → settle them in one tender ----------
 let _mergeSel=new Map();   // ticketId -> net amount

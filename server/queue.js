@@ -544,6 +544,8 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   if (coupon && coupon.couponId) {
     const c = db.prepare('SELECT * FROM coupons WHERE id=? AND active=1').get(Number(coupon.couponId));
     if (!c) throw new Error('coupon_not_found');
+    if (c.expires_at && c.expires_at < db.prepare("SELECT date('now','+7 hours') d").get().d) throw new Error('coupon_expired');
+    if (c.usage_limit > 0 && c.used_count >= c.usage_limit) throw new Error('coupon_used_up');
     cp = { couponId: c.id, label: c.label,
            cap: Math.max(1, c.disc_type === 'percent' ? (c.max_disc || 0) : c.disc_value),
            days: c.valid_days > 0 ? c.valid_days : null, fixedExpiry: c.expires_at || null };
@@ -566,6 +568,7 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
         ? (await pushCouponFlex(key, { label: cp.label, disc_type: 'amount', disc_value: cp.cap, expiresAt }, shopLink(), msg, 'winback')) !== false
         : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
     } catch { ok = false; }
+    if (!LINE_ENABLED) ok = true;
     if (ok) sent++; else failed++;
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
@@ -2582,21 +2585,21 @@ export function claimCoupon(token, customerKey) {
 export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
-  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน', dead: true };
   // A claim-link coupon is quota-controlled: it may ONLY be spent from the wallet of a customer who
   // collected it via the link. Honouring the raw code here would let anyone who saw the code bypass
   // the quota — and let a claimer double-dip (wallet voucher + this code discount on top).
   if (c.distribution === 'claim') return { ok: false, reason: 'คูปองนี้ต้องกดรับผ่านลิงก์ก่อน แล้วใช้จาก "คูปองของฉัน"' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว', dead: true };
   if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
-  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
   if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
-  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
+  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว', dead: true };
   if (c.per_customer > 0 && customerKey) {
     const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
-    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
+    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว', dead: true };
   }
-  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น' };
+  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น', dead: true };
   // Scoped coupons discount ONLY the matching lines. Without the lines we cannot prove eligibility,
   // so we refuse rather than risk discounting the whole bill.
   const { base, scoped } = scopedBase(c.id, lines, orderNet);
@@ -2646,9 +2649,18 @@ export function customerCoupons(customerKey) {
 export function availableCoupons(customerKey, orderNet, lines = null) {
   // Claim-link coupons never appear in the public code list: the quota lives at the link, and a
   // customer who claimed already sees their voucher via the wallet rows unshifted below.
-  const list = listCoupons(false).filter((c) => c.distribution !== 'claim').map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
-    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
-      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+  // A coupon the customer can still act on stays in the list even when it is not usable right now
+  // ("ซื้อเพิ่มอีก ฿20", "เริ่มใช้ได้ 1 ต.ค.") — that grey row is a nudge. A coupon that has EXPIRED,
+  // been used up, or was never for them can never turn usable, so it is dropped: leaving it in the
+  // wallet reads as an offer the shop is refusing to honour, and it buries the live coupons.
+  const list = [];
+  for (const c of listCoupons(false)) {
+    if (c.distribution === 'claim') continue;
+    const v = validateCoupon(c.code, customerKey, orderNet, lines);
+    if (v.dead) continue;
+    list.push({ id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
+      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason });
+  }
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
   // can pick it like any other discount — one tap in the cart applies it as a free-drink discount
   // (redeemRewardOnOrder re-checks their balance server-side at order time, so this is advisory only).
@@ -4789,7 +4801,7 @@ export function setOrderPaid(ticketId, opts = {}) {
   // combined create+pay never double-deducts stock, double-awards loyalty, or resets paid_at.
   if (order.payment_status === 'paid') {
     const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
-    return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
+    return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
   }
   if (order.payment_status === 'void') throw new Error('order_void');
   // The status read above is not atomic — a void landing between the read and this write would be
@@ -4845,7 +4857,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
-  return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
+  return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
 /** Merge-pay: settle several pending orders in ONE cashier action / tender (รวมบิล). Each order
@@ -5064,7 +5076,8 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   const room = Math.max(0, order.total - (order.discount || 0));
   const free = Math.round(Math.min(cc.free_cap, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
-  const reason = (cc.kind === 'birthday' ? '🎂 คูปองวันเกิด: ' : '🎁 คูปองสะสมครบ: ') + cc.label;
+  const reason = ({ birthday: '🎂 คูปองวันเกิด: ', reward: '🎁 คูปองสะสมครบ: ', winback: '💛 คูปองของขวัญ: ', bounceback: '🎁 คูปองกลับมาหาเรา: ',
+    streak: '🔥 คูปองมาต่อเนื่อง: ', flash: '⚡ คูปอง Flash: ' }[cc.kind] || '🎟️ คูปอง: ') + cc.label;
   // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
   // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
   // already used, instead of the discount being applied twice.
@@ -5150,7 +5163,7 @@ export function recordWaste(ticketId, { reason = null, byShop = false, actorId =
  *  to the ticket's own customer (positive = points given back). */
 function reverseLoyaltyForOrder(orderId, ownerKey) {
   // A coupon spent on this order comes back to the customer when the order is voided.
-  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
+  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, used_value=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
   // CODE coupons too: the redemption never used to be handed back, so every voided order
   // permanently shrank the coupon's quota AND burned the customer's per-person allowance.
   // Deleting the coupon_uses row is what restores the per-customer limit — validateCoupon counts rows.

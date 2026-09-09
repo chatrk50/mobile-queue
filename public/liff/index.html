@@ -2062,6 +2062,10 @@ window.selectCoupon=(code)=>{ const c=_availCoupons.find(x=>x.code===code); if(!
 // Phase 4A: coupon-arrival popup — on app open, greet a customer who already holds an unused coupon
 // with the branded card so it doesn't sit forgotten. Once per day per zone, owner-toggleable, only
 // ever shown when there is a genuinely usable coupon. "ใช้เลย" arms it and jumps to the menu.
+// PERSONAL coupons only (stamp reward, birthday, win-back, streak, flash, claim-link, ส่งตรงรายคน):
+// a shop-wide promo code is for everyone, so counting it here made EVERY customer get a "คุณมี 2
+// คูปอง" welcome every single day for as long as the code existed — a gift that is never a gift.
+// Public codes still show in the wallet and the basket picker, under their own heading.
 let _cwCoupon=null;
 window.dismissFlash=()=>{ const b=$('flashBar'); if(b) b.style.display='none'; };
 // Phase 4 #4: while the flash window is live, silently claim today's flash coupon into the wallet
@@ -2086,12 +2090,12 @@ async function maybeCouponWelcome(){
     if(localStorage.getItem(seenKey)) return;
     const ck=lineUserId||(guestPhone?('tel:'+guestPhone):''); if(!ck) return;
     let coupons=[]; try{ const r=await api('/api/coupons?customer='+encodeURIComponent(ck)+'&total=999999'); coupons=r.coupons||[]; }catch(e){ return; }
-    const usable=coupons.filter(c=>c.usable);
+    const usable=coupons.filter(c=>c.usable && c.isReward);
     if(!usable.length) return;
     const val=(c)=> c.disc_type==='reward'?(c.freeCap||49): c.disc_type==='percent'?((c.disc_value||0)*3):(c.disc_value||0);
     _cwCoupon=usable.slice().sort((a,b)=>val(b)-val(a))[0];
     const c=_cwCoupon, isReward=c.disc_type==='reward';
-    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash';
+    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash' || c.couponKind==='winback';
     const cap = c.freeCap||49;
     const grad = c.couponKind==='streak' ? 'linear-gradient(150deg,#7c83e0,#5560c8)'
       : c.couponKind==='bounceback' ? 'linear-gradient(150deg,#12b8b0,#0a8f9c)'
@@ -2153,14 +2157,14 @@ window.openCoupon=async(mode)=>{
     return;
   }
   const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
-  box.innerHTML = clr + _availCoupons.map(c=>{
+  const card=(c)=>{
     const isReward = c.disc_type==='reward';
     const sel = cartCoupon && cartCoupon.code===c.code;
     let discLine;
     const cap = c.freeCap||49;
     // Value coupons (bounce-back, streak) ride the same reward machinery but are "฿X off", not a
     // free drink — label + colour them as discounts so the wallet reads honestly.
-    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash';
+    const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash' || c.couponKind==='winback';
     if(isReward){
       // In cart mode, show the REAL amount this coupon will discount THIS order (capped at the
       // coupon's value or the cheapest item, same math as the server) instead of a generic
@@ -2216,7 +2220,14 @@ window.openCoupon=async(mode)=>{
         ${c.usable?'':`<div class="cpn-bad">${esc(c.reason||'ใช้ไม่ได้')}</div>`}
       </div>
       ${action}
-    </div>`;}).join('');
+    </div>`;};
+  // Two groups, labelled: what the shop gave THIS customer, then the open promo codes anyone may use.
+  // Without the split a public "ลด 20" read as a personal gift — and looked broken when it was gone.
+  const hdr=(t,s)=>`<div style="display:flex;align-items:baseline;gap:8px;margin:14px 2px 8px"><span style="font-size:13.5px;font-weight:800;color:var(--navy)">${t}</span><span class="muted" style="font-size:11.5px">${s}</span></div>`;
+  const mine=_availCoupons.filter(c=>c.isReward), open=_availCoupons.filter(c=>!c.isReward);
+  box.innerHTML = clr
+    + (mine.length ? hdr('🎁 คูปองของฉัน','ร้านมอบให้คุณโดยเฉพาะ') + mine.map(card).join('') : '')
+    + (open.length ? hdr('🏷️ โปรโมชั่นของร้าน','โค้ดส่วนลดที่ใช้ได้ทุกคน') + open.map(card).join('') : '');
 };
 // Phase 7: once the customer picks a QR method, auto-trigger the save-to-album flow
 // (same share-sheet/download path as the manual button) so they don't need a second tap.
