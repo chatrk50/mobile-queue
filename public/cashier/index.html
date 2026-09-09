@@ -2396,8 +2396,8 @@ let COUPONS=[];
 // and two counters whether a campaign is actually running right now.
 function cpStatus(c){ const t=bkkToday();
   if(!c.active) return ['ปิดอยู่','#f1f5f9','#64748b'];
-  if(c.valid_from&&c.valid_from>t) return ['ยังไม่เริ่ม · '+c.valid_from,'#e6f1fb','#185fa5'];
   if(c.expires_at&&c.expires_at<t) return ['หมดอายุแล้ว','#fcebeb','#a32d2d'];
+  if(c.valid_from&&c.valid_from>t) return ['ยังไม่เริ่ม · '+c.valid_from,'#e6f1fb','#185fa5'];
   if(c.usage_limit>0&&c.used_count>=c.usage_limit) return ['ใช้ครบโควตาแล้ว','#fcebeb','#a32d2d'];
   if(c.distribution==='claim'&&c.issue_limit>0&&c.issued_count>=c.issue_limit) return ['แจกครบแล้ว','#faeeda','#854f0b'];
   return ['กำลังใช้งาน','#e1f5ee','#0f6e56'];
@@ -2406,8 +2406,8 @@ function cpStatus(c){ const t=bkkToday();
 // reads as "running / not started / finished / off" instead of one long mixed list (owner ask).
 function cpGroup(c){ const t=bkkToday();
   if(!c.active) return 3;
-  if(c.valid_from&&c.valid_from>t) return 1;
   if((c.expires_at&&c.expires_at<t)||(c.usage_limit>0&&c.used_count>=c.usage_limit)) return 2;
+  if(c.valid_from&&c.valid_from>t) return 1;
   return 0;
 }
 function renderCoupons(list){ COUPONS=list||[];

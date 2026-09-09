@@ -2582,21 +2582,21 @@ export function claimCoupon(token, customerKey) {
 export function validateCoupon(code, customerKey, orderNet, lines = null) {
   const c = _couponByCode(code); orderNet = Math.max(0, Number(orderNet) || 0);
   if (!c) return { ok: false, reason: 'ไม่พบคูปองนี้' };
-  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน' };
+  if (!c.active) return { ok: false, reason: 'คูปองถูกปิดใช้งาน', dead: true };
   // A claim-link coupon is quota-controlled: it may ONLY be spent from the wallet of a customer who
   // collected it via the link. Honouring the raw code here would let anyone who saw the code bypass
   // the quota — and let a claimer double-dip (wallet voucher + this code discount on top).
   if (c.distribution === 'claim') return { ok: false, reason: 'คูปองนี้ต้องกดรับผ่านลิงก์ก่อน แล้วใช้จาก "คูปองของฉัน"' };
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
+  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว', dead: true };
   if (c.valid_from && c.valid_from > today) return { ok: false, reason: `คูปองเริ่มใช้ได้ ${c.valid_from}` };
-  if (c.expires_at && c.expires_at < today) return { ok: false, reason: 'คูปองหมดอายุแล้ว' };
   if (orderNet < c.min_spend) return { ok: false, reason: `ใช้ได้เมื่อยอด ≥ ฿${c.min_spend}` };
-  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว' };
+  if (c.usage_limit > 0 && c.used_count >= c.usage_limit) return { ok: false, reason: 'คูปองถูกใช้ครบแล้ว', dead: true };
   if (c.per_customer > 0 && customerKey) {
     const used = db.prepare('SELECT COUNT(*) n FROM coupon_uses WHERE coupon_id=? AND customer_key=?').get(c.id, customerKey).n;
-    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว' };
+    if (used >= c.per_customer) return { ok: false, reason: 'คุณใช้คูปองนี้ครบสิทธิ์แล้ว', dead: true };
   }
-  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น' };
+  if (!audienceOK(c, customerKey)) return { ok: false, reason: 'คูปองนี้สำหรับลูกค้าใหม่เท่านั้น', dead: true };
   // Scoped coupons discount ONLY the matching lines. Without the lines we cannot prove eligibility,
   // so we refuse rather than risk discounting the whole bill.
   const { base, scoped } = scopedBase(c.id, lines, orderNet);
@@ -2646,9 +2646,18 @@ export function customerCoupons(customerKey) {
 export function availableCoupons(customerKey, orderNet, lines = null) {
   // Claim-link coupons never appear in the public code list: the quota lives at the link, and a
   // customer who claimed already sees their voucher via the wallet rows unshifted below.
-  const list = listCoupons(false).filter((c) => c.distribution !== 'claim').map((c) => { const v = validateCoupon(c.code, customerKey, orderNet, lines);
-    return { id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
-      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason }; });
+  // A coupon the customer can still act on stays in the list even when it is not usable right now
+  // ("ซื้อเพิ่มอีก ฿20", "เริ่มใช้ได้ 1 ต.ค.") — that grey row is a nudge. A coupon that has EXPIRED,
+  // been used up, or was never for them can never turn usable, so it is dropped: leaving it in the
+  // wallet reads as an offer the shop is refusing to honour, and it buries the live coupons.
+  const list = [];
+  for (const c of listCoupons(false)) {
+    if (c.distribution === 'claim') continue;
+    const v = validateCoupon(c.code, customerKey, orderNet, lines);
+    if (v.dead) continue;
+    list.push({ id: c.id, code: c.code, label: c.label, disc_type: c.disc_type, disc_value: c.disc_value, max_disc: c.max_disc,
+      min_spend: c.min_spend, expires_at: c.expires_at, usable: v.ok, discount: v.ok ? v.discount : 0, reason: v.ok ? null : v.reason });
+  }
   // A stamp-card reward the customer has already earned shows up in the SAME coupon list, so they
   // can pick it like any other discount — one tap in the cart applies it as a free-drink discount
   // (redeemRewardOnOrder re-checks their balance server-side at order time, so this is advisory only).

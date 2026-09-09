@@ -2392,6 +2392,45 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare('UPDATE menu_items SET active=0 WHERE id=? OR name=?').run(cheap, 'AbuseRich');
 }
 
+{
+  // What a customer sees in "คูปองของฉัน". A coupon that is merely not usable YET is a nudge and
+  // stays; one that has expired, been used up, or was never for them is gone for good and must not
+  // sit in the wallet looking like an offer the shop is refusing to honour.
+  console.log(String.fromCharCode(10) + "== The wallet only shows coupons the customer can still act on ==");
+  const WK = "U" + "w".repeat(32);
+  const day = (o) => db.prepare("SELECT date(datetime('now','+7 hours'), ?) d").get((o >= 0 ? "+" : "") + o + " days").d;
+  const wallet = (net) => Q.availableCoupons(WK, net).map((c) => c.code);
+
+  Q.createCoupon({ code: "WLIVE", label: "ลด 20", disc_type: "baht", disc_value: 20, expires_at: day(30) });
+  Q.createCoupon({ code: "WGONE", label: "โปรเก่า", disc_type: "baht", disc_value: 50, expires_at: day(-1) });
+  Q.createCoupon({ code: "WSOON", label: "โปรเดือนหน้า", disc_type: "baht", disc_value: 25, valid_from: day(20) });
+  Q.createCoupon({ code: "WMIN", label: "ลด 30 เมื่อครบ 200", disc_type: "baht", disc_value: 30, min_spend: 200 });
+  const wOut = Q.createCoupon({ code: "WOUT", label: "แจกจำกัด", disc_type: "baht", disc_value: 40, usage_limit: 5 });
+  db.prepare("UPDATE coupons SET used_count=5 WHERE id=?").run(wOut.id);
+  const wOnce = Q.createCoupon({ code: "WONCE", label: "1 ครั้งต่อคน", disc_type: "baht", disc_value: 15, per_customer: 1 });
+  db.prepare("INSERT INTO coupon_uses (coupon_id, customer_key) VALUES (?,?)").run(wOnce.id, WK);
+
+  const shown = wallet(100);
+  ok(shown.includes("WLIVE"), "INVARIANT a live coupon is in the wallet");
+  ok(!shown.includes("WGONE"), "INVARIANT an EXPIRED coupon disappears from the wallet");
+  ok(!shown.includes("WOUT"), "INVARIANT a coupon that has been claimed to its limit disappears");
+  ok(!shown.includes("WONCE"), "INVARIANT a coupon this customer has already used up disappears");
+  ok(shown.includes("WMIN"), "INVARIANT a coupon that only needs a bigger basket STAYS as a nudge");
+  ok(shown.includes("WSOON"), "INVARIANT a coupon that has not started yet STAYS, with its start date");
+
+  // A coupon expiring TODAY is still good all day - dropping it a day early steals it.
+  Q.createCoupon({ code: "WTODAY", label: "วันสุดท้าย", disc_type: "baht", disc_value: 10, expires_at: day(0) });
+  ok(wallet(100).includes("WTODAY"), "INVARIANT a coupon expiring today is still usable today");
+
+  // A window typed in backwards (start date after the expiry date) is still an expired coupon.
+  // Reading the start date first made it report "starts on <date>" forever and never die.
+  Q.createCoupon({ code: "WBACK", label: "ช่วงเวลากลับด้าน", disc_type: "baht", disc_value: 10, valid_from: day(20), expires_at: day(-5) });
+  ok(!wallet(100).includes("WBACK"), "INVARIANT a coupon past its expiry is gone even if its start date is in the future");
+  // The owner keeps the history: an expired coupon is hidden from customers, never deleted.
+  ok(Q.listCoupons(true).some((c) => c.code === "WGONE"), "INVARIANT the expired coupon is still on the owner list");
+  db.prepare("UPDATE coupons SET active=0 WHERE code IN ('WLIVE','WGONE','WSOON','WMIN','WOUT','WONCE','WTODAY','WBACK')").run();
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
