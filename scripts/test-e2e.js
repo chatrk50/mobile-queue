@@ -2431,6 +2431,40 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE coupons SET active=0 WHERE code IN ('WLIVE','WGONE','WSOON','WMIN','WOUT','WONCE','WTODAY','WBACK')").run();
 }
 
+{
+  // The gift path (ดึงลูกค้ากลับ → แนบคูปอง) walked end to end on the cashier + LIFF: create, give,
+  // use, refund, expire. These are the rules that walk-through depended on.
+  console.log(String.fromCharCode(10) + "== A gifted coupon lives and dies correctly ==");
+  const GK = "U" + "g".repeat(32);
+  const gday = (o) => db.prepare("SELECT date(datetime('now','+7 hours'), ?) d").get((o >= 0 ? "+" : "") + o + " days").d;
+  const dead = Q.createCoupon({ code: "GDEAD", label: "โปรที่ตายแล้ว", disc_type: "baht", disc_value: 30, expires_at: gday(-1) });
+  let refused = null;
+  try { await Q.sendCampaign({ keys: [GK], message: "hi", coupon: { couponId: dead.id } }); } catch (e) { refused = e.message; }
+  ok(refused === "coupon_expired", `INVARIANT an expired coupon cannot be gifted into a wallet (${refused})`);
+
+  const sent = await Q.sendCampaign({ keys: [GK], message: "คิดถึงจัง", coupon: { label: "คิดถึงจัง ลด 40 บาท", cap: 40, days: 7 } });
+  ok(sent.issuedCoupons === 1 && sent.sent === 1 && sent.failed === 0, `INVARIANT with LINE stubbed the campaign counts as delivered, coupon issued (${JSON.stringify({ s: sent.sent, f: sent.failed, c: sent.issuedCoupons })})`);
+  const gift = Q.customerCoupons(GK)[0];
+  ok(gift && gift.kind === "winback" && gift.free_cap === 40, "INVARIANT the gift lands in the wallet as a ฿40 win-back coupon");
+
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('GiftCup',49,'drink')").run();
+  const gt = Q.createOrder(1, [{ name: "GiftCup", price: 49, qty: 1 }], { source: "customer", lineUserId: GK, couponCode: "CCOUP:" + gift.id });
+  const gbill = db.prepare("SELECT total, discount, discount_reason FROM orders WHERE ticket_id=?").get(gt.ticket.id);
+  ok(near(gbill.discount, 40) && gbill.total - gbill.discount === 9, `INVARIANT ฿40 gift on a ฿49 cup nets ฿9 (got ${gbill.total - gbill.discount})`);
+  ok(/ของขวัญ/.test(gbill.discount_reason) && !/สะสมครบ/.test(gbill.discount_reason), `INVARIANT the bill names it a gift, not a stamp reward (${gbill.discount_reason})`);
+  const paid = Q.setOrderPaid(gt.ticket.id, { method: "cash" });
+  ok(paid.net === 9 && paid.total === 49, `INVARIANT the till is told net ฿9 as well as gross ฿49 (net ${paid.net})`);
+  ok(Q.customerCoupons(GK).length === 0, "INVARIANT a coupon on a live order is out of the wallet");
+  Q.cancelOrderTicket(gt.ticket.id, null, { reason: "refund" });
+  const back = db.prepare("SELECT used_at, used_value, state FROM customer_coupons WHERE id=?").get(gift.id);
+  ok(!back.used_at && back.used_value == null && back.state === "claimed", `INVARIANT a refund returns the coupon clean (${JSON.stringify(back)})`);
+  ok(Q.customerCoupons(GK).length === 1, "INVARIANT and it is back in the wallet");
+  db.prepare("UPDATE customer_coupons SET expires_at=? WHERE id=?").run(gday(-1), gift.id);
+  ok(Q.customerCoupons(GK).length === 0, "INVARIANT the day after it expires it is gone from the wallet");
+  db.prepare("UPDATE menu_items SET active=0 WHERE name='GiftCup'").run();
+  db.prepare("UPDATE coupons SET active=0 WHERE code='GDEAD'").run();
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

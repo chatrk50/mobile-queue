@@ -544,6 +544,8 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   if (coupon && coupon.couponId) {
     const c = db.prepare('SELECT * FROM coupons WHERE id=? AND active=1').get(Number(coupon.couponId));
     if (!c) throw new Error('coupon_not_found');
+    if (c.expires_at && c.expires_at < db.prepare("SELECT date('now','+7 hours') d").get().d) throw new Error('coupon_expired');
+    if (c.usage_limit > 0 && c.used_count >= c.usage_limit) throw new Error('coupon_used_up');
     cp = { couponId: c.id, label: c.label,
            cap: Math.max(1, c.disc_type === 'percent' ? (c.max_disc || 0) : c.disc_value),
            days: c.valid_days > 0 ? c.valid_days : null, fixedExpiry: c.expires_at || null };
@@ -566,6 +568,7 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
         ? (await pushCouponFlex(key, { label: cp.label, disc_type: 'amount', disc_value: cp.cap, expiresAt }, shopLink(), msg, 'winback')) !== false
         : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
     } catch { ok = false; }
+    if (!LINE_ENABLED) ok = true;
     if (ok) sent++; else failed++;
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
@@ -4798,7 +4801,7 @@ export function setOrderPaid(ticketId, opts = {}) {
   // combined create+pay never double-deducts stock, double-awards loyalty, or resets paid_at.
   if (order.payment_status === 'paid') {
     const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
-    return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
+    return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty: null, code: tk?.code || null, number: tk?.number || null, alreadyPaid: true };
   }
   if (order.payment_status === 'void') throw new Error('order_void');
   // The status read above is not atomic — a void landing between the read and this write would be
@@ -4854,7 +4857,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
-  return { ok: true, ticketId: Number(ticketId), total: order.total, loyalty, code: ticket?.code || null, number: ticket?.number || null };
+  return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
 /** Merge-pay: settle several pending orders in ONE cashier action / tender (รวมบิล). Each order
@@ -5073,7 +5076,8 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   const room = Math.max(0, order.total - (order.discount || 0));
   const free = Math.round(Math.min(cc.free_cap, cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
-  const reason = (cc.kind === 'birthday' ? '🎂 คูปองวันเกิด: ' : '🎁 คูปองสะสมครบ: ') + cc.label;
+  const reason = ({ birthday: '🎂 คูปองวันเกิด: ', reward: '🎁 คูปองสะสมครบ: ', winback: '💛 คูปองของขวัญ: ', bounceback: '🎁 คูปองกลับมาหาเรา: ',
+    streak: '🔥 คูปองมาต่อเนื่อง: ', flash: '⚡ คูปอง Flash: ' }[cc.kind] || '🎟️ คูปอง: ') + cc.label;
   // Burn the wallet coupon ATOMICALLY: the used_at check above is a read, so two fast taps could
   // both reach here. Guarding the UPDATE means exactly one of them wins and the other is told it's
   // already used, instead of the discount being applied twice.
@@ -5159,7 +5163,7 @@ export function recordWaste(ticketId, { reason = null, byShop = false, actorId =
  *  to the ticket's own customer (positive = points given back). */
 function reverseLoyaltyForOrder(orderId, ownerKey) {
   // A coupon spent on this order comes back to the customer when the order is voided.
-  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
+  try { db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, used_value=NULL, state='claimed' WHERE used_order_id=?`).run(orderId); } catch { /* table may predate feature */ }
   // CODE coupons too: the redemption never used to be handed back, so every voided order
   // permanently shrank the coupon's quota AND burned the customer's per-person allowance.
   // Deleting the coupon_uses row is what restores the per-customer limit — validateCoupon counts rows.
