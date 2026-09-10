@@ -2423,7 +2423,22 @@ export function deleteTender(id) { db.prepare('DELETE FROM tenders WHERE id=?').
 // ---------- Coupons (validated + priced SERVER-SIDE = anti-fraud) ----------
 function _couponByCode(code) { return db.prepare('SELECT * FROM coupons WHERE code=? COLLATE NOCASE').get((code || '').toString().trim()); }
 export function listCoupons(includeInactive = false) {
-  return db.prepare(`SELECT * FROM coupons ${includeInactive ? '' : 'WHERE active=1'} ORDER BY created_at DESC, id DESC`).all();
+  const rows = db.prepare(`SELECT * FROM coupons ${includeInactive ? '' : 'WHERE active=1'} ORDER BY created_at DESC, id DESC`).all();
+  // issued_count is bumped by BOTH a link claim and a direct send from ดึงลูกค้ากลับ, while
+  // view_count only ever counts link landing pages - so "99 claimed from 50 views" is a real number,
+  // not a bug: 49 of those were handed out directly. And used_count only counts a code TYPED at
+  // checkout; a wallet coupon (link or gift) is spent through customer_coupons.used_at, so for a
+  // campaign coupon "ใช้แล้ว 0/1" would stay 0 forever. The wallet rows are the honest ledger for
+  // both, so every coupon carries them.
+  const w = new Map(db.prepare(
+    `SELECT coupon_id, SUM(source='claim_link') link, SUM(source='campaign') sent, SUM(used_at IS NOT NULL) used
+       FROM customer_coupons WHERE coupon_id IS NOT NULL GROUP BY coupon_id`
+  ).all().map((r) => [r.coupon_id, r]));
+  for (const c of rows) {
+    const s = w.get(c.id) || { link: 0, sent: 0, used: 0 };
+    c.wallet_link = Number(s.link) || 0; c.wallet_sent = Number(s.sent) || 0; c.wallet_used = Number(s.used) || 0;
+  }
+  return rows;
 }
 export function createCoupon(c = {}) {
   const code = (c.code || '').toString().trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24);

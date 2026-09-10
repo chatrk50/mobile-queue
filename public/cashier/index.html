@@ -2432,8 +2432,24 @@ function cpCard(c){
           ${c.audience==='new'?chip('ลูกค้าใหม่เท่านั้น','#e6f1fb','#185fa5'):''}
           ${c.stackable?chip('ใช้ร่วมโปรฯ อื่นได้','#f3f0ff','#5b21b6'):''}
           <div class="muted" style="font-size:11.5px;margin-top:3px">โค้ด <b>${esc(c.code)}</b> · ขั้นต่ำ ฿${c.min_spend} · ${win}</div>
-          <div class="muted" style="font-size:11.5px;margin-top:1px">ใช้แล้ว ${c.used_count}${c.usage_limit>0?('/'+c.usage_limit):' (ไม่จำกัด)'} · ต่อคน ${c.per_customer>0?c.per_customer+' ครั้ง':'ไม่จำกัด'}</div>
-          ${c.distribution==='claim'?`<div style="font-size:11.5px;margin-top:2px;color:${(c.issue_limit>0&&c.issued_count>=c.issue_limit)?'var(--danger)':'#0f6e56'};font-weight:700">รับไปแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}<span style="color:var(--muted);font-weight:600"> · <svg viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg> เปิดดู ${c.view_count||0} ครั้ง${(c.view_count>0)?` · สนใจ→รับ ${Math.round((c.issued_count/(c.view_count||1))*100)}%`:''}</span></div>`:''}
+          ${(()=>{
+            // A wallet coupon (claim link / direct gift) is spent through the customer's wallet, not by a
+            // typed code, so for those the honest "used" figure is the wallet ledger, out of the wallets issued.
+            const walletKind = c.distribution==='claim' || (c.wallet_sent||0)>0;
+            const usedLine = walletKind
+              ? `ใช้แล้ว ${c.wallet_used||0} จาก ${c.issued_count||0} ใบที่แจก · คนละ 1 ใบ`
+              : `ใช้แล้ว ${c.used_count}${c.usage_limit>0?('/'+c.usage_limit):' (ไม่จำกัด)'} · ต่อคน ${c.per_customer>0?c.per_customer+' ครั้ง':'ไม่จำกัด'}`;
+            if(!walletKind) return `<div class="muted" style="font-size:11.5px;margin-top:1px">${usedLine}</div>`;
+            // Two doors hand out the same quota: the link (counted against the landing-page opens) and a
+            // direct send from ดึงลูกค้ากลับ (never opens a landing page). Shown apart so "99 claimed from 50
+            // opens" reads as 50 + 49, and the interest rate is link claims over link opens only.
+            const link=c.wallet_link||0, sent=c.wallet_sent||0, views=c.view_count||0, full=c.issue_limit>0&&c.issued_count>=c.issue_limit;
+            const EYE='<svg viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+            const rate = views>0 && link<=views ? ` · สนใจ→รับ ${Math.round(link/views*100)}%` : (link>views ? ' · สนใจ→รับ — (รับก่อนเริ่มนับการเปิดดู)' : '');
+            return `<div class="muted" style="font-size:11.5px;margin-top:1px">${usedLine}</div>
+          <div style="font-size:11.5px;margin-top:2px;color:${full?'var(--danger)':'#0f6e56'};font-weight:700">แจกแล้ว ${c.issued_count}${c.issue_limit>0?('/'+c.issue_limit):' (ไม่จำกัด)'}<span style="color:var(--muted);font-weight:600"> · ผ่านลิงก์ ${link}${sent?` · ส่งตรง ${sent}`:''}</span></div>
+          ${c.distribution==='claim'?`<div class="muted" style="font-size:11.5px;margin-top:1px">${EYE} เปิดลิงก์ ${views} ครั้ง${rate}</div>`:''}`;
+          })()}
         </div>
         <span class="row" style="gap:6px;flex:none;align-items:center;padding:5px 0">
           <button class="tgl sm ${c.active?'on':'off'}" aria-label="${c.active?'ปิดใช้':'เปิดใช้'}คูปองนี้" title="${c.active?'ปิดใช้':'เปิดใช้'}" onclick="toggleCoupon(${c.id},${c.active?0:1})"></button>
