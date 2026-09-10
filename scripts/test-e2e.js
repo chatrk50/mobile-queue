@@ -2465,6 +2465,34 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE coupons SET active=0 WHERE code='GDEAD'").run();
 }
 
+{
+  // The owner saw "รับไปแล้ว 99/99 · เปิดดู 50 ครั้ง · สนใจ→รับ 198%" on a live campaign. Real numbers:
+  // a direct send from ดึงลูกค้ากลับ takes quota without opening the landing page. The card now
+  // shows the two doors apart, and counts wallet coupons as USED when the customer spends them.
+  console.log(String.fromCharCode(10) + "== Claim-link numbers say where each coupon went ==");
+  const cl = Q.createCoupon({ code: "DEAL99", label: "9.9 Deals", disc_type: "baht", disc_value: 9, per_customer: 1 });
+  const clc = Q.setCouponClaim(cl.id, { issueLimit: 5, validDays: 10 });
+  const A = "U" + "1".repeat(32), B = "U" + "2".repeat(32), C = "U" + "3".repeat(32);
+  Q.recordClaimView(clc.claim_token); Q.recordClaimView(clc.claim_token);          // two landing-page opens
+  ok(Q.claimCoupon(clc.claim_token, A).ok, "INVARIANT customer A claims through the link");
+  await Q.sendCampaign({ keys: [B, C], message: "9.9", coupon: { couponId: cl.id } });   // two direct gifts
+  let row = Q.listCoupons(true).find((c) => c.id === cl.id);
+  ok(row.issued_count === 3 && row.wallet_link === 1 && row.wallet_sent === 2,
+     `INVARIANT quota 3/5 is reported as 1 via the link + 2 sent directly (${JSON.stringify({ issued: row.issued_count, link: row.wallet_link, sent: row.wallet_sent })})`);
+  ok(row.view_count === 2, `INVARIANT direct sends never count as landing-page opens (views ${row.view_count})`);
+  ok(row.used_count === 0 && row.wallet_used === 0, "INVARIANT nothing used yet on either ledger");
+
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('DealCup',55,'drink')").run();
+  const wa = Q.customerCoupons(A)[0];
+  const dt = Q.createOrder(1, [{ name: "DealCup", price: 55, qty: 1 }], { source: "customer", lineUserId: A, couponCode: "CCOUP:" + wa.id });
+  Q.setOrderPaid(dt.ticket.id, { method: "cash" });
+  row = Q.listCoupons(true).find((c) => c.id === cl.id);
+  ok(row.wallet_used === 1, `INVARIANT spending a wallet coupon counts as used on the coupon card (wallet_used ${row.wallet_used})`);
+  ok(row.used_count === 0, "INVARIANT and does not touch the typed-code counter, which never applied to it");
+  db.prepare("UPDATE menu_items SET active=0 WHERE name='DealCup'").run();
+  db.prepare("UPDATE coupons SET active=0 WHERE id=?").run(cl.id);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
