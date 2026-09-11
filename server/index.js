@@ -58,29 +58,22 @@ const LIFF_ID = process.env.LIFF_ID || '';
 const ADD_FRIEND_URL = process.env.LINE_ADD_FRIEND_URL || '';
 // Let customers build an order themselves in the LINE app (pay at counter). On by default.
 const SELF_ORDER = String(process.env.SELF_ORDER ?? '1') !== '0';
-// Merchant PromptPay id (phone / national id / e-wallet) for a dynamic amount QR; off if empty.
-const PROMPTPAY_ID = (process.env.PROMPTPAY_ID || '').trim();
 // Static merchant QR (e.g. a KShop / Thai-QR poster) — no amount, customer types it.
 // Auto-on if you commit public/assets/promptpay.png; or set PROMPTPAY_STATIC to a custom URL.
 const ppStaticEnv = (process.env.PROMPTPAY_STATIC || '').trim();
 const PROMPTPAY_STATIC_URL = ppStaticEnv.startsWith('/') ? ppStaticEnv
   : ((ppStaticEnv || existsSync(join(__dirname, '..', 'public', 'assets', 'promptpay.png'))) ? '/assets/promptpay.png' : '');
-// SlipOK automatic slip verification (https://slipok.com). Set both env vars to enable.
-const SLIPOK_API_KEY = (process.env.SLIPOK_API_KEY || '').trim();
-const SLIPOK_BRANCH_ID = (process.env.SLIPOK_BRANCH_ID || '').trim();
-const SLIPOK_ON = Boolean(SLIPOK_API_KEY && SLIPOK_BRANCH_ID);
 // Master switch for ONLINE payment (PromptPay QR + slip verify). OFF by default ->
 // customers see "pay at counter" only. Flip PAY_ONLINE=1 in Render to re-enable later.
 const PAY_ONLINE = String(process.env.PAY_ONLINE ?? '0') === '1';
 // Decode the shop's static merchant QR (public/assets/promptpay.png) once at boot so we can
 // re-issue it DYNAMICALLY with the bill amount pre-filled (like a POS). Null if no QR image.
-const MERCHANT_QR = PAY_ONLINE ? await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay.png')) : null;
+const MERCHANT_QR = await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay.png'));
+Q.setGlobalMerchantQr(MERCHANT_QR);   // fallback template for any branch without its own poster
 // Inject the bill amount into the shop's merchant QR (dynamic). Empirically this is payable
 // from most banks' apps via the Bill Payment rail; KBank is the known exception (it routes its
 // own merchant QR through its acquirer, which won't accept a customer-set amount).
-const MERCHANT_QR_DYNAMIC = Boolean(MERCHANT_QR);
 if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — dynamic amount ON (${isInjectable(MERCHANT_QR) ? 'standard PromptPay P2P' : 'merchant/bill-payment rail; KBank app may not accept the injected amount'}).`);
-const PROMPTPAY_DYNAMIC = PAY_ONLINE && (MERCHANT_QR_DYNAMIC || (!MERCHANT_QR && Boolean(PROMPTPAY_ID)));
 
 // ---- LINE webhook ----
 // line.middleware() reads the raw body, validates the x-line-signature, and
@@ -235,7 +228,8 @@ app.get('/api/config', (req, res) => {
   const _act = Q.listTenders(false);
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: PAY_ONLINE && payOnline && Boolean(MERCHANT_QR || PROMPTPAY_ID || PROMPTPAY_STATIC_URL), promptPayDynamic: PROMPTPAY_DYNAMIC, promptPayStatic: PAY_ONLINE ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: PAY_ONLINE && SLIPOK_ON && Q.slipAutoEnabled(), linePay: PAY_ONLINE && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -534,7 +528,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: PAY_ONLINE && SLIPOK_ON, printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: Q.slipReadyAny(), printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -773,7 +767,9 @@ app.get('/api/member-qr', async (req, res) => {
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
 app.get('/api/promptpay-qr', async (req, res) => {
-  if (!PAY_ONLINE || !PROMPTPAY_DYNAMIC) return res.status(404).json({ error: 'promptpay_off' });
+  const branchId = req.query.ticket ? Q.branchOfTicket(req.query.ticket) : (Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
+  const pc = Q.getPayConfig(branchId);
+  if (!pc.online || !pc.qrReady) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);
   // static=1 → the ORIGINAL no-amount merchant QR. KBank locks the amount on injected
   // (bill-payment) QRs, so KBank customers scan this and type the amount themselves; the
@@ -783,8 +779,8 @@ app.get('/api/promptpay-qr', async (req, res) => {
     // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
     // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
     const payload = wantStatic
-      ? (MERCHANT_QR ? MERCHANT_QR : generatePayload(PROMPTPAY_ID, {}))
-      : (MERCHANT_QR ? buildDynamicPayload(MERCHANT_QR, amount) : generatePayload(PROMPTPAY_ID, amount > 0 ? { amount } : {}));
+      ? (pc.merchantQr ? pc.merchantQr : generatePayload(pc.promptpayId, {}))
+      : (pc.merchantQr ? buildDynamicPayload(pc.merchantQr, amount) : generatePayload(pc.promptpayId, amount > 0 ? { amount } : {}));
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).json({ error: 'qr_failed' }); }
@@ -983,37 +979,20 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
 // Customer uploads a payment slip -> server verifies it with SlipOK (real transfer,
 // exact amount, to OUR account, not a duplicate) and auto-marks the order PAID.
 app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
-  if (!PAY_ONLINE || !SLIPOK_ON || !Q.slipAutoEnabled()) return res.status(404).json({ error: 'slip_off' });
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
-  const ticketId = req.params.ticketId;
-  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
-  if (!order) return res.status(404).json({ error: 'order_not_found' });
-  if (order.payment_status === 'paid') return res.json({ ok: true, paid: true, already: true });
-  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(req.body?.imageData || '');
-  if (!m) return res.status(400).json({ error: 'bad_image' });
   try {
-    const fd = new FormData();
-    fd.append('files', new Blob([Buffer.from(m[2], 'base64')], { type: m[1] }), 'slip.jpg');
-    fd.append('log', 'true');                 // verify vs linked bank + flag duplicates
-    fd.append('amount', String(order.total)); // SlipOK returns code 1013 on amount mismatch
-    const r = await fetch(`https://api.slipok.com/api/line/apikey/${SLIPOK_BRANCH_ID}`, {
-      method: 'POST', headers: { 'x-authorization': SLIPOK_API_KEY }, body: fd,
-    });
-    const j = await r.json().catch(() => ({}));
-    if (r.ok && j.success && j.data && j.data.success) {
-      const pr = Q.setOrderPaid(ticketId, { method: 'online' });   // online QR + SlipOK → 'online' tender
-      const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(ticketId);
-      if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
-      notifyLoyalty(pr);
-      return res.json({ ok: true, paid: true, amount: j.data.amount, loyalty: pr.loyalty || null });
+    const r = await Q.verifySlipForTicket(req.params.ticketId, req.body?.imageData || '');
+    if (r.paid && !r.already) {
+      emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
+      notifyLoyalty({ ticketId: Number(req.params.ticketId), loyalty: r.loyalty });
     }
-    return res.status(400).json({ error: 'slip_failed', code: j.code ?? j.data?.code, message: j.message || j.data?.message || '' });
-  } catch (e) { return res.status(502).json({ error: 'slipok_unreachable', detail: e.message }); }
+    return res.json({ ok: true, paid: true, already: !!r.already, amount: r.amount, loyalty: r.loyalty || null });
+  } catch (e) { return res.status(e.status || 400).json({ error: e.message, ...(e.extra || {}) }); }
 });
 // Manual slip attach (works WITHOUT SlipOK): customer uploads a slip image, the cashier
 // eyeballs it and confirms paid. Auto-verification (SlipOK) is the verify-slip route above.
 app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
-  if (!PAY_ONLINE) return res.status(404).json({ error: 'pay_off' });
+  if (!Q.getPayConfig(Q.branchOfTicket(req.params.ticketId)).online) return res.status(404).json({ error: 'pay_off' });
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   const img = (req.body?.imageData || '').toString();
   if (!/^data:image\//.test(img) || img.length > 4_000_000) return res.status(400).json({ error: 'bad_image' });
@@ -1507,6 +1486,19 @@ app.post('/api/branches', (req, res) => {
 app.post('/api/branches/:id', (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.updateStore(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/branches/:id/pay', (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.payConfigPublic(Number(req.params.id)));
+});
+app.post('/api/branches/:id/pay', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.setPayConfig(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/branches/:id/pay/test', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.testPayConfig(Number(req.params.id), { slipokBranch: req.body?.slipokBranch, slipokKey: req.body?.slipokKey })); }
+  catch (e) { res.status(502).json({ ok: false, message: 'เชื่อมต่อ SlipOK ไม่ได้: ' + e.message }); }
 });
 app.get('/api/branches/:id/menu', (req, res) => { if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json(Q.listBranchMenu(Number(req.params.id))); });
 app.post('/api/branches/:id/menu', (req, res) => {

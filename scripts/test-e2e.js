@@ -2493,6 +2493,74 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE coupons SET active=0 WHERE id=?").run(cl.id);
 }
 
+{
+  // Online payment is a BRANCH property: each branch banks into its own PromptPay account and SlipOK
+  // vouches per branch. A fake SlipOK stands in for the network so every rule below is checked
+  // without a real slip, a real key, or a quota.
+  console.log(String.fromCharCode(10) + "== SlipOK per branch: right account, net amount, no replay ==");
+  const SB = db.prepare("INSERT INTO stores (name) VALUES ('Branch B')").run().lastInsertRowid;
+  const ZB = db.prepare("INSERT INTO zones (store_id, name, prefix) VALUES (?,'B','B')").run(SB).lastInsertRowid;
+  const calls = [];
+  const fakeSlipOK = (answer) => async (url, opts) => {
+    const fd = opts && opts.body; const form = {};
+    if (fd && typeof fd.get === "function") for (const k of ["amount", "log"]) form[k] = fd.get(k);
+    calls.push({ url, key: opts && opts.headers && opts.headers["x-authorization"], form });
+    const body = typeof answer === "function" ? answer() : answer;
+    return { ok: body.success !== false, json: async () => body };
+  };
+  const pass = (ref, amount) => ({ success: true, data: { success: true, transRef: ref, sendingBank: "004", receivingBank: "014", transDate: "20260911", transTime: "10:00:00", amount, sender: { displayName: "ลูกค้า" }, receiver: { displayName: "YO-DEE" } } });
+  const IMG = "data:image/jpeg;base64," + Buffer.from("slip").toString("base64");
+
+  await Q.setPayConfig(1, { online: true, promptpayId: "0812345678", slipokBranch: "111", slipokKey: "KEY-A-1111" });
+  await Q.setPayConfig(SB, { online: true, promptpayId: "0899999999", slipokBranch: "222", slipokKey: "KEY-B-2222" });
+  Q.setSlipAuto(true);
+  const pubA = Q.payConfigPublic(1);
+  ok(pubA.slipokKeySet && !("slipokKey" in pubA) && pubA.slipokKeyHint === "••••1111", "INVARIANT the branch screen never receives the API key, only its last 4");
+  ok(Q.getPayConfig(SB).slipokBranch === "222" && Q.getPayConfig(1).slipokBranch === "111", "INVARIANT each branch keeps its own SlipOK branch id");
+
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('SlipCup',49,'drink')").run();
+  const KA = "U" + "s".repeat(32);
+  db.prepare("INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?,'winback','ลด 40',40, date('now','+7 hours','+7 days'),'probe')").run(KA);
+  const cc = Q.customerCoupons(KA)[0];
+  const tB = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "customer", lineUserId: KA, couponCode: "CCOUP:" + cc.id });
+  const r1 = await Q.verifySlipForTicket(tB.ticket.id, IMG, { fetchImpl: fakeSlipOK(pass("REF-001", 9)) });
+  ok(r1.paid === true && r1.transRef === "REF-001", "INVARIANT a passing slip marks the order paid");
+  ok(calls[0].url.includes("/apikey/222") && calls[0].key === "KEY-B-2222", `INVARIANT a branch-B order is checked with branch B credentials (${calls[0].url.split("/apikey/")[1]})`);
+  ok(String(calls[0].form.amount) === "9", `INVARIANT SlipOK is asked for the NET the customer paid (฿49 − ฿40 = ฿9), got ${calls[0].form.amount}`);
+  ok(calls[0].form.log === "true", "INVARIANT log=true so SlipOK checks the receiving account and duplicates");
+  ok(db.prepare("SELECT payment_status, payment_method FROM orders WHERE ticket_id=?").get(tB.ticket.id).payment_status === "paid", "INVARIANT the order is paid via the online tender");
+  const audit = db.prepare("SELECT * FROM slip_checks WHERE ticket_id=? AND ok=1").get(tB.ticket.id);
+  ok(audit && audit.trans_ref === "REF-001" && audit.branch_id === SB && near(audit.expected, 9), "INVARIANT the bank answer is on record with branch, transRef and expected amount");
+
+  // The same slip on a second order: refused by us even if SlipOK let it through.
+  const KB = "U" + "t".repeat(32);
+  const t2 = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "customer", lineUserId: KB });
+  let replay = null;
+  try { await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK(pass("REF-001", 49)) }); } catch (e) { replay = e; }
+  ok(replay && replay.extra && replay.extra.code === 1012, `INVARIANT a slip that already paid another order is refused as a replay (${replay && replay.extra && replay.extra.code})`);
+  ok(db.prepare("SELECT payment_status FROM orders WHERE ticket_id=?").get(t2.ticket.id).payment_status !== "paid", "INVARIANT and that order stays unpaid");
+
+  // SlipOK says no: the customer gets the Thai reason, nothing is marked paid.
+  let refused = null;
+  try { await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK({ success: false, code: 1013, message: "amount mismatch" }) }); } catch (e) { refused = e; }
+  ok(refused && refused.extra.code === 1013 && /ยอดเงิน/.test(refused.extra.message), `INVARIANT a SlipOK refusal is passed on in Thai (${refused && refused.extra.message})`);
+
+  // A branch without SlipOK cannot auto-verify at all, whatever the other branch has.
+  await Q.setPayConfig(1, { slipokKey: "", slipokBranch: "" });
+  const tA = Q.createOrder(1, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "customer", lineUserId: KB });
+  let off = null;
+  try { await Q.verifySlipForTicket(tA.ticket.id, IMG, { fetchImpl: fakeSlipOK(pass("REF-002", 49)) }); } catch (e) { off = e; }
+  ok(off && off.message === "slip_off" && off.status === 404, "INVARIANT a branch with no SlipOK credentials refuses auto-verify (slip_off)");
+  ok(Q.slipReadyAny() === true, "INVARIANT the features page still reports auto-verify as available while branch B is wired");
+
+  // The connection test proves a key without spending a slip.
+  const q = await Q.testPayConfig(SB, { fetchImpl: async (url, opts) => ({ ok: true, json: async () => ({ success: true, data: { quota: 87, overQuota: 0 } }) }) });
+  ok(q.ok && q.quota === 87, `INVARIANT the connection test returns the remaining quota (${q.quota})`);
+
+  Q.setSlipAuto(false);
+  db.prepare("UPDATE menu_items SET active=0 WHERE name='SlipCup'").run();
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

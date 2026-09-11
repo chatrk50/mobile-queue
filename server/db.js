@@ -764,6 +764,20 @@ try {
 } catch { /* older SQLite without partial indexes — app-level guard still applies */ }
 // Claim tokens must be unique — SQLite can't add a UNIQUE column via ALTER, so index it after.
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_coupons_claim_token ON coupons(claim_token) WHERE claim_token IS NOT NULL'); } catch { /* ignore */ }
+// Every SlipOK answer, pass or fail: the audit trail behind an online payment (who sent, from which
+// bank, the bank's own transRef) and our own second line against a slip being replayed on another
+// order. trans_ref is indexed, not unique - a refused check may carry the same ref as the pass.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS slip_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER, ticket_id INTEGER, branch_id INTEGER,
+    ok INTEGER NOT NULL DEFAULT 0, code INTEGER, message TEXT,
+    trans_ref TEXT, sending_bank TEXT, receiving_bank TEXT, trans_date TEXT, trans_time TEXT,
+    sender_name TEXT, receiver_name TEXT, amount REAL, expected REAL,
+    at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS ix_slip_checks_ref ON slip_checks(trans_ref)');
+} catch { /* ignore */ }
 // ---- Hot-path indexes on the tables that grow forever ----
 // Each of these backs a query that runs on every order, payment or customer lookup and was doing a
 // full table scan — invisible on a fresh shop, linearly worse every month the shop trades.

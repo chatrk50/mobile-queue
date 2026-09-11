@@ -2,6 +2,8 @@ import { createHash } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
+import { slipokCheck, slipokQuota, SLIPOK_ERRORS } from './slipok.js';
+import { decodeMerchantBuffer } from './thaiqr.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
@@ -2819,6 +2821,130 @@ export function addSlipAlias(text) {
   return { aliases: listSlipAliases() };
 }
 export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1'; }
+
+// ---------- Online payment per BRANCH ----------
+// A PromptPay account and a SlipOK branch are properties of a shop branch (each branch banks into
+// its own account; SlipOK verifies against the account linked to its branch id), so they live in
+// settings keyed by store id, edited on the branch screen. The Render env vars (PAY_ONLINE,
+// PROMPTPAY_ID, SLIPOK_BRANCH_ID, SLIPOK_API_KEY) stay as the fallback for any branch that has not
+// been given its own - a single-branch shop keeps working exactly as before.
+//   pay:<branch>:online        '1'/'0'  accept online payment at this branch (unset = env PAY_ONLINE)
+//   pay:<branch>:promptpay_id  PromptPay id for the dynamic QR (unset = env PROMPTPAY_ID, '' = none)
+//   pay:<branch>:merchant_qr   EMV payload decoded from the branch's own K SHOP / Thai QR poster
+//   pay:<branch>:slipok_branch SlipOK branch id      (unset = env SLIPOK_BRANCH_ID)
+//   pay:<branch>:slipok_key    SlipOK API key - never returned to a browser, only its last 4 digits
+let GLOBAL_MERCHANT_QR = null;
+export function setGlobalMerchantQr(payload) { GLOBAL_MERCHANT_QR = payload || null; }
+const payKey = (b, k) => 'pay:' + (Number(b) || 0) + ':' + k;
+export function branchOfZone(zoneId) {
+  if (!zoneId) return null;
+  const z = db.prepare('SELECT store_id FROM zones WHERE id=?').get(zoneId);
+  return z ? z.store_id : null;
+}
+export function branchOfTicket(ticketId) {
+  const t = db.prepare('SELECT z.store_id FROM tickets t JOIN zones z ON z.id=t.zone_id WHERE t.id=?').get(ticketId);
+  return t ? t.store_id : null;
+}
+export function getPayConfig(branchId) {
+  const b = Number(branchId) || 0;
+  const own = (k) => getSetting(payKey(b, k), null);
+  const pick = (k, envKey) => { const v = own(k); return v != null ? String(v).trim() : String(process.env[envKey] || '').trim(); };
+  const onlineOwn = own('online');
+  const online = onlineOwn != null ? onlineOwn === '1' : String(process.env.PAY_ONLINE ?? '0') === '1';
+  const promptpayId = pick('promptpay_id', 'PROMPTPAY_ID');
+  const merchantQrOwn = String(own('merchant_qr') || '').trim() || null;
+  const merchantQr = merchantQrOwn || GLOBAL_MERCHANT_QR;
+  const slipokBranch = pick('slipok_branch', 'SLIPOK_BRANCH_ID');
+  const slipokKey = pick('slipok_key', 'SLIPOK_API_KEY');
+  return {
+    branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey,
+    qrReady: !!(merchantQr || promptpayId), slipokReady: !!(slipokBranch && slipokKey),
+    fromEnv: { online: onlineOwn == null, promptpayId: own('promptpay_id') == null, slipok: own('slipok_branch') == null && own('slipok_key') == null },
+  };
+}
+/** What the branch screen may see: everything except the key itself. */
+export function payConfigPublic(branchId) {
+  const c = getPayConfig(branchId);
+  const { slipokKey, merchantQr, ...rest } = c;
+  return { ...rest, slipokKeySet: !!slipokKey, slipokKeyHint: slipokKey ? '••••' + slipokKey.slice(-4) : '', merchantQrSet: !!merchantQr,
+    slipAuto: slipAutoEnabled() };
+}
+/** Owner edits a branch's online-payment setup. A field left undefined is untouched; '' clears it
+ *  (that branch then has none, even if the env var is set); merchantQrImage is a data: URL the
+ *  owner uploaded, decoded here so a photo of the wrong thing is refused instead of stored. */
+export async function setPayConfig(branchId, patch = {}) {
+  const b = Number(branchId) || 0;
+  if (!db.prepare('SELECT 1 FROM stores WHERE id=?').get(b)) throw new Error('store_not_found');
+  const put = (k, v) => setSetting(payKey(b, k), v);
+  if (patch.online != null) put('online', patch.online ? '1' : '0');
+  if (patch.promptpayId != null) put('promptpay_id', String(patch.promptpayId).replace(/[^0-9A-Za-z]/g, '').slice(0, 20));
+  if (patch.slipokBranch != null) put('slipok_branch', String(patch.slipokBranch).trim().slice(0, 40));
+  if (patch.slipokKey != null && String(patch.slipokKey).trim() !== '') put('slipok_key', String(patch.slipokKey).trim().slice(0, 200));
+  if (patch.slipokKey === '') put('slipok_key', '');
+  if (patch.merchantQrImage) {
+    const m = /^data:image\/[\w.+-]+;base64,(.+)$/s.exec(String(patch.merchantQrImage));
+    const payload = m ? await decodeMerchantBuffer(Buffer.from(m[1], 'base64')) : null;
+    if (!payload) throw new Error('qr_not_readable');
+    put('merchant_qr', payload);
+  }
+  if (patch.merchantQrClear) put('merchant_qr', '');
+  return payConfigPublic(b);
+}
+/** Prove the credentials without spending a slip: SlipOK's quota call. Uses the saved key unless a
+ *  fresh one is being tried before saving. */
+export async function testPayConfig(branchId, { slipokBranch, slipokKey, fetchImpl } = {}) {
+  const c = getPayConfig(branchId);
+  return slipokQuota({ branchId: (slipokBranch || c.slipokBranch), apiKey: (slipokKey || c.slipokKey), fetchImpl });
+}
+/** Is auto-verify possible anywhere? (drives the "ตรวจสลิปอัตโนมัติ" switch on the features page) */
+export function slipReadyAny() {
+  return db.prepare('SELECT id FROM stores').all().some((s) => { const c = getPayConfig(s.id); return c.online && c.slipokReady; });
+}
+const payFail = (error, status = 400, extra = null) => Object.assign(new Error(error), { status, extra });
+/** The whole slip flow for one ticket: which branch, that branch's SlipOK, the NET the customer was
+ *  asked to pay, our own replay guard, the bank's answer on record, and the order marked paid.
+ *  Throws payFail(error, status, { code, message }) for anything the customer must be told. */
+export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {}) {
+  const t = db.prepare('SELECT t.id, t.zone_id, z.store_id FROM tickets t JOIN zones z ON z.id=t.zone_id WHERE t.id=?').get(ticketId);
+  if (!t) throw payFail('ticket_not_found', 404);
+  const cfg = getPayConfig(t.store_id);
+  if (!cfg.online || !cfg.slipokReady || !slipAutoEnabled()) throw payFail('slip_off', 404);
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw payFail('order_not_found', 404);
+  if (order.payment_status === 'paid') return { ok: true, paid: true, already: true, zoneId: t.zone_id };
+  if (order.payment_status === 'void') throw payFail('order_void', 400);
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(String(imageData || ''));
+  if (!m) throw payFail('bad_image', 400);
+  // The customer pays the NET: the QR carried total - discount, so that is what the slip must show.
+  // Sending the gross made every couponed order fail with 1013 (amount mismatch).
+  const expected = Math.max(0, r2(order.total - (order.discount || 0)));
+  let r;
+  try { r = await slipokCheck({ branchId: cfg.slipokBranch, apiKey: cfg.slipokKey, imageBase64: m[2], mime: m[1], amount: expected, fetchImpl }); }
+  catch (e) { throw payFail('slipok_unreachable', 502, { message: e.message }); }
+  const d = r.data || {};
+  const nameOf = (p) => (p && (p.displayName || p.name)) || null;
+  const rec = (ok, code, message) => db.prepare(
+    `INSERT INTO slip_checks (order_id, ticket_id, branch_id, ok, code, message, trans_ref, sending_bank, receiving_bank, trans_date, trans_time, sender_name, receiver_name, amount, expected)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(order.id, Number(ticketId), t.store_id, ok ? 1 : 0, code, message, d.transRef || null, d.sendingBank || null, d.receivingBank || null,
+        d.transDate || null, d.transTime || null, nameOf(d.sender), nameOf(d.receiver), d.amount != null ? Number(d.amount) : null, expected);
+  if (r.ok && d.transRef) {
+    // SlipOK already refuses a replay (1012) when log=true; this is the second line for the case
+    // where the same slip passed once for a different order of ours.
+    const dup = db.prepare('SELECT order_id FROM slip_checks WHERE trans_ref=? AND ok=1 AND order_id<>? LIMIT 1').get(d.transRef, order.id);
+    if (dup) { rec(false, 1012, SLIPOK_ERRORS[1012]); throw payFail('slip_failed', 400, { code: 1012, message: SLIPOK_ERRORS[1012] }); }
+  }
+  if (!r.ok) { rec(false, r.code, r.message); throw payFail('slip_failed', 400, { code: r.code, message: r.message }); }
+  rec(true, null, null);
+  // Keep the image as evidence next to the bank's answer (same place the manual path stores it).
+  try {
+    const sha = createHash('sha256').update(imageData).digest('hex');
+    db.prepare(`INSERT INTO slips (order_id, ticket_id, image, sha) VALUES (?,?,?,?)
+                ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, sha=excluded.sha, at=datetime('now')`).run(order.id, Number(ticketId), imageData, sha);
+  } catch { /* evidence only */ }
+  const pr = setOrderPaid(ticketId, { method: 'online' });
+  return { ok: true, paid: true, amount: d.amount, transRef: d.transRef, zoneId: t.zone_id, loyalty: pr.loyalty || null };
+}
 // Owner-uploadable promo/ad splash shown in the LIFF after loading (a data-URL image the owner
 // can change anytime in ⚙ จัดการ). enabled gates whether the customer actually sees it.
 export function getPromo() { return { image: getSetting('promo:image', '') || '', enabled: getSetting('promo:enabled', '0') === '1' }; }
