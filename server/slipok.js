@@ -10,7 +10,9 @@
 // log=true is what makes SlipOK check the receiving account and reject a duplicate slip — and what
 // consumes quota. Without it the call is a free OCR that proves nothing, so it is always on here.
 
-export const SLIPOK_BASE = 'https://api.slipok.com/api/line/apikey';
+// SLIPOK_API_BASE lets UAT / a local run point at a stand-in SlipOK (same routes, canned answers) so the
+// whole customer flow can be walked without a real slip or a real key. Unset in prod.
+export const SLIPOK_BASE = (process.env.SLIPOK_API_BASE || '').trim() || 'https://api.slipok.com/api/line/apikey';
 
 /** Error codes from https://slipok.com/api-documentation/error-status-code/ — Thai for the customer. */
 export const SLIPOK_ERRORS = {
