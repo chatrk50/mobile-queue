@@ -2561,6 +2561,64 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE menu_items SET active=0 WHERE name='SlipCup'").run();
 }
 
+{
+  // Prod, 11 Sep: a ฿9 coupon with ขั้นต่ำ ฿49 paid for a ฿40 cup, and a real K SHOP payment was
+  // refused with 1014 because the slip printed the merchant id, not the bank account SlipOK holds.
+  console.log(String.fromCharCode(10) + "== Wallet coupons keep their conditions; the owner can accept a K SHOP receiver ==");
+  const MK = "U" + "m".repeat(32);
+  const min49 = Q.createCoupon({ code: "MIN49", label: "ลด 9 ขั้นต่ำ 49", disc_type: "baht", disc_value: 9, min_spend: 49 });
+  await Q.sendCampaign({ keys: [MK], message: "9.9", coupon: { couponId: min49.id } });
+  const wc = Q.customerCoupons(MK)[0];
+  ok(wc && wc.coupon_id === min49.id, "INVARIANT a gifted shop coupon remembers which definition it came from");
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('Cup40',40,'drink'),('Cup49',49,'drink')").run();
+  const w40 = Q.availableCoupons(MK, 40).find((c) => c.ccId === wc.id);
+  ok(w40 && w40.usable === false && /49/.test(w40.reason || ""), `INVARIANT in a ฿40 basket the wallet coupon is greyed with its ขั้นต่ำ (${w40 && w40.reason})`);
+  const o40 = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: MK, couponCode: "CCOUP:" + wc.id });
+  const b40 = db.prepare("SELECT total, discount FROM orders WHERE ticket_id=?").get(o40.ticket.id);
+  ok(near(b40.discount, 0) && b40.total === 40, `INVARIANT a ฿40 order cannot spend a ขั้นต่ำ-฿49 wallet coupon (discount ${b40.discount})`);
+  ok(!db.prepare("SELECT used_at FROM customer_coupons WHERE id=?").get(wc.id).used_at, "INVARIANT and the coupon stays in the wallet");
+  Q.cancelOrderTicket(o40.ticket.id, null, { reason: "probe" });
+  const o49 = Q.createOrder(1, [{ name: "Cup49", price: 49, qty: 1 }], { source: "customer", lineUserId: MK, couponCode: "CCOUP:" + wc.id });
+  ok(near(db.prepare("SELECT discount FROM orders WHERE ticket_id=?").get(o49.ticket.id).discount, 9), "INVARIANT a ฿49 order spends it for ฿9 off");
+  Q.cancelOrderTicket(o49.ticket.id, null, { reason: "probe" });
+
+  // receiverMatches: the visible digits of a masked account, or the printed name.
+  const recv = { displayName: "YO-DEE YOGURT", name: "YO-DEE YOGURT", account: { type: "BANKAC", value: "xxx-x-xxxxxx3150-x" }, proxy: { value: null } };
+  ok(Q.receiverMatches(["3150"], recv) && Q.receiverMatches(["yo-dee yogurt"], recv), "INVARIANT an accepted receiver matches by last digits or by name");
+  ok(!Q.receiverMatches(["9999"], recv) && !Q.receiverMatches(["someone else"], recv) && !Q.receiverMatches([], recv), "INVARIANT anything else does not match");
+
+  // 1014 with an accepted receiver: paid; without: refused; with the wrong amount: refused as 1013.
+  const SB2 = db.prepare("INSERT INTO stores (name) VALUES ('Branch K')").run().lastInsertRowid;
+  const ZK = db.prepare("INSERT INTO zones (store_id, name, prefix) VALUES (?,'K','K')").run(SB2).lastInsertRowid;
+  await Q.setPayConfig(SB2, { online: true, promptpayId: "0800000000", slipokBranch: "333", slipokKey: "KEY-K-3333" });
+  Q.setSlipAuto(true);
+  const IMG2 = "data:image/jpeg;base64," + Buffer.from("kshop-slip").toString("base64");
+  const r1014 = (ref, amount) => async () => ({ ok: false, json: async () => ({ success: false, code: 1014, message: "receiver mismatch", data: { transRef: ref, amount, sendingBank: "004", receivingBank: "004", receiver: recv, sender: { displayName: "ลูกค้า", account: { value: "xxx-x-x8081-x" } } } }) });
+  const KK = "U" + "k".repeat(32);
+  const k1 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: KK });
+  let noAlias = null;
+  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { noAlias = e; }
+  ok(noAlias && noAlias.extra && noAlias.extra.code === 1014, "INVARIANT without an accepted receiver a 1014 stays refused");
+  const pub = Q.payConfigPublic(SB2);
+  ok(pub.refusedReceivers.length === 1 && /3150/.test(pub.refusedReceivers[0].acct || ""), "INVARIANT the refused receiver is offered to the owner to accept");
+  await Q.setPayConfig(SB2, { addReceiver: "3150" });
+  let badAmt = null;
+  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 31) }); } catch (e) { badAmt = e; }
+  ok(badAmt && badAmt.extra && badAmt.extra.code === 1013, "INVARIANT an accepted receiver never bypasses the amount check");
+  const okK = await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) });
+  ok(okK.paid === true, "INVARIANT a K SHOP slip to an accepted receiver, right amount, marks the order paid");
+  const aud = db.prepare("SELECT message, receiver_acct FROM slip_checks WHERE ticket_id=? AND ok=1").get(k1.ticket.id);
+  ok(aud && /1014/.test(aud.message || "") && /3150/.test(aud.receiver_acct || ""), "INVARIANT the audit row says it was accepted by receiver rule");
+  const k2 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: "U" + "j".repeat(32) });
+  let replayK = null;
+  try { await Q.verifySlipForTicket(k2.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { replayK = e; }
+  ok(replayK && replayK.extra && replayK.extra.code === 1012, "INVARIANT the same K SHOP slip cannot pay a second order (SlipOK does not log a 1014, we do)");
+  ok(Q.payConfigPublic(SB2).refusedReceivers.length === 0, "INVARIANT an accepted receiver no longer appears in the refused list");
+  Q.setSlipAuto(false);
+  db.prepare("UPDATE menu_items SET active=0 WHERE name IN ('Cup40','Cup49')").run();
+  db.prepare("UPDATE coupons SET active=0 WHERE id=?").run(min49.id);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

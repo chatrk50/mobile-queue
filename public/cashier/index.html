@@ -2027,8 +2027,9 @@ window.loadBranchPay=async(id)=>{
       <button class="tgl sm ${p.online?'on':'off'}" role="switch" aria-checked="${p.online?'true':'false'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
+    ${(p.merchantQrSet&&!p.merchantQrP2P&&!p.promptpayId)?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px;margin-top:8px"><b>แนะนำ:</b> ใส่พร้อมเพย์ของสาขาด้านล่าง → ลูกค้าเห็น QR เดียว ใช้ได้ทุกธนาคาร (K PLUS ก็ใส่ยอดให้) และ SlipOK ตรวจผ่านตรง ๆ · QR ร้านค้า (K SHOP) จ่ายผ่านช่องทางร้านค้า สลิปจะพิมพ์รหัสร้านค้าแทนเลขบัญชี ทำให้ SlipOK ตอบ "บัญชีผู้รับไม่ใช่ของร้าน" จนกว่าจะตั้ง "บัญชีผู้รับที่ยอมรับ"</div>':''}
     <div style="display:grid;gap:8px;margin-top:10px">
-      <label class="ff">พร้อมเพย์ของสาขา (เบอร์ / เลขผู้เสียภาษี)${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
+      <label class="ff">พร้อมเพย์ของสาขา (เบอร์ / เลขผู้เสียภาษี) <span class="muted" style="font-weight:400">— ถ้าใส่ ระบบใช้พร้อมเพย์ก่อน QR ร้านค้า</span>${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
         <input id="bp_pp_${id}" value="${esc(p.promptpayId||'')}" placeholder="08xxxxxxxx หรือ 0105xxxxxxxxx" inputmode="numeric"></label>
       <div class="ff">QR ร้านค้า (K SHOP / Thai QR) ของสาขา
         <div class="row" style="gap:6px;align-items:center;margin-top:2px">
@@ -2047,6 +2048,13 @@ window.loadBranchPay=async(id)=>{
             <input id="bp_sk_${id}" type="password" autocomplete="new-password" placeholder="${p.slipokKeySet?'••••••••':'วาง API key'}"></label>
         </div>
         <div id="bp_test_${id}" class="muted" style="font-size:12px;margin-top:4px"></div>
+      </div>
+      <div style="border-top:1px dashed var(--line);padding-top:8px">
+        <b style="font-size:12.5px;color:var(--navy)">บัญชีผู้รับที่ยอมรับ</b>
+        <div class="muted" style="font-size:11px;margin:2px 0 6px">ใช้เมื่อ SlipOK ตอบ "บัญชีผู้รับไม่ใช่บัญชีของร้าน" (1014) ทั้งที่เงินเข้าร้านจริง — เกิดกับ QR ร้านค้า/K SHOP ที่สลิปพิมพ์รหัสร้านค้าแทนเลขบัญชี · ใส่เลขบัญชี 4 ตัวท้าย หรือชื่อผู้รับตามที่สลิปพิมพ์</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap">${(p.receivers||[]).map(x=>`<span style="display:inline-flex;align-items:center;gap:6px;background:#e1f5ee;color:#0f6e56;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">${esc(x)}<button class="ghost" style="padding:0 4px;font-size:12px;line-height:1" aria-label="ลบ" onclick="saveBranchPay(${id},{removeReceiver:'${esc(x)}'})">✕</button></span>`).join('')||'<span class="muted" style="font-size:12px">ยังไม่มี</span>'}</div>
+        <div class="row" style="gap:6px;margin-top:6px"><input id="bp_rcv_${id}" placeholder="เช่น 3150 หรือ YO-DEE YOGURT" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><button class="ghost" style="padding:8px 12px" onclick="saveBranchPay(${id},{addReceiver:document.getElementById('bp_rcv_${id}').value})">เพิ่ม</button></div>
+        ${(p.refusedReceivers&&p.refusedReceivers.length)?`<div style="margin-top:8px;font-size:12px"><div class="muted" style="font-weight:700;margin-bottom:4px">สลิปที่ถูกปฏิเสธล่าสุดเพราะบัญชีผู้รับไม่ตรง — ถ้าเป็นบัญชีของร้าน กดยอมรับ</div>${p.refusedReceivers.map(r=>{ const digits=String(r.acct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(r.name||''); return `<div class="row between" style="align-items:center;padding:5px 0;border-top:1px solid var(--line)"><span>${esc(r.name||'—')} <span class="muted">${esc(r.acct||'')} · ${r.n} ครั้ง</span></span>${key?`<button class="ok" style="padding:5px 10px;font-size:12px" onclick="saveBranchPay(${id},{addReceiver:'${esc(key)}'})">ยอมรับ ${esc(key)}</button>`:''}</div>`; }).join('')}</div>`:''}
       </div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1" onclick="testBranchPay(${id})">ทดสอบการเชื่อมต่อ</button>

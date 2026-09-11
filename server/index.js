@@ -229,7 +229,7 @@ app.get('/api/config', (req, res) => {
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
   const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (!!pc.promptpayId || (!!pc.merchantQr && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -778,9 +778,10 @@ app.get('/api/promptpay-qr', async (req, res) => {
   try {
     // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
     // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
+    const tpl = pc.promptpayId ? null : pc.merchantQr;
     const payload = wantStatic
-      ? (pc.merchantQr ? pc.merchantQr : generatePayload(pc.promptpayId, {}))
-      : (pc.merchantQr ? buildDynamicPayload(pc.merchantQr, amount) : generatePayload(pc.promptpayId, amount > 0 ? { amount } : {}));
+      ? (tpl ? tpl : generatePayload(pc.promptpayId, {}))
+      : (tpl ? buildDynamicPayload(tpl, amount) : generatePayload(pc.promptpayId, amount > 0 ? { amount } : {}));
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).json({ error: 'qr_failed' }); }

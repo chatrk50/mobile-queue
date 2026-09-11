@@ -1959,6 +1959,8 @@ function renderOrderBlock(v){
       if(!payMethod && ticketId){ try{ const sm=localStorage.getItem('paymethod_'+ticketId); if(sm==='promptpay'||sm==='kbank'||sm==='counter') payMethod=sm; }catch(e){} }
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
+      show('payKbankBtn', !cfg.promptPayOneQr);   // one QR for every bank → no separate KBank path
+      if(cfg.promptPayOneQr && payMethod==='kbank') payMethod='promptpay';
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
       show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', false);   // ไทยช่วยไทย poster moved into the payment picker
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
@@ -1988,6 +1990,7 @@ window.openPayPicker=(mode)=>{
   // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
   // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
   let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay);
+  if(cfg.promptPayOneQr) opts = opts.filter(o=>o.m!=='kbank').map(o=>o.m==='promptpay'?{...o,t:'PromptPay (ทุกธนาคาร)',s:'ยอดใส่ให้อัตโนมัติ · สแกนจ่ายได้ทุกแอปธนาคาร รวม K PLUS'}:o);
   if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
   $('payPickerList').innerHTML = opts.map(o=>{ const sel=cur===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
@@ -2023,6 +2026,7 @@ function cartPreCouponNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,
   return sub-Math.min(d,sub); }
 function couponDiscountFor(net){ if(!cartCoupon) return 0;
   if(cartCoupon.isReward){   // issued coupon: free 1 cup, capped at the coupon's value (฿49 reward / ฿100 birthday) or the cheapest item — server re-checks at order time
+    if(net < (cartCoupon.min_spend||0)) return 0;
     const cap=cartCoupon.freeCap||49;
     const prices=cart.filter(e=>e.price>0).map(e=>e.price); const cheapest=prices.length?Math.min(...prices):0;
     return Math.min(cap, cheapest||net, net); }
@@ -2035,7 +2039,7 @@ function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   // An ARMED coupon that hasn't met its condition yet says exactly what's missing, instead of
   // silently discounting ฿0 — the customer armed it from the wallet expecting it to work.
   let extra='';
-  if(cartCoupon && !cartCoupon.isReward){
+  if(cartCoupon){
     const net=cartPreCouponNet(), min=cartCoupon.min_spend||0;
     if(net<min) extra='<div style="font-size:11px;color:#b48a00;font-weight:700;margin-top:2px">ซื้อเพิ่มอีก ฿'+(Math.round((min-net)*100)/100)+' เพื่อใช้คูปองนี้</div>';
   }
@@ -2184,7 +2188,7 @@ window.openCoupon=async(mode)=>{
     const meta = isReward
       ? (c.couponKind==='birthday' ? 'ของขวัญวันเกิด' : c.couponKind==='winback' ? 'ของขวัญจากร้าน'
          : c.couponKind==='streak' ? 'รางวัลมาต่อเนื่อง' : c.couponKind==='bounceback' ? 'ของขวัญกลับมาหาเรา'
-         : c.couponKind==='flash' ? 'Flash Sale วันนี้' : 'จากการสะสมครบ')
+         : c.couponKind==='flash' ? 'Flash Sale วันนี้' : 'จากการสะสมครบ') + (c.min_spend>0?(' · ขั้นต่ำ ฿'+c.min_spend):'')
       : ((c.min_spend>0?('ขั้นต่ำ ฿'+c.min_spend):'ไม่มีขั้นต่ำ')+' · โค้ด '+esc(c.code));
     // Shared premium ticket (.cpn): brand-gradient value stub, clean dotted tear line (no floating
     // notches — the owner flagged those), details, then ONE clear action — "ใช้" in browse mode
