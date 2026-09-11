@@ -2858,16 +2858,22 @@ export function getPayConfig(branchId) {
   const pick = (k, envKey) => { const v = own(k); return v != null ? String(v).trim() : String(process.env[envKey] || '').trim(); };
   const onlineOwn = own('online');
   const online = onlineOwn != null ? onlineOwn === '1' : String(process.env.PAY_ONLINE ?? '0') === '1';
+  const ppOwn = own('promptpay_id');
   const promptpayId = pick('promptpay_id', 'PROMPTPAY_ID');
   const merchantQrOwn = String(own('merchant_qr') || '').trim() || null;
   const merchantQr = merchantQrOwn || GLOBAL_MERCHANT_QR;
+  const qrMode = (ppOwn != null && String(ppOwn).trim()) ? 'promptpay'
+    : merchantQrOwn ? 'merchant'
+    : (ppOwn == null && promptpayId && !GLOBAL_MERCHANT_QR) ? 'promptpay'
+    : merchantQr ? 'merchant'
+    : promptpayId ? 'promptpay' : null;
   const slipokBranch = pick('slipok_branch', 'SLIPOK_BRANCH_ID');
   const slipokKey = pick('slipok_key', 'SLIPOK_API_KEY');
   let receivers = [];
   try { const a = JSON.parse(own('receivers') || '[]'); if (Array.isArray(a)) receivers = a.map((x) => String(x).trim()).filter(Boolean).slice(0, 10); } catch { /* none */ }
   return {
-    branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey, receivers,
-    qrReady: !!(merchantQr || promptpayId), slipokReady: !!(slipokBranch && slipokKey),
+    branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey, receivers, qrMode,
+    qrReady: !!qrMode, slipokReady: !!(slipokBranch && slipokKey),
     fromEnv: { online: onlineOwn == null, promptpayId: own('promptpay_id') == null, slipok: own('slipok_branch') == null && own('slipok_key') == null },
   };
 }

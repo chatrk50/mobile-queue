@@ -2619,6 +2619,33 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE coupons SET active=0 WHERE id=?").run(min49.id);
 }
 
+{
+  // Which QR the customer sees. The shop runs a K SHOP poster (merchant KB000002309786, the same
+  // id SlipOK is linked to); a PromptPay id in the Render env must never displace it - only a value
+  // the owner types on the branch page may.
+  console.log(String.fromCharCode(10) + "== The QR the customer scans follows the owner, not the env ==");
+  const SQ = db.prepare("INSERT INTO stores (name) VALUES ('QR Branch')").run().lastInsertRowid;
+  const KSHOP = "00020101021130810016A00000067701011201150107536000315010214KB0000023097860320EMPKB00000230978600131900016A00000067701011301030040214KB0000023097860420EMPKB0000023097860010517KB00000230978600153037645802TH6304E819";
+  const envWas = process.env.PROMPTPAY_ID;
+  Q.setGlobalMerchantQr(KSHOP); process.env.PROMPTPAY_ID = "0668123456";
+  let c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "merchant" && c.merchantQr === KSHOP, `INVARIANT env PROMPTPAY_ID does not displace the shop poster (mode ${c.qrMode})`);
+  await Q.setPayConfig(SQ, { promptpayId: "0812345678" });
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "promptpay" && c.promptpayId === "0812345678", "INVARIANT a PromptPay id typed on the branch page wins over the poster");
+  await Q.setPayConfig(SQ, { promptpayId: "" });
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "merchant", "INVARIANT clearing it on the page goes back to the poster, not to the env id");
+  Q.setGlobalMerchantQr(null);
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === null && c.qrReady === false, "INVARIANT a cleared page id with no poster leaves no QR (env id stays out)");
+  const SQ2 = db.prepare("INSERT INTO stores (name) VALUES ('Env Branch')").run().lastInsertRowid;
+  c = Q.getPayConfig(SQ2);
+  ok(c.qrMode === "promptpay" && c.promptpayId === "0668123456", "INVARIANT with no poster and nothing typed, the env id is the fallback");
+  if (envWas == null) delete process.env.PROMPTPAY_ID; else process.env.PROMPTPAY_ID = envWas;
+  Q.setGlobalMerchantQr(null);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
