@@ -844,7 +844,7 @@ function errTH(msg){ const m=String(msg||''); if(ERR_TH[m]) return ERR_TH[m]; fo
 function err(msg){_onMenu=false;['addCard','getCard','ticketCard'].forEach(x=>show(x,false));show('errCard',true);$('errMsg').textContent=errTH(msg);}
 
 async function initLiff(){
-  cfg = await api('/api/config');
+  cfg = await api('/api/config'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''));
   // Package 1 (POS only): customer LINE ordering is disabled — show a clean notice, don't render the order UI.
   if (cfg.posOnly){ err('ระบบนี้ไม่เปิดสั่งผ่านไลน์ · กรุณาสั่งที่เคาน์เตอร์'); return; }
   if (cfg.liffId && window.liff){
@@ -2261,10 +2261,10 @@ function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null
 // then the attached slip is checked by SlipOK against the order total.
 function setQrFor(isKbank){
   if(isKbank){
-    $('ppQrImg').src='/api/promptpay-qr?static=1';
+    $('ppQrImg').src='/api/promptpay-qr?static=1&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='ลูกค้า KBank: สแกนแล้ว <b style="color:var(--navy);font-size:15px">กรอกยอด ฿'+_orderTotal+' เอง</b><br>จ่ายแล้ว <b>แนบสลิป</b> — ระบบตรวจยอดให้อัตโนมัติ';
   } else {
-    $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal;
+    $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal+'&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
   }
   // The static KBank QR only works scanned from K PLUS — hide the other bank icons in that case.
@@ -2390,9 +2390,11 @@ function slipResize(file,max){ return new Promise((resolve,reject)=>{ const img=
     const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
     resolve(c.toDataURL('image/jpeg',0.9)); };
   img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('bad image')); }; img.src=url; }); }
-function slipErr(e){ const code=e.data&&e.data.code;
-  const map={1002:'อ่านสลิปไม่ได้ ถ่ายให้เห็น QR ชัดๆ',1012:'สลิปนี้ถูกใช้ไปแล้ว',1013:'ยอดเงินไม่ตรงกับออเดอร์',1014:'บัญชีผู้รับไม่ใช่ของร้าน'};
-  return map[code]||(e.data&&e.data.message)||'ตรวจสลิปไม่สำเร็จ ลองใหม่ หรือกด "ฉันชำระแล้ว"'; }
+function slipErr(e){ const d=e.data||{}; const code=d.code;
+  if(d.message) return d.message;                 // server-side Thai for every SlipOK code
+  if(d.error==='slipok_unreachable') return 'ติดต่อระบบตรวจสลิปไม่ได้ชั่วคราว ลองใหม่อีกครั้ง';
+  const map={1007:'ถ่ายให้เห็น QR มุมขวาล่างของสลิปชัด ๆ',1012:'สลิปนี้ถูกใช้ไปแล้ว',1013:'ยอดเงินไม่ตรงกับออเดอร์',1014:'บัญชีผู้รับไม่ใช่ของร้าน'};
+  return map[code]||'ตรวจสลิปไม่สำเร็จ ลองใหม่อีกครั้ง'; }
 async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) return;
   const b=$('slipBtn'); b.disabled=true; $('slipBtnLabel').textContent='กำลังส่งสลิป...';
   try{ const dataUrl=await slipResize(f,1080);

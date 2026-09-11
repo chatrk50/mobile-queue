@@ -1979,7 +1979,7 @@ function renderBranch(list){
 window.editBranchForm=(id)=>{
   _selBranchId=id; const isNew=id==='new';
   const b=isNew?{id:'new',name:'',code:'',address:'',phone:'',hours_open:'',hours_close:'',hours_days:'',is_open:1,zones:['Zone A']}:BRANCHES.find(x=>x.id===id);
-  if(!b) return; renderBranch();
+  if(!b) return; renderBranch(); if(!isNew) setTimeout(()=>loadBranchPay(id),0);
   $('branchEditForm').innerHTML=`<h2 style="margin:0 0 10px">${isNew?'เพิ่มสาขาใหม่':'แก้ไขสาขา'}</h2>
     <div style="display:grid;gap:10px">
       ${isNew?'':`<div class="ff">Store ID<input value="${b.id}" disabled style="background:var(--surface)"></div>`}
@@ -1993,6 +1993,7 @@ window.editBranchForm=(id)=>{
         <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
         <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
       </div>
+      <div id="bf_pay"></div>
       <div style="text-align:center;font-size:13px;font-weight:700;margin:2px 0 8px;padding:9px 10px;border-radius:10px;background:${b.open_now?'rgba(22,135,111,.12)':'rgba(196,58,75,.1)'};color:${b.open_now?'#16876f':'#c43a4b'}">สถานะตอนนี้: ${b.open_now?'🟢 เปิดรับออเดอร์':(b.is_open?`🟡 นอกเวลาทำการ — ลูกค้าสั่งไม่ได้ตอนนี้${(b.hours_open&&b.hours_close)?` (เปิด ${b.hours_open}–${b.hours_close})`:''}`:'🔴 ปิดร้าน (ปิดเอง)')}</div>
       <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'เปิดร้านไว้ — กดเพื่อปิดร้านเอง':'🔴 ปิดร้านเองอยู่ — กดเพื่อเปิดร้าน'}</button>`}
       <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
@@ -2009,6 +2010,64 @@ window.saveBranchForm=async()=>{
   if(!body.name){ toast('กรอกชื่อสาขา'); return; }
   try{ await api('/api/branches/'+_selBranchId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกแล้ว'); renderBranch(await api('/api/branches')); editBranchForm(_selBranchId); }catch(e){ toast(err(e)); }
 };
+// ---- Online payment per branch: PromptPay account + SlipOK credentials + a connection test ----
+// Owner-only (the API routes refuse a manager). The key is write-only: the screen shows "••••1234"
+// and an empty field means "keep"; typing a new one replaces it.
+window.loadBranchPay=async(id)=>{
+  const box=$('bf_pay'); if(!box) return;
+  const own=(!ME||ME.role==='owner'); if(!own){ box.innerHTML=''; return; }
+  let p; try{ p=await api('/api/branches/'+id+'/pay'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดการตั้งค่าชำระเงินไม่ได้: '+esc(err(e))+'</p>'; return; }
+  const envNote=(on)=>on?'<span class="muted" style="font-size:11px"> · ใช้ค่ากลางจาก Render</span>':'';
+  box.innerHTML=`<div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;background:var(--surface)">
+    <div class="row between" style="align-items:center">
+      <b style="font-size:13.5px;color:var(--navy)">รับเงินออนไลน์ (พร้อมเพย์ + ตรวจสลิป)</b>
+      <button class="tgl sm ${p.online?'on':'off'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
+    </div>
+    <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
+    <div style="display:grid;gap:8px;margin-top:10px">
+      <label class="ff">พร้อมเพย์ของสาขา (เบอร์ / เลขผู้เสียภาษี)${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
+        <input id="bp_pp" value="${esc(p.promptpayId||'')}" placeholder="08xxxxxxxx หรือ 0105xxxxxxxxx" inputmode="numeric"></label>
+      <div class="ff">QR ร้านค้า (K SHOP / Thai QR) ของสาขา
+        <div class="row" style="gap:6px;align-items:center;margin-top:2px">
+          <span class="muted" style="font-size:12px;flex:1">${p.merchantQrOwn?'✓ ใช้ QR ของสาขานี้':(p.merchantQrSet?'ใช้ QR กลางของร้าน':'ยังไม่มี — จะใช้พร้อมเพย์ด้านบน')}</span>
+          <input id="bp_qrfile" type="file" accept="image/*" style="display:none" onchange="uploadBranchQr(${id},this)">
+          <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_qrfile').click()">อัปโหลดรูป QR</button>
+          ${p.merchantQrOwn?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay(${id},{merchantQrClear:1})">ลบ</button>`:''}
+        </div>
+      </div>
+      <div style="border-top:1px dashed var(--line);padding-top:8px">
+        <b style="font-size:12.5px;color:var(--navy)">SlipOK — ตรวจสลิปอัตโนมัติ</b>${envNote(p.fromEnv&&p.fromEnv.slipok)}
+        <div class="muted" style="font-size:11px;margin:2px 0 6px">สมัครที่ slipok.com → เพิ่มสาขา + ผูกบัญชีธนาคารที่รับเงิน (บัญชีเดียวกับ QR ด้านบน) → คัดลอก Branch ID และ API key มาใส่</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <label class="ff" style="flex:1;min-width:120px">Branch ID<input id="bp_sb" value="${esc(p.slipokBranch||'')}" placeholder="เช่น 12345"></label>
+          <label class="ff" style="flex:2;min-width:180px">API key ${p.slipokKeySet?'<span class="muted" style="font-weight:400">(ตั้งไว้แล้ว '+esc(p.slipokKeyHint)+' — พิมพ์ใหม่เพื่อเปลี่ยน)</span>':''}
+            <input id="bp_sk" type="password" autocomplete="new-password" placeholder="${p.slipokKeySet?'••••••••':'วาง API key'}"></label>
+        </div>
+        <div id="bp_test" class="muted" style="font-size:12px;margin-top:4px"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="ghost" style="flex:1" onclick="testBranchPay(${id})">ทดสอบการเชื่อมต่อ</button>
+        <button class="ok" style="flex:1" onclick="saveBranchPay(${id})">บันทึกการชำระเงิน</button>
+      </div>
+      ${p.slipokReady&&!p.slipAuto?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px">ใส่ SlipOK แล้ว แต่สวิตช์ "ตรวจสลิปอัตโนมัติ" ยังปิดอยู่ — เปิดที่ ⚙ ระบบ &amp; แจ้งเตือน LINE</div>':''}
+    </div>
+  </div>`;
+};
+window.saveBranchPay=async(id,quick)=>{
+  const body=quick||{ promptpayId:$('bp_pp').value.trim(), slipokBranch:$('bp_sb').value.trim(), slipokKey:($('bp_sk').value.trim()||undefined) };
+  try{ await api('/api/branches/'+id+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการชำระเงินแล้ว'); loadBranchPay(id); }
+  catch(e){ toast(e&&e.data&&e.data.error==='qr_not_readable'?'อ่าน QR จากรูปไม่ได้ — ใช้รูป QR ร้านค้าที่ชัดเจน':err(e)); }
+};
+window.testBranchPay=async(id)=>{
+  const out=$('bp_test'); out.textContent='กำลังทดสอบ…';
+  const body={ slipokBranch:$('bp_sb').value.trim()||undefined, slipokKey:$('bp_sk').value.trim()||undefined };
+  try{ const r=await api('/api/branches/'+id+'/pay/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    out.innerHTML=r.ok?`<span style="color:#0f6e56;font-weight:700">✓ เชื่อมต่อได้ · โควตาตรวจสลิปเหลือ ${r.quota} ครั้ง${r.overQuota?(' · เกินโควตา '+r.overQuota):''}</span>`
+                     :`<span style="color:var(--danger);font-weight:700">✗ ${esc(r.message||'เชื่อมต่อไม่ได้')}${r.code?(' (รหัส '+r.code+')'):''}</span>`; }
+  catch(e){ out.innerHTML='<span style="color:var(--danger)">✗ '+esc(err(e))+'</span>'; }
+};
+window.uploadBranchQr=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>saveBranchPay(id,{merchantQrImage:rd.result}); rd.readAsDataURL(f); inp.value=''; };
 window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!!open})}); renderBranch(await api('/api/branches')); editBranchForm(id); }catch(e){ toast(err(e)); } };
 
 // ---------- Inventory / stock (owner/manager) ----------

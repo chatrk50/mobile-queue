@@ -14,7 +14,13 @@ import { readFileSync, existsSync } from 'node:fs';
 export async function decodeMerchantTemplate(filePath) {
   try {
     if (!filePath || !existsSync(filePath)) return null;
-    const buf = readFileSync(filePath);
+    return await decodeMerchantBuffer(readFileSync(filePath));
+  } catch { return null; }
+}
+/** Same decode for an image the owner uploads from the branch screen (a K SHOP / Thai QR poster). */
+export async function decodeMerchantBuffer(buf) {
+  try {
+    if (!buf || buf.length < 8) return null;
     let px;
     if (buf[0] === 0xFF && buf[1] === 0xD8) {            // JPEG
       const { default: jpeg } = await import('jpeg-js');
