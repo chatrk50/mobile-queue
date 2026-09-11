@@ -574,6 +574,9 @@
       <span class="row" style="gap:6px;flex:none;align-items:center"><button class="bkSet ghost" style="padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="backToSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideTenders()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
     </div>
     <div id="tenderList" style="margin-top:14px"><p class="muted" style="font-size:13px">กำลังโหลด…</p></div>
+    <!-- Online payment: the auto-verify switch (one for the shop) and, per branch, the account the
+         customer pays into + the SlipOK branch that vouches for the slip. Owner-only. -->
+    <div id="slipokBox" style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px"></div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
       <div style="font-weight:800;color:var(--navy);margin-bottom:8px"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>เพิ่มช่องทางใหม่</div>
       <div class="row" style="gap:6px;flex-wrap:wrap">
@@ -1979,7 +1982,7 @@ function renderBranch(list){
 window.editBranchForm=(id)=>{
   _selBranchId=id; const isNew=id==='new';
   const b=isNew?{id:'new',name:'',code:'',address:'',phone:'',hours_open:'',hours_close:'',hours_days:'',is_open:1,zones:['Zone A']}:BRANCHES.find(x=>x.id===id);
-  if(!b) return; renderBranch(); if(!isNew) setTimeout(()=>loadBranchPay(id),0);
+  if(!b) return; renderBranch();
   $('branchEditForm').innerHTML=`<h2 style="margin:0 0 10px">${isNew?'เพิ่มสาขาใหม่':'แก้ไขสาขา'}</h2>
     <div style="display:grid;gap:10px">
       ${isNew?'':`<div class="ff">Store ID<input value="${b.id}" disabled style="background:var(--surface)"></div>`}
@@ -1993,7 +1996,7 @@ window.editBranchForm=(id)=>{
         <div class="row" style="gap:6px;align-items:center;margin-top:2px"><input id="bf_open" type="time" value="${b.hours_open||''}" style="flex:1"><span class="muted">ถึง</span><input id="bf_close" type="time" value="${b.hours_close||''}" style="flex:1"></div>
         <div id="bf_days" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${['อา','จ','อ','พ','พฤ','ศ','ส'].map((d,i)=>{const ds=(b.hours_days?String(b.hours_days).split(',').filter(Boolean):[]);const on=!ds.length||ds.includes(String(i));return `<button data-day="${i}" class="${on?'on':''}" onclick="toggleDay(this)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-weight:700;font-size:12px">${d}</button>`;}).join('')}</div>
       </div>
-      <div id="bf_pay"></div>
+      ${isNew?'':`<div class="muted" style="font-size:12px;padding:8px 10px;background:var(--surface);border-radius:10px">รับเงินออนไลน์ (พร้อมเพย์ + SlipOK) ของสาขานี้ ตั้งที่ <a href="#" onclick="sgo('showTenders');return false" style="color:var(--accent);font-weight:700;text-decoration:none">ช่องทางชำระเงิน ›</a></div>`}
       <div style="text-align:center;font-size:13px;font-weight:700;margin:2px 0 8px;padding:9px 10px;border-radius:10px;background:${b.open_now?'rgba(22,135,111,.12)':'rgba(196,58,75,.1)'};color:${b.open_now?'#16876f':'#c43a4b'}">สถานะตอนนี้: ${b.open_now?'🟢 เปิดรับออเดอร์':(b.is_open?`🟡 นอกเวลาทำการ — ลูกค้าสั่งไม่ได้ตอนนี้${(b.hours_open&&b.hours_close)?` (เปิด ${b.hours_open}–${b.hours_close})`:''}`:'🔴 ปิดร้าน (ปิดเอง)')}</div>
       <button class="${b.is_open?'ghost':'warn'}" style="width:100%" onclick="toggleBranchOpen(${b.id},${b.is_open?0:1})">${b.is_open?'เปิดร้านไว้ — กดเพื่อปิดร้านเอง':'🔴 ปิดร้านเองอยู่ — กดเพื่อเปิดร้าน'}</button>`}
       <button class="ok" style="width:100%;margin-top:6px" onclick="saveBranchForm()">${isNew?'เพิ่มสาขา':'บันทึก'}</button>
@@ -2014,24 +2017,24 @@ window.saveBranchForm=async()=>{
 // Owner-only (the API routes refuse a manager). The key is write-only: the screen shows "••••1234"
 // and an empty field means "keep"; typing a new one replaces it.
 window.loadBranchPay=async(id)=>{
-  const box=$('bf_pay'); if(!box) return;
+  const box=$('bf_pay_'+id); if(!box) return;
   const own=(!ME||ME.role==='owner'); if(!own){ box.innerHTML=''; return; }
   let p; try{ p=await api('/api/branches/'+id+'/pay'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดการตั้งค่าชำระเงินไม่ได้: '+esc(err(e))+'</p>'; return; }
   const envNote=(on)=>on?'<span class="muted" style="font-size:11px"> · ใช้ค่ากลางจาก Render</span>':'';
   box.innerHTML=`<div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;background:var(--surface)">
     <div class="row between" style="align-items:center">
       <b style="font-size:13.5px;color:var(--navy)">รับเงินออนไลน์ (พร้อมเพย์ + ตรวจสลิป)</b>
-      <button class="tgl sm ${p.online?'on':'off'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
+      <button class="tgl sm ${p.online?'on':'off'}" role="switch" aria-checked="${p.online?'true':'false'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
     <div style="display:grid;gap:8px;margin-top:10px">
       <label class="ff">พร้อมเพย์ของสาขา (เบอร์ / เลขผู้เสียภาษี)${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
-        <input id="bp_pp" value="${esc(p.promptpayId||'')}" placeholder="08xxxxxxxx หรือ 0105xxxxxxxxx" inputmode="numeric"></label>
+        <input id="bp_pp_${id}" value="${esc(p.promptpayId||'')}" placeholder="08xxxxxxxx หรือ 0105xxxxxxxxx" inputmode="numeric"></label>
       <div class="ff">QR ร้านค้า (K SHOP / Thai QR) ของสาขา
         <div class="row" style="gap:6px;align-items:center;margin-top:2px">
           <span class="muted" style="font-size:12px;flex:1">${p.merchantQrOwn?'✓ ใช้ QR ของสาขานี้':(p.merchantQrSet?'ใช้ QR กลางของร้าน':'ยังไม่มี — จะใช้พร้อมเพย์ด้านบน')}</span>
-          <input id="bp_qrfile" type="file" accept="image/*" style="display:none" onchange="uploadBranchQr(${id},this)">
-          <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_qrfile').click()">อัปโหลดรูป QR</button>
+          <input id="bp_qrfile_${id}" type="file" accept="image/*" style="display:none" onchange="uploadBranchQr(${id},this)">
+          <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_qrfile_${id}').click()">อัปโหลดรูป QR</button>
           ${p.merchantQrOwn?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay(${id},{merchantQrClear:1})">ลบ</button>`:''}
         </div>
       </div>
@@ -2039,28 +2042,28 @@ window.loadBranchPay=async(id)=>{
         <b style="font-size:12.5px;color:var(--navy)">SlipOK — ตรวจสลิปอัตโนมัติ</b>${envNote(p.fromEnv&&p.fromEnv.slipok)}
         <div class="muted" style="font-size:11px;margin:2px 0 6px">สมัครที่ slipok.com → เพิ่มสาขา + ผูกบัญชีธนาคารที่รับเงิน (บัญชีเดียวกับ QR ด้านบน) → คัดลอก Branch ID และ API key มาใส่</div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <label class="ff" style="flex:1;min-width:120px">Branch ID<input id="bp_sb" value="${esc(p.slipokBranch||'')}" placeholder="เช่น 12345"></label>
+          <label class="ff" style="flex:1;min-width:120px">Branch ID<input id="bp_sb_${id}" value="${esc(p.slipokBranch||'')}" placeholder="เช่น 12345"></label>
           <label class="ff" style="flex:2;min-width:180px">API key ${p.slipokKeySet?'<span class="muted" style="font-weight:400">(ตั้งไว้แล้ว '+esc(p.slipokKeyHint)+' — พิมพ์ใหม่เพื่อเปลี่ยน)</span>':''}
-            <input id="bp_sk" type="password" autocomplete="new-password" placeholder="${p.slipokKeySet?'••••••••':'วาง API key'}"></label>
+            <input id="bp_sk_${id}" type="password" autocomplete="new-password" placeholder="${p.slipokKeySet?'••••••••':'วาง API key'}"></label>
         </div>
-        <div id="bp_test" class="muted" style="font-size:12px;margin-top:4px"></div>
+        <div id="bp_test_${id}" class="muted" style="font-size:12px;margin-top:4px"></div>
       </div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1" onclick="testBranchPay(${id})">ทดสอบการเชื่อมต่อ</button>
         <button class="ok" style="flex:1" onclick="saveBranchPay(${id})">บันทึกการชำระเงิน</button>
       </div>
-      ${p.slipokReady&&!p.slipAuto?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px">ใส่ SlipOK แล้ว แต่สวิตช์ "ตรวจสลิปอัตโนมัติ" ยังปิดอยู่ — เปิดที่ ⚙ ระบบ &amp; แจ้งเตือน LINE</div>':''}
+      ${p.slipokReady&&!p.slipAuto?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px">ใส่ SlipOK แล้ว แต่สวิตช์ "ตรวจสลิปอัตโนมัติ" ด้านบนยังปิดอยู่</div>':''}
     </div>
   </div>`;
 };
 window.saveBranchPay=async(id,quick)=>{
-  const body=quick||{ promptpayId:$('bp_pp').value.trim(), slipokBranch:$('bp_sb').value.trim(), slipokKey:($('bp_sk').value.trim()||undefined) };
-  try{ await api('/api/branches/'+id+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการชำระเงินแล้ว'); loadBranchPay(id); }
+  const body=quick||{ promptpayId:$('bp_pp_'+id).value.trim(), slipokBranch:$('bp_sb_'+id).value.trim(), slipokKey:($('bp_sk_'+id).value.trim()||undefined) };
+  try{ await api('/api/branches/'+id+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการชำระเงินแล้ว'); loadSlipokPage(); }
   catch(e){ toast(e&&e.data&&e.data.error==='qr_not_readable'?'อ่าน QR จากรูปไม่ได้ — ใช้รูป QR ร้านค้าที่ชัดเจน':err(e)); }
 };
 window.testBranchPay=async(id)=>{
-  const out=$('bp_test'); out.textContent='กำลังทดสอบ…';
-  const body={ slipokBranch:$('bp_sb').value.trim()||undefined, slipokKey:$('bp_sk').value.trim()||undefined };
+  const out=$('bp_test_'+id); out.textContent='กำลังทดสอบ…';
+  const body={ slipokBranch:$('bp_sb_'+id).value.trim()||undefined, slipokKey:$('bp_sk_'+id).value.trim()||undefined };
   try{ const r=await api('/api/branches/'+id+'/pay/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     out.innerHTML=r.ok?`<span style="color:#0f6e56;font-weight:700">✓ เชื่อมต่อได้ · โควตาตรวจสลิปเหลือ ${r.quota} ครั้ง${r.overQuota?(' · เกินโควตา '+r.overQuota):''}</span>`
                      :`<span style="color:var(--danger);font-weight:700">✗ ${esc(r.message||'เชื่อมต่อไม่ได้')}${r.code?(' (รหัส '+r.code+')'):''}</span>`; }
@@ -2435,7 +2438,26 @@ window.hideControl=()=>{ $('controlCard').style.display='none'; $('dash').style.
 // ---------- Payment tenders management (owner) ----------
 window.hideTenders=()=>{ $('tenderCard').style.display='none'; $('dash').style.display=''; };
 window.showTenders=async()=>{ hideAllPanels(); ['cashCard','controlCard','chartsCard','reportCard','menuCard','orderCard','historyCard','salesCard','staffCard','detailCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';}); $('dash').style.display='none'; $('tenderCard').style.display=''; loadTenders(); };
-window.loadTenders=async()=>{ const box=$('tenderList'); try{ renderTenders(await api('/api/tenders/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } };
+window.loadTenders=async()=>{ const box=$('tenderList'); try{ renderTenders(await api('/api/tenders/all')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;color:var(--danger)">โหลดไม่สำเร็จ</p>'; } loadSlipokPage(); };
+// Auto-verify switch + one online-payment block per branch (rendered by loadBranchPay).
+window.loadSlipokPage=async()=>{
+  const box=$('slipokBox'); if(!box) return;
+  const own=(!ME||ME.role==='owner'); if(!own){ box.innerHTML=''; return; }
+  let f={}, branches=[];
+  try{ f=await api('/api/admin/features'); branches=await api('/api/branches'); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">'+esc(err(e))+'</p>'; return; }
+  box.innerHTML=`
+    <div class="row between" style="align-items:center;gap:10px">
+      <div style="flex:1"><b style="color:var(--navy)">${IC.shield}ตรวจสลิปอัตโนมัติ (SlipOK)</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">${f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจกับธนาคารเอง ผ่านแล้วขึ้น "ชำระแล้ว" ทันที':'ปิดอยู่ — ลูกค้าแนบสลิปให้แคชเชียร์ตรวจเอง'):'ยังไม่พร้อม — ใส่ SlipOK ของสาขาด้านล่างและกด "ทดสอบการเชื่อมต่อ" ให้ผ่านก่อน'}</div></div>
+      <button class="tgl ${f.slipAuto?'on':'off'}" ${f.slipReady?'':'disabled'} role="switch" aria-checked="${f.slipAuto?'true':'false'}" aria-label="ตรวจสลิปอัตโนมัติ" onclick="toggleSlipAuto(${f.slipAuto?0:1})"></button>
+    </div>
+    <div style="font-weight:800;color:var(--navy);margin:14px 0 6px">บัญชีรับเงินออนไลน์รายสาขา</div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">แต่ละสาขารับเงินเข้าบัญชีของตัวเอง — พร้อมเพย์ที่ลูกค้าโอนเข้า และ SlipOK ที่ผูกกับบัญชีนั้น จึงตั้งแยกสาขา</div>
+    ${branches.map(b=>`<div style="margin-bottom:10px"><div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:4px">${esc(b.name)}${b.code?` <span class="muted" style="font-size:11px">[${esc(b.code)}]</span>`:''}</div><div id="bf_pay_${b.id}"></div></div>`).join('')}`;
+  for(const b of branches) loadBranchPay(b.id);
+};
+window.toggleSlipAuto=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slipAuto:!!on})});
+    try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(on?'เปิดตรวจสลิปอัตโนมัติแล้ว':'ปิดตรวจสลิปอัตโนมัติแล้ว'); loadSlipokPage(); }catch(e){ toast(err(e)); } };
 function renderTenders(list){ $('tenderList').innerHTML=(list&&list.length)?list.map(t=>`<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${t.active?'':'opacity:.55'}">
     <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(t.label)}</b> <span style="font-size:10px;padding:1px 7px;border-radius:999px;background:${t.kind==='online'?'rgba(0,181,216,.15)':'rgba(0,0,0,.05)'};color:${t.kind==='online'?'#0e7c93':'var(--muted)'};font-weight:700">${t.kind==='online'?'ในแอป':'เคาน์เตอร์'}</span></div>
     <button class="tgl ${t.active?'on':'off'}" style="margin:0 10px" aria-label="${t.active?'ปิดใช้':'เปิดใช้'}ช่องทางนี้" onclick="toggleTender(${t.id},${t.active?0:1})"></button>
@@ -3733,7 +3755,7 @@ function renderSettingsHub(){
     ${row('toggleFinance()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>','ต้นทุน & ค่าใช้จ่าย','ค่าเช่า ค่าแรง วัตถุดิบ % ฯลฯ — ใช้คำนวณกำไร-ขาดทุน')}
     ${row("sgo('showBranch')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>','สาขา & เวลาเปิด-ปิด','ชื่อร้าน ที่อยู่ เวลาทำการ',true)}
     ${row("sgo('showLoyalty')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5"/></svg>','แต้มสะสม & สมาชิก','บัตรสะสมแต้ม บัตรสมาชิก ของรางวัล')}
-    ${row("sgo('showTenders')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ K PLUS เป๋าตัง ฯลฯ',true)}
+    ${row("sgo('showTenders')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>','ช่องทางชำระเงิน','เงินสด พร้อมเพย์ ฯลฯ · บัญชีรับเงิน + SlipOK รายสาขา',true)}
     ${row('showFeatures()','<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>','ระบบ & แจ้งเตือน LINE','คิว การพิมพ์ สรุปอัตโนมัติ สำรองข้อมูล',true)}
     ${row("sgo('showCouponHub')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>','คูปอง & แคมเปญ','มูลค่าของแถมทุกแบบ เลขนำโชค คูปองคงค้าง รายงาน',true)}
     ${row("sgo('showMenu')",'<svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M4 6h16M4 12h16M4 18h16"/></svg>','จัดการเมนู & ราคา','เมนู ราคา รูป สูตร (BOM)',true)}
@@ -4975,7 +4997,6 @@ window.showFeatures=async()=>{
   $('featuresBody').innerHTML=
     row('queueFirst', f.queueFirst, IC.ticket, 'เข้าคิวทันที (Queue-first)', f.queueFirst?'เปิดอยู่ — ทุกออเดอร์ (แคชเชียร์+LINE) ได้เลขคิวตั้งแต่กดสั่ง แม้ยังไม่จ่าย · ยังต้องจ่ายก่อนรับของเสมอ':'ปิดอยู่ (จ่ายก่อนออกคิว) — เปิดเพื่อให้ออเดอร์เข้าคิวเรียงลำดับทันทีแม้ลูกค้ายังไม่จ่าย', false)+
     row('printEnabled', f.printEnabled, IC.print, 'พิมพ์ใบเสร็จ', f.printEnabled?'เปิดอยู่ — มีปุ่ม "พิมพ์" ที่รายการที่ชำระแล้ว + พิมพ์อัตโนมัติหลังรับเงิน':'ปิดอยู่ — เปิดเมื่อต่อปริ้นเตอร์ (AirPrint) แล้ว', false)+
-    row('slipAuto', f.slipAuto, IC.shield, 'ตรวจสลิปอัตโนมัติ (SlipOK)', f.slipReady?(f.slipAuto?'เปิดอยู่ — ลูกค้าแนบสลิปแล้วระบบตรวจเอง':'ปิดอยู่ — ใช้แบบแคชเชียร์ยืนยันเอง · เปิดได้เมื่อมีพร้อมเพย์ที่ SlipOK ตรวจได้'):'ยังไม่พร้อม — ยังไม่ได้ตั้งค่า SlipOK (env)', !f.slipReady)+
     row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
     row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
     row('couponPopup', f.couponPopup!==false, '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></svg>', 'เด้งคูปองตอนลูกค้าเข้าแอป', (f.couponPopup!==false)?'เปิดอยู่ — ลูกค้าที่มีคูปองค้างในกระเป๋าจะเห็นการ์ดคูปองเด้งทักทายตอนเปิดแอป (วันละครั้ง) ให้รีบใช้':'ปิดอยู่ — เปิดเพื่อเด้งการ์ดคูปองต้อนรับให้ลูกค้าที่มีคูปองค้างอยู่', false)+
