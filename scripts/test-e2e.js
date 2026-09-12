@@ -2561,6 +2561,143 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE menu_items SET active=0 WHERE name='SlipCup'").run();
 }
 
+{
+  // Prod, 11 Sep: a ฿9 coupon with ขั้นต่ำ ฿49 paid for a ฿40 cup, and a real K SHOP payment was
+  // refused with 1014 because the slip printed the merchant id, not the bank account SlipOK holds.
+  console.log(String.fromCharCode(10) + "== Wallet coupons keep their conditions; the owner can accept a K SHOP receiver ==");
+  const MK = "U" + "m".repeat(32);
+  const min49 = Q.createCoupon({ code: "MIN49", label: "ลด 9 ขั้นต่ำ 49", disc_type: "baht", disc_value: 9, min_spend: 49 });
+  await Q.sendCampaign({ keys: [MK], message: "9.9", coupon: { couponId: min49.id } });
+  const wc = Q.customerCoupons(MK)[0];
+  ok(wc && wc.coupon_id === min49.id, "INVARIANT a gifted shop coupon remembers which definition it came from");
+  db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('Cup40',40,'drink'),('Cup49',49,'drink')").run();
+  const w40 = Q.availableCoupons(MK, 40).find((c) => c.ccId === wc.id);
+  ok(w40 && w40.usable === false && /49/.test(w40.reason || ""), `INVARIANT in a ฿40 basket the wallet coupon is greyed with its ขั้นต่ำ (${w40 && w40.reason})`);
+  const o40 = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: MK, couponCode: "CCOUP:" + wc.id });
+  const b40 = db.prepare("SELECT total, discount FROM orders WHERE ticket_id=?").get(o40.ticket.id);
+  ok(near(b40.discount, 0) && b40.total === 40, `INVARIANT a ฿40 order cannot spend a ขั้นต่ำ-฿49 wallet coupon (discount ${b40.discount})`);
+  ok(!db.prepare("SELECT used_at FROM customer_coupons WHERE id=?").get(wc.id).used_at, "INVARIANT and the coupon stays in the wallet");
+  Q.cancelOrderTicket(o40.ticket.id, null, { reason: "probe" });
+  const o49 = Q.createOrder(1, [{ name: "Cup49", price: 49, qty: 1 }], { source: "customer", lineUserId: MK, couponCode: "CCOUP:" + wc.id });
+  ok(near(db.prepare("SELECT discount FROM orders WHERE ticket_id=?").get(o49.ticket.id).discount, 9), "INVARIANT a ฿49 order spends it for ฿9 off");
+  Q.cancelOrderTicket(o49.ticket.id, null, { reason: "probe" });
+
+  // receiverMatches: the visible digits of a masked account, or the printed name.
+  const recv = { displayName: "YO-DEE YOGURT", name: "YO-DEE YOGURT", account: { type: "BANKAC", value: "xxx-x-xxxxxx3150-x" }, proxy: { value: null } };
+  ok(Q.receiverMatches(["3150"], recv) && Q.receiverMatches(["yo-dee yogurt"], recv), "INVARIANT an accepted receiver matches by last digits or by name");
+  ok(!Q.receiverMatches(["9999"], recv) && !Q.receiverMatches(["someone else"], recv) && !Q.receiverMatches([], recv), "INVARIANT anything else does not match");
+
+  // 1014 with an accepted receiver: paid; without: refused; with the wrong amount: refused as 1013.
+  const SB2 = db.prepare("INSERT INTO stores (name) VALUES ('Branch K')").run().lastInsertRowid;
+  const ZK = db.prepare("INSERT INTO zones (store_id, name, prefix) VALUES (?,'K','K')").run(SB2).lastInsertRowid;
+  await Q.setPayConfig(SB2, { online: true, promptpayId: "0800000000", slipokBranch: "333", slipokKey: "KEY-K-3333" });
+  Q.setSlipAuto(true);
+  const IMG2 = "data:image/jpeg;base64," + Buffer.from("kshop-slip").toString("base64");
+  const r1014 = (ref, amount) => async () => ({ ok: false, json: async () => ({ success: false, code: 1014, message: "receiver mismatch", data: { transRef: ref, amount, sendingBank: "004", receivingBank: "004", receiver: recv, sender: { displayName: "ลูกค้า", account: { value: "xxx-x-x8081-x" } } } }) });
+  const KK = "U" + "k".repeat(32);
+  const k1 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: KK });
+  let noAlias = null;
+  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { noAlias = e; }
+  ok(noAlias && noAlias.extra && noAlias.extra.code === 1014, "INVARIANT without an accepted receiver a 1014 stays refused");
+  const pub = Q.payConfigPublic(SB2);
+  ok(pub.refusedReceivers.length === 1 && /3150/.test(pub.refusedReceivers[0].acct || ""), "INVARIANT the refused receiver is offered to the owner to accept");
+  await Q.setPayConfig(SB2, { addReceiver: "3150" });
+  let badAmt = null;
+  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 31) }); } catch (e) { badAmt = e; }
+  ok(badAmt && badAmt.extra && badAmt.extra.code === 1013, "INVARIANT an accepted receiver never bypasses the amount check");
+  const okK = await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) });
+  ok(okK.paid === true, "INVARIANT a K SHOP slip to an accepted receiver, right amount, marks the order paid");
+  const aud = db.prepare("SELECT message, receiver_acct FROM slip_checks WHERE ticket_id=? AND ok=1").get(k1.ticket.id);
+  ok(aud && /1014/.test(aud.message || "") && /3150/.test(aud.receiver_acct || ""), "INVARIANT the audit row says it was accepted by receiver rule");
+  const k2 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: "U" + "j".repeat(32) });
+  let replayK = null;
+  try { await Q.verifySlipForTicket(k2.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { replayK = e; }
+  ok(replayK && replayK.extra && replayK.extra.code === 1012, "INVARIANT the same K SHOP slip cannot pay a second order (SlipOK does not log a 1014, we do)");
+  ok(Q.payConfigPublic(SB2).refusedReceivers.length === 0, "INVARIANT an accepted receiver no longer appears in the refused list");
+  Q.setSlipAuto(false);
+  db.prepare("UPDATE menu_items SET active=0 WHERE name IN ('Cup40','Cup49')").run();
+  db.prepare("UPDATE coupons SET active=0 WHERE id=?").run(min49.id);
+}
+
+{
+  // Which QR the customer sees. The shop runs a K SHOP poster (merchant KB000002309786, the same
+  // id SlipOK is linked to); a PromptPay id in the Render env must never displace it - only a value
+  // the owner types on the branch page may.
+  console.log(String.fromCharCode(10) + "== The QR the customer scans follows the owner, not the env ==");
+  const SQ = db.prepare("INSERT INTO stores (name) VALUES ('QR Branch')").run().lastInsertRowid;
+  const KSHOP = "00020101021130810016A00000067701011201150107536000315010214KB0000023097860320EMPKB00000230978600131900016A00000067701011301030040214KB0000023097860420EMPKB0000023097860010517KB00000230978600153037645802TH6304E819";
+  const envWas = process.env.PROMPTPAY_ID;
+  Q.setGlobalMerchantQr(KSHOP); process.env.PROMPTPAY_ID = "0668123456";
+  let c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "merchant" && c.merchantQr === KSHOP, `INVARIANT env PROMPTPAY_ID does not displace the shop poster (mode ${c.qrMode})`);
+  await Q.setPayConfig(SQ, { promptpayId: "0812345678" });
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "promptpay" && c.promptpayId === "0812345678", "INVARIANT a PromptPay id typed on the branch page wins over the poster");
+  await Q.setPayConfig(SQ, { promptpayId: "" });
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === "merchant", "INVARIANT clearing it on the page goes back to the poster, not to the env id");
+  Q.setGlobalMerchantQr(null);
+  c = Q.getPayConfig(SQ);
+  ok(c.qrMode === null && c.qrReady === false, "INVARIANT a cleared page id with no poster leaves no QR (env id stays out)");
+  const SQ2 = db.prepare("INSERT INTO stores (name) VALUES ('Env Branch')").run().lastInsertRowid;
+  c = Q.getPayConfig(SQ2);
+  ok(c.qrMode === "promptpay" && c.promptpayId === "0668123456", "INVARIANT with no poster and nothing typed, the env id is the fallback");
+  if (envWas == null) delete process.env.PROMPTPAY_ID; else process.env.PROMPTPAY_ID = envWas;
+  Q.setGlobalMerchantQr(null);
+}
+
+{
+  // 12 Sep: "every bank app refuses the QR". A PromptPay box that accepted the K SHOP merchant code
+  // (KB0000…) rendered a QR no bank can pay. Only a real PromptPay target is stored now, and the
+  // owner can read back exactly what the QR pays into.
+  console.log(String.fromCharCode(10) + "== The PromptPay box only takes a PromptPay id; the owner can read what the QR pays into ==");
+  const SV = db.prepare("INSERT INTO stores (name) VALUES ('Valid Branch')").run().lastInsertRowid;
+  const KSHOP2 = "00020101021130810016A00000067701011201150107536000315010214KB0000023097860320EMPKB00000230978600131900016A00000067701011301030040214KB0000023097860420EMPKB0000023097860010517KB00000230978600153037645802TH6304E819";
+  const refuse = async (v) => { try { await Q.setPayConfig(SV, { promptpayId: v }); return null; } catch (e) { return e.message; } };
+  ok((await refuse("KB000002309786")) === "promptpay_invalid", "INVARIANT the K SHOP merchant code is refused as a PromptPay id");
+  ok((await refuse("000002309786")) === "promptpay_invalid", "INVARIANT a 12-digit number is refused (not a mobile, id or e-wallet)");
+  ok((await refuse("8123456789")) === "promptpay_invalid", "INVARIANT a 10-digit number must start with 0");
+  ok(Q.getPayConfig(SV).promptpayId === "" && Q.getPayConfig(SV).qrMode !== "promptpay", "INVARIANT a refused id is not stored");
+  await Q.setPayConfig(SV, { promptpayId: "081-234 5678" });
+  ok(Q.getPayConfig(SV).promptpayId === "0812345678", "INVARIANT a mobile number is stored as digits (dashes/spaces dropped)");
+  await Q.setPayConfig(SV, { promptpayId: "0107536000315" });
+  ok(Q.getPayConfig(SV).promptpayId === "0107536000315", "INVARIANT a 13-digit tax id is accepted");
+  ok(Q.qrSummary(SV).mode === "promptpay" && Q.qrSummary(SV).promptpayId === "0107536000315", "INVARIANT the summary says it is a PromptPay QR and to which id");
+  await Q.setPayConfig(SV, { promptpayId: "" });
+  Q.setGlobalMerchantQr(KSHOP2);
+  const sm = Q.qrSummary(SV);
+  ok(sm && sm.mode === "merchant" && sm.merchantId === "KB000002309786" && sm.ref === "EMPKB000002309786001", `INVARIANT the K SHOP poster reads back as merchant KB000002309786 / EMPKB…001 (${sm && sm.merchantId} / ${sm && sm.ref})`);
+  ok(Q.payConfigPublic(SV).qrSummary.merchantId === "KB000002309786", "INVARIANT the branch screen gets that summary");
+  Q.setGlobalMerchantQr(null);
+  ok(Q.qrSummary(SV) === null, "INVARIANT no QR, no summary");
+}
+
+{
+  // 12 Sep: K PLUS cannot pay the K SHOP QR, so KBank customers get the shop's original KBank QR
+  // (static, amount typed, cashier-checked) as a channel of its own; SlipOK stays on PromptPay.
+  console.log(String.fromCharCode(10) + "== K PLUS is its own channel on the shop's original KBank QR ==");
+  const SK = db.prepare("INSERT INTO stores (name) VALUES ('KPlus Branch')").run().lastInsertRowid;
+  const KPLUS = "0002010102110216478772000631910104155303920006320191531343007640052044640122419727900130810016A00000067701011201150107536000315010214KB0000023097860320KPS004KB00000230978631690016A00000067701011301030040214KB0000023097860420KPS004KB00000230978651430014A000000004101001064169710211123456789015204581253037645802TH5912YODEE YOGURT6004CITY6225050972745250207084238972863047C51";
+  Q.setGlobalKplusQr(null);
+  let kc = Q.getPayConfig(SK);
+  ok(kc.kplusReady === false && Q.payConfigPublic(SK).kplusQrSet === false, "INVARIANT no KBank QR anywhere → no K PLUS channel");
+  Q.setGlobalKplusQr(KPLUS);
+  kc = Q.getPayConfig(SK);
+  ok(kc.kplusReady === true && kc.kplusQr === KPLUS && kc.kplusQrOwn === false, "INVARIANT the shop-wide KBank QR serves every branch without its own");
+  const kpub = Q.payConfigPublic(SK);
+  ok(!("kplusQr" in kpub) && kpub.kplusQrSet === true && kpub.kplusSummary.ref === "KPS004KB000002309786" && kpub.kplusSummary.name === "YODEE YOGURT", "INVARIANT the branch screen reads the KBank QR back (merchant, ref, name) without the payload");
+  const { default: QRCode } = await import("qrcode");
+  const png = await QRCode.toBuffer(KPLUS, { width: 400, margin: 2 });
+  await Q.setPayConfig(SK, { kplusQrImage: "data:image/png;base64," + png.toString("base64") });
+  ok(Q.getPayConfig(SK).kplusQrOwn === true && Q.getPayConfig(SK).kplusQr === KPLUS, "INVARIANT a KBank QR uploaded on the branch page is decoded and kept");
+  let bad = null; try { await Q.setPayConfig(SK, { kplusQrImage: "data:image/png;base64,AAAA" }); } catch (e) { bad = e.message; }
+  ok(bad === "qr_not_readable", "INVARIANT an unreadable image is refused");
+  await Q.setPayConfig(SK, { kplusQrClear: 1 });
+  ok(Q.getPayConfig(SK).kplusQrOwn === false && Q.getPayConfig(SK).kplusReady === true, "INVARIANT clearing the branch QR falls back to the shop-wide one");
+  ok(Q.getPayConfig(SK).qrMode !== "promptpay", "INVARIANT the KBank QR never changes which PromptPay QR the other banks get");
+  Q.setGlobalKplusQr(null);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

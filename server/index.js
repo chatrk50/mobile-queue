@@ -12,7 +12,7 @@ import { subscribe, emit } from './events.js';
 import compression from 'compression';
 import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
-import { decodeMerchantTemplate, buildDynamicPayload, isInjectable } from './thaiqr.js';
+import { decodeMerchantTemplate, buildDynamicPayload, isInjectable, describeQr } from './thaiqr.js';
 import QRCode from 'qrcode';
 import generatePayload from 'promptpay-qr';
 
@@ -70,6 +70,10 @@ const PAY_ONLINE = String(process.env.PAY_ONLINE ?? '0') === '1';
 // re-issue it DYNAMICALLY with the bill amount pre-filled (like a POS). Null if no QR image.
 const MERCHANT_QR = await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay.png'));
 Q.setGlobalMerchantQr(MERCHANT_QR);   // fallback template for any branch without its own poster
+// The shop's original KBank QR for K PLUS customers (static, amount typed, cashier-checked).
+const KPLUS_QR = await decodeMerchantTemplate(join(__dirname, '..', 'public', 'assets', 'promptpay-kplus.png'));
+Q.setGlobalKplusQr(KPLUS_QR);
+if (KPLUS_QR) console.log('[qr] KBank (K PLUS) QR decoded — K PLUS channel ON (static, cashier verifies the slip).');
 // Inject the bill amount into the shop's merchant QR (dynamic). Empirically this is payable
 // from most banks' apps via the Bill Payment rail; KBank is the known exception (it routes its
 // own merchant QR through its acquirer, which won't accept a customer-set amount).
@@ -229,7 +233,7 @@ app.get('/api/config', (req, res) => {
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
   const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, payKplus: pc.online && payOnline && pc.kplusReady, payToKplus: (pc.online && pc.kplusReady) ? payToPublic({ mode: 'merchant', ...describeQr(pc.kplusQr) }) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -766,9 +770,24 @@ app.get('/api/member-qr', async (req, res) => {
 });
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
+// The receiver line under the customer's QR: shop name + a masked id, enough to match the bank
+// app's confirmation screen, never the full account.
+function payToPublic(s) {
+  if (!s) return null;
+  const mask = (v) => { const d = String(v || ''); return d.length > 4 ? d.slice(0, 2) + '…' + d.slice(-4) : d; };
+  return s.mode === 'promptpay' ? { name: '', id: 'พร้อมเพย์ ' + mask(s.promptpayId) } : { name: s.name || '', id: s.merchantId ? 'ร้านค้า ' + mask(s.merchantId) : '' };
+}
 app.get('/api/promptpay-qr', async (req, res) => {
-  const branchId = req.query.ticket ? Q.branchOfTicket(req.query.ticket) : (Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
+  const branchId = req.query.branch ? Number(req.query.branch) : req.query.ticket ? Q.branchOfTicket(req.query.ticket) : (Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
   const pc = Q.getPayConfig(branchId);
+  // kplus=1 → the shop's original KBank QR, exactly as issued (no amount): K PLUS customers type it.
+  if (String(req.query.kplus || '') === '1') {
+    if (!pc.online || !pc.kplusQr) return res.status(404).json({ error: 'kplus_off' });
+    try {
+      const buf = await QRCode.toBuffer(pc.kplusQr, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
+      return res.set('Cache-Control', 'no-store').type('png').send(buf);
+    } catch (e) { return res.status(500).json({ error: 'qr_failed' }); }
+  }
   if (!pc.online || !pc.qrReady) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);
   // static=1 → the ORIGINAL no-amount merchant QR. KBank locks the amount on injected
@@ -778,9 +797,10 @@ app.get('/api/promptpay-qr', async (req, res) => {
   try {
     // Prefer the shop's real merchant QR (K SHOP/Thai QR) with the amount injected; else a
     // plain PromptPay id. Both yield a scannable QR with the bill amount pre-filled.
+    const tpl = pc.qrMode === 'merchant' ? pc.merchantQr : null;
     const payload = wantStatic
-      ? (pc.merchantQr ? pc.merchantQr : generatePayload(pc.promptpayId, {}))
-      : (pc.merchantQr ? buildDynamicPayload(pc.merchantQr, amount) : generatePayload(pc.promptpayId, amount > 0 ? { amount } : {}));
+      ? (tpl ? tpl : generatePayload(pc.promptpayId, {}))
+      : (tpl ? buildDynamicPayload(tpl, amount) : generatePayload(pc.promptpayId, amount > 0 ? { amount } : {}));
     const buf = await QRCode.toBuffer(payload, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.set('Cache-Control', 'no-store').type('png').send(buf);
   } catch (e) { res.status(500).json({ error: 'qr_failed' }); }

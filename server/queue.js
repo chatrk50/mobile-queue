@@ -3,7 +3,7 @@ import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 import { slipokCheck, slipokQuota, SLIPOK_ERRORS } from './slipok.js';
-import { decodeMerchantBuffer } from './thaiqr.js';
+import { decodeMerchantBuffer, isInjectable, describeQr } from './thaiqr.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
@@ -2685,9 +2685,16 @@ export function availableCoupons(customerKey, orderNet, lines = null) {
     // Convert any full stamp cards first (lazy, covers balances earned before this feature), then
     // surface every live coupon the customer holds — reward conversions and birthday gifts alike.
     try { convertReadyRewards(customerKey); } catch { /* never block the coupon list */ }
+    // A wallet coupon born from a shop definition keeps that definition's ขั้นต่ำ, and says so in
+    // the basket the same way a typed code does ("ใช้ได้เมื่อยอด ≥ ฿49") instead of pretending.
+    const defOf = db.prepare('SELECT min_spend FROM coupons WHERE id=?');
     for (const cc of customerCoupons(customerKey).reverse()) {
+      const def = cc.coupon_id ? defOf.get(cc.coupon_id) : null;
+      const minSpend = def ? Math.max(0, Number(def.min_spend) || 0) : 0;
+      const okMin = orderNet >= minSpend;
       list.unshift({ id: 'cc-' + cc.id, code: 'CCOUP:' + cc.id, label: cc.label, disc_type: 'reward',
-        disc_value: 0, max_disc: 0, min_spend: 0, expires_at: cc.expires_at, usable: true, discount: 0, reason: null,
+        disc_value: 0, max_disc: 0, min_spend: minSpend, expires_at: cc.expires_at, usable: okMin, discount: 0,
+        reason: okMin ? null : `ใช้ได้เมื่อยอด ≥ ฿${minSpend}`,
         isReward: true, ccId: cc.id, freeCap: cc.free_cap, couponKind: cc.kind });
     }
   }
@@ -2835,6 +2842,11 @@ export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1';
 //   pay:<branch>:slipok_key    SlipOK API key - never returned to a browser, only its last 4 digits
 let GLOBAL_MERCHANT_QR = null;
 export function setGlobalMerchantQr(payload) { GLOBAL_MERCHANT_QR = payload || null; }
+// The KBank QR: K PLUS cannot pay the shop's K SHOP QR with an injected amount, so KBank customers
+// get the shop's ORIGINAL KBank QR (public/assets/promptpay-kplus.png, or one uploaded per branch),
+// type the amount, and the cashier checks the slip. Never amount-injected, never sent to SlipOK.
+let GLOBAL_KPLUS_QR = null;
+export function setGlobalKplusQr(payload) { GLOBAL_KPLUS_QR = payload || null; }
 const payKey = (b, k) => 'pay:' + (Number(b) || 0) + ':' + k;
 export function branchOfZone(zoneId) {
   if (!zoneId) return null;
@@ -2851,33 +2863,75 @@ export function getPayConfig(branchId) {
   const pick = (k, envKey) => { const v = own(k); return v != null ? String(v).trim() : String(process.env[envKey] || '').trim(); };
   const onlineOwn = own('online');
   const online = onlineOwn != null ? onlineOwn === '1' : String(process.env.PAY_ONLINE ?? '0') === '1';
+  const ppOwn = own('promptpay_id');
   const promptpayId = pick('promptpay_id', 'PROMPTPAY_ID');
   const merchantQrOwn = String(own('merchant_qr') || '').trim() || null;
   const merchantQr = merchantQrOwn || GLOBAL_MERCHANT_QR;
+  const qrMode = (ppOwn != null && String(ppOwn).trim()) ? 'promptpay'
+    : merchantQrOwn ? 'merchant'
+    : (ppOwn == null && promptpayId && !GLOBAL_MERCHANT_QR) ? 'promptpay'
+    : merchantQr ? 'merchant'
+    : promptpayId ? 'promptpay' : null;
+  const kplusQrOwn = String(own('kplus_qr') || '').trim() || null;
+  const kplusQr = kplusQrOwn || GLOBAL_KPLUS_QR;
   const slipokBranch = pick('slipok_branch', 'SLIPOK_BRANCH_ID');
   const slipokKey = pick('slipok_key', 'SLIPOK_API_KEY');
+  let receivers = [];
+  try { const a = JSON.parse(own('receivers') || '[]'); if (Array.isArray(a)) receivers = a.map((x) => String(x).trim()).filter(Boolean).slice(0, 10); } catch { /* none */ }
   return {
-    branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey,
-    qrReady: !!(merchantQr || promptpayId), slipokReady: !!(slipokBranch && slipokKey),
+    branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey, receivers, qrMode,
+    qrReady: !!qrMode, slipokReady: !!(slipokBranch && slipokKey),
+    kplusQr, kplusQrOwn: !!kplusQrOwn, kplusReady: !!kplusQr,
     fromEnv: { online: onlineOwn == null, promptpayId: own('promptpay_id') == null, slipok: own('slipok_branch') == null && own('slipok_key') == null },
   };
 }
 /** What the branch screen may see: everything except the key itself. */
 export function payConfigPublic(branchId) {
   const c = getPayConfig(branchId);
-  const { slipokKey, merchantQr, ...rest } = c;
+  const { slipokKey, merchantQr, kplusQr, ...rest } = c;
+  // The receivers SlipOK refused lately (1014) - the owner accepts the right one with a tap.
+  let refused = [];
+  try {
+    refused = db.prepare(
+      `SELECT receiver_name name, receiver_acct acct, MAX(at) at, COUNT(*) n FROM slip_checks
+        WHERE branch_id=? AND code=1014 AND (receiver_name IS NOT NULL OR receiver_acct IS NOT NULL)
+        GROUP BY receiver_name, receiver_acct ORDER BY at DESC LIMIT 5`
+    ).all(c.branchId).filter((r) => !receiverMatches(c.receivers, { displayName: r.name, account: { value: r.acct } }));
+  } catch { /* column may predate this build */ }
   return { ...rest, slipokKeySet: !!slipokKey, slipokKeyHint: slipokKey ? '••••' + slipokKey.slice(-4) : '', merchantQrSet: !!merchantQr,
-    slipAuto: slipAutoEnabled() };
+    merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled(), qrSummary: qrSummary(c.branchId),
+    kplusQrSet: !!kplusQr, kplusSummary: kplusQr ? describeQr(kplusQr) : null };
 }
 /** Owner edits a branch's online-payment setup. A field left undefined is untouched; '' clears it
  *  (that branch then has none, even if the env var is set); merchantQrImage is a data: URL the
  *  owner uploaded, decoded here so a photo of the wrong thing is refused instead of stored. */
+/**
+ * Only a real PromptPay target makes a QR a bank will pay: a 10-digit mobile number, a 13-digit
+ * citizen / tax id, or a 15-digit e-wallet id. Anything else (a K SHOP merchant code "KB0000…",
+ * a 12-digit typo) would still render a QR - every bank then answers "ไม่พบบัญชี" - so it is refused
+ * at save time instead. Dashes and spaces are tolerated; '' clears the id.
+ */
+export function normalizePromptPayId(raw) {
+  const s = String(raw == null ? '' : raw).replace(/[\s-]/g, '');
+  if (s === '') return '';
+  if (/\D/.test(s)) throw new Error('promptpay_invalid');
+  if (s.length === 10 && s[0] === '0') return s;
+  if (s.length === 13 || s.length === 15) return s;
+  throw new Error('promptpay_invalid');
+}
+/** What the branch's QR pays into, in words the owner can check against the poster. */
+export function qrSummary(branchId) {
+  const c = getPayConfig(branchId);
+  if (!c.qrMode) return null;
+  if (c.qrMode === 'promptpay') return { mode: 'promptpay', promptpayId: c.promptpayId, merchantId: '', ref: '', name: '' };
+  return { mode: 'merchant', promptpayId: '', ...describeQr(c.merchantQr) };
+}
 export async function setPayConfig(branchId, patch = {}) {
   const b = Number(branchId) || 0;
   if (!db.prepare('SELECT 1 FROM stores WHERE id=?').get(b)) throw new Error('store_not_found');
   const put = (k, v) => setSetting(payKey(b, k), v);
   if (patch.online != null) put('online', patch.online ? '1' : '0');
-  if (patch.promptpayId != null) put('promptpay_id', String(patch.promptpayId).replace(/[^0-9A-Za-z]/g, '').slice(0, 20));
+  if (patch.promptpayId != null) put('promptpay_id', normalizePromptPayId(patch.promptpayId));
   if (patch.slipokBranch != null) put('slipok_branch', String(patch.slipokBranch).trim().slice(0, 40));
   if (patch.slipokKey != null && String(patch.slipokKey).trim() !== '') put('slipok_key', String(patch.slipokKey).trim().slice(0, 200));
   if (patch.slipokKey === '') put('slipok_key', '');
@@ -2888,6 +2942,21 @@ export async function setPayConfig(branchId, patch = {}) {
     put('merchant_qr', payload);
   }
   if (patch.merchantQrClear) put('merchant_qr', '');
+  if (patch.kplusQrImage) {
+    const m = /^data:image\/[\w.+-]+;base64,(.+)$/s.exec(String(patch.kplusQrImage));
+    const payload = m ? await decodeMerchantBuffer(Buffer.from(m[1], 'base64')) : null;
+    if (!payload) throw new Error('qr_not_readable');
+    put('kplus_qr', payload);
+  }
+  if (patch.kplusQrClear) put('kplus_qr', '');
+  if (patch.receivers != null || patch.addReceiver != null || patch.removeReceiver != null) {
+    let list = getPayConfig(b).receivers;
+    if (Array.isArray(patch.receivers)) list = patch.receivers;
+    if (patch.addReceiver) list = list.concat([String(patch.addReceiver)]);
+    if (patch.removeReceiver) list = list.filter((x) => x !== String(patch.removeReceiver));
+    list = [...new Set(list.map((x) => String(x).trim().slice(0, 60)).filter(Boolean))].slice(0, 10);
+    put('receivers', JSON.stringify(list));
+  }
   return payConfigPublic(b);
 }
 /** Prove the credentials without spending a slip: SlipOK's quota call. Uses the saved key unless a
@@ -2901,6 +2970,23 @@ export function slipReadyAny() {
   return db.prepare('SELECT id FROM stores').all().some((s) => { const c = getPayConfig(s.id); return c.online && c.slipokReady; });
 }
 const payFail = (error, status = 400, extra = null) => Object.assign(new Error(error), { status, extra });
+/** Does the slip's receiver match one of the owner's accepted receivers? An alias with 4+ digits is
+ *  compared against the masked account / PromptPay proxy on the slip (only the visible digits can
+ *  match, e.g. "3150" vs "xxx-x-xxxxxx3150-x"); anything else is compared as a name. */
+export function receiverMatches(aliases, recv) {
+  if (!Array.isArray(aliases) || !aliases.length || !recv) return false;
+  const digitsOf = (v) => String(v || '').replace(/\D/g, '');
+  const nameOf = (v) => String(v || '').toLowerCase().replace(/\s+/g, '');
+  const accts = [recv.account && recv.account.value, recv.proxy && recv.proxy.value].map(digitsOf).filter(Boolean);
+  const names = [recv.displayName, recv.name].map(nameOf).filter(Boolean);
+  return aliases.some((a) => {
+    const d = digitsOf(a);
+    if (d.length >= 4 && /^[\dxX\-\s]+$/.test(String(a).trim())) return accts.some((v) => v.endsWith(d) || d.endsWith(v));
+    const n = nameOf(a);
+    return n.length >= 3 && names.some((v) => v === n || v.includes(n) || n.includes(v));
+  });
+}
+const isInjectableQr = (payload) => { try { return isInjectable(payload); } catch { return false; } };
 /** The whole slip flow for one ticket: which branch, that branch's SlipOK, the NET the customer was
  *  asked to pay, our own replay guard, the bank's answer on record, and the order marked paid.
  *  Throws payFail(error, status, { code, message }) for anything the customer must be told. */
@@ -2923,11 +3009,24 @@ export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {
   catch (e) { throw payFail('slipok_unreachable', 502, { message: e.message }); }
   const d = r.data || {};
   const nameOf = (p) => (p && (p.displayName || p.name)) || null;
+  const acctOf = (p) => (p && ((p.account && p.account.value) || (p.proxy && p.proxy.value))) || null;
   const rec = (ok, code, message) => db.prepare(
-    `INSERT INTO slip_checks (order_id, ticket_id, branch_id, ok, code, message, trans_ref, sending_bank, receiving_bank, trans_date, trans_time, sender_name, receiver_name, amount, expected)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO slip_checks (order_id, ticket_id, branch_id, ok, code, message, trans_ref, sending_bank, receiving_bank, trans_date, trans_time, sender_name, receiver_name, amount, expected, receiver_acct, sender_acct)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(order.id, Number(ticketId), t.store_id, ok ? 1 : 0, code, message, d.transRef || null, d.sendingBank || null, d.receivingBank || null,
-        d.transDate || null, d.transTime || null, nameOf(d.sender), nameOf(d.receiver), d.amount != null ? Number(d.amount) : null, expected);
+        d.transDate || null, d.transTime || null, nameOf(d.sender), nameOf(d.receiver), d.amount != null ? Number(d.amount) : null, expected, acctOf(d.receiver), acctOf(d.sender));
+  // 1014 = the bank confirmed the transfer but its receiver is not the account SlipOK has on file.
+  // With a K SHOP / bill-payment QR the slip prints the merchant id, not the bank account, so the
+  // owner may list the receivers that ARE the shop; then the slip stands if the amount is right and
+  // the bank returned the details (it does on 1014). SlipOK does not log a 1014, so our own transRef
+  // guard below is what stops a replay of such a slip.
+  let viaAlias = false;
+  if (!r.ok && r.code === 1014 && d.transRef && receiverMatches(cfg.receivers, d.receiver)) {
+    if (d.amount == null || Math.abs(Number(d.amount) - expected) > 0.009) {
+      rec(false, 1013, SLIPOK_ERRORS[1013]); throw payFail('slip_failed', 400, { code: 1013, message: SLIPOK_ERRORS[1013] });
+    }
+    r = { ok: true, code: null, message: '', data: d }; viaAlias = true;
+  }
   if (r.ok && d.transRef) {
     // SlipOK already refuses a replay (1012) when log=true; this is the second line for the case
     // where the same slip passed once for a different order of ours.
@@ -2935,7 +3034,7 @@ export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {
     if (dup) { rec(false, 1012, SLIPOK_ERRORS[1012]); throw payFail('slip_failed', 400, { code: 1012, message: SLIPOK_ERRORS[1012] }); }
   }
   if (!r.ok) { rec(false, r.code, r.message); throw payFail('slip_failed', 400, { code: r.code, message: r.message }); }
-  rec(true, null, null);
+  rec(true, null, viaAlias ? 'ยอมรับตามบัญชีผู้รับที่ร้านตั้งไว้ (SlipOK 1014)' : null);
   // Keep the image as evidence next to the bank's answer (same place the manual path stores it).
   try {
     const sha = createHash('sha256').update(imageData).digest('hex');
@@ -5210,6 +5309,19 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') throw new Error('order_already_paid');
   if (order.payment_status === 'void') throw new Error('order_void');
+  // A coupon that came from a shop definition (claim link / direct send) carries that definition's
+  // conditions into the wallet: a ฿9 coupon with ขั้นต่ำ ฿49 was spent on a ฿40 cup on prod because
+  // the wallet copy only knew its cap.
+  if (cc.coupon_id) {
+    const def = db.prepare('SELECT id, min_spend FROM coupons WHERE id=?').get(cc.coupon_id);
+    const room0 = Math.max(0, order.total - (order.discount || 0));
+    if (def && Number(def.min_spend) > 0 && room0 < Number(def.min_spend)) throw new Error('coupon_min_spend');
+    if (def) {
+      const lines = db.prepare('SELECT name, price, qty FROM order_items WHERE order_id=?').all(order.id);
+      const sb = scopedBase(def.id, lines, room0);
+      if (sb.scoped && !(sb.base > 0)) throw new Error('coupon_not_applicable');
+    }
+  }
   const cheapest = db.prepare(
     `SELECT MIN(oi.price) p FROM order_items oi LEFT JOIN menu_items mi ON mi.name=oi.name
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`

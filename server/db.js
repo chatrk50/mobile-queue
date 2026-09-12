@@ -750,6 +750,10 @@ for (const stmt of [
   // explicitly assigned in branch_menu carry it, and those branches may price it themselves.
   // Existing catalogs migrate to nationwide, which is exactly how they behaved before.
   `ALTER TABLE menu_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'nationwide'`,
+  // The masked account / PromptPay proxy on each side of a verified slip, so a refused 1014 can be
+  // turned into an accepted receiver by the owner with one tap.
+  `ALTER TABLE slip_checks ADD COLUMN receiver_acct TEXT`,
+  `ALTER TABLE slip_checks ADD COLUMN sender_acct TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -773,7 +777,7 @@ try {
     order_id INTEGER, ticket_id INTEGER, branch_id INTEGER,
     ok INTEGER NOT NULL DEFAULT 0, code INTEGER, message TEXT,
     trans_ref TEXT, sending_bank TEXT, receiving_bank TEXT, trans_date TEXT, trans_time TEXT,
-    sender_name TEXT, receiver_name TEXT, amount REAL, expected REAL,
+    sender_name TEXT, receiver_name TEXT, amount REAL, expected REAL, receiver_acct TEXT, sender_acct TEXT,
     at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS ix_slip_checks_ref ON slip_checks(trans_ref)');

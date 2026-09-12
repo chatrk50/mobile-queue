@@ -81,6 +81,26 @@ export function isInjectable(template) {
   return false;
 }
 
+/**
+ * What a Thai QR pays into, for the owner's eyes: the merchant id + reference from the PromptPay
+ * credit-transfer template (tag 30), else the bill-payment template (tag 31), and the merchant name
+ * (tag 59) when the poster carries one. Never throws - an odd payload just yields blanks.
+ */
+export function describeQr(payload) {
+  const out = { merchantId: '', ref: '', name: '' };
+  try {
+    const top = parseTLV(String(payload || ''));
+    const sub = (tag) => { const f = top.find((x) => x.tag === tag); return f ? parseTLV(f.val) : []; };
+    const pick = (fields, t) => { const f = fields.find((x) => x.tag === t); return f ? f.val : ''; };
+    const t30 = sub('30'), t31 = sub('31'), t29 = sub('29');
+    out.merchantId = pick(t30, '02') || pick(t31, '02');
+    out.ref = pick(t30, '03') || pick(t31, '04');
+    if (!out.merchantId) out.merchantId = pick(t29, '01') || pick(t29, '02') || pick(t29, '03');
+    out.name = pick(top, '59');
+  } catch { /* blanks */ }
+  return out;
+}
+
 /** Recompute and verify a payload's CRC (sanity check on a decoded static QR). */
 export function verifyCRC(payload) {
   const i = payload.lastIndexOf('6304');
