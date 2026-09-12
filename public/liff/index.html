@@ -409,7 +409,7 @@
           <button class="ghost" id="payCounterBtn" style="width:100%" onclick="choosePay('counter')"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>จ่ายที่เคาน์เตอร์</button>
           <div id="payQrRow" class="row" style="gap:8px;margin-top:8px;display:none">
             <button class="ok" id="payPromptBtn" style="flex:1;line-height:1.25" onclick="choosePay('promptpay')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg><span style="font-size:11px;font-weight:500;opacity:.85">พร้อมเพย์</span><br><b style="font-size:15px">ธนาคารอื่น</b></button>
-            <button class="ok" id="payKbankBtn" style="flex:1;line-height:1.25" onclick="choosePay('kbank')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg><span style="font-size:11px;font-weight:500;opacity:.85">พร้อมเพย์</span><br><b style="font-size:15px">เฉพาะ Kbank</b></button>
+            <button class="ok" id="payKbankBtn" style="flex:1;line-height:1.25" onclick="choosePay('kbank')"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg><span style="font-size:11px;font-weight:500;opacity:.85">ลูกค้า Kbank</span><br><b style="font-size:15px">K PLUS</b></button>
           </div>
         </div>
         <button class="ok" id="payLinePayBtn" style="width:100%;margin-top:8px;display:none;background:#06c755;color:#fff" onclick="startLinePay()"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 9l9 5 9-5"/></svg>จ่ายด้วย LINE Pay</button>
@@ -1959,15 +1959,14 @@ function renderOrderBlock(v){
       if(!payMethod && ticketId){ try{ const sm=localStorage.getItem('paymethod_'+ticketId); if(sm==='promptpay'||sm==='kbank'||sm==='counter') payMethod=sm; }catch(e){} }
       const preChosen=!!payMethod;   // channel already picked in the cart → hide the choice buttons, show only that channel
       show('payReassure',true); show('payChoiceLabel',!preChosen); show('payBtnRow',!preChosen);
-      show('payKbankBtn', false);   // the KBank variant lives under the QR now, not as a channel
-      if(cfg.promptPayOneQr && payMethod==='kbank') payMethod='promptpay';
+      show('payKbankBtn', !!cfg.payKplus);   // K PLUS: the shop's KBank QR, amount typed, cashier checks the slip
+      if(!cfg.payKplus && payMethod==='kbank') payMethod='promptpay';
       show('payQrRow',!!cfg.promptPay); show('slipBtn', !!cfg.promptPay); show('payLinePayBtn', !!cfg.linePay && !preChosen);
       show('payCounterBtn', cfg.payCounter!==false); show('counterInfo', false);   // ไทยช่วยไทย poster moved into the payment picker
       // SlipOK auto-verify advances by itself on a passing slip — the manual "ฉันชำระแล้ว"
       // button is only a fallback when SlipOK is OFF (cashier eyeballs the slip).
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
-      $('slipBtnLabel').textContent = cfg.slipVerify ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
-      $('onePhoneTipStep4').textContent = cfg.slipVerify ? 'กลับมาแนบสลิป (ตรวจอัตโนมัติ)' : 'กลับมาแนบสลิป (แคชเชียร์ตรวจ)';
+      setSlipLabels();
       $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
         +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">แจ้งพนักงานว่าสั่งผ่าน LINE · รับหมายเลขคิวหลังชำระเสร็จ</div>';
       applyPayChoice();
@@ -1979,8 +1978,8 @@ let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null, _r
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
 let cartPayMethod=null;
 const PAY_OPTS=[
-  {m:'kbank',hidden:true,t:'PromptPay',s:'',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
-  {m:'promptpay',t:'PromptPay',s:'',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'kbank',t:'K PLUS',s:'ลูกค้า Kbank',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
+  {m:'promptpay',t:'PromptPay',s:'ธนาคารอื่น ๆ',ic:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/>'},
   {m:'counter',t:'จ่ายที่เคาน์เตอร์',s:'รับคิวเลย · จ่ายที่ร้าน',ic:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'},
 ];
 let _payPickMode='cart';   // 'cart' = choosing before the order · 'ticket' = re-choosing on the ticket (เปลี่ยนวิธีจ่าย)
@@ -1989,7 +1988,7 @@ window.openPayPicker=(mode)=>{
   const cur = _payPickMode==='ticket' ? payMethod : cartPayMethod;
   // Filter by which tender KINDS the owner enabled: counter option needs an active counter tender,
   // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
-  let opts = PAY_OPTS.filter(o => !o.hidden && (o.m==='counter' ? (cfg.payCounter!==false) : !!cfg.promptPay));
+  let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : o.m==='kbank' ? !!cfg.payKplus : !!cfg.promptPay);
   if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
   $('payPickerList').innerHTML = opts.map(o=>{ const sel=cur===o.m;
     return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
@@ -2262,26 +2261,29 @@ function stopQrCountdown(){ if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null
 // Set the QR + caption for the chosen bank type. Other banks → dynamic QR (amount baked in).
 // KBank → original no-amount QR (KBank locks injected amounts) → customer types the amount,
 // then the attached slip is checked by SlipOK against the order total.
+// Slip handling follows the channel: a K PLUS slip always goes to the cashier (the KBank QR is not
+// the account SlipOK checks); a PromptPay slip is auto-verified when SlipOK is on.
+function slipIsAuto(){ return !!cfg.slipVerify && payMethod!=='kbank'; }
+function setSlipLabels(){
+  const auto=slipIsAuto();
+  $('slipBtnLabel').textContent = auto ? 'แนบสลิป (ยืนยันอัตโนมัติ)' : 'แนบสลิป (ส่งให้แคชเชียร์ตรวจ)';
+  $('onePhoneTipStep4').textContent = auto ? 'กลับมาแนบสลิป (ตรวจอัตโนมัติ)' : 'กลับมาแนบสลิป (แคชเชียร์ตรวจ)';
+}
 function setQrFor(isKbank){
+  setSlipLabels();
   if(isKbank){
-    $('ppQrImg').src='/api/promptpay-qr?static=1&ticket='+encodeURIComponent(ticketId||'');
-    $('ppQrNote').innerHTML='ลูกค้า KBank: สแกนแล้ว <b style="color:var(--navy);font-size:15px">กรอกยอด ฿'+_orderTotal+' เอง</b><br>จ่ายแล้ว <b>แนบสลิป</b> — ระบบตรวจยอดให้อัตโนมัติ';
+    $('ppQrImg').src='/api/promptpay-qr?kplus=1&ticket='+encodeURIComponent(ticketId||'');
+    $('ppQrNote').innerHTML='สแกนด้วย <b>K PLUS</b> แล้ว <b style="color:var(--navy);font-size:15px">กรอกยอด ฿'+_orderTotal+' เอง</b><br>จ่ายแล้ว <b>แนบสลิป</b> — แคชเชียร์ตรวจสลิปแล้วยืนยันให้';
+    if(cfg.payToKplus&&(cfg.payToKplus.name||cfg.payToKplus.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payToKplus.name,cfg.payToKplus.id].filter(Boolean).join(' · '))+'</div>';
   } else {
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal+'&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
+    if(cfg.payTo&&(cfg.payTo.name||cfg.payTo.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payTo.name,cfg.payTo.id].filter(Boolean).join(' · '))+'</div>';
   }
-  if(cfg.payTo&&(cfg.payTo.name||cfg.payTo.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payTo.name,cfg.payTo.id].filter(Boolean).join(' · '))+'</div>';
-  // A merchant (K SHOP) QR: K PLUS ignores the pre-filled amount, so a K PLUS user swaps to the
-  // type-it-yourself QR right here instead of picking a different channel. A PromptPay id needs none.
-  if(!cfg.promptPayOneQr){
-    $('ppQrNote').innerHTML += isKbank
-      ? '<div style="margin-top:6px"><a href="#" onclick="choosePay(\'promptpay\');return false" style="font-size:12px;color:var(--accent);font-weight:700;text-decoration:none">← กลับไปใช้ QR ที่ใส่ยอดให้แล้ว</a></div>'
-      : '<div style="margin-top:6px"><a href="#" onclick="choosePay(\'kbank\');return false" style="font-size:12px;color:var(--accent);font-weight:700;text-decoration:none">ใช้ K PLUS แล้วยอดไม่ขึ้น? แตะเพื่อใช้ QR แบบกรอกยอดเอง</a></div>';
-  }
-  // The static KBank QR only works scanned from K PLUS — hide the other bank icons in that case.
+  // Bank shortcuts follow the channel: K PLUS alone on the KBank QR; every other bank on PromptPay.
   const strip=$('bankIconStrip');
   if(strip){
-    strip.querySelectorAll('[data-bank]').forEach(el=>{ el.style.display = (isKbank && el.dataset.bank!=='kplus') ? 'none' : ''; });
+    strip.querySelectorAll('[data-bank]').forEach(el=>{ const isK=el.dataset.bank==='kplus'; el.style.display = (isKbank ? !isK : (isK && cfg.payKplus)) ? 'none' : ''; });
   }
   startQrCountdown();
 }
@@ -2409,7 +2411,7 @@ function slipErr(e){ const d=e.data||{}; const code=d.code;
 async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) return;
   const b=$('slipBtn'); b.disabled=true; $('slipBtnLabel').textContent='กำลังส่งสลิป...';
   try{ const dataUrl=await slipResize(f,1080);
-    if(cfg.slipVerify){   // SlipOK auto-verify
+    if(slipIsAuto()){   // SlipOK auto-verify (PromptPay channel only)
       const r=await api('/api/tickets/'+ticketId+'/verify-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
       if(r.paid){ toast('✅ ตรวจสลิปผ่าน · ชำระเงินเรียบร้อย'); const v=await api('/api/tickets/'+ticketId); render(v); loadLoyalty(); }
     } else {              // manual — send to the cashier to verify

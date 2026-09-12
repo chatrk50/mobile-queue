@@ -2027,11 +2027,11 @@ window.loadBranchPay=async(id)=>{
       <button class="tgl sm ${p.online?'on':'off'}" role="switch" aria-checked="${p.online?'true':'false'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
-    ${(p.qrMode==='merchant'&&!p.merchantQrP2P)?'<div style="font-size:11.5px;background:#eef6ff;color:#185fa5;border-radius:8px;padding:7px 10px;margin-top:8px">ตอนนี้ลูกค้าเห็น <b>QR ร้านค้า (K SHOP)</b> — ทุกธนาคารสแกนได้ ยอดใส่ให้ ยกเว้น K PLUS ที่ลูกค้ากดลิงก์ใต้ QR เพื่อกรอกยอดเอง · ช่องพร้อมเพย์ด้านล่างปล่อยว่าง (QR ร้านค้าไม่ใช่พร้อมเพย์ในมุมร้าน แต่ลูกค้าสแกนจ่ายด้วยแอปธนาคารได้ทุกธนาคาร) · ใน SlipOK ตั้งประเภทบัญชีเป็น <b>e-wallet</b> แล้วใส่รหัสร้านค้า KB… เดียวกับบนสลิป ไม่งั้นจะตอบ "บัญชีผู้รับไม่ใช่ของร้าน" → ตั้ง "บัญชีผู้รับที่ยอมรับ" ด้านล่างได้</div>':''}
+    ${(p.qrMode==='merchant'&&!p.merchantQrP2P)?'<div style="font-size:11.5px;background:#eef6ff;color:#185fa5;border-radius:8px;padding:7px 10px;margin-top:8px">ลูกค้าเห็น 3 ทาง: <b>PromptPay</b> (ธนาคารอื่น — QR ร้านค้า K SHOP ใส่ยอดให้ → SlipOK ตรวจ) · <b>K PLUS</b> (ลูกค้า Kbank — QR Kbank ตัวเดิม กรอกยอดเอง → แคชเชียร์ตรวจสลิป) · <b>เคาน์เตอร์</b> · ช่องพร้อมเพย์ด้านล่างปล่อยว่าง (QR ร้านค้าไม่ใช่พร้อมเพย์ในมุมร้าน แต่ลูกค้าสแกนจ่ายด้วยแอปธนาคารได้ทุกธนาคาร) · ใน SlipOK ตั้งประเภทบัญชีเป็น <b>e-wallet</b> แล้วใส่รหัสร้านค้า KB… เดียวกับบนสลิป ไม่งั้นจะตอบ "บัญชีผู้รับไม่ใช่ของร้าน" → ตั้ง "บัญชีผู้รับที่ยอมรับ" ด้านล่างได้</div>':''}
     ${(p.qrMode==='promptpay')?'<div class="muted" style="font-size:11.5px;margin-top:6px">ตอนนี้ลูกค้าเห็น QR พร้อมเพย์ '+esc(p.promptpayId)+' — ยอดใส่ให้ทุกธนาคารรวม K PLUS'+((p.fromEnv&&p.fromEnv.promptpayId)?' (ค่ากลางจาก Render)':'')+'</div>':''}
     ${(p.online&&p.qrReady&&p.qrSummary)?`<div class="row" style="gap:10px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:10px">
       <img src="/api/promptpay-qr?branch=${id}&amount=1&v=${Date.now()}" alt="QR ทดสอบ" style="width:104px;height:104px;border-radius:8px;background:#fff;flex:none" onerror="this.style.display='none'">
-      <div style="font-size:11.5px;min-width:0"><b style="color:var(--navy)">QR ที่ลูกค้าเห็นตอนนี้</b> <span class="muted">(ยอดทดสอบ ฿1)</span><br>
+      <div style="font-size:11.5px;min-width:0"><b style="color:var(--navy)">QR PromptPay ที่ลูกค้าเห็นตอนนี้</b> <span class="muted">(ธนาคารอื่น → SlipOK · ยอดทดสอบ ฿1)</span><br>
         <span class="muted">${p.qrSummary.mode==='merchant'?('QR ร้านค้า'+(p.qrSummary.name?' '+esc(p.qrSummary.name):'')+' · รหัสร้านค้า '+esc(p.qrSummary.merchantId||'—')+(p.qrSummary.ref?' · อ้างอิง '+esc(p.qrSummary.ref):'')):('พร้อมเพย์ '+esc(p.qrSummary.promptpayId))}</span><br>
         <span class="muted">สแกนรูปนี้ด้วยแอปธนาคารของคุณ — ต้องขึ้นชื่อร้านและยอด ฿1 ถึงจะใช้ได้จริง (ไม่ต้องโอน) · เทียบรหัสร้านค้ากับโปสเตอร์ K SHOP ให้ตรงกัน</span></div>
     </div>`:(p.online?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px;margin-top:8px">เปิดรับเงินออนไลน์อยู่แต่ยังไม่มี QR — ใส่พร้อมเพย์ หรืออัปโหลดรูป QR ร้านค้าด้านล่าง</div>':'')}
@@ -2045,6 +2045,18 @@ window.loadBranchPay=async(id)=>{
           <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_qrfile_${id}').click()">อัปโหลดรูป QR</button>
           ${p.merchantQrOwn?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay(${id},{merchantQrClear:1})">ลบ</button>`:''}
         </div>
+      </div>
+      <div class="ff">QR สำหรับ K PLUS (ลูกค้า Kbank) <span class="muted" style="font-weight:400">— QR Kbank ตัวเดิม ลูกค้ากรอกยอดเอง แคชเชียร์ตรวจสลิป ไม่ผ่าน SlipOK</span>
+        <div class="row" style="gap:6px;align-items:center;margin-top:2px">
+          <span class="muted" style="font-size:12px;flex:1">${p.kplusQrOwn?'✓ ใช้ QR Kbank ของสาขานี้':(p.kplusQrSet?'ใช้ QR Kbank กลางของร้าน':'ยังไม่มี — ลูกค้า Kbank จะไม่เห็นตัวเลือก K PLUS')}</span>
+          <input id="bp_kqrfile_${id}" type="file" accept="image/*" style="display:none" onchange="uploadBranchKplusQr(${id},this)">
+          <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_kqrfile_${id}').click()">อัปโหลดรูป QR Kbank</button>
+          ${p.kplusQrOwn?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay(${id},{kplusQrClear:1})">ลบ</button>`:''}
+        </div>
+        ${(p.online&&p.kplusQrSet&&p.kplusSummary)?`<div class="row" style="gap:10px;align-items:center;margin-top:6px;padding:8px;border:1px dashed var(--line);border-radius:10px">
+          <img src="/api/promptpay-qr?branch=${id}&kplus=1&v=${Date.now()}" alt="QR Kbank" style="width:84px;height:84px;border-radius:8px;background:#fff;flex:none" onerror="this.style.display='none'">
+          <div class="muted" style="font-size:11.5px;min-width:0"><b style="color:var(--navy)">QR K PLUS ที่ลูกค้า Kbank เห็น</b><br>${p.kplusSummary.name?esc(p.kplusSummary.name)+' · ':''}รหัสร้านค้า ${esc(p.kplusSummary.merchantId||'—')}${p.kplusSummary.ref?' · อ้างอิง '+esc(p.kplusSummary.ref):''}<br>สแกนด้วย K PLUS แล้วต้องขึ้นชื่อร้าน (ไม่ต้องโอน)</div>
+        </div>`:''}
       </div>
       <div style="border-top:1px dashed var(--line);padding-top:8px">
         <b style="font-size:12.5px;color:var(--navy)">SlipOK — ตรวจสลิปอัตโนมัติ</b>${envNote(p.fromEnv&&p.fromEnv.slipok)}
@@ -2089,6 +2101,8 @@ window.testBranchPay=async(id)=>{
 };
 window.uploadBranchQr=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
   const rd=new FileReader(); rd.onload=()=>saveBranchPay(id,{merchantQrImage:rd.result}); rd.readAsDataURL(f); inp.value=''; };
+window.uploadBranchKplusQr=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>saveBranchPay(id,{kplusQrImage:rd.result}); rd.readAsDataURL(f); inp.value=''; };
 window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!!open})}); renderBranch(await api('/api/branches')); editBranchForm(id); }catch(e){ toast(err(e)); } };
 
 // ---------- Inventory / stock (owner/manager) ----------

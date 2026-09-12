@@ -2672,6 +2672,32 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   ok(Q.qrSummary(SV) === null, "INVARIANT no QR, no summary");
 }
 
+{
+  // 12 Sep: K PLUS cannot pay the K SHOP QR, so KBank customers get the shop's original KBank QR
+  // (static, amount typed, cashier-checked) as a channel of its own; SlipOK stays on PromptPay.
+  console.log(String.fromCharCode(10) + "== K PLUS is its own channel on the shop's original KBank QR ==");
+  const SK = db.prepare("INSERT INTO stores (name) VALUES ('KPlus Branch')").run().lastInsertRowid;
+  const KPLUS = "0002010102110216478772000631910104155303920006320191531343007640052044640122419727900130810016A00000067701011201150107536000315010214KB0000023097860320KPS004KB00000230978631690016A00000067701011301030040214KB0000023097860420KPS004KB00000230978651430014A000000004101001064169710211123456789015204581253037645802TH5912YODEE YOGURT6004CITY6225050972745250207084238972863047C51";
+  Q.setGlobalKplusQr(null);
+  let kc = Q.getPayConfig(SK);
+  ok(kc.kplusReady === false && Q.payConfigPublic(SK).kplusQrSet === false, "INVARIANT no KBank QR anywhere → no K PLUS channel");
+  Q.setGlobalKplusQr(KPLUS);
+  kc = Q.getPayConfig(SK);
+  ok(kc.kplusReady === true && kc.kplusQr === KPLUS && kc.kplusQrOwn === false, "INVARIANT the shop-wide KBank QR serves every branch without its own");
+  const kpub = Q.payConfigPublic(SK);
+  ok(!("kplusQr" in kpub) && kpub.kplusQrSet === true && kpub.kplusSummary.ref === "KPS004KB000002309786" && kpub.kplusSummary.name === "YODEE YOGURT", "INVARIANT the branch screen reads the KBank QR back (merchant, ref, name) without the payload");
+  const { default: QRCode } = await import("qrcode");
+  const png = await QRCode.toBuffer(KPLUS, { width: 400, margin: 2 });
+  await Q.setPayConfig(SK, { kplusQrImage: "data:image/png;base64," + png.toString("base64") });
+  ok(Q.getPayConfig(SK).kplusQrOwn === true && Q.getPayConfig(SK).kplusQr === KPLUS, "INVARIANT a KBank QR uploaded on the branch page is decoded and kept");
+  let bad = null; try { await Q.setPayConfig(SK, { kplusQrImage: "data:image/png;base64,AAAA" }); } catch (e) { bad = e.message; }
+  ok(bad === "qr_not_readable", "INVARIANT an unreadable image is refused");
+  await Q.setPayConfig(SK, { kplusQrClear: 1 });
+  ok(Q.getPayConfig(SK).kplusQrOwn === false && Q.getPayConfig(SK).kplusReady === true, "INVARIANT clearing the branch QR falls back to the shop-wide one");
+  ok(Q.getPayConfig(SK).qrMode !== "promptpay", "INVARIANT the KBank QR never changes which PromptPay QR the other banks get");
+  Q.setGlobalKplusQr(null);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

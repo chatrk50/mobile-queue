@@ -2842,6 +2842,11 @@ export function slipAutoEnabled() { return getSetting('slip:auto', '0') === '1';
 //   pay:<branch>:slipok_key    SlipOK API key - never returned to a browser, only its last 4 digits
 let GLOBAL_MERCHANT_QR = null;
 export function setGlobalMerchantQr(payload) { GLOBAL_MERCHANT_QR = payload || null; }
+// The KBank QR: K PLUS cannot pay the shop's K SHOP QR with an injected amount, so KBank customers
+// get the shop's ORIGINAL KBank QR (public/assets/promptpay-kplus.png, or one uploaded per branch),
+// type the amount, and the cashier checks the slip. Never amount-injected, never sent to SlipOK.
+let GLOBAL_KPLUS_QR = null;
+export function setGlobalKplusQr(payload) { GLOBAL_KPLUS_QR = payload || null; }
 const payKey = (b, k) => 'pay:' + (Number(b) || 0) + ':' + k;
 export function branchOfZone(zoneId) {
   if (!zoneId) return null;
@@ -2867,6 +2872,8 @@ export function getPayConfig(branchId) {
     : (ppOwn == null && promptpayId && !GLOBAL_MERCHANT_QR) ? 'promptpay'
     : merchantQr ? 'merchant'
     : promptpayId ? 'promptpay' : null;
+  const kplusQrOwn = String(own('kplus_qr') || '').trim() || null;
+  const kplusQr = kplusQrOwn || GLOBAL_KPLUS_QR;
   const slipokBranch = pick('slipok_branch', 'SLIPOK_BRANCH_ID');
   const slipokKey = pick('slipok_key', 'SLIPOK_API_KEY');
   let receivers = [];
@@ -2874,13 +2881,14 @@ export function getPayConfig(branchId) {
   return {
     branchId: b, online, promptpayId, merchantQr, merchantQrOwn: !!merchantQrOwn, slipokBranch, slipokKey, receivers, qrMode,
     qrReady: !!qrMode, slipokReady: !!(slipokBranch && slipokKey),
+    kplusQr, kplusQrOwn: !!kplusQrOwn, kplusReady: !!kplusQr,
     fromEnv: { online: onlineOwn == null, promptpayId: own('promptpay_id') == null, slipok: own('slipok_branch') == null && own('slipok_key') == null },
   };
 }
 /** What the branch screen may see: everything except the key itself. */
 export function payConfigPublic(branchId) {
   const c = getPayConfig(branchId);
-  const { slipokKey, merchantQr, ...rest } = c;
+  const { slipokKey, merchantQr, kplusQr, ...rest } = c;
   // The receivers SlipOK refused lately (1014) - the owner accepts the right one with a tap.
   let refused = [];
   try {
@@ -2891,7 +2899,8 @@ export function payConfigPublic(branchId) {
     ).all(c.branchId).filter((r) => !receiverMatches(c.receivers, { displayName: r.name, account: { value: r.acct } }));
   } catch { /* column may predate this build */ }
   return { ...rest, slipokKeySet: !!slipokKey, slipokKeyHint: slipokKey ? '••••' + slipokKey.slice(-4) : '', merchantQrSet: !!merchantQr,
-    merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled(), qrSummary: qrSummary(c.branchId) };
+    merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled(), qrSummary: qrSummary(c.branchId),
+    kplusQrSet: !!kplusQr, kplusSummary: kplusQr ? describeQr(kplusQr) : null };
 }
 /** Owner edits a branch's online-payment setup. A field left undefined is untouched; '' clears it
  *  (that branch then has none, even if the env var is set); merchantQrImage is a data: URL the
@@ -2933,6 +2942,13 @@ export async function setPayConfig(branchId, patch = {}) {
     put('merchant_qr', payload);
   }
   if (patch.merchantQrClear) put('merchant_qr', '');
+  if (patch.kplusQrImage) {
+    const m = /^data:image\/[\w.+-]+;base64,(.+)$/s.exec(String(patch.kplusQrImage));
+    const payload = m ? await decodeMerchantBuffer(Buffer.from(m[1], 'base64')) : null;
+    if (!payload) throw new Error('qr_not_readable');
+    put('kplus_qr', payload);
+  }
+  if (patch.kplusQrClear) put('kplus_qr', '');
   if (patch.receivers != null || patch.addReceiver != null || patch.removeReceiver != null) {
     let list = getPayConfig(b).receivers;
     if (Array.isArray(patch.receivers)) list = patch.receivers;
