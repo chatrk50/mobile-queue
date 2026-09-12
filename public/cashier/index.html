@@ -2027,7 +2027,7 @@ window.loadBranchPay=async(id)=>{
       <button class="tgl sm ${p.online?'on':'off'}" role="switch" aria-checked="${p.online?'true':'false'}" aria-label="เปิดรับเงินออนไลน์" onclick="saveBranchPay(${id},{online:${p.online?0:1}})"></button>
     </div>
     <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
-    ${(p.qrMode==='merchant'&&!p.merchantQrP2P)?'<div style="font-size:11.5px;background:#eef6ff;color:#185fa5;border-radius:8px;padding:7px 10px;margin-top:8px">ตอนนี้ลูกค้าเห็น <b>QR ร้านค้า (K SHOP)</b> — ทุกธนาคารสแกนได้ ยอดใส่ให้ ยกเว้น K PLUS ที่ลูกค้ากดลิงก์ใต้ QR เพื่อกรอกยอดเอง · SlipOK ต้องผูกกับร้านค้า KB… เดียวกัน (ดูรหัสร้านค้าบนสลิป) ไม่งั้นจะตอบ "บัญชีผู้รับไม่ใช่ของร้าน" → ตั้ง "บัญชีผู้รับที่ยอมรับ" ด้านล่างได้</div>':''}
+    ${(p.qrMode==='merchant'&&!p.merchantQrP2P)?'<div style="font-size:11.5px;background:#eef6ff;color:#185fa5;border-radius:8px;padding:7px 10px;margin-top:8px">ตอนนี้ลูกค้าเห็น <b>QR ร้านค้า (K SHOP)</b> — ทุกธนาคารสแกนได้ ยอดใส่ให้ ยกเว้น K PLUS ที่ลูกค้ากดลิงก์ใต้ QR เพื่อกรอกยอดเอง · ช่องพร้อมเพย์ด้านล่างปล่อยว่าง (QR ร้านค้าไม่ใช่พร้อมเพย์ในมุมร้าน แต่ลูกค้าสแกนจ่ายด้วยแอปธนาคารได้ทุกธนาคาร) · ใน SlipOK ตั้งประเภทบัญชีเป็น <b>e-wallet</b> แล้วใส่รหัสร้านค้า KB… เดียวกับบนสลิป ไม่งั้นจะตอบ "บัญชีผู้รับไม่ใช่ของร้าน" → ตั้ง "บัญชีผู้รับที่ยอมรับ" ด้านล่างได้</div>':''}
     ${(p.qrMode==='promptpay')?'<div class="muted" style="font-size:11.5px;margin-top:6px">ตอนนี้ลูกค้าเห็น QR พร้อมเพย์ '+esc(p.promptpayId)+' — ยอดใส่ให้ทุกธนาคารรวม K PLUS'+((p.fromEnv&&p.fromEnv.promptpayId)?' (ค่ากลางจาก Render)':'')+'</div>':''}
     ${(p.online&&p.qrReady&&p.qrSummary)?`<div class="row" style="gap:10px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:10px">
       <img src="/api/promptpay-qr?branch=${id}&amount=1&v=${Date.now()}" alt="QR ทดสอบ" style="width:104px;height:104px;border-radius:8px;background:#fff;flex:none" onerror="this.style.display='none'">
@@ -2048,7 +2048,7 @@ window.loadBranchPay=async(id)=>{
       </div>
       <div style="border-top:1px dashed var(--line);padding-top:8px">
         <b style="font-size:12.5px;color:var(--navy)">SlipOK — ตรวจสลิปอัตโนมัติ</b>${envNote(p.fromEnv&&p.fromEnv.slipok)}
-        <div class="muted" style="font-size:11px;margin:2px 0 6px">สมัครที่ slipok.com → เพิ่มสาขา + ผูกบัญชีธนาคารที่รับเงิน (บัญชีเดียวกับ QR ด้านบน) → คัดลอก Branch ID และ API key มาใส่</div>
+        <div class="muted" style="font-size:11px;margin:2px 0 6px">สมัครที่ slipok.com → เพิ่มสาขา + ผูกบัญชีที่รับเงิน (QR ร้านค้า K SHOP = ประเภท e-wallet ใส่รหัสร้านค้า KB… · พร้อมเพย์ = ประเภท PromptPay) → คัดลอก Branch ID และ API key มาใส่</div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <label class="ff" style="flex:1;min-width:120px">Branch ID<input id="bp_sb_${id}" value="${esc(p.slipokBranch||'')}" placeholder="เช่น 12345"></label>
           <label class="ff" style="flex:2;min-width:180px">API key ${p.slipokKeySet?'<span class="muted" style="font-weight:400">(ตั้งไว้แล้ว '+esc(p.slipokKeyHint)+' — พิมพ์ใหม่เพื่อเปลี่ยน)</span>':''}
