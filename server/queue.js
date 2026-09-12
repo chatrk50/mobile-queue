@@ -3,7 +3,7 @@ import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
 import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 import { slipokCheck, slipokQuota, SLIPOK_ERRORS } from './slipok.js';
-import { decodeMerchantBuffer, isInjectable } from './thaiqr.js';
+import { decodeMerchantBuffer, isInjectable, describeQr } from './thaiqr.js';
 
 const pad = (n) => String(n).padStart(3, '0');
 const code = (prefix, n) => `${prefix}${pad(n)}`;
@@ -2891,17 +2891,38 @@ export function payConfigPublic(branchId) {
     ).all(c.branchId).filter((r) => !receiverMatches(c.receivers, { displayName: r.name, account: { value: r.acct } }));
   } catch { /* column may predate this build */ }
   return { ...rest, slipokKeySet: !!slipokKey, slipokKeyHint: slipokKey ? '••••' + slipokKey.slice(-4) : '', merchantQrSet: !!merchantQr,
-    merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled() };
+    merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled(), qrSummary: qrSummary(c.branchId) };
 }
 /** Owner edits a branch's online-payment setup. A field left undefined is untouched; '' clears it
  *  (that branch then has none, even if the env var is set); merchantQrImage is a data: URL the
  *  owner uploaded, decoded here so a photo of the wrong thing is refused instead of stored. */
+/**
+ * Only a real PromptPay target makes a QR a bank will pay: a 10-digit mobile number, a 13-digit
+ * citizen / tax id, or a 15-digit e-wallet id. Anything else (a K SHOP merchant code "KB0000…",
+ * a 12-digit typo) would still render a QR - every bank then answers "ไม่พบบัญชี" - so it is refused
+ * at save time instead. Dashes and spaces are tolerated; '' clears the id.
+ */
+export function normalizePromptPayId(raw) {
+  const s = String(raw == null ? '' : raw).replace(/[\s-]/g, '');
+  if (s === '') return '';
+  if (/\D/.test(s)) throw new Error('promptpay_invalid');
+  if (s.length === 10 && s[0] === '0') return s;
+  if (s.length === 13 || s.length === 15) return s;
+  throw new Error('promptpay_invalid');
+}
+/** What the branch's QR pays into, in words the owner can check against the poster. */
+export function qrSummary(branchId) {
+  const c = getPayConfig(branchId);
+  if (!c.qrMode) return null;
+  if (c.qrMode === 'promptpay') return { mode: 'promptpay', promptpayId: c.promptpayId, merchantId: '', ref: '', name: '' };
+  return { mode: 'merchant', promptpayId: '', ...describeQr(c.merchantQr) };
+}
 export async function setPayConfig(branchId, patch = {}) {
   const b = Number(branchId) || 0;
   if (!db.prepare('SELECT 1 FROM stores WHERE id=?').get(b)) throw new Error('store_not_found');
   const put = (k, v) => setSetting(payKey(b, k), v);
   if (patch.online != null) put('online', patch.online ? '1' : '0');
-  if (patch.promptpayId != null) put('promptpay_id', String(patch.promptpayId).replace(/[^0-9A-Za-z]/g, '').slice(0, 20));
+  if (patch.promptpayId != null) put('promptpay_id', normalizePromptPayId(patch.promptpayId));
   if (patch.slipokBranch != null) put('slipok_branch', String(patch.slipokBranch).trim().slice(0, 40));
   if (patch.slipokKey != null && String(patch.slipokKey).trim() !== '') put('slipok_key', String(patch.slipokKey).trim().slice(0, 200));
   if (patch.slipokKey === '') put('slipok_key', '');

@@ -2029,8 +2029,14 @@ window.loadBranchPay=async(id)=>{
     <div class="muted" style="font-size:11.5px;margin-top:2px">${p.online?'เปิดอยู่ — ลูกค้าสาขานี้เห็นปุ่มพร้อมเพย์/แนบสลิป':'ปิดอยู่ — ลูกค้าสาขานี้จ่ายที่เคาน์เตอร์เท่านั้น'}${envNote(p.fromEnv&&p.fromEnv.online)}</div>
     ${(p.qrMode==='merchant'&&!p.merchantQrP2P)?'<div style="font-size:11.5px;background:#eef6ff;color:#185fa5;border-radius:8px;padding:7px 10px;margin-top:8px">ตอนนี้ลูกค้าเห็น <b>QR ร้านค้า (K SHOP)</b> — ทุกธนาคารสแกนได้ ยอดใส่ให้ ยกเว้น K PLUS ที่ลูกค้ากดลิงก์ใต้ QR เพื่อกรอกยอดเอง · SlipOK ต้องผูกกับร้านค้า KB… เดียวกัน (ดูรหัสร้านค้าบนสลิป) ไม่งั้นจะตอบ "บัญชีผู้รับไม่ใช่ของร้าน" → ตั้ง "บัญชีผู้รับที่ยอมรับ" ด้านล่างได้</div>':''}
     ${(p.qrMode==='promptpay')?'<div class="muted" style="font-size:11.5px;margin-top:6px">ตอนนี้ลูกค้าเห็น QR พร้อมเพย์ '+esc(p.promptpayId)+' — ยอดใส่ให้ทุกธนาคารรวม K PLUS'+((p.fromEnv&&p.fromEnv.promptpayId)?' (ค่ากลางจาก Render)':'')+'</div>':''}
+    ${(p.online&&p.qrReady&&p.qrSummary)?`<div class="row" style="gap:10px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:10px">
+      <img src="/api/promptpay-qr?branch=${id}&amount=1&v=${Date.now()}" alt="QR ทดสอบ" style="width:104px;height:104px;border-radius:8px;background:#fff;flex:none" onerror="this.style.display='none'">
+      <div style="font-size:11.5px;min-width:0"><b style="color:var(--navy)">QR ที่ลูกค้าเห็นตอนนี้</b> <span class="muted">(ยอดทดสอบ ฿1)</span><br>
+        <span class="muted">${p.qrSummary.mode==='merchant'?('QR ร้านค้า'+(p.qrSummary.name?' '+esc(p.qrSummary.name):'')+' · รหัสร้านค้า '+esc(p.qrSummary.merchantId||'—')+(p.qrSummary.ref?' · อ้างอิง '+esc(p.qrSummary.ref):'')):('พร้อมเพย์ '+esc(p.qrSummary.promptpayId))}</span><br>
+        <span class="muted">สแกนรูปนี้ด้วยแอปธนาคารของคุณ — ต้องขึ้นชื่อร้านและยอด ฿1 ถึงจะใช้ได้จริง (ไม่ต้องโอน) · เทียบรหัสร้านค้ากับโปสเตอร์ K SHOP ให้ตรงกัน</span></div>
+    </div>`:(p.online?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px;margin-top:8px">เปิดรับเงินออนไลน์อยู่แต่ยังไม่มี QR — ใส่พร้อมเพย์ หรืออัปโหลดรูป QR ร้านค้าด้านล่าง</div>':'')}
     <div style="display:grid;gap:8px;margin-top:10px">
-      <label class="ff">พร้อมเพย์ของสาขา (เบอร์ / เลขผู้เสียภาษี) <span class="muted" style="font-weight:400">— ถ้าใส่ ระบบใช้พร้อมเพย์ก่อน QR ร้านค้า</span>${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
+      <label class="ff">พร้อมเพย์ของสาขา (เบอร์มือถือ 10 หลัก / เลขผู้เสียภาษี 13 หลัก) <span class="muted" style="font-weight:400">— ถ้าใส่ ระบบใช้พร้อมเพย์ก่อน QR ร้านค้า · รหัสร้านค้า KB… ไม่ใช่พร้อมเพย์ ใส่ที่นี่ไม่ได้</span>${envNote(p.fromEnv&&p.fromEnv.promptpayId)}
         <input id="bp_pp_${id}" value="${esc(p.promptpayId||'')}" placeholder="08xxxxxxxx หรือ 0105xxxxxxxxx" inputmode="numeric"></label>
       <div class="ff">QR ร้านค้า (K SHOP / Thai QR) ของสาขา
         <div class="row" style="gap:6px;align-items:center;margin-top:2px">
@@ -2068,7 +2074,10 @@ window.loadBranchPay=async(id)=>{
 window.saveBranchPay=async(id,quick)=>{
   const body=quick||{ promptpayId:$('bp_pp_'+id).value.trim(), slipokBranch:$('bp_sb_'+id).value.trim(), slipokKey:($('bp_sk_'+id).value.trim()||undefined) };
   try{ await api('/api/branches/'+id+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); toast('บันทึกการชำระเงินแล้ว'); loadSlipokPage(); }
-  catch(e){ toast(e&&e.data&&e.data.error==='qr_not_readable'?'อ่าน QR จากรูปไม่ได้ — ใช้รูป QR ร้านค้าที่ชัดเจน':err(e)); }
+  catch(e){ const code=(e&&e.data&&e.data.error)||(e&&e.message);   // api() carries the server code in message
+    toast(code==='qr_not_readable'?'อ่าน QR จากรูปไม่ได้ — ใช้รูป QR ร้านค้าที่ชัดเจน'
+        : code==='promptpay_invalid'?'เลขนี้ไม่ใช่พร้อมเพย์ — ใส่เบอร์มือถือ 10 หลัก หรือเลขบัตร/ผู้เสียภาษี 13 หลัก · รหัสร้านค้า KB… ให้อัปโหลดรูป QR ร้านค้าแทน'
+        : err(e)); }
 };
 window.testBranchPay=async(id)=>{
   const out=$('bp_test_'+id); out.textContent='กำลังทดสอบ…';

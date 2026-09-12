@@ -229,7 +229,7 @@ app.get('/api/config', (req, res) => {
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
   const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -766,8 +766,15 @@ app.get('/api/member-qr', async (req, res) => {
 });
 // PromptPay payment QR for a given amount (dynamic QR — pre-fills the amount in the
 // payer's bank app). Free, no gateway; the cashier confirms payment manually then taps Paid.
+// The receiver line under the customer's QR: shop name + a masked id, enough to match the bank
+// app's confirmation screen, never the full account.
+function payToPublic(s) {
+  if (!s) return null;
+  const mask = (v) => { const d = String(v || ''); return d.length > 4 ? d.slice(0, 2) + '…' + d.slice(-4) : d; };
+  return s.mode === 'promptpay' ? { name: '', id: 'พร้อมเพย์ ' + mask(s.promptpayId) } : { name: s.name || '', id: s.merchantId ? 'ร้านค้า ' + mask(s.merchantId) : '' };
+}
 app.get('/api/promptpay-qr', async (req, res) => {
-  const branchId = req.query.ticket ? Q.branchOfTicket(req.query.ticket) : (Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
+  const branchId = req.query.branch ? Number(req.query.branch) : req.query.ticket ? Q.branchOfTicket(req.query.ticket) : (Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
   const pc = Q.getPayConfig(branchId);
   if (!pc.online || !pc.qrReady) return res.status(404).json({ error: 'promptpay_off' });
   const amount = Math.max(0, Number(req.query.amount) || 0);

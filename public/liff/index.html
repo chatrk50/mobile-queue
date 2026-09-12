@@ -2270,6 +2270,7 @@ function setQrFor(isKbank){
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal+'&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
   }
+  if(cfg.payTo&&(cfg.payTo.name||cfg.payTo.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payTo.name,cfg.payTo.id].filter(Boolean).join(' · '))+'</div>';
   // A merchant (K SHOP) QR: K PLUS ignores the pre-filled amount, so a K PLUS user swaps to the
   // type-it-yourself QR right here instead of picking a different channel. A PromptPay id needs none.
   if(!cfg.promptPayOneQr){

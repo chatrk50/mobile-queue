@@ -2646,6 +2646,32 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   Q.setGlobalMerchantQr(null);
 }
 
+{
+  // 12 Sep: "every bank app refuses the QR". A PromptPay box that accepted the K SHOP merchant code
+  // (KB0000…) rendered a QR no bank can pay. Only a real PromptPay target is stored now, and the
+  // owner can read back exactly what the QR pays into.
+  console.log(String.fromCharCode(10) + "== The PromptPay box only takes a PromptPay id; the owner can read what the QR pays into ==");
+  const SV = db.prepare("INSERT INTO stores (name) VALUES ('Valid Branch')").run().lastInsertRowid;
+  const KSHOP2 = "00020101021130810016A00000067701011201150107536000315010214KB0000023097860320EMPKB00000230978600131900016A00000067701011301030040214KB0000023097860420EMPKB0000023097860010517KB00000230978600153037645802TH6304E819";
+  const refuse = async (v) => { try { await Q.setPayConfig(SV, { promptpayId: v }); return null; } catch (e) { return e.message; } };
+  ok((await refuse("KB000002309786")) === "promptpay_invalid", "INVARIANT the K SHOP merchant code is refused as a PromptPay id");
+  ok((await refuse("000002309786")) === "promptpay_invalid", "INVARIANT a 12-digit number is refused (not a mobile, id or e-wallet)");
+  ok((await refuse("8123456789")) === "promptpay_invalid", "INVARIANT a 10-digit number must start with 0");
+  ok(Q.getPayConfig(SV).promptpayId === "" && Q.getPayConfig(SV).qrMode !== "promptpay", "INVARIANT a refused id is not stored");
+  await Q.setPayConfig(SV, { promptpayId: "081-234 5678" });
+  ok(Q.getPayConfig(SV).promptpayId === "0812345678", "INVARIANT a mobile number is stored as digits (dashes/spaces dropped)");
+  await Q.setPayConfig(SV, { promptpayId: "0107536000315" });
+  ok(Q.getPayConfig(SV).promptpayId === "0107536000315", "INVARIANT a 13-digit tax id is accepted");
+  ok(Q.qrSummary(SV).mode === "promptpay" && Q.qrSummary(SV).promptpayId === "0107536000315", "INVARIANT the summary says it is a PromptPay QR and to which id");
+  await Q.setPayConfig(SV, { promptpayId: "" });
+  Q.setGlobalMerchantQr(KSHOP2);
+  const sm = Q.qrSummary(SV);
+  ok(sm && sm.mode === "merchant" && sm.merchantId === "KB000002309786" && sm.ref === "EMPKB000002309786001", `INVARIANT the K SHOP poster reads back as merchant KB000002309786 / EMPKB…001 (${sm && sm.merchantId} / ${sm && sm.ref})`);
+  ok(Q.payConfigPublic(SV).qrSummary.merchantId === "KB000002309786", "INVARIANT the branch screen gets that summary");
+  Q.setGlobalMerchantQr(null);
+  ok(Q.qrSummary(SV) === null, "INVARIANT no QR, no summary");
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
