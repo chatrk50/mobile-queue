@@ -1743,6 +1743,14 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     // "สั่งให้ลูกค้าคนนี้": tag the new order to a looked-up customer (phone or LINE) BEFORE pay so
     // the history accrues + the card recognises them. Best-effort; idempotent retries are unaffected.
     if (req.body?.customerKey && r.ticket && !r.idempotent) Q.tagOrderCustomer(r.ticket.id, String(req.body.customerKey).slice(0, 80), req.body?.customerName || null);
+    // A discount keyed on the bill screen (ส่วนลด before the tender): the same setOrderDiscount the
+    // queue card uses, applied BEFORE the pay step so the tender settles the net. Skipped on an
+    // idempotent replay (the first request already applied it).
+    let disc = null;
+    if (req.body?.discount && r.ticket && !r.idempotent) {
+      try { disc = Q.setOrderDiscount(r.ticket.id, { amount: Number(req.body.discount.amount) || 0, reason: String(req.body.discount.reason || '').slice(0, 120) || null, actorId }); }
+      catch { /* the bill stays undiscounted; the cashier can still discount it from the card */ }
+    }
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
     // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid
@@ -1750,7 +1758,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     let paid = null;
     if (req.body?.pay) { try { paid = Q.setOrderPaid(r.ticket.id, { actorId, method: String(req.body.pay) }); } catch { /* stays pending */ } }
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
-    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
+    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, discount: disc ? disc.discount : 0, net: disc ? disc.net : (paid && paid.net != null ? paid.net : r.total), paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
   } catch (e) {
     const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
     res.status(map[e.message] || 400).json({ error: e.message });
