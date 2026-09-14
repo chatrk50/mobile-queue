@@ -1254,6 +1254,16 @@ app.post('/api/tickets/:ticketId/paid', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// A paid bill edited upward/downward: collect or hand back the difference. body: { method }.
+app.post('/api/tickets/:ticketId/settle-balance', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.settleBalance(req.params.ticketId, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Merge-pay: settle several pending bills in one tender (รวมบิล). body: { ticketIds:[], method }.
 app.post('/api/orders/pay-multi', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -1295,7 +1305,7 @@ app.post('/api/tickets/:ticketId/pay-items', (req, res) => {
 app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null });
+    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null, allowPaid: true });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
@@ -1329,8 +1339,15 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
     // (CASH-4). Only an UNPAID waste, or an explicit refund/cancel, goes through cancelOrderTicket.
     const o = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(req.params.ticketId);
     let result = { ok: true };
-    if (req.body?.kind === 'waste' && o && o.payment_status === 'paid') {
-      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 120) || null, byShop: !!req.body?.byShop });
+    const outcome = String(req.body?.outcome || '');
+    const reasonTxt = (req.body?.reason || '').toString().slice(0, 200) || null;
+    if (outcome === 'noshow') {
+      // ลูกค้าไม่มารับ: ticket → no_show (counts as a strike), money kept, made drink → waste.
+      result = Q.noShowTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: reasonTxt || 'ลูกค้าไม่มารับ', made: req.body?.made !== false });
+      result.noShow = true;
+    } else if ((outcome === 'remake' || (!outcome && req.body?.kind === 'waste')) && o && o.payment_status === 'paid') {
+      // ทำใหม่: the sale stands, the wasted first attempt is booked (CASH-4).
+      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (reasonTxt || '').slice(0, 120) || null, byShop: !!req.body?.byShop });
       result.wasteRemake = true;
     } else {
       Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
@@ -1356,6 +1373,14 @@ app.post('/api/tickets/:ticketId/:action', (req, res) => {
   const status = map[req.params.action];
   if (!status) return res.status(404).json({ error: 'unknown_action' });
   try {
+    // The card's own "ไม่มารับ" (no reason picked): close the order as well - an unpaid one is
+    // voided (nothing was made as far as we know, so no waste), a paid one keeps its money.
+    if (status === 'no_show') {
+      Q.noShowTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, made: false });
+      const tk = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+      if (tk) emit(tk.zone_id, 'update', (reveal) => Q.zoneSnapshot(tk.zone_id, { reveal }));
+      return res.json({ ok: true });
+    }
     const t = Q.setStatus(req.params.ticketId, status, THRESHOLD);
     emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });
@@ -1733,6 +1758,14 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     // "สั่งให้ลูกค้าคนนี้": tag the new order to a looked-up customer (phone or LINE) BEFORE pay so
     // the history accrues + the card recognises them. Best-effort; idempotent retries are unaffected.
     if (req.body?.customerKey && r.ticket && !r.idempotent) Q.tagOrderCustomer(r.ticket.id, String(req.body.customerKey).slice(0, 80), req.body?.customerName || null);
+    // A discount keyed on the bill screen (ส่วนลด before the tender): the same setOrderDiscount the
+    // queue card uses, applied BEFORE the pay step so the tender settles the net. Skipped on an
+    // idempotent replay (the first request already applied it).
+    let disc = null;
+    if (req.body?.discount && r.ticket && !r.idempotent) {
+      try { disc = Q.setOrderDiscount(r.ticket.id, { amount: Number(req.body.discount.amount) || 0, reason: String(req.body.discount.reason || '').slice(0, 120) || null, actorId }); }
+      catch { /* the bill stays undiscounted; the cashier can still discount it from the card */ }
+    }
     // Optional combined "create + pay" in one request — the cashier picks the tender first, so we
     // skip a whole extra HTTP+DB round-trip (matters most on the remote-DB prod). Pay failure leaves
     // the order as a normal pending bill in "รอชำระเงิน". Both createOrder (by token) and setOrderPaid
@@ -1740,7 +1773,7 @@ app.post('/api/zones/:zoneId/orders', (req, res) => {
     let paid = null;
     if (req.body?.pay) { try { paid = Q.setOrderPaid(r.ticket.id, { actorId, method: String(req.body.pay) }); } catch { /* stays pending */ } }
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
-    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
+    res.json({ ticketId: r.ticket.id, code: paid?.code || r.ticket.code, total: r.total, discount: disc ? disc.discount : 0, net: disc ? disc.net : (paid && paid.net != null ? paid.net : r.total), paid: !!paid, number: paid?.number || 0, idempotent: !!r.idempotent });
   } catch (e) {
     const map = { zone_closed: 423, zone_not_found: 404, empty_order: 400 };
     res.status(map[e.message] || 400).json({ error: e.message });

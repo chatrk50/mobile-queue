@@ -2698,6 +2698,109 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   Q.setGlobalKplusQr(null);
 }
 
+{
+  // 14 Sep: a paid bill may be edited on the cashier screen. The money already taken stays; the
+  // difference is a balance the cashier collects (or hands back) before serving.
+  console.log(String.fromCharCode(10) + "== A paid bill can be edited; the difference is a balance to settle ==");
+  db.prepare("UPDATE menu_items SET active=1 WHERE name IN ('Cup40','Cup49')").run();
+  const legs = (oid) => db.prepare("SELECT COALESCE(SUM(amount),0) s, COUNT(*) n FROM order_payments WHERE order_id=?").get(oid);
+  const oe = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(oe.ticket.id, { method: "cash" });
+  const oid = db.prepare("SELECT id FROM orders WHERE ticket_id=?").get(oe.ticket.id).id;
+  let refused = null; try { Q.editOrderItems(oe.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }]); } catch (e) { refused = e.message; }
+  ok(refused === "already_paid", "INVARIANT without allowPaid a paid bill is still refused (customer/API paths)");
+  const up = Q.editOrderItems(oe.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }, { name: "Cup40", price: 40, qty: 1 }], { allowPaid: true });
+  ok(up.ok && up.net === 89 && up.paid === 40 && up.due === 49, `INVARIANT editing ฿40→฿89 keeps the ฿40 taken and shows ฿49 due (${up.paid}/${up.due})`);
+  ok(db.prepare("SELECT payment_status FROM orders WHERE id=?").get(oid).payment_status === "paid", "INVARIANT the bill stays paid (queue number, loyalty, stock stand)");
+  ok(Q.orderForTicket(oe.ticket.id).due === 49, "INVARIANT the ticket API reports the balance");
+  let serveBlocked = null; try { Q.setStatus(oe.ticket.id, "served"); } catch (e) { serveBlocked = e.message; }
+  ok(serveBlocked === "balance_due", "INVARIANT serving waits for the balance like it waits for payment");
+  const before = legs(oid);
+  const st = Q.settleBalance(oe.ticket.id, { method: "promptpay" });
+  const after = legs(oid);
+  ok(st.amount === 49 && after.n === before.n + 1 && Math.abs(after.s - 89) < 0.01, `INVARIANT collecting the balance records a ฿49 leg; legs now total the new net (${after.s})`);
+  ok(Q.orderForTicket(oe.ticket.id).due === 0 && Q.settleBalance(oe.ticket.id, {}).nothing === true, "INVARIANT settled: nothing due, a second settle is a no-op");
+  const down = Q.editOrderItems(oe.ticket.id, [{ name: "Cup40", price: 40, qty: 1 }], { allowPaid: true });
+  ok(down.due === -49, `INVARIANT editing back down shows ฿49 to hand back (${down.due})`);
+  const rf = Q.settleBalance(oe.ticket.id, { method: "cash" });
+  const afterRf = legs(oid);
+  ok(rf.amount === -49 && Math.abs(afterRf.s - 40) < 0.01, `INVARIANT the refund leg brings the legs back to the net (${afterRf.s})`);
+  ok(Q.setStatus(oe.ticket.id, "served").ok !== false, "INVARIANT with nothing due the cup can be served");
+  const ou = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "cashier" });
+  const eu = Q.editOrderItems(ou.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }], { allowPaid: true });
+  ok(eu.due === 0 && eu.paid === 0 && eu.total === 49, "INVARIANT an unpaid bill edits as before (no balance concept)");
+  Q.cancelOrderTicket(ou.ticket.id, null, { reason: "probe" });
+  db.prepare("UPDATE menu_items SET active=0 WHERE name IN ('Cup40','Cup49')").run();
+}
+
+{
+  // 15 Sep: every void reason must land where the report expects it. A made-but-unpaid drink was
+  // voided with no waste booked; a paid no-show was "remade"; refunds never said how the money went back.
+  console.log(String.fromCharCode(10) + "== Void reasons: cancel / no-show / refund / remake each do the right thing ==");
+  const vIng = db.prepare("INSERT INTO ingredients (name, unit, stock_qty, avg_cost) VALUES ('นมของเสีย','ลิตร', 50, 10)").run().lastInsertRowid;
+  const vMenu = db.prepare("INSERT INTO menu_items (name,price,category) VALUES ('VoidCup',40,'drink')").run().lastInsertRowid;
+  db.prepare("INSERT INTO recipes (menu_item_id, ingredient_id, qty) VALUES (?,?,0.5)").run(vMenu, vIng);
+  const stock = () => db.prepare("SELECT stock_qty s FROM ingredients WHERE id=?").get(vIng).s;
+  const moves = (kind, since) => db.prepare("SELECT COUNT(*) n, COALESCE(SUM(qty),0) q FROM stock_moves WHERE ingredient_id=? AND kind=? AND id>?").get(vIng, kind, since);
+  const lastMove = () => db.prepare("SELECT COALESCE(MAX(id),0) m FROM stock_moves").get().m;
+  const legs = (tid) => db.prepare("SELECT COALESCE(SUM(amount),0) s FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=?)").get(tid).s;
+  const ordOf = (tid) => db.prepare("SELECT payment_status, void_kind, void_reason FROM orders WHERE ticket_id=?").get(tid);
+  const tkOf = (tid) => db.prepare("SELECT status, line_user_id FROM tickets WHERE id=?").get(tid);
+  const NS = "U" + "n".repeat(32);
+  // 1. unpaid, made, customer never came → no_show ticket, waste booked, a strike for the LINE customer
+  let m0 = lastMove();
+  const n1 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "customer", lineUserId: NS });
+  const r1 = Q.noShowTicket(n1.ticket.id, null, { reason: "ลูกค้าไม่มารับ", made: true });
+  ok(tkOf(n1.ticket.id).status === "no_show" && ordOf(n1.ticket.id).payment_status === "void" && ordOf(n1.ticket.id).void_kind === "waste", "INVARIANT an unpaid made no-show closes as no_show with the order voided as waste");
+  ok(r1.waste === 1 && moves("waste", m0).n === 1 && Math.abs(moves("waste", m0).q + 0.5) < 0.001 && Math.abs(stock() - 49.5) < 0.001, `INVARIANT its ingredients are booked as waste (stock 50 → ${stock()})`);
+  ok(Q.noshowStrikes(NS).strikes === 1, "INVARIANT the LINE customer gets a no-show strike");
+  // 2. paid, made, no-show → money kept, ticket no_show, the use at payment becomes waste
+  m0 = lastMove();
+  const n2 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(n2.ticket.id, { method: "promptpay" });
+  ok(Math.abs(stock() - 49) < 0.001, "INVARIANT payment deducted the recipe (use)");
+  const r2 = Q.noShowTicket(n2.ticket.id, null, { made: true });
+  ok(r2.paid === true && ordOf(n2.ticket.id).payment_status === "paid" && tkOf(n2.ticket.id).status === "no_show", "INVARIANT a paid no-show keeps the sale and closes the ticket as no_show");
+  ok(moves("return", m0).n === 1 && moves("waste", m0).n === 1 && Math.abs(stock() - 49) < 0.001, `INVARIANT its use is reclassified as waste (return + waste, stock unchanged ${stock()})`);
+  ok(Math.abs(legs(n2.ticket.id) - 40) < 0.01, "INVARIANT no refund leg on a paid no-show");
+  // 3. unpaid, made wrong → void + waste
+  m0 = lastMove();
+  const n3 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.cancelOrderTicket(n3.ticket.id, null, { reason: "ของเสีย/ทำพลาด", kind: "waste", restock: false });
+  ok(ordOf(n3.ticket.id).void_kind === "waste" && moves("waste", m0).n === 1 && Math.abs(stock() - 48.5) < 0.001, `INVARIANT an unpaid made-wrong drink is voided as waste with its ingredients booked (stock ${stock()})`);
+  // 4. paid, not made, customer cancels → refund in CASH on a promptpay sale, ingredients returned
+  m0 = lastMove();
+  const n4 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(n4.ticket.id, { method: "promptpay" });
+  Q.cancelOrderTicket(n4.ticket.id, null, { reason: "ลูกค้ายกเลิก", restock: true, refundMethod: "cash" });
+  const rl4 = db.prepare("SELECT method, amount, kind FROM order_payments WHERE order_id=(SELECT id FROM orders WHERE ticket_id=?) AND kind='refund'").get(n4.ticket.id);
+  ok(ordOf(n4.ticket.id).void_kind === "refund" && rl4 && rl4.method === "cash" && Math.abs(rl4.amount + 40) < 0.01, "INVARIANT a refund records the tender the money went back in (cash on a PromptPay sale)");
+  ok(moves("return", m0).n === 1 && moves("waste", m0).n === 0 && Math.abs(stock() - 48.5) < 0.001, `INVARIANT a not-made refund returns the ingredients, no waste (stock ${stock()})`);
+  // 5. paid, made, unhappy → refund: the cup is waste, not COGS
+  m0 = lastMove();
+  const n5 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(n5.ticket.id, { method: "cash" });
+  Q.cancelOrderTicket(n5.ticket.id, null, { reason: "ลูกค้าไม่พอใจ", kind: "waste", restock: false, refundMethod: "cash" });
+  ok(ordOf(n5.ticket.id).void_kind === "refund" && moves("return", m0).n === 1 && moves("waste", m0).n === 1 && Math.abs(stock() - 48) < 0.001, `INVARIANT a refunded made drink is reclassified from use to waste (stock ${stock()})`);
+  await new Promise((r) => setTimeout(r, 30));   // sale_events flush on setImmediate
+  const ev5 = db.prepare("SELECT meta FROM sale_events WHERE ticket_id=? AND type='refund'").get(n5.ticket.id);
+  ok(ev5 && /\"waste\":1/.test(ev5.meta || "") && /cash/.test(ev5.meta || ""), "INVARIANT the audit event carries the waste and the refund tender");
+  // 6. paid, made wrong → remake keeps the sale and books the waste on top (existing CASH-4 path)
+  m0 = lastMove();
+  const n6 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(n6.ticket.id, { method: "cash" });
+  const r6 = Q.recordWaste(n6.ticket.id, { byShop: true, reason: "ของเสีย/ทำพลาด" });
+  ok(r6.cups === 1 && ordOf(n6.ticket.id).payment_status === "paid" && tkOf(n6.ticket.id).status !== "cancelled" && moves("waste", m0).n === 1, "INVARIANT a remake keeps the sale, keeps the ticket, and books the extra cup as waste");
+  ok(Q.orderForTicket(n6.ticket.id).remakes === 1, "INVARIANT the order remembers the remake so the card can show 🔁 ทำใหม่");
+  // 7. the plain ไม่มารับ button (nothing made) voids an unpaid order without waste
+  m0 = lastMove();
+  const n7 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });
+  Q.noShowTicket(n7.ticket.id, null, { made: false });
+  ok(tkOf(n7.ticket.id).status === "no_show" && ordOf(n7.ticket.id).void_kind === "void" && moves("waste", m0).n === 0, "INVARIANT the card's ไม่มารับ closes an unmade unpaid order as void, no waste");
+  ok(Q.noShowTicket(n7.ticket.id, null, {}).already === true, "INVARIANT a second no-show on a closed ticket is a no-op");
+  db.prepare("UPDATE menu_items SET active=0 WHERE id=?").run(vMenu);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

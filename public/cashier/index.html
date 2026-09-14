@@ -237,6 +237,8 @@
   .cprow + .cprow{ margin-top:9px; }
   .cphint{ font-size:11px; color:var(--muted); margin-top:7px; }
 </style>
+<script src="/assets/i18n-core.js?v=2" defer></script>
+<script src="/cashier/i18n.js?v=1" defer></script>
 </head><body>
 <!-- Connection state. navigator.onLine only says "a network exists" — it happily reports online
      on a wifi that has no route out, which is exactly the market-stall failure. So this is driven
@@ -795,9 +797,14 @@
         <div class="pos-totals">
           <div class="row between" style="font-size:13px"><span class="muted">จำนวนรายการ</span><span id="billCount">0</span></div>
           <div id="billDiscRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:#7c3aed;margin-top:4px"><span>ส่วนลดของแถม (ฟรี)</span><span>-฿<span id="billDisc">0</span></span></div>
+          <div id="billManRow" class="row between" style="display:none;font-size:14px;font-weight:800;color:var(--danger);margin-top:4px;align-items:center"><span><span>ส่วนลด</span><span id="billManReason" class="muted" style="font-weight:500;font-size:12px"></span></span><span>-฿<span id="billMan">0</span> <button class="ghost" style="padding:0 6px;font-size:12px;line-height:1.6;vertical-align:middle" aria-label="ยกเลิกส่วนลด" onclick="billDiscount(0)">✕</button></span></div>
           <div class="row between" style="font-size:24px;font-weight:800;color:var(--navy);margin-top:2px"><span>รวม</span><span>฿<span id="billTotal">0</span></span></div>
         </div>
-        <div class="row" style="gap:8px;margin-top:12px">
+        <div id="billExtraRow" class="row" style="gap:8px;margin-top:12px">
+          <button class="ghost" id="billDiscBtn" style="flex:1" onclick="billDiscount()" disabled><svg class="ic" viewBox="0 0 24 24"><path d="M20 12l-8 8-8-8V4h8z"/><circle cx="9" cy="9" r="1.5"/></svg>ส่วนลด</button>
+          <button class="ghost" id="billSplitBtn" style="flex:1" onclick="billSplitItems()" disabled title="แยกจ่ายตามเมนู"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>แยกรายการชำระ</button>
+        </div>
+        <div class="row" style="gap:8px;margin-top:8px">
           <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ล้างบิล</button>
           <button class="ghost" id="billHoldBtn" style="flex:1.4;background:rgba(243,203,85,.18);color:#946f00;border-color:#f3cb55" onclick="holdBill()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>พักบิล (จ่ายทีหลัง)</button>
           <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน → ออกคิว</button>
@@ -1528,7 +1535,7 @@ async function api(path,opts={}){
   try{ r=await fetch(path,opts); }catch(e){ setNet(false); throw new Error('offline'); }
   setNet(true);
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
+function err(e){ const m={offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -4107,7 +4114,7 @@ function renderOrderMenu(){
 // Re-price the menu when the cashier switches channel (delivery applies its markup).
 window.onChannelChange=async(v)=>{ orderChannel=Number(v); await loadMenu(orderChannel); renderOrderMenu();
   if(cart.length){ toast('เปลี่ยนช่องทาง — ตรวจราคาในตะกร้าอีกครั้ง'); } };
-window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; orderChannel=null; _orderCust=null; const _ocb=$('orderCustBanner'); if(_ocb) _ocb.style.display='none'; await loadChannels(); renderChannelSel();
+window.showOrder=async(zoneId)=>{ orderZoneId=zoneId; cart=[]; _billDisc=null; orderChannel=null; _orderCust=null; const _ocb=$('orderCustBanner'); if(_ocb) _ocb.style.display='none'; await loadChannels(); renderChannelSel();
   await loadMenu(orderChannel); renderOrderMenu();
   const z=zones.find(x=>x.id===zoneId); $('orderZone').textContent=z?z.name:('Zone '+zoneId);
   renderBasketCount(); hideAllPanels(); $('dash').style.display='none'; $('orderCard').style.display=''; };   // hideAllPanels closes EVERY admin card (the old hand-written list missed tender/coupon/promo/control)
@@ -4126,12 +4133,13 @@ window.clearOrderCust=()=>{ _orderCust=null; const ocb=$('orderCustBanner'); if(
 function setEditMode(on){
   const hold=$('billHoldBtn'), pay=$('billPayBtn'), save=$('billSaveBtn');
   if(hold) hold.style.display=on?'none':''; if(pay) pay.style.display=on?'none':''; if(save) save.style.display=on?'':'none';
+  const ex=$('billExtraRow'); if(ex) ex.style.display=on?'none':'';
   if(on && _editTicket) $('orderZone').textContent='แก้ไขออเดอร์ #'+_editTicket; }
 window.editOrder=async(tid, zoneId)=>{
-  let lines, blocked;
-  try{ const v=await api('/api/tickets/'+tid); const o=v.order||{}; lines=o.lines||[]; blocked=(o.paid||o.status==='paid'); }
+  let lines, paid, net;
+  try{ const v=await api('/api/tickets/'+tid); const o=v.order||{}; lines=o.lines||[]; paid=(o.paid||o.status==='paid'); net=Math.round(((o.total||0)-(o.discount||0))*100)/100; }
   catch(e){ toast(err(e)); return; }
-  if(blocked){ toast('ออเดอร์นี้ชำระแล้ว แก้ไขไม่ได้'); return; }
+  if(paid && !(await appConfirm({title:'แก้ไขออเดอร์ที่ชำระแล้ว',message:'ออเดอร์นี้รับเงินแล้ว ฿'+net+'\n\nแก้ไขได้ — ถ้ายอดใหม่สูงกว่า ส่วนต่างจะเป็น "ค้างเพิ่ม" ให้กดรับเงินเพิ่มที่การ์ด ถ้าต่ำกว่า จะขึ้นให้คืนส่วนต่าง',okText:'แก้ไขต่อ',cancelText:'ยกเลิก'}))) return;
   if(!lines.length){ toast('ไม่พบรายการในออเดอร์'); return; }
   const entries=[];
   for(const l of lines){ let name=l.name, sweet=100; const m=String(name).match(/^(.*) · หวาน (\d+)%$/); if(m){ name=m[1]; sweet=+m[2]; }
@@ -4144,7 +4152,7 @@ window.saveEdit=async()=>{
   if(!cart.length){ toast('บิลว่าง — เพิ่มรายการก่อนบันทึก'); return; }
   const tid=_editTicket, items=buildBillItems(cart);
   try{ const r=await api('/api/tickets/'+tid+'/edit-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
-    toast('✅ แก้ไขออเดอร์ #'+tid+' แล้ว · ยอดใหม่ ฿'+r.total);
+    toast(r.due>0?('✅ แก้ไขแล้ว · ยอดใหม่ ฿'+r.net+' — ค้างเพิ่ม ฿'+r.due+' กด "รับเงินเพิ่ม" ที่การ์ด'):r.due<0?('✅ แก้ไขแล้ว · ยอดใหม่ ฿'+r.net+' — คืนลูกค้า ฿'+Math.abs(r.due)+' กด "คืนส่วนต่าง" ที่การ์ด'):('✅ แก้ไขออเดอร์ #'+tid+' แล้ว · ยอดใหม่ ฿'+r.total));
     _editTicket=null; cart=[]; setEditMode(false); hideOrder();
   }catch(e){ const m=String(e&&e.message||''); toast(/already_paid/.test(m)?'ชำระไปแล้ว แก้ไขไม่ได้':/has_partial_payment/.test(m)?'มีการรับเงินบางส่วนแล้ว แก้ไขไม่ได้':err(e)); } };
 
@@ -4246,11 +4254,48 @@ function renderBill(){
     : '<p class="muted" style="text-align:center;padding:28px 8px">แตะเมนูทางขวา เพื่อเพิ่มลงบิล →</p>';
   const sub=cart.reduce((s,e)=>s+entryTotal(e),0); const disc=cartFreeDiscount();
   const dr=$('billDiscRow'); if(dr){ if(disc>0){ dr.style.display='flex'; const dd=$('billDisc'); if(dd) dd.textContent=disc; } else dr.style.display='none'; }
-  const bt=$('billTotal'); if(bt) bt.textContent=sub-disc;
+  // The till discount never exceeds what is left after the free-giveaway one.
+  const man=billManualDiscount(sub-disc);
+  const mr=$('billManRow'); if(mr){ if(man>0){ mr.style.display='flex'; $('billMan').textContent=man; $('billManReason').textContent=_billDisc&&_billDisc.reason?(' · '+_billDisc.reason):''; } else mr.style.display='none'; }
+  const bt=$('billTotal'); if(bt) bt.textContent=sub-disc-man;
   const bc=$('billCount'); if(bc) bc.textContent=cart.length;
   const pay=$('billPayBtn'); if(pay) pay.disabled=!cart.length;
   const hold=$('billHoldBtn'); if(hold) hold.disabled=!cart.length;
+  const db_=$('billDiscBtn'); if(db_) db_.disabled=!cart.length||!!_editTicket;
+  const sp=$('billSplitBtn'); if(sp) sp.disabled=billGroups().length<2||!!_editTicket;
 }
+// ---- ส่วนลด on the bill (before the order exists) ----
+// Kept on the till until the bill is sent; the server applies it with setOrderDiscount before the
+// tender, so cash / change and the queue card all see the net. Cleared with the bill.
+let _billDisc=null;
+function billManualDiscount(cap){ if(!_billDisc) return 0; const a=Math.round((Number(_billDisc.amount)||0)*100)/100; return Math.max(0, Math.min(a, Math.max(0, cap))); }
+window.billDiscount=async(preset)=>{
+  if(_editTicket){ toast('แก้ไขออเดอร์อยู่ — ใส่ส่วนลดได้ที่การ์ดออเดอร์'); return; }
+  if(!cart.length){ toast('ตะกร้าว่าง'); return; }
+  const net=cart.reduce((s,e)=>s+entryTotal(e),0)-cartFreeDiscount();
+  let amount, reason='';
+  if(preset===0){ amount=0; }
+  else {
+    const a=await appPrompt({title:'ลดราคา',message:'ส่วนลด (บาท) — สูงสุด ฿'+net+'\nใส่ 0 เพื่อยกเลิกส่วนลด',type:'number',inputMode:'decimal',placeholder:String(_billDisc?_billDisc.amount:0)}); if(a===null) return;
+    amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
+    if(amount>0){ reason=((await appPrompt({title:'เหตุผลส่วนลด',message:'ไม่บังคับ — เช่น สมาชิก, โปรโมชั่น',placeholder:'เหตุผล (เว้นว่างได้)',okText:'บันทึก',value:_billDisc?(_billDisc.reason||''):''}))||'').trim(); }
+  }
+  _billDisc = amount>0 ? { amount:Math.min(amount,net), reason } : null;
+  renderBill();
+  toast(_billDisc?('ลด ฿'+_billDisc.amount+' · ยอดสุทธิ ฿'+(net-_billDisc.amount)):'ยกเลิกส่วนลดแล้ว');
+};
+// ---- แยกรายการชำระ from the bill: park it, then open the per-item split for the new order ----
+window.billSplitItems=async()=>{
+  if(_editTicket){ toast('แก้ไขออเดอร์อยู่ — แยกจ่ายได้ที่การ์ดออเดอร์'); return; }
+  if(billGroups().length<2){ toast('แยกรายการได้เมื่อมีอย่างน้อย 2 รายการ'); return; }
+  const snapshot=cart.slice(); const token=tokenFor(snapshot); const discSnap=_billDisc;
+  cart=[]; _billDisc=null; _heldToken=null; _heldSig=null; hideOrder(); beep(660);
+  toast('🧾 กำลังสร้างบิลเพื่อแยกจ่าย…');
+  try{ const r=await sendBillRetry(snapshot,null,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'),discSnap);
+    await new Promise(res=>setTimeout(res,350));   // let the queue card land before the popup reads it
+    openItemSplit(r.ticketId); }
+  catch(e){ if(!cart.length){ restoreBill(snapshot,token); _billDisc=discSnap; renderBill(); toast('⚠️ สร้างบิลไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน'); }
+    else { toast('⚠️ บิลก่อนหน้าส่งไม่สำเร็จ ('+err(e)+') กรุณาทำใหม่'); } } };
 // Kept for back-compat (old basket modal): also refreshes the live bill.
 function renderBasketCount(){ const c=$('basketCount'); if(c){ c.textContent=cart.length; c.style.display=cart.length?'':'none'; } renderBill(); }
 // Step 4: review basket -> confirm or cancel.
@@ -4360,7 +4405,7 @@ function renderBasket(){
   $('basketConfirm').disabled = !cart.length;
 }
 window.cancelBasket=async()=>{ if(!cart.length) return;
-  if(!(await appConfirm({title:'ล้างบิล',message:'ล้างรายการทั้งหมดในบิล?',okText:'ล้างบิล',danger:true}))) return; cart=[]; renderBasketCount(); };
+  if(!(await appConfirm({title:'ล้างบิล',message:'ล้างรายการทั้งหมดในบิล?',okText:'ล้างบิล',danger:true}))) return; cart=[]; _billDisc=null; renderBasketCount(); };
 // Short confirmation beep (Web Audio) — instant audio feedback the moment a bill is sent,
 // so the cashier feels "done" before the network round-trip finishes. Safe no-op if blocked.
 let _ac=null;
@@ -4380,15 +4425,16 @@ let _heldToken=null, _heldSig=null;   // token kept with a restored (failed) bil
 // Low-level send. payMethod given = server creates AND pays in one round-trip; omitted = park/hold.
 // Captures zone/channel synchronously (before the await) so it stays correct even if the cashier
 // starts a new order while this one is still in flight. Does NOT touch the cart/UI.
-function postBill(entries,payMethod,token){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
+function postBill(entries,payMethod,token,disc){ const body={items:buildBillItems(entries),channelId:orderChannel,clientToken:token};
+  if(disc&&disc.amount>0) body.discount={amount:disc.amount,reason:disc.reason||''};
   if(_orderCust){ body.customerKey=_orderCust.key; body.customerName=_orderCust.name; }   // "สั่งให้ลูกค้าคนนี้"
   if(payMethod) body.pay=payMethod;   // no tender = พักบิล (held); queue number follows the เข้าคิวทันที setting
   return api('/api/zones/'+orderZoneId+'/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
 // Send with automatic retry on transient failure. The SAME token is reused every attempt, so even if
 // a "failed" send actually reached the server, the retry returns the SAME order (never a duplicate).
-async function sendBillRetry(entries,payMethod,token,onRetry){ let lastErr;
+async function sendBillRetry(entries,payMethod,token,onRetry,disc){ let lastErr;
   for(let attempt=1; attempt<=3; attempt++){
-    try{ return await postBill(entries,payMethod,token); }
+    try{ return await postBill(entries,payMethod,token,disc); }
     catch(e){ lastErr=e; const msg=String(e&&e.message||'');
       if(/zone_closed|empty_order|bad_pin|zone_not_found/.test(msg)) throw e;   // deterministic reject — don't retry
       if(attempt<3){ onRetry&&onRetry(attempt); await new Promise(r=>setTimeout(r,600*attempt)); } } }
@@ -4404,29 +4450,30 @@ window.confirmBasket=async()=>{
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
   // Pick the tender FIRST (popup shows instantly — no order created yet). Charge the NET of any
   // free-giveaway discount so the cash keypad / change calc matches what the server will settle.
-  const total=cart.reduce((s,e)=>s+entryTotal(e),0) - cartFreeDiscount();
+  const gross=cart.reduce((s,e)=>s+entryTotal(e),0) - cartFreeDiscount();
+  const total=gross - billManualDiscount(gross);
   const method=await pickPayMethod(total); if(method===null) return;
   // OPTIMISTIC: clear the UI + beep INSTANTLY (0ms perceived) and return to the queue, then send in
   // the background with retry. On total failure the bill is restored so a network blip never loses a sale.
-  const snapshot=cart.slice(); const token=tokenFor(snapshot);
-  cart=[]; _heldToken=null; _heldSig=null; hideOrder(); beep();
+  const snapshot=cart.slice(); const token=tokenFor(snapshot); const discSnap=_billDisc;
+  cart=[]; _billDisc=null; _heldToken=null; _heldSig=null; hideOrder(); beep();
   toast('✅ รับออเดอร์แล้ว · กำลังออกคิว…');
-  try{ const r=await sendBillRetry(snapshot,method,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'));
-    toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+(method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ')+') · ฿'+r.total);
+  try{ const r=await sendBillRetry(snapshot,method,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'),discSnap);
+    toast('✅ ชำระแล้ว'+(r.code?(' · คิว '+r.code):'')+' ('+(method==='cash'?'เงินสด':method==='promptpay'?'พร้อมเพย์':'อื่นๆ')+') · ฿'+(r.net!=null?r.net:r.total));
     if(CFG.printEnabled && r.ticketId) printKitchen(r.ticketId);
     loadTodayStats();   // refresh the pulse strip with the new sale (no-op for cashiers)
-  }catch(e){ if(!cart.length){ restoreBill(snapshot,token); toast('⚠️ ส่งไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน กดชำระอีกครั้งได้'); }
+  }catch(e){ if(!cart.length){ restoreBill(snapshot,token); _billDisc=discSnap; renderBill(); toast('⚠️ ส่งไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน กดชำระอีกครั้งได้'); }
     else { toast('⚠️ บิลก่อนหน้าส่งไม่สำเร็จ ('+err(e)+') กรุณาทำรายการนั้นใหม่'); } } };
 // Hold/park the bill: create the order but DON'T pay yet — it waits in "รอชำระเงิน" for later.
 window.holdBill=async()=>{
   if(_editTicket){ return saveEdit(); }
   if(!cart.length){ toast('ตะกร้าว่าง'); return; }
-  const snapshot=cart.slice(); const token=tokenFor(snapshot);
-  cart=[]; _heldToken=null; _heldSig=null; hideOrder(); beep(660);
+  const snapshot=cart.slice(); const token=tokenFor(snapshot); const discSnap=_billDisc;
+  cart=[]; _billDisc=null; _heldToken=null; _heldSig=null; hideOrder(); beep(660);
   toast('🅿️ กำลังพักบิล…');
-  try{ const r=await sendBillRetry(snapshot,null,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'));
+  try{ const r=await sendBillRetry(snapshot,null,token,(n)=>toast('⏳ เครือข่ายช้า… กำลังลองใหม่ ('+n+')'),discSnap);
     toast('🅿️ พักบิลไว้แล้ว · ออเดอร์ #'+r.ticketId+' อยู่ใน "รอชำระเงิน" — กดรับเงินภายหลังได้'); }
-  catch(e){ if(!cart.length){ restoreBill(snapshot,token); toast('⚠️ พักบิลไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน'); }
+  catch(e){ if(!cart.length){ restoreBill(snapshot,token); _billDisc=discSnap; renderBill(); toast('⚠️ พักบิลไม่สำเร็จ: '+err(e)+' — บิลถูกกู้คืน'); }
     else { toast('⚠️ พักบิลก่อนหน้าไม่สำเร็จ ('+err(e)+') กรุณาทำใหม่'); } } };
 
 async function boot(){
@@ -4633,7 +4680,11 @@ function renderZone(snap){
     ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?t.loy_tier+' ':'⭐ '}${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
   const pay=(t)=>{
     if(t.order_total==null) return '';
-    if(t.payment_status==='paid') return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
+    if(t.payment_status==='paid'){
+      if(t.order_due>0) return ' <span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800;margin-left:6px">ชำระแล้ว · ค้างเพิ่ม ฿'+t.order_due+'</span>';
+      if(t.order_due<0) return ' <span class="pill" style="background:rgba(229,91,107,.15);color:#c43a4b;font-weight:800;margin-left:6px">ชำระแล้ว · ต้องคืน ฿'+Math.abs(t.order_due)+'</span>';
+      return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
+    }
     if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
     return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
@@ -4674,7 +4725,8 @@ function renderZone(snap){
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="keepOrder(${t.id})">เก็บไว้ / ทำต่อ</button></div>`
     : '';
   const cancelCardStyle=(t)=> t.cancel_requested ? 'border:2px solid var(--danger);border-top:none;border-radius:0 0 12px 12px;background:rgba(220,38,38,.06)' : '';
-  const makingPill=(t)=> t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '';
+  const makingPill=(t)=> (t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '')
+    + (t.order_remakes>0 ? ' <span class="pill" style="background:rgba(229,91,107,.14);color:#c43a4b;font-size:11px;margin-left:6px" title="บันทึกของเสียแล้ว กำลังทำใหม่ให้ลูกค้า — กดเสิร์ฟเมื่อเสร็จ">🔁 ทำใหม่'+(t.order_remakes>1?(' ×'+t.order_remakes):'')+'</span>' : '');
   // Queue-first: an unpaid order not yet being made → start-making (locks the customer cancel) + nudge to pay.
   const makeBtns=(t)=> (CFG.queueFirst && t.order_total!=null && t.payment_status!=='paid' && !t.making_at)
     ? `<button class="ghost" style="padding:8px 10px" onclick="startMaking(${t.id})">🍳 เริ่มทำ</button>`+
@@ -4732,7 +4784,7 @@ function renderZone(snap){
   const splitBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && (t.order_lines||[]).length>=2)
     ? `<button class="ghost" style="padding:8px 10px" onclick="openItemSplit(${t.id})" title="แยกจ่ายตามเมนู">${IC.split}แยกรายการ</button>` : '';
   // แก้ไขออเดอร์: change drink/topping/sweet in place instead of cancel+rekey (unpaid, no partial).
-  const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void' && !(t.order_paid>0))
+  const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='void' && !(t.payment_status!=='paid' && t.order_paid>0))
     ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">${IC.edit}แก้ไข</button>` : '';
   // "เพิ่มเติม" overflow: collect the occasional actions into one menu so the card row stays tidy.
   // Each card passes its own applicable secondary buttons (pending vs waiting differ); openMoreMenu shows them.
@@ -4751,6 +4803,9 @@ function renderZone(snap){
   // order is unpaid → then "เสิร์ฟแล้ว" once paid. One prominent button guides the cashier pay → serve.
   // Distinct pastel states (theme-matched, not loud): awaiting payment = soft butter; ready to serve = soft mint.
   const payOrServe=(t)=>{ if(t.order_total==null) return '';
+    // A paid bill edited after payment: collect the extra (or hand the difference back) before serving.
+    if(t.payment_status==='paid' && t.order_due>0) return `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="settleBalance(${t.id},${t.order_due})">${IC.cash}รับเงินเพิ่ม ฿${t.order_due}</button>`;
+    if(t.payment_status==='paid' && t.order_due<0) return `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f7c9d0;color:#8a1f2e" onclick="settleBalance(${t.id},${t.order_due})">${IC.cash}คืนส่วนต่าง ฿${Math.abs(t.order_due)}</button>`;
     return (t.payment_status!=='paid')
       ? `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน ฿${remainOf(t)}</button>`
       : `<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#a9e3d0;color:#0c5e48" onclick="act(${t.id},'serve')">${IC.serve}เสิร์ฟแล้ว</button>`; };
@@ -4819,10 +4874,12 @@ function renderPayButtons(){
     +`</div><button class="ghost" style="width:100%;padding:13px;text-align:center;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);border-radius:0 0 12px 12px" onclick="choosePayMethod(null)">ยกเลิก</button>`;
 }
 let _payAmt=0;
-function pickPayMethod(amount){ _payAmt=Number(amount)||0; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
+let _payMode='pay';
+function pickPayMethod(amount,opts){ _payAmt=Number(amount)||0; _payMode=(opts&&opts.mode)||'pay'; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
+  const h=$('payMethodPop').querySelector('h1'); if(h) h.textContent=(opts&&opts.title)||'รับชำระเงิน';
   return new Promise(res=>{ _payRes=res; }); }
 window.choosePayMethod=(m)=>{
-  if(m==='cash'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
+  if(m==='cash' && _payMode!=='refund'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
   $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
 // Cash received → change. Pro POS pattern: lead with smart "quick cash" (exact + the nearest notes
 // above the bill, each showing its change); the numpad is the exception, hidden behind a toggle.
@@ -4862,6 +4919,15 @@ window.calcChange=()=>{ const due=_payAmt, recv=(_cashRecv==='')?due:(Number(_ca
   else { lab.textContent='เงินทอน'; box.textContent='฿'+fmt0(recv-due); box.style.color='#16876f'; if(btn){btn.disabled=false;btn.style.opacity=1;} } };
 window.confirmCash=()=>{ $('cashPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r('cash'); };
 window.cashBack=()=>{ $('cashPop').style.display='none'; $('payMethodPop').style.display='flex'; };   // back to tender picker
+// Settle what a post-payment edit left on a paid bill: extra to collect (+) or change to hand back (-).
+window.settleBalance=async(tid,due)=>{
+  due=Number(due)||0; if(!due) return;
+  let method;
+  if(due>0){ method=await pickPayMethod(due); if(method===null) return; }
+  else { if(!(await appConfirm({title:'คืนส่วนต่าง ฿'+Math.abs(due),message:'ยอดใหม่ต่ำกว่าที่รับเงินไว้ — คืนเงินลูกค้า ฿'+Math.abs(due)+' แล้วกดยืนยัน',okText:'คืนแล้ว ✓',cancelText:'ยังไม่คืน'}))) return; method='cash'; }
+  try{ const r=await api('/api/tickets/'+tid+'/settle-balance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method})});
+    toast(r.amount>0?('✅ รับเงินเพิ่ม ฿'+r.amount+' แล้ว · ยอดรวม ฿'+r.net):r.amount<0?('✅ คืนส่วนต่าง ฿'+Math.abs(r.amount)+' แล้ว · ยอดรวม ฿'+r.net):'ไม่มียอดค้าง'); }
+  catch(e){ toast(err(e)); } };
 window.markPaid=async(tid,status,amount)=>{
   // For a customer-declared PromptPay payment, force the staff to verify the money
   // actually arrived in the bank app before confirming — a tap is not proof of payment.
@@ -5340,13 +5406,20 @@ window.saveRecipe=async()=>{
 // product so the report counts it as a no-revenue cost; the rest auto-classify as
 // cancel (unpaid → neutral) or refund (paid → money back) on the server.
 // restock:true = ยังไม่ได้ทำ → คืนวัตถุดิบเข้าสต๊อก · restock:false = ทำแล้ว → หักสต๊อกเป็นของเสีย
+// Each reason says what happens next (outcome):
+//   cancel  - not made: void (paid → refund) and the ingredients go back to stock
+//   noshow  - made, nobody came: ticket closes as ไม่มารับ (a strike for a LINE customer), money kept,
+//             the drink is booked as waste
+//   ask     - made, customer unhappy: on a paid bill the cashier chooses ทำใหม่ (keep the money,
+//             book the waste) or คืนเงิน (refund + waste); unpaid → void + waste
+//   remake  - made wrong: paid → ทำใหม่ (whose fault is asked); unpaid → void + waste
 const VOID_REASONS=[
-  {label:'🙅 ลูกค้ายกเลิก · ยังไม่ได้ทำ', reason:'ลูกค้ายกเลิก', restock:true},
-  {label:'🔁 สั่ง/กดผิด · ยังไม่ได้ทำ', reason:'สั่งหรือกดผิด', restock:true},
-  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้', restock:true},
-  {label:'🚶 ลูกค้าไม่มารับ · ทำแล้ว', reason:'ลูกค้าไม่มารับ', restock:false, kind:'waste'},
-  {label:'😞 ลูกค้าไม่พอใจ · ทำแล้ว', reason:'ลูกค้าไม่พอใจ', restock:false, kind:'waste'},
-  {label:'🗑️ ของเสีย/ทำพลาด · ทำแล้ว', reason:'ของเสีย/ทำพลาด', restock:false, kind:'waste'},
+  {label:'🙅 ลูกค้ายกเลิก · ยังไม่ได้ทำ', reason:'ลูกค้ายกเลิก', restock:true, outcome:'cancel'},
+  {label:'🔁 สั่ง/กดผิด · ยังไม่ได้ทำ', reason:'สั่งหรือกดผิด', restock:true, outcome:'cancel'},
+  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้', restock:true, outcome:'cancel'},
+  {label:'🚶 ลูกค้าไม่มารับ · ทำแล้ว', reason:'ลูกค้าไม่มารับ', restock:false, kind:'waste', outcome:'noshow'},
+  {label:'😞 ลูกค้าไม่พอใจ · ทำแล้ว', reason:'ลูกค้าไม่พอใจ', restock:false, kind:'waste', outcome:'ask'},
+  {label:'🗑️ ของเสีย/ทำพลาด · ทำแล้ว', reason:'ของเสีย/ทำพลาด', restock:false, kind:'waste', outcome:'remake'},
 ];
 let _voidRes=null;
 function pickVoidReason(){ const box=$('voidReasonBtns');
@@ -5357,15 +5430,32 @@ function pickVoidReason(){ const box=$('voidReasonBtns');
 window.chooseVoidReason=(i)=>{ $('voidPop').style.display='none'; const r=_voidRes; _voidRes=null; if(r) r(i<0?null:VOID_REASONS[i]); };
 window.voidTicket=async(tid)=>{
   const choice=await pickVoidReason(); if(!choice) return;
-  // For the generic "ของเสีย/ทำพลาด" reason, ask whose fault it is — on a PAID bill this becomes a
-  // ทำใหม่ (keep the money + book the waste), so the label matters in the report. Clear-cut customer
-  // reasons (ไม่มารับ/ไม่พอใจ) are auto byShop=false.
-  let byShop=false;
-  if(choice.kind==='waste' && /ทำพลาด|ของเสีย/.test(choice.reason)){
-    byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — ถ้าบิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'});
+  // What the bill looks like decides the questions: a paid bill may need ทำใหม่-or-คืนเงิน and the
+  // refund tender; an unpaid one just closes.
+  let paid=false, net=0;
+  try{ const v=await api('/api/tickets/'+tid); const o=v.order||{}; paid=!!(o.paid||o.status==='paid'); net=Math.round(((o.total||0)-(o.discount||0))*100)/100; }catch(e){}
+  let outcome=choice.outcome||'cancel', byShop=false, refundMethod=null;
+  if(outcome==='ask'){
+    if(paid){ outcome=(await appConfirm({title:'ลูกค้าไม่พอใจ — ทำอย่างไร?',message:'ทำใหม่: เก็บเงินเดิม บันทึกแก้วเดิมเป็นของเสีย\nคืนเงิน: คืนเงิน ฿'+net+' และบันทึกของเสีย',okText:'ทำใหม่ให้ลูกค้า',cancelText:'คืนเงิน'}))?'remake':'refund'; }
+    else outcome='cancel';
   }
-  try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop})});
-    toast(r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว + ทำใหม่ · เก็บเงินเดิม'):(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว'))); }catch(e){ toast(err(e)); } };
+  if(outcome==='remake'){
+    if(paid){
+      const remake=await appConfirm({title:'ของเสีย/ทำพลาด — ทำอย่างไรต่อ?',message:'ทำใหม่: เก็บเงินเดิม บันทึกแก้วเดิมเป็นของเสีย การ์ดยังอยู่ในคิวจนกดเสิร์ฟ\nยกเลิก: คืนเงิน ฿'+net+' และบันทึกของเสีย การ์ดหายจากคิว',okText:'ทำใหม่ให้ลูกค้า',cancelText:'ยกเลิก + คืนเงิน'});
+      if(remake){ byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — บิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'}); }
+      else outcome='refund';
+    }
+    else outcome='cancel';   // unpaid: nothing to keep - void + book the waste
+  }
+  // A refund: the cashier says HOW the money went back (a K PLUS sale refunded in cash reduces the drawer).
+  if(paid && (outcome==='cancel'||outcome==='refund')){
+    refundMethod=await pickPayMethod(net,{title:'คืนเงิน',mode:'refund'}); if(refundMethod===null) return;
+  }
+  try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop,outcome,made:choice.outcome!=='cancel',refundMethod})});
+    toast(r&&r.noShow?('🚶 ปิดเป็นไม่มารับแล้ว'+(r.waste?(' · ของเสีย '+r.waste+' แก้ว'):'')+(r.paid?' · เก็บเงินเดิม':''))
+        : r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว · ทำใหม่ให้ลูกค้า — การ์ดยังอยู่ กดเสิร์ฟเมื่อทำเสร็จ')
+        : paid?('↩️ คืนเงิน ฿'+net+(choice.restock?' + คืนวัตถุดิบเข้าสต๊อก':' · บันทึกของเสีย'))
+        : (choice.kind==='waste'?'🗑️ ยกเลิก · บันทึกของเสีย':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
   const a=await appPrompt({title:'ลดราคา',message:'ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด',type:'number',inputMode:'decimal',placeholder:'0'}); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
