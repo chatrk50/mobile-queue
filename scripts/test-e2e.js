@@ -2698,6 +2698,41 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   Q.setGlobalKplusQr(null);
 }
 
+{
+  // 14 Sep: a paid bill may be edited on the cashier screen. The money already taken stays; the
+  // difference is a balance the cashier collects (or hands back) before serving.
+  console.log(String.fromCharCode(10) + "== A paid bill can be edited; the difference is a balance to settle ==");
+  db.prepare("UPDATE menu_items SET active=1 WHERE name IN ('Cup40','Cup49')").run();
+  const legs = (oid) => db.prepare("SELECT COALESCE(SUM(amount),0) s, COUNT(*) n FROM order_payments WHERE order_id=?").get(oid);
+  const oe = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "cashier" });
+  Q.setOrderPaid(oe.ticket.id, { method: "cash" });
+  const oid = db.prepare("SELECT id FROM orders WHERE ticket_id=?").get(oe.ticket.id).id;
+  let refused = null; try { Q.editOrderItems(oe.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }]); } catch (e) { refused = e.message; }
+  ok(refused === "already_paid", "INVARIANT without allowPaid a paid bill is still refused (customer/API paths)");
+  const up = Q.editOrderItems(oe.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }, { name: "Cup40", price: 40, qty: 1 }], { allowPaid: true });
+  ok(up.ok && up.net === 89 && up.paid === 40 && up.due === 49, `INVARIANT editing ฿40→฿89 keeps the ฿40 taken and shows ฿49 due (${up.paid}/${up.due})`);
+  ok(db.prepare("SELECT payment_status FROM orders WHERE id=?").get(oid).payment_status === "paid", "INVARIANT the bill stays paid (queue number, loyalty, stock stand)");
+  ok(Q.orderForTicket(oe.ticket.id).due === 49, "INVARIANT the ticket API reports the balance");
+  let serveBlocked = null; try { Q.setStatus(oe.ticket.id, "served"); } catch (e) { serveBlocked = e.message; }
+  ok(serveBlocked === "balance_due", "INVARIANT serving waits for the balance like it waits for payment");
+  const before = legs(oid);
+  const st = Q.settleBalance(oe.ticket.id, { method: "promptpay" });
+  const after = legs(oid);
+  ok(st.amount === 49 && after.n === before.n + 1 && Math.abs(after.s - 89) < 0.01, `INVARIANT collecting the balance records a ฿49 leg; legs now total the new net (${after.s})`);
+  ok(Q.orderForTicket(oe.ticket.id).due === 0 && Q.settleBalance(oe.ticket.id, {}).nothing === true, "INVARIANT settled: nothing due, a second settle is a no-op");
+  const down = Q.editOrderItems(oe.ticket.id, [{ name: "Cup40", price: 40, qty: 1 }], { allowPaid: true });
+  ok(down.due === -49, `INVARIANT editing back down shows ฿49 to hand back (${down.due})`);
+  const rf = Q.settleBalance(oe.ticket.id, { method: "cash" });
+  const afterRf = legs(oid);
+  ok(rf.amount === -49 && Math.abs(afterRf.s - 40) < 0.01, `INVARIANT the refund leg brings the legs back to the net (${afterRf.s})`);
+  ok(Q.setStatus(oe.ticket.id, "served").ok !== false, "INVARIANT with nothing due the cup can be served");
+  const ou = Q.createOrder(1, [{ name: "Cup40", price: 40, qty: 1 }], { source: "cashier" });
+  const eu = Q.editOrderItems(ou.ticket.id, [{ name: "Cup49", price: 49, qty: 1 }], { allowPaid: true });
+  ok(eu.due === 0 && eu.paid === 0 && eu.total === 49, "INVARIANT an unpaid bill edits as before (no balance concept)");
+  Q.cancelOrderTicket(ou.ticket.id, null, { reason: "probe" });
+  db.prepare("UPDATE menu_items SET active=0 WHERE name IN ('Cup40','Cup49')").run();
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

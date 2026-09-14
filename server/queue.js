@@ -182,6 +182,7 @@ export function setStatus(ticketId, status, threshold) {
   if (status === 'served') {
     const o = orderForTicket(ticketId);
     if (o && o.payment_status !== 'paid') throw new Error('order_unpaid');
+    if (o && balanceDueOf(o) > 0) throw new Error('balance_due');
   }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
   // Notify the customer on LINE when their order is handed over (served).
@@ -4637,12 +4638,18 @@ export function customerSuggestions(lineUserId, opts = {}) {
  *  cancel-and-rekey. Replaces all order_items + recomputes total. Guarded: not paid, not void, and
  *  nothing collected yet (paid_amount 0). Stock isn't touched here — it deducts at payment. */
 export function editOrderItems(ticketId, items, opts = {}) {
-  const { actorId = null } = opts;
+  const { actorId = null, allowPaid = false } = opts;
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
-  if (order.payment_status === 'paid') throw new Error('already_paid');
+  const wasPaid = order.payment_status === 'paid';
+  if (wasPaid && !allowPaid) throw new Error('already_paid');
   if (order.payment_status === 'void') throw new Error('order_void');
-  if ((order.paid_amount || 0) > 0) throw new Error('has_partial_payment');
+  if (!wasPaid && (order.paid_amount || 0) > 0) throw new Error('has_partial_payment');
+  // A paid order: what was collected stays the truth (paid_amount; older rows never stored it, so
+  // the net at the time counts). After the edit the difference is a balance the cashier collects
+  // (or hands back) with settleBalance - the sale itself, its queue number and loyalty stand.
+  const oldNet = r2((order.total || 0) - (order.discount || 0));
+  const paidAmt = wasPaid ? ((order.paid_amount || 0) > 0 ? r2(order.paid_amount) : oldNet) : 0;
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({ name: (it.name || '').toString().slice(0, 60), price: Math.max(0, Number(it.price) || 0), qty: Math.max(1, Math.min(99, Math.round(Number(it.qty) || 1))) }))
     .filter((it) => it.name);
@@ -4660,10 +4667,47 @@ export function editOrderItems(ticketId, items, opts = {}) {
     const newDisc = keepManual ? Math.min(order.discount, total) : freeDisc;
     const newReason = keepManual ? order.discount_reason : (freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
     db.prepare('UPDATE orders SET total=?, discount=?, discount_reason=? WHERE id=?').run(total, newDisc, newReason, order.id);
+    // A paid bill: pin down what was collected; per-line "paid" marks no longer describe the new lines.
+    if (wasPaid) db.prepare('UPDATE orders SET paid_amount=?, paid_lines=NULL WHERE id=?').run(paidAmt, order.id);
   });
+  if (wasPaid) returnStockForOrder(order);   // the recipe use booked at payment, given back before…
   tx();
-  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'order_edited', amount: total, actor: actorId, meta: {} });
-  return { ok: true, total, ticketId: Number(ticketId) };
+  if (wasPaid) deductStockForOrder(order);   // …the new lines are consumed (both never throw)
+  const net = r2(total - (keepManualDiscountOf(order, total)));
+  const due = wasPaid ? r2(net - paidAmt) : 0;
+  logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: wasPaid ? 'order_edited_paid' : 'order_edited', amount: total, actor: actorId, meta: wasPaid ? { oldNet, net, paid: paidAmt, due } : {} });
+  return { ok: true, total, net, paid: paidAmt, due, ticketId: Number(ticketId) };
+}
+// The discount the edit left on the bill (re-read: the tx above decided it).
+function keepManualDiscountOf(order, total) {
+  const cur = db.prepare('SELECT discount FROM orders WHERE id=?').get(order.id);
+  return Math.min(Number(cur && cur.discount) || 0, total);
+}
+/** Collect (or hand back) the difference a post-payment edit left on a paid bill. Records the tender
+ *  leg so the drawer / tender reconciliation carries it, then pins paid_amount to the new net. */
+export function settleBalance(ticketId, opts = {}) {
+  const { actorId = null, method: rawMethod = null } = opts;
+  const method = normalizeMethod(rawMethod);
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  if (!order) throw new Error('order_not_found');
+  if (order.payment_status !== 'paid') throw new Error('order_unpaid');
+  const net = r2((order.total || 0) - (order.discount || 0));
+  const paid = (order.paid_amount || 0) > 0 ? r2(order.paid_amount) : net;
+  const diff = r2(net - paid);
+  if (Math.abs(diff) < 0.005) return { ok: true, settled: true, amount: 0, net, nothing: true };
+  return db.transaction(() => {
+    recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: method || 'cash', amount: Math.abs(diff), kind: diff > 0 ? 'payment' : 'refund', actorId });
+    db.prepare('UPDATE orders SET paid_amount=? WHERE id=?').run(net, order.id);
+    logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: diff > 0 ? 'paid_extra' : 'refund_partial', amount: Math.abs(diff), actor: actorId, meta: { method: method || 'cash', net, paidBefore: paid } });
+    return { ok: true, settled: true, amount: diff, net };
+  })();
+}
+/** What a paid bill still owes after an edit (+) or is owed back (-); 0 for anything else. */
+export function balanceDueOf(order) {
+  if (!order || order.payment_status !== 'paid') return 0;
+  const net = r2((order.total || 0) - (order.discount || 0));
+  const paid = (order.paid_amount || 0) > 0 ? r2(order.paid_amount) : net;
+  return r2(net - paid);
 }
 
 // Free-badge giveaway: any menu item / topping flagged badge='free' is recorded at its REAL price
@@ -5614,7 +5658,7 @@ export function orderForTicket(ticketId) {
   // discount_reason was missing from this hand-built object, so every reason the code carefully sets
   // (คูปอง / วันเกิด / เลขนำโชค) reached the customer's ticket as null. The DB and the audit log were
   // always right — only the label the customer reads was being dropped here.
-  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, due: balanceDueOf(order), paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 /** Server-side subtotal of one grouped order line (drink + its toppings) — the authoritative amount
@@ -5691,6 +5735,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_discount = o.discount || 0;
       t.order_net = Math.round((o.total - (o.discount || 0)) * 100) / 100;
       t.order_paid = Math.round((o.paid_amount || 0) * 100) / 100; // partial payments so far (แยกตามเงิน)
+      t.order_due = o.due || 0;              // a paid bill edited upward (+) / downward (-), not yet settled
       t.order_summary = o.items.map((i) => `${i.qty}× ${i.name}`).join(', ');
       t.order_lines = o.lines;               // grouped: drink + its toppings (dash sub-lines)
       t.payment_status = o.payment_status;   // 'unpaid' | 'paid' | 'void'
@@ -5784,7 +5829,7 @@ export function ticketView(ticketId) {
     cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
-    order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
+    order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', due: o.due || 0, status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
     loyalty,
     // Lucky-number prize. Only present on a winning ticket; the LIFF shows the congratulations
     // sheet while state is 'won' and the order is still unpaid (a paid order can't be discounted).

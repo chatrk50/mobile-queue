@@ -1254,6 +1254,16 @@ app.post('/api/tickets/:ticketId/paid', (req, res) => {
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// A paid bill edited upward/downward: collect or hand back the difference. body: { method }.
+app.post('/api/tickets/:ticketId/settle-balance', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try {
+    const r = Q.settleBalance(req.params.ticketId, { actorId: req.staff?.id || null, method: req.body?.method || null });
+    const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+    if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Merge-pay: settle several pending bills in one tender (รวมบิล). body: { ticketIds:[], method }.
 app.post('/api/orders/pay-multi', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -1295,7 +1305,7 @@ app.post('/api/tickets/:ticketId/pay-items', (req, res) => {
 app.post('/api/tickets/:ticketId/edit-order', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   try {
-    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null });
+    const r = Q.editOrderItems(req.params.ticketId, req.body?.items, { actorId: req.staff?.id || null, allowPaid: true });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);

@@ -227,6 +227,7 @@
   .cw-later{background:#fff;color:var(--muted);border:1.5px solid var(--line)}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="/liff/i18n.js?v=1" defer></script>
 </head><body>
 <!-- Loading splash (capture 1): logo + fill-bar, shown until the app is ready -->
 <div id="loadSplash" style="position:fixed;inset:0;z-index:90;background:linear-gradient(160deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px">
@@ -1934,7 +1935,7 @@ function renderOrderBlock(v){
     show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; if(v.order&&v.order.due>0){ pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML+=' · ค้างเพิ่ม ฿'+v.order.due+' ชำระที่เคาน์เตอร์'; } else { pill.style.background=''; pill.style.color=''; } show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
     else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
   else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
