@@ -2791,6 +2791,7 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   Q.setOrderPaid(n6.ticket.id, { method: "cash" });
   const r6 = Q.recordWaste(n6.ticket.id, { byShop: true, reason: "ของเสีย/ทำพลาด" });
   ok(r6.cups === 1 && ordOf(n6.ticket.id).payment_status === "paid" && tkOf(n6.ticket.id).status !== "cancelled" && moves("waste", m0).n === 1, "INVARIANT a remake keeps the sale, keeps the ticket, and books the extra cup as waste");
+  ok(Q.orderForTicket(n6.ticket.id).remakes === 1, "INVARIANT the order remembers the remake so the card can show 🔁 ทำใหม่");
   // 7. the plain ไม่มารับ button (nothing made) voids an unpaid order without waste
   m0 = lastMove();
   const n7 = Q.createOrder(1, [{ name: "VoidCup", price: 40, qty: 1 }], { source: "cashier" });

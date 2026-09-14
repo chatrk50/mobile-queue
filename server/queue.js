@@ -5473,6 +5473,7 @@ export function recordWaste(ticketId, { reason = null, byShop = false, actorId =
         } catch { /* a missing ingredient must never block booking the waste */ }
       }
     }
+    db.prepare('UPDATE orders SET remakes = COALESCE(remakes,0) + 1 WHERE id=?').run(order.id);
     logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'waste_remake', amount: order.total, actor: actorId, meta: { reason: rsn, byShop, cups } });
   })();
   return { ok: true, cups, cost: Math.round(cost * 100) / 100, byShop, reason: rsn };
@@ -5715,7 +5716,7 @@ export function orderForTicket(ticketId) {
   // discount_reason was missing from this hand-built object, so every reason the code carefully sets
   // (คูปอง / วันเกิด / เลขนำโชค) reached the customer's ticket as null. The DB and the audit log were
   // always right — only the label the customer reads was being dropped here.
-  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, due: balanceDueOf(order), paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, due: balanceDueOf(order), paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, remakes: order.remakes || 0, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 /** Server-side subtotal of one grouped order line (drink + its toppings) — the authoritative amount
@@ -5799,6 +5800,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_source = o.source;             // 'cashier' | 'customer'
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
+      t.order_remakes = o.remakes || 0;      // ทำใหม่: the sale stands, the card stays until the new cup is served
     }
     // Cashier-only: show the attached customer (phone) so staff always know an order is tagged — even
     // with loyalty OFF (CRM). When loyalty is ON, also attach the stamp balance for on-the-spot redeem.

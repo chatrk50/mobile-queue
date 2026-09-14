@@ -4725,7 +4725,8 @@ function renderZone(snap){
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="keepOrder(${t.id})">เก็บไว้ / ทำต่อ</button></div>`
     : '';
   const cancelCardStyle=(t)=> t.cancel_requested ? 'border:2px solid var(--danger);border-top:none;border-radius:0 0 12px 12px;background:rgba(220,38,38,.06)' : '';
-  const makingPill=(t)=> t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '';
+  const makingPill=(t)=> (t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '')
+    + (t.order_remakes>0 ? ' <span class="pill" style="background:rgba(229,91,107,.14);color:#c43a4b;font-size:11px;margin-left:6px" title="บันทึกของเสียแล้ว กำลังทำใหม่ให้ลูกค้า — กดเสิร์ฟเมื่อเสร็จ">🔁 ทำใหม่'+(t.order_remakes>1?(' ×'+t.order_remakes):'')+'</span>' : '');
   // Queue-first: an unpaid order not yet being made → start-making (locks the customer cancel) + nudge to pay.
   const makeBtns=(t)=> (CFG.queueFirst && t.order_total!=null && t.payment_status!=='paid' && !t.making_at)
     ? `<button class="ghost" style="padding:8px 10px" onclick="startMaking(${t.id})">🍳 เริ่มทำ</button>`+
@@ -5439,7 +5440,11 @@ window.voidTicket=async(tid)=>{
     else outcome='cancel';
   }
   if(outcome==='remake'){
-    if(paid){ byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — บิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'}); }
+    if(paid){
+      const remake=await appConfirm({title:'ของเสีย/ทำพลาด — ทำอย่างไรต่อ?',message:'ทำใหม่: เก็บเงินเดิม บันทึกแก้วเดิมเป็นของเสีย การ์ดยังอยู่ในคิวจนกดเสิร์ฟ\nยกเลิก: คืนเงิน ฿'+net+' และบันทึกของเสีย การ์ดหายจากคิว',okText:'ทำใหม่ให้ลูกค้า',cancelText:'ยกเลิก + คืนเงิน'});
+      if(remake){ byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — บิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'}); }
+      else outcome='refund';
+    }
     else outcome='cancel';   // unpaid: nothing to keep - void + book the waste
   }
   // A refund: the cashier says HOW the money went back (a K PLUS sale refunded in cash reduces the drawer).
@@ -5448,7 +5453,7 @@ window.voidTicket=async(tid)=>{
   }
   try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop,outcome,made:choice.outcome!=='cancel',refundMethod})});
     toast(r&&r.noShow?('🚶 ปิดเป็นไม่มารับแล้ว'+(r.waste?(' · ของเสีย '+r.waste+' แก้ว'):'')+(r.paid?' · เก็บเงินเดิม':''))
-        : r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว + ทำใหม่ · เก็บเงินเดิม')
+        : r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว · ทำใหม่ให้ลูกค้า — การ์ดยังอยู่ กดเสิร์ฟเมื่อทำเสร็จ')
         : paid?('↩️ คืนเงิน ฿'+net+(choice.restock?' + คืนวัตถุดิบเข้าสต๊อก':' · บันทึกของเสีย'))
         : (choice.kind==='waste'?'🗑️ ยกเลิก · บันทึกของเสีย':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
