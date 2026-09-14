@@ -5404,6 +5404,29 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
  *  (cancelled before any product/money — neutral). All three are excluded from sales. */
 // Reverse a paid order's recipe deduction — ingredients go BACK to stock when the cancel
 // reason says the drink was never made (e.g. customer cancelled / wrong order / can't make).
+/** A drink that was MADE and then binned: its recipe ingredients are posted as 'waste' moves so the
+ *  day's waste cost carries them. Returns the cups and the ingredient cost. Never throws. */
+function wasteStockForOrder(order, note, actorId = null) {
+  let cups = 0, cost = 0;
+  try {
+    const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
+    for (const it of items) {
+      cups += Number(it.qty) || 1;
+      let miId = it.menu_item_id;
+      if (!miId) { const base = String(it.name).split(' · ')[0]; miId = db.prepare('SELECT id FROM menu_items WHERE name=? LIMIT 1').get(base)?.id; }
+      if (!miId) continue;
+      for (const r of db.prepare('SELECT ingredient_id, qty FROM recipes WHERE menu_item_id=?').all(miId)) {
+        const q = (Number(r.qty) || 0) * (Number(it.qty) || 1);
+        if (q > 0) try {
+          const ing = db.prepare('SELECT avg_cost FROM ingredients WHERE id=?').get(r.ingredient_id);
+          cost += q * (Number(ing?.avg_cost) || 0);
+          recordStockMove(r.ingredient_id, { kind: 'waste', qty: q, note, actorId });
+        } catch { /* a missing ingredient never blocks the booking */ }
+      }
+    }
+  } catch { /* never block a cancel on stock */ }
+  return { cups, cost: Math.round(cost * 100) / 100 };
+}
 function returnStockForOrder(order) {
   try {
     const items = db.prepare('SELECT name, qty, menu_item_id FROM order_items WHERE order_id=?').all(order.id);
@@ -5511,6 +5534,10 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
     // If the drink was never made (restock reason) AND its stock had been deducted (paid), put
     // the ingredients back. A "made then discarded" reason leaves stock deducted (it was a waste).
     if (order && wasPaid && restock && !alreadyVoid) returnStockForOrder(order);
+    const code = t.code || ('#' + (order && order.id));
+    let waste = null;
+    if (order && !alreadyVoid && kind === 'waste') waste = wasteStockForOrder(order, 'ของเสีย (ยกเลิก) ' + code, actorId);
+    if (order && !alreadyVoid && wasPaid && !restock) { returnStockForOrder(order); waste = wasteStockForOrder(order, 'ของเสีย (คืนเงิน) ' + code, actorId); }
     // Undo loyalty: return any redeemed stamps + remove any stamps earned on this order — BUT only
     // if the drink wasn't already served. Once served, the product cost is incurred and the free
     // drink was handed over, so points are never returned (owner rule).
@@ -5521,7 +5548,7 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
     if (order && wasPaid && kind === 'refund' && !alreadyVoid) {
       recordPaymentLeg({ orderId: order.id, branchId: order.branch_id, method: refundMethod || order.payment_method || 'cash', amount: order.total - (order.discount || 0), kind: 'refund', actorId });
     }
-    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, pointsReturned: pts, refundMethod: (kind === 'refund' ? (refundMethod || order.payment_method || 'cash') : undefined) } });
+    if (order && !alreadyVoid) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: kind, amount: order.total, actor: actorId, meta: { reason, restock, waste: waste ? waste.cups : 0, wasteCost: waste ? waste.cost : 0, pointsReturned: pts, refundMethod: (kind === 'refund' ? (refundMethod || order.payment_method || 'cash') : undefined) } });
     db.prepare(`UPDATE tickets SET status='cancelled', closed_at=datetime('now') WHERE id=?`).run(ticketId);
     return pts;
   })();
@@ -5538,6 +5565,36 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   }
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true };
+}
+
+/** ลูกค้าไม่มารับ: close the ticket as no_show (that is what the no-show strikes count), keep any money
+ *  already taken (a paid no-show is still a sale), void an unpaid order, and - when the drink was
+ *  made - book its ingredients as waste (for a paid one, the 'use' at payment becomes waste). */
+export function noShowTicket(ticketId, threshold, opts = {}) {
+  const { actorId = null, reason = 'ลูกค้าไม่มารับ', made = true } = opts;
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (['served', 'cancelled', 'no_show', 'skipped'].includes(t.status)) return { ok: true, already: true, status: t.status };
+  const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
+  const wasPaid = !!(order && order.payment_status === 'paid');
+  const code = t.code || ('#' + (order && order.id));
+  let waste = null;
+  db.transaction(() => {
+    if (order && !wasPaid && order.payment_status !== 'void') {
+      db.prepare(`UPDATE orders SET payment_status='void', void_kind=?, void_reason=?, voided_at=datetime('now'), voided_by=? WHERE id=?`)
+        .run(made ? 'waste' : 'void', reason, actorId, order.id);
+      reverseLoyaltyForOrder(order.id, t.line_user_id);
+      if (made) waste = wasteStockForOrder(order, 'ของเสีย (ไม่มารับ) ' + code, actorId);
+    } else if (order && wasPaid && made) {
+      returnStockForOrder(order);
+      waste = wasteStockForOrder(order, 'ของเสีย (ไม่มารับ) ' + code, actorId);
+    }
+    if (order) logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'no_show', amount: order.total, actor: actorId, meta: { reason, paid: wasPaid, made, waste: waste ? waste.cups : 0, wasteCost: waste ? waste.cost : 0 } });
+    db.prepare(`UPDATE tickets SET status='no_show', closed_at=datetime('now') WHERE id=?`).run(ticketId);
+  })();
+  if (t.line_user_id) pushQueue(t.line_user_id, `🚶 ออเดอร์ ${t.code || ''} ถูกปิดเนื่องจากไม่มีผู้มารับค่ะ\n` + (wasPaid ? '' : 'สั่งใหม่ได้ตลอดเลยนะคะ ') + 'ขอบคุณค่ะ 🙂', null);
+  if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
+  return { ok: true, paid: wasPaid, made, waste: waste ? waste.cups : 0, wasteCost: waste ? waste.cost : 0 };
 }
 
 /** กู้คืนออเดอร์: revive a cancelled UNPAID order (typically auto-voided by the payment timeout)

@@ -1339,8 +1339,15 @@ app.post('/api/tickets/:ticketId/void', (req, res) => {
     // (CASH-4). Only an UNPAID waste, or an explicit refund/cancel, goes through cancelOrderTicket.
     const o = db.prepare(`SELECT payment_status FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1`).get(req.params.ticketId);
     let result = { ok: true };
-    if (req.body?.kind === 'waste' && o && o.payment_status === 'paid') {
-      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 120) || null, byShop: !!req.body?.byShop });
+    const outcome = String(req.body?.outcome || '');
+    const reasonTxt = (req.body?.reason || '').toString().slice(0, 200) || null;
+    if (outcome === 'noshow') {
+      // ลูกค้าไม่มารับ: ticket → no_show (counts as a strike), money kept, made drink → waste.
+      result = Q.noShowTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: reasonTxt || 'ลูกค้าไม่มารับ', made: req.body?.made !== false });
+      result.noShow = true;
+    } else if ((outcome === 'remake' || (!outcome && req.body?.kind === 'waste')) && o && o.payment_status === 'paid') {
+      // ทำใหม่: the sale stands, the wasted first attempt is booked (CASH-4).
+      result = Q.recordWaste(req.params.ticketId, { actorId: req.staff?.id || null, reason: (reasonTxt || '').slice(0, 120) || null, byShop: !!req.body?.byShop });
       result.wasteRemake = true;
     } else {
       Q.cancelOrderTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, reason: (req.body?.reason || '').toString().slice(0, 200) || null, kind: req.body?.kind === 'waste' ? 'waste' : null, restock: !!req.body?.restock, refundMethod: req.body?.refundMethod || null });
@@ -1366,6 +1373,14 @@ app.post('/api/tickets/:ticketId/:action', (req, res) => {
   const status = map[req.params.action];
   if (!status) return res.status(404).json({ error: 'unknown_action' });
   try {
+    // The card's own "ไม่มารับ" (no reason picked): close the order as well - an unpaid one is
+    // voided (nothing was made as far as we know, so no waste), a paid one keeps its money.
+    if (status === 'no_show') {
+      Q.noShowTicket(req.params.ticketId, THRESHOLD, { actorId: req.staff?.id || null, made: false });
+      const tk = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
+      if (tk) emit(tk.zone_id, 'update', (reveal) => Q.zoneSnapshot(tk.zone_id, { reveal }));
+      return res.json({ ok: true });
+    }
     const t = Q.setStatus(req.params.ticketId, status, THRESHOLD);
     emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true });

@@ -4873,10 +4873,12 @@ function renderPayButtons(){
     +`</div><button class="ghost" style="width:100%;padding:13px;text-align:center;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);border-radius:0 0 12px 12px" onclick="choosePayMethod(null)">ยกเลิก</button>`;
 }
 let _payAmt=0;
-function pickPayMethod(amount){ _payAmt=Number(amount)||0; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
+let _payMode='pay';
+function pickPayMethod(amount,opts){ _payAmt=Number(amount)||0; _payMode=(opts&&opts.mode)||'pay'; $('payMethodAmt').textContent=amount; renderPayButtons(); $('payMethodPop').style.display='flex';
+  const h=$('payMethodPop').querySelector('h1'); if(h) h.textContent=(opts&&opts.title)||'รับชำระเงิน';
   return new Promise(res=>{ _payRes=res; }); }
 window.choosePayMethod=(m)=>{
-  if(m==='cash'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
+  if(m==='cash' && _payMode!=='refund'){ $('payMethodPop').style.display='none'; openCashPop(); return; }   // cash → received/change step first
   $('payMethodPop').style.display='none'; const r=_payRes; _payRes=null; if(r) r(m); };
 // Cash received → change. Pro POS pattern: lead with smart "quick cash" (exact + the nearest notes
 // above the bill, each showing its change); the numpad is the exception, hidden behind a toggle.
@@ -5403,13 +5405,20 @@ window.saveRecipe=async()=>{
 // product so the report counts it as a no-revenue cost; the rest auto-classify as
 // cancel (unpaid → neutral) or refund (paid → money back) on the server.
 // restock:true = ยังไม่ได้ทำ → คืนวัตถุดิบเข้าสต๊อก · restock:false = ทำแล้ว → หักสต๊อกเป็นของเสีย
+// Each reason says what happens next (outcome):
+//   cancel  - not made: void (paid → refund) and the ingredients go back to stock
+//   noshow  - made, nobody came: ticket closes as ไม่มารับ (a strike for a LINE customer), money kept,
+//             the drink is booked as waste
+//   ask     - made, customer unhappy: on a paid bill the cashier chooses ทำใหม่ (keep the money,
+//             book the waste) or คืนเงิน (refund + waste); unpaid → void + waste
+//   remake  - made wrong: paid → ทำใหม่ (whose fault is asked); unpaid → void + waste
 const VOID_REASONS=[
-  {label:'🙅 ลูกค้ายกเลิก · ยังไม่ได้ทำ', reason:'ลูกค้ายกเลิก', restock:true},
-  {label:'🔁 สั่ง/กดผิด · ยังไม่ได้ทำ', reason:'สั่งหรือกดผิด', restock:true},
-  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้', restock:true},
-  {label:'🚶 ลูกค้าไม่มารับ · ทำแล้ว', reason:'ลูกค้าไม่มารับ', restock:false, kind:'waste'},
-  {label:'😞 ลูกค้าไม่พอใจ · ทำแล้ว', reason:'ลูกค้าไม่พอใจ', restock:false, kind:'waste'},
-  {label:'🗑️ ของเสีย/ทำพลาด · ทำแล้ว', reason:'ของเสีย/ทำพลาด', restock:false, kind:'waste'},
+  {label:'🙅 ลูกค้ายกเลิก · ยังไม่ได้ทำ', reason:'ลูกค้ายกเลิก', restock:true, outcome:'cancel'},
+  {label:'🔁 สั่ง/กดผิด · ยังไม่ได้ทำ', reason:'สั่งหรือกดผิด', restock:true, outcome:'cancel'},
+  {label:'📦 ของหมด/ทำไม่ได้', reason:'ของหมด/ทำไม่ได้', restock:true, outcome:'cancel'},
+  {label:'🚶 ลูกค้าไม่มารับ · ทำแล้ว', reason:'ลูกค้าไม่มารับ', restock:false, kind:'waste', outcome:'noshow'},
+  {label:'😞 ลูกค้าไม่พอใจ · ทำแล้ว', reason:'ลูกค้าไม่พอใจ', restock:false, kind:'waste', outcome:'ask'},
+  {label:'🗑️ ของเสีย/ทำพลาด · ทำแล้ว', reason:'ของเสีย/ทำพลาด', restock:false, kind:'waste', outcome:'remake'},
 ];
 let _voidRes=null;
 function pickVoidReason(){ const box=$('voidReasonBtns');
@@ -5420,15 +5429,28 @@ function pickVoidReason(){ const box=$('voidReasonBtns');
 window.chooseVoidReason=(i)=>{ $('voidPop').style.display='none'; const r=_voidRes; _voidRes=null; if(r) r(i<0?null:VOID_REASONS[i]); };
 window.voidTicket=async(tid)=>{
   const choice=await pickVoidReason(); if(!choice) return;
-  // For the generic "ของเสีย/ทำพลาด" reason, ask whose fault it is — on a PAID bill this becomes a
-  // ทำใหม่ (keep the money + book the waste), so the label matters in the report. Clear-cut customer
-  // reasons (ไม่มารับ/ไม่พอใจ) are auto byShop=false.
-  let byShop=false;
-  if(choice.kind==='waste' && /ทำพลาด|ของเสีย/.test(choice.reason)){
-    byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — ถ้าบิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'});
+  // What the bill looks like decides the questions: a paid bill may need ทำใหม่-or-คืนเงิน and the
+  // refund tender; an unpaid one just closes.
+  let paid=false, net=0;
+  try{ const v=await api('/api/tickets/'+tid); const o=v.order||{}; paid=!!(o.paid||o.status==='paid'); net=Math.round(((o.total||0)-(o.discount||0))*100)/100; }catch(e){}
+  let outcome=choice.outcome||'cancel', byShop=false, refundMethod=null;
+  if(outcome==='ask'){
+    if(paid){ outcome=(await appConfirm({title:'ลูกค้าไม่พอใจ — ทำอย่างไร?',message:'ทำใหม่: เก็บเงินเดิม บันทึกแก้วเดิมเป็นของเสีย\nคืนเงิน: คืนเงิน ฿'+net+' และบันทึกของเสีย',okText:'ทำใหม่ให้ลูกค้า',cancelText:'คืนเงิน'}))?'remake':'refund'; }
+    else outcome='cancel';
   }
-  try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop})});
-    toast(r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว + ทำใหม่ · เก็บเงินเดิม'):(choice.restock?'ยกเลิก + คืนวัตถุดิบเข้าสต๊อก':(choice.kind==='waste'?'🗑️ ของเสีย (หักสต๊อก)':'ยกเลิกออเดอร์แล้ว'))); }catch(e){ toast(err(e)); } };
+  if(outcome==='remake'){
+    if(paid){ byShop=await appConfirm({title:'ของเสียเพราะอะไร?',message:'บันทึกไว้ในรายงาน — บิลนี้จ่ายแล้ว ระบบจะทำใหม่ให้ลูกค้าโดยเก็บเงินเดิม',okText:'ความผิดของร้าน',cancelText:'ลูกค้าทำ/อื่นๆ'}); }
+    else outcome='cancel';   // unpaid: nothing to keep - void + book the waste
+  }
+  // A refund: the cashier says HOW the money went back (a K PLUS sale refunded in cash reduces the drawer).
+  if(paid && (outcome==='cancel'||outcome==='refund')){
+    refundMethod=await pickPayMethod(net,{title:'คืนเงิน',mode:'refund'}); if(refundMethod===null) return;
+  }
+  try{ const r=await api('/api/tickets/'+tid+'/void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:choice.reason,kind:choice.kind||null,restock:!!choice.restock,byShop,outcome,made:choice.outcome!=='cancel',refundMethod})});
+    toast(r&&r.noShow?('🚶 ปิดเป็นไม่มารับแล้ว'+(r.waste?(' · ของเสีย '+r.waste+' แก้ว'):'')+(r.paid?' · เก็บเงินเดิม':''))
+        : r&&r.wasteRemake?('🔁 บันทึกของเสีย '+(r.cups||1)+' แก้ว + ทำใหม่ · เก็บเงินเดิม')
+        : paid?('↩️ คืนเงิน ฿'+net+(choice.restock?' + คืนวัตถุดิบเข้าสต๊อก':' · บันทึกของเสีย'))
+        : (choice.kind==='waste'?'🗑️ ยกเลิก · บันทึกของเสีย':'ยกเลิกออเดอร์แล้ว')); }catch(e){ toast(err(e)); } };
 window.discountTicket=async(tid,total)=>{
   const a=await appPrompt({title:'ลดราคา',message:'ส่วนลด (บาท) — สูงสุด ฿'+total+'\nใส่ 0 เพื่อยกเลิกส่วนลด',type:'number',inputMode:'decimal',placeholder:'0'}); if(a===null) return;
   const amount=Number(a); if(!(amount>=0)){ toast('จำนวนไม่ถูกต้อง'); return; }
