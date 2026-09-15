@@ -1360,7 +1360,7 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
           +((c.receiverName||c.receiverAcct)?'<div class="muted" style="font-size:12px;margin-top:3px">ธนาคารตอบว่าผู้รับคือ <b>'+esc([c.receiverName,c.receiverAcct].filter(Boolean).join(' '))+'</b>'+(c.amount!=null?' · ยอด ฿'+c.amount:'')+(c.transRef?' · อ้างอิง '+esc(c.transRef):'')+'</div>':'')
           +((c.code===1014&&key&&p.branchId)?'<div style="margin-top:6px"><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay('+p.branchId+',{addReceiver:\''+esc(key)+'\'});toast(\'ยอมรับบัญชี '+esc(key)+' แล้ว — สลิปแบบนี้จะผ่านอัตโนมัติครั้งหน้า\')">ยอมรับบัญชีนี้เป็นของร้าน ('+esc(key)+')</button></div>':'')
           +'</div>'; }
-      pb.innerHTML = dupBox + okBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
+      pb.innerHTML = okBox + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
     }
     $('slipPop').style.display='flex';
     if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
@@ -2093,7 +2093,6 @@ window.loadBranchPay=async(id)=>{
         <div class="muted" style="font-size:11px;margin:2px 0 6px">ใช้เมื่อ SlipOK ตอบ "บัญชีผู้รับไม่ใช่บัญชีของร้าน" (1014) ทั้งที่เงินเข้าร้านจริง — เกิดกับ QR ร้านค้า/K SHOP ที่สลิปพิมพ์รหัสร้านค้าแทนเลขบัญชี · ใส่เลขบัญชี 4 ตัวท้าย หรือชื่อผู้รับตามที่สลิปพิมพ์</div>
         <div class="row" style="gap:6px;flex-wrap:wrap">${(p.receivers||[]).map(x=>`<span style="display:inline-flex;align-items:center;gap:6px;background:#e1f5ee;color:#0f6e56;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">${esc(x)}<button class="ghost" style="padding:0 4px;font-size:12px;line-height:1" aria-label="ลบ" onclick="saveBranchPay(${id},{removeReceiver:'${esc(x)}'})">✕</button></span>`).join('')||'<span class="muted" style="font-size:12px">ยังไม่มี</span>'}</div>
         <div class="row" style="gap:6px;margin-top:6px"><input id="bp_rcv_${id}" placeholder="เช่น 3150 หรือ YO-DEE YOGURT" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><button class="ghost" style="padding:8px 12px" onclick="saveBranchPay(${id},{addReceiver:document.getElementById('bp_rcv_${id}').value})">เพิ่ม</button></div>
-        ${(p.refusedReceivers&&p.refusedReceivers.length)?`<div style="margin-top:8px;font-size:12px"><div class="muted" style="font-weight:700;margin-bottom:4px">สลิปที่ถูกปฏิเสธล่าสุดเพราะบัญชีผู้รับไม่ตรง — ถ้าเป็นบัญชีของร้าน กดยอมรับ</div>${p.refusedReceivers.map(r=>{ const digits=String(r.acct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):String(r.name||'').replace(/\s*\(.*$/,'').trim(); return `<div class="row between" style="align-items:center;padding:5px 0;border-top:1px solid var(--line)"><span>${esc(r.name||'—')} <span class="muted">${esc(r.acct||'')} · ${r.n} ครั้ง</span></span>${key?`<button class="ok" style="padding:5px 10px;font-size:12px" onclick="saveBranchPay(${id},{addReceiver:'${esc(key)}'})">ยอมรับ ${esc(key)}</button>`:''}</div>`; }).join('')}</div>`:''}
       </div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1" onclick="testBranchPay(${id})">ทดสอบการเชื่อมต่อ</button>
@@ -4716,9 +4715,7 @@ function renderZone(snap){
     if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
     return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
-  const slipNoteLine=(t)=> (t.payment_status==='claimed' && t.order_slip_note)
-    ? `<div style="font-size:12px;color:#b45309;background:#fff7ed;border-radius:8px;padding:5px 8px;margin-top:6px">🤖 ${esc(t.order_slip_note)} — ตรวจสลิปด้วยตาแล้วกด "รับเงิน"</div>` : '';
-  const ord=(t)=> slipNoteLine(t)+ordBody(t);
+  const ord=(t)=> ordBody(t);
   const ordBody=(t)=>{
     if(t.order_lines&&t.order_lines.length){
       return `<div style="font-size:14px;margin-top:4px">`+t.order_lines.map((l,i)=>{
