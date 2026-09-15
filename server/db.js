@@ -631,6 +631,7 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN discount_reason TEXT`,
   `ALTER TABLE orders ADD COLUMN payment_method TEXT`,       // cash|promptpay|slip|other
   `ALTER TABLE orders ADD COLUMN remakes INTEGER NOT NULL DEFAULT 0`,   // ทำใหม่ count (waste booked, sale kept)
+  `ALTER TABLE orders ADD COLUMN slip_note TEXT`,                       // why SlipOK refused the slip (cashier checks it by eye)
   `ALTER TABLE orders ADD COLUMN void_kind TEXT`,            // void (unpaid) | refund (paid)
   `ALTER TABLE orders ADD COLUMN void_reason TEXT`,
   `ALTER TABLE orders ADD COLUMN voided_at TEXT`,

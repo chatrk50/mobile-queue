@@ -884,6 +884,8 @@
     ['🔁 ทำใหม่ ×{n}', '🔁 Remake ×{n}', '🔁 ເຮັດໃໝ່ ×{n}'],
     ['บันทึกของเสียแล้ว กำลังทำใหม่ให้ลูกค้า — กดเสิร์ฟเมื่อเสร็จ', 'Waste booked, remaking for the customer — tap Served when done', 'ບັນທຶກຂອງເສຍແລ້ວ ກຳລັງເຮັດໃໝ່ໃຫ້ລູກຄ້າ — ກົດເສີບເມື່ອແລ້ວ'],
     ['🔁 บันทึกของเสีย {n} แก้ว · ทำใหม่ให้ลูกค้า — การ์ดยังอยู่ กดเสิร์ฟเมื่อทำเสร็จ', '🔁 {n} cup(s) booked as waste · remaking — the card stays, tap Served when done', '🔁 ບັນທຶກຂອງເສຍ {n} ຈອກ · ເຮັດໃໝ່ໃຫ້ລູກຄ້າ — ກາດຍັງຢູ່ ກົດເສີບເມື່ອເຮັດແລ້ວ'],
+    ['🧪 ทดสอบสลิปกับ SlipOK', '🧪 Test a slip with SlipOK', '🧪 ທົດສອບສະລິບກັບ SlipOK'],
+    ['ตรวจสลิปด้วยตาแล้วกด "รับเงิน"', 'check the slip by eye, then tap Take payment', 'ກວດສະລິບດ້ວຍຕາແລ້ວກົດ "ຮັບເງິນ"'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS, into: '.hdr-actions', before: '#logoutBtn', className: 'ghost ic-btn' });

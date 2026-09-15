@@ -2535,15 +2535,13 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   // The same slip on a second order: refused by us even if SlipOK let it through.
   const KB = "U" + "t".repeat(32);
   const t2 = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "customer", lineUserId: KB });
-  let replay = null;
-  try { await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK(pass("REF-001", 49)) }); } catch (e) { replay = e; }
-  ok(replay && replay.extra && replay.extra.code === 1012, `INVARIANT a slip that already paid another order is refused as a replay (${replay && replay.extra && replay.extra.code})`);
+  const replay = await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK(pass("REF-001", 49)) });
+  ok(replay.claimed === true && replay.code === 1012 && !replay.paid, `INVARIANT a slip that already paid another order is refused as a replay - it goes to the cashier as 1012 (${replay.code})`);
   ok(db.prepare("SELECT payment_status FROM orders WHERE ticket_id=?").get(t2.ticket.id).payment_status !== "paid", "INVARIANT and that order stays unpaid");
 
   // SlipOK says no: the customer gets the Thai reason, nothing is marked paid.
-  let refused = null;
-  try { await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK({ success: false, code: 1013, message: "amount mismatch" }) }); } catch (e) { refused = e; }
-  ok(refused && refused.extra.code === 1013 && /ยอดเงิน/.test(refused.extra.message), `INVARIANT a SlipOK refusal is passed on in Thai (${refused && refused.extra.message})`);
+  const refused = await Q.verifySlipForTicket(t2.ticket.id, IMG, { fetchImpl: fakeSlipOK({ success: false, code: 1013, message: "amount mismatch" }) });
+  ok(refused.claimed === true && refused.code === 1013 && /ยอดเงิน/.test(refused.message) && /ยอดเงิน/.test(refused.note), `INVARIANT a SlipOK refusal is passed on in Thai and handed to the cashier (${refused.message})`);
 
   // A branch without SlipOK cannot auto-verify at all, whatever the other branch has.
   await Q.setPayConfig(1, { slipokKey: "", slipokBranch: "" });
@@ -2596,23 +2594,39 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   const r1014 = (ref, amount) => async () => ({ ok: false, json: async () => ({ success: false, code: 1014, message: "receiver mismatch", data: { transRef: ref, amount, sendingBank: "004", receivingBank: "004", receiver: recv, sender: { displayName: "ลูกค้า", account: { value: "xxx-x-x8081-x" } } } }) });
   const KK = "U" + "k".repeat(32);
   const k1 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: KK });
-  let noAlias = null;
-  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { noAlias = e; }
-  ok(noAlias && noAlias.extra && noAlias.extra.code === 1014, "INVARIANT without an accepted receiver a 1014 stays refused");
+  const noAlias = await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) });
+  ok(noAlias.claimed === true && noAlias.code === 1014 && !noAlias.paid, "INVARIANT without an accepted receiver a 1014 is not paid - it goes to the cashier");
+  const k1o = db.prepare("SELECT payment_status, slip_note FROM orders WHERE ticket_id=?").get(k1.ticket.id);
+  ok(k1o.payment_status === "claimed" && /1014/.test(k1o.slip_note || "") && /3150/.test(k1o.slip_note || ""), `INVARIANT the order is 'claimed' with SlipOK's reason and the receiver the bank named (${k1o.slip_note})`);
+  ok(!!db.prepare("SELECT 1 FROM slips WHERE ticket_id=?").get(k1.ticket.id), "INVARIANT the slip image is stored for the cashier");
+  ok(Q.slipPrelim(k1.ticket.id).lastCheck.code === 1014 && Q.slipPrelim(k1.ticket.id).slipNote === k1o.slip_note, "INVARIANT the slip viewer gets the verdict and the bank's answer");
   const pub = Q.payConfigPublic(SB2);
   ok(pub.refusedReceivers.length === 1 && /3150/.test(pub.refusedReceivers[0].acct || ""), "INVARIANT the refused receiver is offered to the owner to accept");
   await Q.setPayConfig(SB2, { addReceiver: "3150" });
-  let badAmt = null;
-  try { await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 31) }); } catch (e) { badAmt = e; }
-  ok(badAmt && badAmt.extra && badAmt.extra.code === 1013, "INVARIANT an accepted receiver never bypasses the amount check");
+  const badAmt = await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 31) });
+  ok(badAmt.claimed === true && badAmt.code === 1013, "INVARIANT an accepted receiver never bypasses the amount check (1013 → cashier)");
   const okK = await Q.verifySlipForTicket(k1.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) });
   ok(okK.paid === true, "INVARIANT a K SHOP slip to an accepted receiver, right amount, marks the order paid");
   const aud = db.prepare("SELECT message, receiver_acct FROM slip_checks WHERE ticket_id=? AND ok=1").get(k1.ticket.id);
   ok(aud && /1014/.test(aud.message || "") && /3150/.test(aud.receiver_acct || ""), "INVARIANT the audit row says it was accepted by receiver rule");
   const k2 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: "U" + "j".repeat(32) });
-  let replayK = null;
-  try { await Q.verifySlipForTicket(k2.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) }); } catch (e) { replayK = e; }
-  ok(replayK && replayK.extra && replayK.extra.code === 1012, "INVARIANT the same K SHOP slip cannot pay a second order (SlipOK does not log a 1014, we do)");
+  const replayK = await Q.verifySlipForTicket(k2.ticket.id, IMG2, { fetchImpl: r1014("KSHOP-1", 40) });
+  ok(replayK.claimed === true && replayK.code === 1012 && db.prepare("SELECT payment_status FROM orders WHERE ticket_id=?").get(k2.ticket.id).payment_status !== "paid", "INVARIANT the same K SHOP slip cannot pay a second order (SlipOK does not log a 1014, we do) - it goes to the cashier as 1012");
+  ok(db.prepare("SELECT slip_note FROM orders WHERE ticket_id=?").get(k1.ticket.id).slip_note == null, "INVARIANT a slip that finally passed clears the note");
+  // SlipOK unreachable: the customer is still not stuck.
+  const k3 = Q.createOrder(ZK, [{ name: "Cup40", price: 40, qty: 1 }], { source: "customer", lineUserId: "U" + "h".repeat(32) });
+  const down = await Q.verifySlipForTicket(k3.ticket.id, IMG2, { fetchImpl: async () => { throw new Error("ECONNRESET"); } });
+  ok(down.claimed === true && /ติดต่อ SlipOK ไม่ได้/.test(down.note || ""), "INVARIANT SlipOK down → the slip goes to the cashier with that reason");
+  // The owner's diagnostic reads a slip without recording it and names the alias that would pass.
+  const diag = await Q.testSlipForBranch(SB2, IMG2, { fetchImpl: r1014("KSHOP-9", 40) });
+  ok(diag.ok === false && diag.code === 1014 && /3150/.test(diag.receiverAcct || "") && diag.matchesAccepted === true, "INVARIANT the slip test reports the bank's receiver and that the accepted list covers it");
+  await Q.setPayConfig(SB2, { removeReceiver: "3150" });
+  const diag2 = await Q.testSlipForBranch(SB2, IMG2, { fetchImpl: r1014("KSHOP-9", 40) });
+  ok(diag2.matchesAccepted === false && diag2.acceptKey === "3150", "INVARIANT without the alias it says so and offers the last-4 digits to accept");
+  ok(!db.prepare("SELECT 1 FROM slip_checks WHERE trans_ref='KSHOP-9'").get(), "INVARIANT the diagnostic never writes a slip_checks row");
+  await Q.setPayConfig(SB2, { addReceiver: "3150" });
+  const st = Q.slipStats(SB2);
+  ok(st.month.checks >= 4 && st.month.ok >= 1 && st.month.failed >= 3 && st.lastFail, `INVARIANT usage stats count this month's checks (${st.month.checks}: ok ${st.month.ok} / failed ${st.month.failed})`);
   ok(Q.payConfigPublic(SB2).refusedReceivers.length === 0, "INVARIANT an accepted receiver no longer appears in the refused list");
   Q.setSlipAuto(false);
   db.prepare("UPDATE menu_items SET active=0 WHERE name IN ('Cup40','Cup49')").run();

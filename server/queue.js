@@ -2901,7 +2901,7 @@ export function payConfigPublic(branchId) {
   } catch { /* column may predate this build */ }
   return { ...rest, slipokKeySet: !!slipokKey, slipokKeyHint: slipokKey ? '••••' + slipokKey.slice(-4) : '', merchantQrSet: !!merchantQr,
     merchantQrP2P: !!merchantQr && isInjectableQr(merchantQr), refusedReceivers: refused, slipAuto: slipAutoEnabled(), qrSummary: qrSummary(c.branchId),
-    kplusQrSet: !!kplusQr, kplusSummary: kplusQr ? describeQr(kplusQr) : null };
+    kplusQrSet: !!kplusQr, kplusSummary: kplusQr ? describeQr(kplusQr) : null, slipStats: slipStats(c.branchId) };
 }
 /** Owner edits a branch's online-payment setup. A field left undefined is untouched; '' clears it
  *  (that branch then has none, even if the env var is set); merchantQrImage is a data: URL the
@@ -2966,6 +2966,40 @@ export async function testPayConfig(branchId, { slipokBranch, slipokKey, fetchIm
   const c = getPayConfig(branchId);
   return slipokQuota({ branchId: (slipokBranch || c.slipokBranch), apiKey: (slipokKey || c.slipokKey), fetchImpl });
 }
+/** The owner's diagnostic: read one slip with SlipOK (log=false - not recorded as used) and say what
+ *  the bank answered, whether the receiver would pass, and which alias would make it pass. */
+export async function testSlipForBranch(branchId, imageData, { fetchImpl } = {}) {
+  const cfg = getPayConfig(branchId);
+  if (!cfg.slipokReady) throw payFail('slipok_not_set', 400);
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(String(imageData || ''));
+  if (!m) throw payFail('bad_image', 400);
+  let r;
+  try { r = await slipokCheck({ branchId: cfg.slipokBranch, apiKey: cfg.slipokKey, imageBase64: m[2], mime: m[1], amount: null, fetchImpl, log: false }); }
+  catch (e) { throw payFail('slipok_unreachable', 502, { message: e.message }); }
+  const d = r.data || {};
+  const nameOf = (p) => (p && (p.displayName || p.name)) || null;
+  const acctOf = (p) => (p && ((p.account && p.account.value) || (p.proxy && p.proxy.value))) || null;
+  const digits = String(acctOf(d.receiver) || '').replace(/\D/g, '');
+  const acceptKey = digits.length >= 4 ? digits.slice(-4) : (nameOf(d.receiver) ? String(nameOf(d.receiver)).replace(/\s*\(.*$/, '').trim() : null);
+  return {
+    ok: r.ok, code: r.code, message: r.message,
+    receiverName: nameOf(d.receiver), receiverAcct: acctOf(d.receiver), senderName: nameOf(d.sender), senderAcct: acctOf(d.sender),
+    amount: d.amount != null ? Number(d.amount) : null, transRef: d.transRef || null, transDate: d.transDate || null, transTime: d.transTime || null,
+    sendingBank: d.sendingBank || null, receivingBank: d.receivingBank || null,
+    matchesAccepted: receiverMatches(cfg.receivers, d.receiver), acceptKey,
+  };
+}
+/** How much SlipOK checking this branch did: this month and today, and the latest refusal. */
+export function slipStats(branchId) {
+  const b = Number(branchId) || 0;
+  const q = (where) => { try { return db.prepare(`SELECT COUNT(*) n, SUM(ok) okn FROM slip_checks WHERE branch_id=? AND ${where}`).get(b); } catch { return { n: 0, okn: 0 }; } };
+  const month = q("strftime('%Y-%m', at, '+7 hours') = strftime('%Y-%m', 'now', '+7 hours')");
+  const today = q("date(at, '+7 hours') = date('now', '+7 hours')");
+  let lastFail = null;
+  try { const c = db.prepare('SELECT code, message, receiver_name, receiver_acct, amount, at FROM slip_checks WHERE branch_id=? AND ok=0 ORDER BY id DESC LIMIT 1').get(b); if (c) lastFail = { code: c.code, message: c.message, receiverName: c.receiver_name, receiverAcct: c.receiver_acct, amount: c.amount, at: c.at }; } catch { /* none */ }
+  const shape = (x) => ({ checks: x.n || 0, ok: x.okn || 0, failed: (x.n || 0) - (x.okn || 0) });
+  return { month: shape(month), today: shape(today), lastFail };
+}
 /** Is auto-verify possible anywhere? (drives the "ตรวจสลิปอัตโนมัติ" switch on the features page) */
 export function slipReadyAny() {
   return db.prepare('SELECT id FROM stores').all().some((s) => { const c = getPayConfig(s.id); return c.online && c.slipokReady; });
@@ -3005,12 +3039,24 @@ export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {
   // The customer pays the NET: the QR carried total - discount, so that is what the slip must show.
   // Sending the gross made every couponed order fail with 1013 (amount mismatch).
   const expected = Math.max(0, r2(order.total - (order.discount || 0)));
-  let r;
-  try { r = await slipokCheck({ branchId: cfg.slipokBranch, apiKey: cfg.slipokKey, imageBase64: m[2], mime: m[1], amount: expected, fetchImpl }); }
-  catch (e) { throw payFail('slipok_unreachable', 502, { message: e.message }); }
-  const d = r.data || {};
   const nameOf = (p) => (p && (p.displayName || p.name)) || null;
   const acctOf = (p) => (p && ((p.account && p.account.value) || (p.proxy && p.proxy.value))) || null;
+  // SlipOK could not confirm the slip: hand it to the cashier with SlipOK's reason and whatever the
+  // bank answered, instead of leaving the customer stuck at "แนบสลิปไม่ได้". Same state as the
+  // manual path ('claimed'); the card and the slip viewer show the note.
+  const toCashier = (code, message, data) => {
+    const bits = [];
+    if (data && (nameOf(data.receiver) || acctOf(data.receiver))) bits.push('ผู้รับ ' + [nameOf(data.receiver), acctOf(data.receiver)].filter(Boolean).join(' '));
+    if (data && data.amount != null) bits.push('ยอด ฿' + data.amount);
+    if (data && data.transRef) bits.push('อ้างอิง ' + data.transRef);
+    const note = 'SlipOK ไม่ผ่าน' + (code ? ' (' + code + ')' : '') + ': ' + (message || 'ตรวจไม่สำเร็จ') + (bits.length ? ' — ' + bits.join(' · ') : '');
+    attachSlip(ticketId, imageData, { note });
+    return { ok: false, claimed: true, code, message, note, zoneId: t.zone_id };
+  };
+  let r;
+  try { r = await slipokCheck({ branchId: cfg.slipokBranch, apiKey: cfg.slipokKey, imageBase64: m[2], mime: m[1], amount: expected, fetchImpl }); }
+  catch (e) { return toCashier(null, 'ติดต่อ SlipOK ไม่ได้ (' + e.message + ')', null); }
+  const d = r.data || {};
   const rec = (ok, code, message) => db.prepare(
     `INSERT INTO slip_checks (order_id, ticket_id, branch_id, ok, code, message, trans_ref, sending_bank, receiving_bank, trans_date, trans_time, sender_name, receiver_name, amount, expected, receiver_acct, sender_acct)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
@@ -3024,7 +3070,7 @@ export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {
   let viaAlias = false;
   if (!r.ok && r.code === 1014 && d.transRef && receiverMatches(cfg.receivers, d.receiver)) {
     if (d.amount == null || Math.abs(Number(d.amount) - expected) > 0.009) {
-      rec(false, 1013, SLIPOK_ERRORS[1013]); throw payFail('slip_failed', 400, { code: 1013, message: SLIPOK_ERRORS[1013] });
+      rec(false, 1013, SLIPOK_ERRORS[1013]); return toCashier(1013, SLIPOK_ERRORS[1013], d);
     }
     r = { ok: true, code: null, message: '', data: d }; viaAlias = true;
   }
@@ -3032,10 +3078,11 @@ export async function verifySlipForTicket(ticketId, imageData, { fetchImpl } = {
     // SlipOK already refuses a replay (1012) when log=true; this is the second line for the case
     // where the same slip passed once for a different order of ours.
     const dup = db.prepare('SELECT order_id FROM slip_checks WHERE trans_ref=? AND ok=1 AND order_id<>? LIMIT 1').get(d.transRef, order.id);
-    if (dup) { rec(false, 1012, SLIPOK_ERRORS[1012]); throw payFail('slip_failed', 400, { code: 1012, message: SLIPOK_ERRORS[1012] }); }
+    if (dup) { rec(false, 1012, SLIPOK_ERRORS[1012]); return toCashier(1012, SLIPOK_ERRORS[1012], d); }
   }
-  if (!r.ok) { rec(false, r.code, r.message); throw payFail('slip_failed', 400, { code: r.code, message: r.message }); }
+  if (!r.ok) { rec(false, r.code, r.message); return toCashier(r.code, r.message, d); }
   rec(true, null, viaAlias ? 'ยอมรับตามบัญชีผู้รับที่ร้านตั้งไว้ (SlipOK 1014)' : null);
+  try { db.prepare('UPDATE orders SET slip_note=NULL WHERE id=?').run(order.id); } catch { /* column may predate this build */ }
   // Keep the image as evidence next to the bank's answer (same place the manual path stores it).
   try {
     const sha = createHash('sha256').update(imageData).digest('hex');
@@ -5200,10 +5247,11 @@ export function payPartial(ticketId, amount, opts = {}) {
 
 /** Customer attaches a payment slip (no SlipOK): stored for the cashier to eyeball, and the
  *  order is flagged 'claimed' so the cashier knows to verify + confirm. */
-export function attachSlip(ticketId, imageData) {
+export function attachSlip(ticketId, imageData, { note = null } = {}) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order) throw new Error('order_not_found');
   if (order.payment_status === 'paid') return { ok: true, already: true };
+  try { db.prepare('UPDATE orders SET slip_note=? WHERE id=?').run(note ? String(note).slice(0, 300) : null, order.id); } catch { /* column may predate this build */ }
   const sha = createHash('sha256').update(imageData || '').digest('hex');   // fingerprint → catch the SAME slip reused
   db.prepare(`INSERT INTO slips (order_id, ticket_id, image, sha) VALUES (?,?,?,?)
               ON CONFLICT(order_id) DO UPDATE SET image=excluded.image, sha=excluded.sha, at=datetime('now')`).run(order.id, Number(ticketId), imageData, sha);
@@ -5228,7 +5276,12 @@ export function slipPrelim(ticketId) {
     if (dup) duplicate = { code: dup.code, ticketId: dup.id };
   }
   const today = db.prepare("SELECT date(datetime('now','+7 hours')) d").get().d;
-  return { expectedAmount: Math.max(0, order.total - (order.discount || 0)), today, duplicate };
+  let lastCheck = null;
+  try {
+    const c = db.prepare('SELECT ok, code, message, receiver_name, receiver_acct, sender_name, amount, trans_ref, at FROM slip_checks WHERE order_id=? ORDER BY id DESC LIMIT 1').get(order.id);
+    if (c) lastCheck = { ok: !!c.ok, code: c.code, message: c.message, receiverName: c.receiver_name, receiverAcct: c.receiver_acct, senderName: c.sender_name, amount: c.amount, transRef: c.trans_ref, at: c.at };
+  } catch { /* table may predate this build */ }
+  return { expectedAmount: Math.max(0, order.total - (order.discount || 0)), today, duplicate, slipNote: order.slip_note || null, lastCheck, branchId: order.branch_id || null };
 }
 /** Customer asks for a refund (paid online but can't come). Flags the order so the cashier
  *  sees it in history and processes the refund. */
@@ -5716,7 +5769,7 @@ export function orderForTicket(ticketId) {
   // discount_reason was missing from this hand-built object, so every reason the code carefully sets
   // (คูปอง / วันเกิด / เลขนำโชค) reached the customer's ticket as null. The DB and the audit log were
   // always right — only the label the customer reads was being dropped here.
-  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, due: balanceDueOf(order), paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, remakes: order.remakes || 0, created_at: order.created_at, paid_at: order.paid_at };
+  return { total: order.total, discount: order.discount || 0, discount_reason: order.discount_reason || null, paid_amount: order.paid_amount || 0, due: balanceDueOf(order), paid_lines: paidLines, items: rows, lines, payment_status: order.payment_status || 'unpaid', method: order.payment_method || null, source: order.source || 'cashier', refund_requested: order.refund_requested || 0, refund_note: order.refund_note || null, remakes: order.remakes || 0, slip_note: order.slip_note || null, created_at: order.created_at, paid_at: order.paid_at };
 }
 
 /** Server-side subtotal of one grouped order line (drink + its toppings) — the authoritative amount
@@ -5801,6 +5854,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       t.order_created_at = o.created_at;     // when the order was placed (UTC)
       t.order_paid_at = o.paid_at;           // when it was paid (UTC), if paid
       t.order_remakes = o.remakes || 0;      // ทำใหม่: the sale stands, the card stays until the new cup is served
+      t.order_slip_note = o.slip_note || null; // SlipOK refused the slip → why (the cashier checks it by eye)
     }
     // Cashier-only: show the attached customer (phone) so staff always know an order is tagged — even
     // with loyalty OFF (CRM). When loyalty is ON, also attach the stamp balance for on-the-spot redeem.
