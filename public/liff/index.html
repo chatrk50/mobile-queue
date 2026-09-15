@@ -2416,6 +2416,7 @@ async function uploadSlip(e){ const f=e.target.files&&e.target.files[0]; if(!f) 
     if(slipIsAuto()){   // SlipOK auto-verify (PromptPay channel only)
       const r=await api('/api/tickets/'+ticketId+'/verify-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
       if(r.paid){ toast('✅ ตรวจสลิปผ่าน · ชำระเงินเรียบร้อย'); const v=await api('/api/tickets/'+ticketId); render(v); loadLoyalty(); }
+      else if(r.claimed){ toast('📨 ส่งสลิปให้แคชเชียร์ตรวจแล้ว · ระบบตรวจอัตโนมัติไม่ผ่าน: '+(r.message||'')); const v=await api('/api/tickets/'+ticketId); render(v); }
     } else {              // manual — send to the cashier to verify
       await api('/api/tickets/'+ticketId+'/attach-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:dataUrl,lineUserId})});
       toast('✅ ส่งสลิปแล้ว · รอแคชเชียร์ยืนยัน'); const v=await api('/api/tickets/'+ticketId); render(v);

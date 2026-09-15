@@ -1354,7 +1354,13 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
       const dupBox = p.duplicate
         ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
         : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
-      pb.innerHTML = dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
+      let okBox='';
+      if(p.slipNote||p.lastCheck){ const c=p.lastCheck||{}; const digits=String(c.receiverAcct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(c.receiverName?String(c.receiverName).replace(/\s*\(.*$/,'').trim():'');
+        okBox='<div style="background:#fff7ed;border:1px solid #fcd9a8;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px;color:#7c4a03"><b>🤖 SlipOK:</b> '+esc(p.slipNote||(c.message||''))
+          +((c.receiverName||c.receiverAcct)?'<div class="muted" style="font-size:12px;margin-top:3px">ธนาคารตอบว่าผู้รับคือ <b>'+esc([c.receiverName,c.receiverAcct].filter(Boolean).join(' '))+'</b>'+(c.amount!=null?' · ยอด ฿'+c.amount:'')+(c.transRef?' · อ้างอิง '+esc(c.transRef):'')+'</div>':'')
+          +((c.code===1014&&key&&p.branchId)?'<div style="margin-top:6px"><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay('+p.branchId+',{addReceiver:\''+esc(key)+'\'});toast(\'ยอมรับบัญชี '+esc(key)+' แล้ว — สลิปแบบนี้จะผ่านอัตโนมัติครั้งหน้า\')">ยอมรับบัญชีนี้เป็นของร้าน ('+esc(key)+')</button></div>':'')
+          +'</div>'; }
+      pb.innerHTML = okBox + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
     }
     $('slipPop').style.display='flex';
     if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
@@ -2074,13 +2080,19 @@ window.loadBranchPay=async(id)=>{
             <input id="bp_sk_${id}" type="password" autocomplete="new-password" placeholder="${p.slipokKeySet?'••••••••':'วาง API key'}"></label>
         </div>
         <div id="bp_test_${id}" class="muted" style="font-size:12px;margin-top:4px"></div>
+        ${p.slipokReady?`<div class="muted" style="font-size:12px;margin-top:6px">ใช้ไปเดือนนี้ <b style="color:var(--navy)">${(p.slipStats&&p.slipStats.month.checks)||0}</b> ครั้ง (ผ่าน ${(p.slipStats&&p.slipStats.month.ok)||0} · ไม่ผ่าน ${(p.slipStats&&p.slipStats.month.failed)||0}) · วันนี้ ${(p.slipStats&&p.slipStats.today.checks)||0} ครั้ง${(p.slipStats&&p.slipStats.lastFail)?' · ไม่ผ่านล่าสุด: '+esc(p.slipStats.lastFail.message||'')+((p.slipStats.lastFail.receiverName||p.slipStats.lastFail.receiverAcct)?' (ผู้รับ '+esc([p.slipStats.lastFail.receiverName,p.slipStats.lastFail.receiverAcct].filter(Boolean).join(' '))+')':''):''}</div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:8px">
+          <input id="bp_slipfile_${id}" type="file" accept="image/*" style="display:none" onchange="testBranchSlip(${id},this)">
+          <button class="ghost" style="padding:6px 10px;font-size:12px" onclick="document.getElementById('bp_slipfile_${id}').click()">🧪 ทดสอบสลิปกับ SlipOK</button>
+          <span class="muted" style="font-size:11px;flex:1">อัปโหลดสลิปที่ลูกค้าส่งมา → ดูว่า SlipOK อ่านผู้รับ/ยอดเป็นอะไร และจะผ่านหรือไม่ (ไม่บันทึกว่าใช้แล้ว)</span>
+        </div>
+        <div id="bp_sliptest_${id}" style="font-size:12.5px;margin-top:6px"></div>`:''}
       </div>
       <div style="border-top:1px dashed var(--line);padding-top:8px">
         <b style="font-size:12.5px;color:var(--navy)">บัญชีผู้รับที่ยอมรับ</b>
         <div class="muted" style="font-size:11px;margin:2px 0 6px">ใช้เมื่อ SlipOK ตอบ "บัญชีผู้รับไม่ใช่บัญชีของร้าน" (1014) ทั้งที่เงินเข้าร้านจริง — เกิดกับ QR ร้านค้า/K SHOP ที่สลิปพิมพ์รหัสร้านค้าแทนเลขบัญชี · ใส่เลขบัญชี 4 ตัวท้าย หรือชื่อผู้รับตามที่สลิปพิมพ์</div>
         <div class="row" style="gap:6px;flex-wrap:wrap">${(p.receivers||[]).map(x=>`<span style="display:inline-flex;align-items:center;gap:6px;background:#e1f5ee;color:#0f6e56;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">${esc(x)}<button class="ghost" style="padding:0 4px;font-size:12px;line-height:1" aria-label="ลบ" onclick="saveBranchPay(${id},{removeReceiver:'${esc(x)}'})">✕</button></span>`).join('')||'<span class="muted" style="font-size:12px">ยังไม่มี</span>'}</div>
         <div class="row" style="gap:6px;margin-top:6px"><input id="bp_rcv_${id}" placeholder="เช่น 3150 หรือ YO-DEE YOGURT" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><button class="ghost" style="padding:8px 12px" onclick="saveBranchPay(${id},{addReceiver:document.getElementById('bp_rcv_${id}').value})">เพิ่ม</button></div>
-        ${(p.refusedReceivers&&p.refusedReceivers.length)?`<div style="margin-top:8px;font-size:12px"><div class="muted" style="font-weight:700;margin-bottom:4px">สลิปที่ถูกปฏิเสธล่าสุดเพราะบัญชีผู้รับไม่ตรง — ถ้าเป็นบัญชีของร้าน กดยอมรับ</div>${p.refusedReceivers.map(r=>{ const digits=String(r.acct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(r.name||''); return `<div class="row between" style="align-items:center;padding:5px 0;border-top:1px solid var(--line)"><span>${esc(r.name||'—')} <span class="muted">${esc(r.acct||'')} · ${r.n} ครั้ง</span></span>${key?`<button class="ok" style="padding:5px 10px;font-size:12px" onclick="saveBranchPay(${id},{addReceiver:'${esc(key)}'})">ยอมรับ ${esc(key)}</button>`:''}</div>`; }).join('')}</div>`:''}
       </div>
       <div class="row" style="gap:8px">
         <button class="ghost" style="flex:1" onclick="testBranchPay(${id})">ทดสอบการเชื่อมต่อ</button>
@@ -2089,6 +2101,7 @@ window.loadBranchPay=async(id)=>{
       ${p.slipokReady&&!p.slipAuto?'<div style="font-size:11.5px;background:#fff7ed;color:#b45309;border-radius:8px;padding:7px 10px">ใส่ SlipOK แล้ว แต่สวิตช์ "ตรวจสลิปอัตโนมัติ" ด้านบนยังปิดอยู่</div>':''}
     </div>
   </div>`;
+  if(p.slipokReady) testBranchPay(id);   // live quota from SlipOK, straight away
 };
 window.saveBranchPay=async(id,quick)=>{
   const body=quick||{ promptpayId:$('bp_pp_'+id).value.trim(), slipokBranch:$('bp_sb_'+id).value.trim(), slipokKey:($('bp_sk_'+id).value.trim()||undefined) };
@@ -2102,12 +2115,26 @@ window.testBranchPay=async(id)=>{
   const out=$('bp_test_'+id); out.textContent='กำลังทดสอบ…';
   const body={ slipokBranch:$('bp_sb_'+id).value.trim()||undefined, slipokKey:$('bp_sk_'+id).value.trim()||undefined };
   try{ const r=await api('/api/branches/'+id+'/pay/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    out.innerHTML=r.ok?`<span style="color:#0f6e56;font-weight:700">✓ เชื่อมต่อได้ · โควตาตรวจสลิปเหลือ ${r.quota} ครั้ง${r.overQuota?(' · เกินโควตา '+r.overQuota):''}</span>`
+    out.innerHTML=r.ok?`<span style="color:#0f6e56;font-weight:700">✓ เชื่อมต่อได้ · โควตาตรวจสลิปคงเหลือ (SlipOK แจ้ง) ${r.quota} ครั้ง${r.overQuota?(' · เกินโควตา '+r.overQuota):''}</span>`
                      :`<span style="color:var(--danger);font-weight:700">✗ ${esc(r.message||'เชื่อมต่อไม่ได้')}${r.code?(' (รหัส '+r.code+')'):''}</span>`; }
   catch(e){ out.innerHTML='<span style="color:var(--danger)">✗ '+esc(err(e))+'</span>'; }
 };
 window.uploadBranchQr=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
   const rd=new FileReader(); rd.onload=()=>saveBranchPay(id,{merchantQrImage:rd.result}); rd.readAsDataURL(f); inp.value=''; };
+window.testBranchSlip=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+  const out=$('bp_sliptest_'+id); out.textContent='กำลังส่งให้ SlipOK อ่าน…';
+  const rd=new FileReader(); rd.onload=async()=>{
+    try{ const r=await api('/api/branches/'+id+'/pay/test-slip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:rd.result})});
+      const recv=[r.receiverName,r.receiverAcct].filter(Boolean).join(' ');
+      out.innerHTML='<div style="border:1px solid '+(r.ok?'#6ee7b7':'#fcd9a8')+';background:'+(r.ok?'#ecfdf5':'#fff7ed')+';border-radius:10px;padding:9px 11px">'
+        +'<b>'+(r.ok?'✓ SlipOK อ่านผ่าน':'✗ SlipOK ตอบ: '+esc(r.message||'')+(r.code?' ('+r.code+')':''))+'</b>'
+        +(recv?'<div style="margin-top:4px">ผู้รับตามธนาคาร: <b>'+esc(recv)+'</b>'+(r.matchesAccepted?' <span style="color:#0f6e56">· อยู่ในบัญชีที่ยอมรับแล้ว ✓</span>':' <span style="color:#b45309">· ยังไม่อยู่ในบัญชีที่ยอมรับ</span>')+'</div>':'')
+        +(r.senderName?'<div class="muted" style="margin-top:2px">ผู้โอน: '+esc([r.senderName,r.senderAcct].filter(Boolean).join(' '))+(r.amount!=null?' · ยอด ฿'+r.amount:'')+(r.transDate?' · '+esc(r.transDate)+' '+esc(r.transTime||''):'')+(r.transRef?' · อ้างอิง '+esc(r.transRef):'')+'</div>':'')
+        +((!r.matchesAccepted&&r.acceptKey)?'<div style="margin-top:6px"><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay('+id+',{addReceiver:\''+esc(r.acceptKey)+'\'})">ยอมรับ '+esc(r.acceptKey)+' เป็นบัญชีของร้าน</button> <span class="muted">→ สลิปแบบนี้จะผ่านอัตโนมัติเมื่อยอดตรง</span></div>':'')
+        +'</div>';
+    }catch(e){ const m=e&&e.message; out.innerHTML='<span style="color:var(--danger)">✗ '+esc(m==='slipok_not_set'?'ยังไม่ได้ใส่ Branch ID / API key':m==='bad_image'?'ไฟล์ไม่ใช่รูปภาพ':err(e))+'</span>'; }
+    inp.value=''; };
+  rd.readAsDataURL(f); };
 window.uploadBranchKplusQr=(id,inp)=>{ const f=inp.files&&inp.files[0]; if(!f) return;
   const rd=new FileReader(); rd.onload=()=>saveBranchPay(id,{kplusQrImage:rd.result}); rd.readAsDataURL(f); inp.value=''; };
 window.toggleBranchOpen=async(id,open)=>{ try{ await api('/api/branches/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({isOpen:!!open})}); renderBranch(await api('/api/branches')); editBranchForm(id); }catch(e){ toast(err(e)); } };
@@ -4688,7 +4715,8 @@ function renderZone(snap){
     if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
     return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
-  const ord=(t)=>{
+  const ord=(t)=> ordBody(t);
+  const ordBody=(t)=>{
     if(t.order_lines&&t.order_lines.length){
       return `<div style="font-size:14px;margin-top:4px">`+t.order_lines.map((l,i)=>{
         const m=(l.name||'').match(/^(.*?) · (หวาน .+)$/);          // pull sweetness onto its own line

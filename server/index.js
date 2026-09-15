@@ -1002,6 +1002,10 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
     const r = await Q.verifySlipForTicket(req.params.ticketId, req.body?.imageData || '');
+    if (r.claimed) {   // SlipOK refused → the slip went to the cashier with the reason
+      emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
+      return res.json({ ok: true, paid: false, claimed: true, code: r.code || null, message: r.message || '', note: r.note || '' });
+    }
     if (r.paid && !r.already) {
       emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
       notifyLoyalty({ ticketId: Number(req.params.ticketId), loyalty: r.loyalty });
@@ -1539,6 +1543,14 @@ app.get('/api/branches/:id/pay', (req, res) => {
 app.post('/api/branches/:id/pay', async (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(await Q.setPayConfig(Number(req.params.id), req.body || {})); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Owner diagnostic: read a slip with SlipOK (not recorded as used) and show what the bank answered.
+app.post('/api/branches/:id/pay/test-slip', async (req, res) => {
+  if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const img = (req.body?.imageData || '').toString();
+  if (!/^data:image\//.test(img) || img.length > 4_000_000) return res.status(400).json({ error: 'bad_image' });
+  try { res.json(await Q.testSlipForBranch(Number(req.params.id), img)); }
+  catch (e) { res.status(e.status || 400).json({ error: e.message, ...(e.extra || {}) }); }
 });
 app.post('/api/branches/:id/pay/test', async (req, res) => {
   if (!ownerOK(req)) return res.status(403).json({ error: 'forbidden' });

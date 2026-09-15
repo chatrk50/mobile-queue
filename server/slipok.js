@@ -42,11 +42,13 @@ const norm = (j) => {
 
 /** Verify one slip image. Never throws on a SlipOK refusal — returns { ok:false, code, message };
  *  throws only when SlipOK itself cannot be reached. `fetchImpl` lets tests stand in for the network. */
-export async function slipokCheck({ branchId, apiKey, imageBase64, mime = 'image/jpeg', amount = null, fetchImpl = fetch } = {}) {
+export async function slipokCheck({ branchId, apiKey, imageBase64, mime = 'image/jpeg', amount = null, fetchImpl = fetch, log = true } = {}) {
   if (!branchId || !apiKey) return { ok: false, code: 1002, message: SLIPOK_ERRORS[1002] };
   const fd = new FormData();
   fd.append('files', new Blob([Buffer.from(imageBase64, 'base64')], { type: mime }), 'slip.jpg');
-  fd.append('log', 'true');
+  // log=false is the owner's diagnostic: SlipOK reads the slip and answers, without recording it
+  // as used - so the customer's own submission of the same slip is not refused as a duplicate later.
+  fd.append('log', log ? 'true' : 'false');
   if (amount != null && Number(amount) > 0) fd.append('amount', String(Number(amount)));
   const r = await fetchImpl(`${SLIPOK_BASE}/${encodeURIComponent(branchId)}`, { method: 'POST', headers: { 'x-authorization': apiKey }, body: fd });
   const j = await r.json().catch(() => ({}));
