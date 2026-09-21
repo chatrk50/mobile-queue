@@ -5723,18 +5723,31 @@ window.clSendCampaign=async()=>{
   if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:coupDesc+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
   const btn=$('clSend'); btn.disabled=true;
   try{ const r=await api('/api/crm/campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[..._clSel],message:msg,coupon})});
-    toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉') : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
+    const cpTxt = r.couponAttached ? (' · ออกคูปอง '+r.issuedCoupons+' ใบ'+(r.notIssued?(' (ไม่ได้ออก '+r.notIssued+': '+(r.reasons||[]).map(x=>x.reason+' '+x.n).join(', ')+')'):'')) : '';
+    toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉'+cpTxt) : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'+cpTxt));
     _clSel.clear(); $('clSelN').textContent='0'; renderCustList(); loadCampaigns(); }
-  catch(e){ const m=err(e); toast(m==='no_targets'?'เลือกได้เฉพาะลูกค้า LINE':(m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ':('ส่งไม่สำเร็จ: '+m))); }
+  catch(e){ const m=err(e); const d=(e&&e.data)||{};
+    toast(m==='no_targets'?'เลือกได้เฉพาะลูกค้า LINE':m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ'
+      :m==='coupon_quota_short'?('โควตาคูปองไม่พอ — เหลือ '+(d.remaining!=null?d.remaining:'?')+' ใบ แต่ต้องออก '+(d.needed!=null?d.needed:'?')+' ใบ · เพิ่มโควตาที่หน้าคูปองก่อน แล้วส่งใหม่ (ยังไม่ได้ส่งข้อความ)')
+      :m==='coupon_used_up'?'คูปองนี้ถูกใช้ครบจำนวนแล้ว — เลือกใบอื่นหรือเพิ่มจำนวนครั้งใช้':m==='coupon_expired'?'คูปองนี้หมดอายุแล้ว':('ส่งไม่สำเร็จ: '+m)); }
   finally{ btn.disabled=false; } };
 async function loadCampaigns(){ const box=$('clCampaigns'); if(!box) return;
   let r; try{ r=await api('/api/crm/campaigns'); }catch(e){ box.innerHTML='<span class="muted">—</span>'; return; }
   const cs=r.campaigns||[];
-  box.innerHTML = cs.length ? cs.map(c=>`<div class="row between" style="padding:6px 2px;border-bottom:1px solid var(--line);gap:8px;align-items:flex-start">
+  box.innerHTML = cs.length ? cs.map(c=>`<div style="padding:6px 2px;border-bottom:1px solid var(--line)">
+      <div class="row between" style="gap:8px;align-items:flex-start;cursor:pointer" onclick="toggleCampaignRecipients(${c.id})" title="ดูรายชื่อ: ใครได้รับ / ใครไม่ได้">
       <span style="min-width:0;flex:1"><div style="color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.message)}</div>
       <div class="muted" style="font-size:11px">${fmtDT(c.at)}${c.coupon_label?(' · 🎁 '+esc(c.coupon_label)):''}${c.actor_name?(' · โดย '+esc(c.actor_name)):''}</div></span>
-      <span style="flex:none;text-align:right;font-size:11.5px"><b style="color:${c.sent?'#0f6e56':'var(--muted)'}">ส่งได้ ${c.sent}</b>/${c.targeted}${c.failed?(' · <span style="color:#a32d2d">พลาด '+c.failed+'</span>'):''}</span>
+      <span style="flex:none;text-align:right;font-size:11.5px"><b style="color:${c.sent?'#0f6e56':'var(--muted)'}">ส่งได้ ${c.sent}</b>/${c.targeted}${c.failed?(' · <span style="color:#a32d2d">พลาด '+c.failed+'</span>'):''}${c.coupon_label?('<br>🎁 ออกคูปอง <b>'+(c.issued||0)+'</b>'+((c.issued||0)<c.sent?' <span style="color:#a32d2d">(ไม่ได้ออก '+(c.sent-(c.issued||0))+')</span>':'')):''} <span class="muted">▾</span></span>
+      </div><div id="campRcp-${c.id}" style="display:none;margin-top:6px"></div>
     </div>`).join('') : '<span class="muted">ยังไม่เคยส่งแคมเปญ</span>'; }
+window.toggleCampaignRecipients=async(id)=>{ const box=$('campRcp-'+id); if(!box) return;
+  if(box.style.display!=='none'){ box.style.display='none'; return; }
+  box.style.display=''; box.innerHTML='<span class="muted">กำลังโหลด…</span>';
+  try{ const r=await api('/api/crm/campaigns/'+id+'/recipients'); const rows=r.recipients||[];
+    box.innerHTML = rows.length ? '<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">'+rows.map(x=>'<div class="row between" style="padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name||('ลูกค้า …'+String(x.customer_key||'').slice(-6)))+'</span><span style="flex:none;text-align:right">'+(x.sent?'<span style="color:#0f6e56">✓ ส่งถึง</span>':'<span style="color:#a32d2d">✗ ส่งไม่ถึง</span>')+(x.issued?' · <span style="color:#0f6e56">🎁 ออกคูปองแล้ว</span>':(x.reason?' · <span style="color:#b45309">'+esc(x.reason)+'</span>':''))+'</span></div>').join('')+'</div>'
+      : '<span class="muted">แคมเปญนี้ส่งก่อนมีรายชื่อรายคน — ดูจำนวนรวมด้านบน</span>'; }
+  catch(e){ box.innerHTML='<span style="color:var(--danger)">'+esc(err(e))+'</span>'; } };
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

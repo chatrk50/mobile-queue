@@ -560,9 +560,30 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   const expiresAt = !cp ? null
     : cp.days ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d
     : (cp.fixedExpiry || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  // Quota FIRST. A coupon that cannot be handed to everyone selected is refused before any push
+  // goes out - otherwise customers are told about a gift that never reaches their wallet
+  // (21 Sep: "the coupons disappeared"). Customers already holding a live copy need no quota.
+  const liveRow = (key) => {
+    if (!cp || !cp.couponId) return null;
+    const r = db.prepare('SELECT * FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(cp.couponId, key);
+    if (!r) return null;
+    const live = !r.used_at && r.state !== 'cancelled' && r.expires_at >= today;
+    return { row: r, live };
+  };
+  if (cp && cp.couponId) {
+    const c = db.prepare('SELECT issue_limit, issued_count FROM coupons WHERE id=?').get(cp.couponId);
+    if (c && c.issue_limit > 0) {
+      const need = targets.filter((k) => { const x = liveRow(k); return !(x && x.live); }).length;
+      const remaining = Math.max(0, c.issue_limit - c.issued_count);
+      if (need > remaining) { const e = new Error('coupon_quota_short'); e.remaining = remaining; e.needed = need; throw e; }
+    }
+  }
   let sent = 0, failed = 0, issuedCoupons = 0;
+  const log = [];
   for (const key of targets) {
-    let ok = false;
+    let ok = false, reason = null, issued = 0;
+    const had = liveRow(key);
     try {
       // A coupon campaign now goes out as the branded YO-DEE coupon card (Phase 4A) — ONE Flex message
       // carrying the owner's message + the coupon; no attachment, no extra send. Message-only campaigns
@@ -572,37 +593,66 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
         : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
     } catch { ok = false; }
     if (!LINE_ENABLED) ok = true;
-    if (ok) sent++; else failed++;
+    if (ok) sent++;
+    else { failed++; const le = lastPushError(); reason = 'LINE ส่งไม่ถึง' + (le && le.detail ? ' (' + String(le.detail).slice(0, 120) + ')' : ''); }
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
-    // reports false, so we still issue there or the whole flow would be untestable.
-    if (cp && (ok || !LINE_ENABLED)) {
+    // reports ok above, so the flow stays testable there.
+    if (cp && ok) {
       if (cp.couponId) {
-        // Same discipline as claimCoupon: take quota atomically, and the unique
-        // (coupon_id, customer_key) index makes re-sending to the same customer a no-op instead of
-        // stacking duplicate gifts — quota is handed back when that happens.
-        const took = db.prepare(
-          'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
-        ).run(cp.couponId);
-        if (took.changes) {
-          try {
-            db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source) VALUES (?, ?, 'winback', ?, ?, ?, 'campaign')`)
-              .run(key, cp.couponId, cp.label, cp.cap, expiresAt);
-            issuedCoupons++;
-          } catch { db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(cp.couponId); }
+        if (had && had.live) {
+          reason = 'มีคูปองใบนี้อยู่แล้ว ยังไม่ได้ใช้';   // a reminder went out; nothing new to hand over
+        } else {
+          // Same discipline as claimCoupon: take quota atomically. One row per (coupon, customer):
+          // a customer whose earlier copy was used / expired / cancelled gets a FRESH gift on that
+          // row (a re-send after use used to be a silent no-op - the customer was told about a
+          // coupon that never came back); a first-timer gets a new row.
+          const took = db.prepare(
+            'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
+          ).run(cp.couponId);
+          if (!took.changes) reason = 'โควตาคูปองหมด';
+          else if (had) {
+            db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, used_value=NULL, state='claimed', kind='winback', label=?, free_cap=?, expires_at=?, issued_at=datetime('now'), source='campaign' WHERE id=?`)
+              .run(cp.label, cp.cap, expiresAt, had.row.id);
+            issued = 1; issuedCoupons++;
+          } else {
+            try {
+              db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source) VALUES (?, ?, 'winback', ?, ?, ?, 'campaign')`)
+                .run(key, cp.couponId, cp.label, cp.cap, expiresAt);
+              issued = 1; issuedCoupons++;
+            } catch { db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(cp.couponId); reason = 'มีคูปองใบนี้อยู่แล้ว'; }
+          }
         }
       } else {
         db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
           .run(key, cp.label, cp.cap, expiresAt);
-        issuedCoupons++;
+        issued = 1; issuedCoupons++;
       }
     }
+    log.push({ key, sent: ok ? 1 : 0, issued, reason });
   }
   const info = db.prepare(
-    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id)
-     VALUES (?,?,?,?,?,?,?,?)`
-  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
-  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp, issuedCoupons };
+    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id, issued, coupon_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
+  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId, issuedCoupons, cp && cp.couponId ? cp.couponId : null);
+  const campaignId = Number(info.lastInsertRowid);
+  try {
+    const ins = db.prepare('INSERT INTO crm_campaign_recipients (campaign_id, customer_key, sent, issued, reason) VALUES (?,?,?,?,?)');
+    for (const l of log) ins.run(campaignId, l.key, l.sent, l.issued, l.reason);
+  } catch { /* the audit list is best-effort; the campaign row is the tally */ }
+  const notIssued = cp ? log.filter((l) => !l.issued).length : 0;
+  return { ok: true, campaignId, targeted: targets.length, sent, failed, couponAttached: !!cp, issuedCoupons, notIssued,
+           reasons: cp ? Object.entries(log.filter((l) => !l.issued && l.reason).reduce((m, l) => { m[l.reason] = (m[l.reason] || 0) + 1; return m; }, {})).map(([reason, n]) => ({ reason, n })) : [] };
+}
+/** Who a campaign reached, one row per customer: the push result, whether a coupon landed, and why not. */
+export function campaignRecipients(campaignId) {
+  try {
+    return db.prepare(
+      `SELECT r.customer_key, r.sent, r.issued, r.reason, r.at, c.name
+         FROM crm_campaign_recipients r LEFT JOIN customers c ON c.line_user_id = r.customer_key
+        WHERE r.campaign_id=? ORDER BY r.id`
+    ).all(Number(campaignId));
+  } catch { return []; }
 }
 // ---------- แม่แบบคูปอง (coupon templates) ----------
 // ONE registry defines every automatic giveaway's value/expiry, so the owner edits ฿ amounts on a

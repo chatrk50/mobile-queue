@@ -587,6 +587,16 @@ CREATE TABLE IF NOT EXISTS crm_campaigns (
   actor_id     INTEGER,
   at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS crm_campaign_recipients (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id  INTEGER NOT NULL REFERENCES crm_campaigns(id),
+  customer_key TEXT NOT NULL,
+  sent         INTEGER NOT NULL DEFAULT 0,      -- 1 = LINE accepted the push
+  issued       INTEGER NOT NULL DEFAULT 0,      -- 1 = a coupon landed in the wallet
+  reason       TEXT,                            -- why not (LINE's answer / quota / already holds one)
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_recipients_campaign ON crm_campaign_recipients(campaign_id);
 CREATE TABLE IF NOT EXISTS push_log (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT,
@@ -632,6 +642,8 @@ for (const stmt of [
   `ALTER TABLE orders ADD COLUMN payment_method TEXT`,       // cash|promptpay|slip|other
   `ALTER TABLE orders ADD COLUMN remakes INTEGER NOT NULL DEFAULT 0`,   // ทำใหม่ count (waste booked, sale kept)
   `ALTER TABLE orders ADD COLUMN slip_note TEXT`,                       // why SlipOK refused the slip (cashier checks it by eye)
+  `ALTER TABLE crm_campaigns ADD COLUMN issued INTEGER NOT NULL DEFAULT 0`,  // coupons that actually landed in wallets
+  `ALTER TABLE crm_campaigns ADD COLUMN coupon_id INTEGER`,                  // which coupon definition was attached
   `ALTER TABLE orders ADD COLUMN void_kind TEXT`,            // void (unpaid) | refund (paid)
   `ALTER TABLE orders ADD COLUMN void_reason TEXT`,
   `ALTER TABLE orders ADD COLUMN voided_at TEXT`,

@@ -886,6 +886,13 @@
     ['🔁 บันทึกของเสีย {n} แก้ว · ทำใหม่ให้ลูกค้า — การ์ดยังอยู่ กดเสิร์ฟเมื่อทำเสร็จ', '🔁 {n} cup(s) booked as waste · remaking — the card stays, tap Served when done', '🔁 ບັນທຶກຂອງເສຍ {n} ຈອກ · ເຮັດໃໝ່ໃຫ້ລູກຄ້າ — ກາດຍັງຢູ່ ກົດເສີບເມື່ອເຮັດແລ້ວ'],
     ['🧪 ทดสอบสลิปกับ SlipOK', '🧪 Test a slip with SlipOK', '🧪 ທົດສອບສະລິບກັບ SlipOK'],
     ['ตรวจสลิปด้วยตาแล้วกด "รับเงิน"', 'check the slip by eye, then tap Take payment', 'ກວດສະລິບດ້ວຍຕາແລ້ວກົດ "ຮັບເງິນ"'],
+    ['ดูรายชื่อ: ใครได้รับ / ใครไม่ได้', 'Who received it / who did not', 'ເບິ່ງລາຍຊື່: ໃຜໄດ້ຮັບ / ໃຜບໍ່ໄດ້'],
+    ['✓ ส่งถึง', '✓ Delivered', '✓ ສົ່ງເຖິງ'],
+    ['✗ ส่งไม่ถึง', '✗ Not delivered', '✗ ສົ່ງບໍ່ເຖິງ'],
+    ['🎁 ออกคูปองแล้ว', '🎁 Coupon issued', '🎁 ອອກຄູປອງແລ້ວ'],
+    ['มีคูปองใบนี้อยู่แล้ว ยังไม่ได้ใช้', 'Already holds this coupon, unused', 'ມີຄູປອງໃບນີ້ຢູ່ແລ້ວ ຍັງບໍ່ໄດ້ໃຊ້'],
+    ['โควตาคูปองหมด', 'Coupon quota exhausted', 'ໂຄຕາຄູປອງໝົດ'],
+    ['แคมเปญนี้ส่งก่อนมีรายชื่อรายคน — ดูจำนวนรวมด้านบน', 'Sent before per-person records existed — see the totals above', 'ແຄມເປນນີ້ສົ່ງກ່ອນມີລາຍຊື່ລາຍຄົນ — ເບິ່ງຈຳນວນລວມຂ້າງເທິງ'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS, into: '.hdr-actions', before: '#logoutBtn', className: 'ghost ic-btn' });

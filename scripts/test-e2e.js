@@ -1525,9 +1525,26 @@ console.log('\n== Win-back attaches a coupon BUILT ON THE COUPON PAGE (define on
   const r2 = await Q.sendCampaign({ keys: [K1], message: 'ส่งซ้ำ', coupon: { couponId: cid } });
   ok(r2.issuedCoupons === 0, 'INVARIANT re-sending to the same customer issues nothing new');
   ok(db.prepare('SELECT issued_count n FROM coupons WHERE id=?').get(cid).n === 1, 'INVARIANT the handed-back quota is not consumed by the duplicate');
-  // issue_limit is respected across a blast: 2-coupon quota, 1 already gone, 2 more recipients.
-  const r3 = await Q.sendCampaign({ keys: [K2, K3], message: 'โควตา', coupon: { couponId: cid } });
-  ok(r3.issuedCoupons === 1, `INVARIANT the campaign stops issuing when the coupon's quota runs out (got ${r3.issuedCoupons})`);
+  // issue_limit is checked BEFORE anything goes out: 2-coupon quota, 1 already gone, 2 more recipients → refused.
+  let shortErr = null; try { await Q.sendCampaign({ keys: [K2, K3], message: 'โควตา', coupon: { couponId: cid } }); } catch (e) { shortErr = e; }
+  ok(shortErr && shortErr.message === 'coupon_quota_short' && shortErr.remaining === 1 && shortErr.needed === 2, `INVARIANT a blast the quota cannot cover is refused up front, nothing sent (remaining ${shortErr && shortErr.remaining} / needed ${shortErr && shortErr.needed})`);
+  ok(db.prepare('SELECT COUNT(*) n FROM crm_campaigns WHERE message=?').get('โควตา').n === 0, 'INVARIANT no campaign row is written for a refused blast');
+  const r3 = await Q.sendCampaign({ keys: [K2], message: 'โควตา', coupon: { couponId: cid } });
+  ok(r3.issuedCoupons === 1 && r3.notIssued === 0, `INVARIANT within quota the coupon lands (got ${r3.issuedCoupons})`);
+  // A customer holding a live copy is not counted against the quota and is not given a second one.
+  const r3b = await Q.sendCampaign({ keys: [K1, K2], message: 'เตือน', coupon: { couponId: cid } });
+  ok(r3b.issuedCoupons === 0 && r3b.notIssued === 2 && r3b.reasons[0] && /อยู่แล้ว/.test(r3b.reasons[0].reason), 'INVARIANT reminders to holders issue nothing and say why');
+  // A used copy is re-gifted on the same row (a re-send after use is a real new coupon).
+  db.prepare("UPDATE customer_coupons SET used_at=datetime('now'), used_order_id=1 WHERE coupon_id=? AND customer_key=?").run(cid, K1);
+  db.prepare('UPDATE coupons SET issue_limit=5 WHERE id=?').run(cid);
+  const r4 = await Q.sendCampaign({ keys: [K1], message: 'ของขวัญอีกครั้ง', coupon: { couponId: cid } });
+  const w4 = Q.customerCoupons(K1).find((c) => c.coupon_id === cid);
+  ok(r4.issuedCoupons === 1 && !!w4 && !w4.used_at, 'INVARIANT a customer whose copy was used gets a fresh, usable one on re-send');
+  ok(db.prepare('SELECT COUNT(*) n FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(cid, K1).n === 1, 'INVARIANT still one row per customer (the unique index holds)');
+  // Every recipient is on record with the outcome.
+  const rc = Q.campaignRecipients(r3b.campaignId);
+  ok(rc.length === 2 && rc.every((x) => x.sent === 1 && x.issued === 0 && /อยู่แล้ว/.test(x.reason || '')), `INVARIANT the campaign keeps a per-person record: sent / issued / reason (${rc.length} rows)`);
+  ok(db.prepare('SELECT issued, coupon_id FROM crm_campaigns WHERE id=?').get(r4.campaignId).issued === 1 && db.prepare('SELECT coupon_id FROM crm_campaigns WHERE id=?').get(r4.campaignId).coupon_id === cid, 'INVARIANT the campaign row carries issued + the coupon id');
   let ghostErr = null; try { await Q.sendCampaign({ keys: [K1], message: 'x', coupon: { couponId: 999999 } }); } catch (e) { ghostErr = e.message; }
   ok(ghostErr === 'coupon_not_found', 'INVARIANT a deleted/unknown coupon id is refused up front');
   for (const k of [K1, K2, K3]) { db.prepare('DELETE FROM customer_coupons WHERE customer_key=?').run(k); db.prepare('DELETE FROM customers WHERE line_user_id=?').run(k); }
