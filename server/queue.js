@@ -835,6 +835,13 @@ export function couponReportSheet({ from = null, to = null } = {}) {
     `SELECT kind, label, COUNT(*) n FROM customer_coupons
       WHERE used_at IS NULL AND state != 'cancelled' AND expires_at BETWEEN ? AND ? AND expires_at < ?
       GROUP BY kind, label`).all(f, t, today);
+  // All-time view of the same coupon: a coupon handed out before the window and used inside it
+  // showed "ออก 0 · ใช้ 1" and read as lost. Total issued, total used and the copies still live
+  // (unused, not expired, not cancelled) make the row self-explanatory.
+  const allTime = db.prepare(
+    `SELECT kind, label, COUNT(*) n, SUM(used_at IS NOT NULL) usedAll,
+            SUM(used_at IS NULL AND state != 'cancelled' AND expires_at >= ?) live
+       FROM customer_coupons GROUP BY kind, label`).all(today);
   const SEP = String.fromCharCode(0);   // labels contain spaces, so join on a char no label can hold
   const keys = [...new Set([...issued, ...used, ...lapsed].map((r) => r.kind + SEP + (r.label || '')))];
   const rows = keys.map((k) => {
@@ -843,9 +850,12 @@ export function couponReportSheet({ from = null, to = null } = {}) {
     const i = pick(issued) || { n: 0, face: 0 };
     const u = pick(used) || { n: 0, value: 0, lastUsed: null, avgDays: null };
     const e = pick(lapsed) || { n: 0 };
+    const a = pick(allTime) || { n: 0, usedAll: 0, live: 0 };
     return { kind, kindTh: COUPON_KIND_TH[kind] || kind, label,
              issued: i.n, faceValue: r2(i.face), redeemed: u.n, value: r2(u.value),
              rate: i.n ? Math.round((u.n / i.n) * 1000) / 10 : null,
+             issuedAll: a.n || 0, usedAll: a.usedAll || 0, live: a.live || 0,
+             rateAll: a.n ? Math.round(((a.usedAll || 0) / a.n) * 1000) / 10 : null,
              expired: e.n, lastUsed: u.lastUsed, avgDays: u.avgDays };
   }).sort((a, b) => b.issued - a.issued || b.redeemed - a.redeemed);
   const uses = db.prepare(

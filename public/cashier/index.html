@@ -3634,8 +3634,9 @@ function renderCrSheet(){
   const td=(v,align,col)=>`<td style="border:1px solid var(--line);padding:6px 8px;white-space:nowrap;text-align:${align||'right'}${col?';color:'+col:''}">${v}</td>`;
   const body=rows.map(x=>'<tr>'
     +td(`<b style="color:var(--navy)">${esc(x.label)}</b> <span class="muted" style="font-size:10.5px">${esc(x.kindTh)}</span>`,'left')
-    +td(x.issued)+td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
-    +td(x.rate==null?'—':x.rate+'%')+td(x.expired||0,'right',x.expired?'#b45309':'')
+    +td(x.issued)+td(x.issuedAll==null?'—':x.issuedAll,'right','var(--muted)')+td(x.live==null?'—':x.live,'right',x.live?'#0e7c93':'var(--muted)')
+    +td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
+    +td((x.rateAll==null?'—':x.rateAll+'%')+(x.rate!=null&&x.issued?' <span class="muted" style="font-size:10.5px">(ช่วงนี้ '+x.rate+'%)</span>':''))+td(x.expired||0,'right',x.expired?'#b45309':'')
     +td(x.avgDays==null?'—':x.avgDays+' วัน')+td(x.lastUsed||'—')
     +'</tr>').join('');
   const uses=(_crSheet.uses||[]);
@@ -3644,9 +3645,9 @@ function renderCrSheet(){
   box.innerHTML=rows.length?`
     <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px">
       <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px">
-        <thead><tr>${th('label','คูปอง','left')}${th('issued','ออก')}${th('redeemed','ใช้')}${th('value','฿ ลดจริง')}${th('rate','อัตราใช้')}${th('expired','หมดอายุ')}${th('avgDays','เฉลี่ยกี่วันถึงใช้')}${th('lastUsed','ใช้ล่าสุด')}</tr></thead>
+        <thead><tr>${th('label','คูปอง','left')}${th('issued','ออก (ช่วงนี้)')}${th('issuedAll','ออกทั้งหมด')}${th('live','ยังไม่ใช้')}${th('redeemed','ใช้')}${th('value','฿ ลดจริง')}${th('rateAll','อัตราใช้ (สะสม)')}${th('expired','หมดอายุ')}${th('avgDays','เฉลี่ยกี่วันถึงใช้')}${th('lastUsed','ใช้ล่าสุด')}</tr></thead>
         <tbody>${body}</tbody></table></div>
-    <p class="muted" style="font-size:11px;margin:6px 0 0">แตะหัวตารางเพื่อเรียงลำดับ · "ออก" นับตามวันที่แจก ส่วน "ใช้" นับตามวันที่ลูกค้าใช้จริงในช่วงเดียวกัน</p>
+    <p class="muted" style="font-size:11px;margin:6px 0 0">แตะหัวตารางเพื่อเรียงลำดับ · "ออก (ช่วงนี้)" นับตามวันที่แจก ส่วน "ใช้" นับตามวันที่ลูกค้าใช้จริงในช่วงเดียวกัน — คูปองที่แจกก่อนช่วงนี้แล้วเพิ่งถูกใช้จึงขึ้น ออก 0 · ดู "ออกทั้งหมด" และ "ยังไม่ใช้" (ใบที่ยังอยู่ในกระเป๋าลูกค้า) เพื่อเห็นภาพรวมของคูปองใบนั้น</p>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--navy)">รายการใช้รายใบ (${uses.length}${uses.length>=300?'+':''} ครั้ง) — ใคร ใช้อะไร วันไหน</summary>
       <div style="overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px;margin-top:8px">
@@ -3659,8 +3660,8 @@ function renderCrSheet(){
 window.crExportCsv=()=>{
   if(!_crSheet) return;
   const q=(s)=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
-  const L1=[['คูปอง','ประเภท','ออก (ใบ)','ใช้ (ใบ)','฿ ลดจริง','อัตราใช้ %','หมดอายุ (ใบ)','เฉลี่ยกี่วันถึงใช้','ใช้ล่าสุด'],
-    ...(_crSheet.rows||[]).map(x=>[x.label,x.kindTh,x.issued,x.redeemed,x.value,x.rate==null?'':x.rate,x.expired,x.avgDays==null?'':x.avgDays,x.lastUsed||''])];
+  const L1=[['คูปอง','ประเภท','ออก ช่วงนี้ (ใบ)','ออกทั้งหมด (ใบ)','ยังไม่ใช้ (ใบ)','ใช้ (ใบ)','฿ ลดจริง','อัตราใช้สะสม %','หมดอายุ (ใบ)','เฉลี่ยกี่วันถึงใช้','ใช้ล่าสุด'],
+    ...(_crSheet.rows||[]).map(x=>[x.label,x.kindTh,x.issued,x.issuedAll==null?'':x.issuedAll,x.live==null?'':x.live,x.redeemed,x.value,x.rateAll==null?'':x.rateAll,x.expired,x.avgDays==null?'':x.avgDays,x.lastUsed||''])];
   const L2=[[],['รายการใช้รายใบ'],['วันที่','ลูกค้า','คูปอง','฿'],
     ...(_crSheet.uses||[]).map(u=>[u.d,u.name||u.key,u.label,u.value==null?'':u.value])];
   const csv='﻿'+[...L1,...L2].map(r=>r.map(q).join(',')).join('\r\n');
