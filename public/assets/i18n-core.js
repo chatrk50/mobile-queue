@@ -15,6 +15,19 @@
     const EN = Object.create(null), LO = Object.create(null);
     for (const [th, en, lo] of rows) { EN[th] = en; LO[th] = lo; }
     const DICTS = { en: EN, lo: LO };
+    // Menu item names (the shop's own English / Lao names) - matched as exact text AND as a
+    // substring, since a ticket line reads "1× โยเกิร์ตปั่น Original · หวาน 50%".
+    const NAMES = { en: [], lo: [] };
+    function addNames(list) {
+      NAMES.en = []; NAMES.lo = [];
+      for (const [th, en, lo] of (list || [])) {
+        if (!th) continue;
+        if (en && en !== th) NAMES.en.push([th, en]);
+        if (lo && lo !== th) NAMES.lo.push([th, lo]);
+      }
+      for (const k of ['en', 'lo']) NAMES[k].sort((a, b) => b[0].length - a[0].length);   // longest first
+      if (lang !== 'th' && document.body) walk(document.body);
+    }
     let lang = 'th';
     try { lang = localStorage.getItem(KEY) || 'th'; } catch (e) { /* private mode */ }
     if (!LANGS[lang]) lang = 'th';
@@ -30,6 +43,15 @@
         if (nums) {
           const p = dict[t.replace(NUM, '{n}')];
           if (p != null) { let i = 0; out = p.replace(/\{n\}/g, () => (i < nums.length ? nums[i++] : '')); }
+        }
+      }
+      if (out == null) {
+        // A menu name inside a longer line: swap just the name.
+        const names = NAMES[lang];
+        if (names && names.length) {
+          let s = t, hit = false;
+          for (const [th, x] of names) { if (s.includes(th)) { s = s.split(th).join(x); hit = true; } }
+          if (hit) out = s;
         }
       }
       if (out == null) return null;
@@ -68,10 +90,14 @@
       }
     });
     let bar = null;
+    const order = Object.keys(LANGS);
+    const nextLang = () => order[(order.indexOf(lang) + 1) % order.length];
     function paint() {
       if (!bar) return;
-      if (bar.dataset.mode === 'cycle') { bar.textContent = LANGS[lang]; bar.setAttribute('aria-label', 'Language: ' + LANGS[lang]); return; }
-      bar.querySelectorAll('button').forEach((b) => { const on = b.dataset.lang === lang; b.style.background = on ? 'var(--accent,#00b5d8)' : 'transparent'; b.style.color = on ? '#fff' : 'var(--navy,#16314f)'; b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      const nx = nextLang();
+      bar.textContent = LANGS[nx];
+      bar.setAttribute('aria-label', 'Switch language to ' + LANGS[nx]);
+      bar.title = LANGS[lang] + ' → ' + LANGS[nx];
     }
     function setLang(l) {
       if (!LANGS[l]) return;
@@ -82,43 +108,34 @@
       paint();
       try { document.dispatchEvent(new CustomEvent('yd:lang', { detail: { lang: l } })); } catch (e) { /* old engines */ }
     }
-    const order = Object.keys(LANGS);
-    function cycle() { setLang(order[(order.indexOf(lang) + 1) % order.length]); }
+    function cycle() { setLang(nextLang()); }
     function mount() {
       if (bar || !document.body) return;
       const into = opts && opts.into ? document.querySelector(opts.into) : null;
+      // ONE button that shows the language it switches to (ไทย → EN → ລາວ → ไทย): in the page's
+      // own toolbar when it has one, else a small pill at the top-right.
+      bar = document.createElement('button');
+      bar.type = 'button'; bar.id = 'ydLang';
+      bar.addEventListener('click', cycle);
       if (into) {
-        // A single button in the page's own toolbar that cycles ไทย → EN → ລາວ.
-        bar = document.createElement('button');
-        bar.type = 'button'; bar.id = 'ydLang'; bar.dataset.mode = 'cycle';
         bar.className = (opts.className || 'ghost');
-        bar.style.cssText = 'font-weight:800;font-size:12px;letter-spacing:.2px;min-width:44px;padding:0 10px;font-family:inherit';
-        bar.title = 'ภาษา / Language / ພາສາ';
-        bar.addEventListener('click', cycle);
+        bar.style.cssText = 'font-weight:800;font-size:12px;letter-spacing:.2px;min-width:44px;width:auto;padding:0 10px;font-family:inherit';
         const before = opts.before ? into.querySelector(opts.before) : null;
         if (before) into.insertBefore(bar, before); else into.appendChild(bar);
       } else {
-        bar = document.createElement('div');
-        bar.id = 'ydLang';
-        bar.setAttribute('role', 'group');
-        bar.setAttribute('aria-label', 'Language');
-        bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:80;display:flex;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid var(--line,#e3e8ef);box-shadow:0 4px 14px rgba(16,40,70,.12);font-family:inherit';
-        for (const [code, label] of Object.entries(LANGS)) {
-          const b = document.createElement('button');
-          b.type = 'button'; b.dataset.lang = code; b.textContent = label;
-          b.style.cssText = 'border:none;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:800;line-height:1;cursor:pointer;font-family:inherit;min-width:36px;min-height:26px';
-          b.addEventListener('click', () => setLang(code));
-          bar.appendChild(b);
-        }
+        bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:80;min-width:44px;min-height:32px;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid var(--line,#e3e8ef);box-shadow:0 4px 14px rgba(16,40,70,.12);font-family:inherit;font-size:12.5px;font-weight:800;color:var(--navy,#16314f);cursor:pointer;line-height:1';
         document.body.appendChild(bar);
       }
       paint();
+      // Menu names registered before the engine loaded (the LIFF fetches its menu early).
+      if (window.YD_NAME_ROWS) addNames(window.YD_NAME_ROWS);
+      document.addEventListener('yd:names', () => addNames(window.YD_NAME_ROWS || []));
       document.documentElement.lang = lang;
       if (lang !== 'th') walk(document.body);
       mo.observe(document.body, { childList: true, subtree: true, characterData: true });
     }
     if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
-    window.YD_LANG = { get: () => lang, set: setLang, tr: (t) => (tr(t) ?? t), list: LANGS };
+    window.YD_LANG = { get: () => lang, set: setLang, tr: (t) => (tr(t) ?? t), list: LANGS, addNames };
     return window.YD_LANG;
   };
 })();

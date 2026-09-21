@@ -661,6 +661,7 @@ for (const stmt of [
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
+  `ALTER TABLE menu_items ADD COLUMN name_lo TEXT`,        // Lao name (shown when the customer picks ລາວ)
   `ALTER TABLE menu_items ADD COLUMN badge TEXT`,          // merchandising label shown on the tile: '' | new | promo | hot (ขายดี). Decorative, doesn't disable.
   // A wallet coupon becomes an INSTANCE of a campaign (the model every major platform uses):
   // coupon_id links it back to coupons; state makes claimed→redeemed explicit instead of

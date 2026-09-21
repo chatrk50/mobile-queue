@@ -229,6 +229,8 @@
   @keyframes coachIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
   @keyframes coachPulse{0%{box-shadow:0 0 0 0 rgba(0,181,216,.55)}70%{box-shadow:0 0 0 12px rgba(0,181,216,0)}100%{box-shadow:0 0 0 0 rgba(0,181,216,0)}}
   .coach-pulse{animation:coachPulse 1.6s ease-out infinite}
+  /* In EN / ລາວ the item name itself is shown translated, so the English subline would repeat it. */
+  html:not([lang="th"]) .mn-en{display:none}
   @media (prefers-reduced-motion:reduce){ .coach-pulse{animation:none} }
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -1240,6 +1242,17 @@ async function loadMemberStrip(){
     maybeAcctCoach();
   }catch(e){}
 }
+// Menu names in the customer's language: the shop's English / Lao names (from the menu editor) are
+// handed to the language engine, which swaps them wherever the Thai name is shown — cards, sheets,
+// basket, ticket lines. Orders still carry the Thai name (the kitchen reads Thai). Lao falls back
+// to English when no Lao name was typed.
+function registerMenuNames(){
+  try{
+    const rows=(MENU||[]).filter(m=>m&&m.name&&(m.name_en||m.name_lo)).map(m=>[m.name, m.name_en||m.name, m.name_lo||m.name_en||m.name]);
+    window.YD_NAME_ROWS=rows;
+    if(window.YD_LANG&&YD_LANG.addNames) YD_LANG.addNames(rows); else document.dispatchEvent(new CustomEvent('yd:names'));
+  }catch(e){}
+}
 // One-time coach mark: a bubble under the chip saying that tapping the photo opens คูปองของคุณ.
 // Shown on at most 3 visits, and never again once the customer taps the chip or closes the bubble.
 function maybeAcctCoach(){
@@ -1248,13 +1261,14 @@ function maybeAcctCoach(){
   try{ localStorage.setItem('acct_coach_n', String(n+1)); }catch(e){}
   const chip=$('acctChip'); if(!chip||!chip.parentNode) return;
   const el=document.createElement('div'); el.id='acctCoach'; el.setAttribute('role','status');
-  el.style.cssText='position:absolute;top:52px;left:8px;z-index:30;max-width:250px;background:var(--navy,#16314f);color:#fff;border-radius:12px;padding:10px 30px 10px 12px;font-size:13.5px;line-height:1.35;box-shadow:0 8px 24px rgba(16,40,70,.28);animation:coachIn .35s ease-out;cursor:pointer';
-  el.innerHTML='<div style="position:absolute;left:14px;top:-6px;width:12px;height:12px;background:var(--navy,#16314f);transform:rotate(45deg);border-radius:2px"></div>'
-    +'<b>🎁 คูปองของคุณอยู่ที่นี่</b><div style="font-size:12px;opacity:.9;margin-top:2px">แตะรูปโปรไฟล์ → ดูคูปอง แต้ม และประวัติการสั่ง</div>'
-    +'<button type="button" aria-label="ปิด" onclick="event.stopPropagation();dismissAcctCoach(true)" style="position:absolute;top:6px;right:6px;border:none;background:transparent;color:#fff;font-size:16px;line-height:1;padding:4px 6px;min-width:28px;min-height:28px;cursor:pointer">✕</button>';
+  // One word, as the owner asked: a small label under the chip. It fades by itself after a few
+  // seconds (so it can come back next visit, up to 3 times); tapping it or the chip retires it.
+  el.style.cssText='position:absolute;top:50px;left:8px;z-index:30;background:var(--navy,#16314f);color:#fff;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:800;line-height:1.2;box-shadow:0 6px 18px rgba(16,40,70,.28);animation:coachIn .35s ease-out;cursor:pointer;white-space:nowrap';
+  el.innerHTML='<div style="position:absolute;left:14px;top:-5px;width:10px;height:10px;background:var(--navy,#16314f);transform:rotate(45deg);border-radius:2px"></div>🎁 คูปอง';
   el.addEventListener('click',()=>{ dismissAcctCoach(true); openAccount(); });
   chip.parentNode.insertBefore(el, chip.nextSibling);
   chip.classList.add('coach-pulse');
+  setTimeout(()=>dismissAcctCoach(false), 7000);
 }
 window.dismissAcctCoach=(done)=>{ const el=$('acctCoach'); if(el) el.remove(); const chip=$('acctChip'); if(chip) chip.classList.remove('coach-pulse'); if(done){ try{ localStorage.setItem('acct_coach_done','1'); }catch(e){} } };
 // Non-LINE phone capture: format while typing (full digits, not masked — easier to verify), mask only when saved.
@@ -1423,7 +1437,7 @@ function itemImg(m){
 let menuLoadFailed=false;
 // ?zone asks for THIS branch's menu and prices: nationwide items look the same at every branch,
 // LSM items only appear at the branches HQ assigned them to.
-async function loadMenu(){ try{ MENU=await api('/api/menu'+(zoneId?('?zone='+encodeURIComponent(zoneId)):'')); menuLoadFailed=false; }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
+async function loadMenu(){ try{ MENU=await api('/api/menu'+(zoneId?('?zone='+encodeURIComponent(zoneId)):'')); menuLoadFailed=false; registerMenuNames(); }catch(e){ MENU=[]; menuLoadFailed=true; }   // CUS-C4: remember it was a fetch failure, don't tell the customer the shop has no drinks
   // Which items THIS customer has hearted (paints the ❤️ filled). Real LINE ids only — the demo
   // fallback ids can't like, which is what keeps the public counts honest.
   try{ if(/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ const r=await api('/api/menu-likes?u='+encodeURIComponent(lineUserId)); MY_LIKES=new Set(r.ids||[]); } }catch(e){}
@@ -1573,7 +1587,7 @@ function randomCard(m, spinning){
   return `<div style="${spinning?'opacity:.55;filter:blur(.4px)':'animation:rpop .22s ease-out'}">
     <div style="font-size:62px;line-height:1">${itemImg(m)}</div>
     <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:6px">${esc(m.name)}</div>
-    ${m.name_en?`<div class="muted" style="font-size:12px">${esc(m.name_en)}</div>`:''}
+    ${m.name_en?`<div class="muted mn-en" style="font-size:12px">${esc(m.name_en)}</div>`:''}
     <div style="font-size:23px;font-weight:800;color:var(--accent);margin-top:4px">฿${m.price}</div>
     ${b?`<div style="margin-top:7px"><span style="background:${b.bg};color:#fff;font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px">${b.t}</span></div>`:''}
   </div>`;

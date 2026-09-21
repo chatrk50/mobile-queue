@@ -1643,7 +1643,7 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
+  const rows = db.prepare('SELECT id, name, name_en, name_lo, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
   // Branch scoping — the HQ rule, applied in ONE place so the storefront, the till and the order
   // endpoint can never disagree about what a branch sells:
   //   nationwide -> every branch carries it (a branch cannot drop it), at HQ's single price.
@@ -1752,7 +1752,7 @@ export function renameBranch(id, { name, code }) {
 /** Per-branch menu overrides: list catalog items with this branch's enable/price/soldout. */
 export function listBranchMenu(branchId) {
   const rows = db.prepare(
-    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category, mi.scope,
+    `SELECT mi.id, mi.name, mi.name_en, mi.name_lo, mi.price AS base_price, mi.category, mi.scope,
             COALESCE(bm.enabled, 0) AS assigned, bm.price_override,
             COALESCE(bm.soldout, mi.soldout) AS soldout
        FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
@@ -4588,14 +4588,14 @@ export function channelNet(amount, channelId) {
 const VALID_BADGES = ['new', 'promo', 'hot', 'rec', 'free'];
 const normBadge = (b) => (VALID_BADGES.includes(b) ? b : null);
 
-export function addMenuItem({ name, name_en, price, image, category, badge }) {
+export function addMenuItem({ name, name_en, name_lo, price, image, category, badge }) {
   const n = (name || '').toString().trim().slice(0, 80);
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
   const cat = category === 'topping' ? 'topping' : 'drink';
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
-  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort, badge) VALUES (?,?,?,?,?,?,?)')
-    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
+  const info = db.prepare('INSERT INTO menu_items (name, name_en, name_lo, price, image, category, sort, badge) VALUES (?,?,?,?,?,?,?,?)')
+    .run(n, (name_en || '').toString().slice(0, 80) || null, (name_lo || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
 // Append-only price trail. A margin report from last month is only readable against the price that
@@ -4606,11 +4606,12 @@ export function priceHistory(itemId = null, limit = 100) {
     ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
     : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge, scope }, actor = null) {
+export function updateMenuItem(id, { name, name_en, name_lo, price, image, active, soldout, category, badge, scope }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
   const en = name_en != null ? (name_en.toString().slice(0, 80) || null) : cur.name_en;
+  const lo = name_lo != null ? (name_lo.toString().slice(0, 80) || null) : cur.name_lo;
   const p = price != null ? Math.max(0, Number(price) || 0) : cur.price;
   const img = image != null ? (image.toString().slice(0, IMG_CAP) || null) : cur.image;
   const cat = category != null ? (category === 'topping' ? 'topping' : 'drink') : cur.category;
@@ -4618,7 +4619,7 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
   const sc = scope != null ? (scope === 'lsm' ? 'lsm' : 'nationwide') : (cur.scope || 'nationwide');
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, sc, id);
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, name_lo=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, lo, p, img, cat, a, so, bd, sc, id);
   // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
   if (Number(p) !== Number(cur.price)) {
     try {

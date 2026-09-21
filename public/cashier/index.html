@@ -4004,6 +4004,7 @@ window.editMenuForm=(id)=>{
     <div style="display:grid;gap:10px">
       <label class="ff">ชื่อเมนู (ไทย) *<input id="mf_name" value="${esc(m.name||'')}"></label>
       <label class="ff">ชื่ออังกฤษ<input id="mf_en" value="${esc(m.name_en||'')}"></label>
+      <label class="ff">ชื่อลาว <span class="muted" style="font-weight:400">— ลูกค้าที่เลือกภาษาลาวจะเห็นชื่อนี้ (ว่าง = ใช้ชื่ออังกฤษ)</span><input id="mf_lo" value="${esc(m.name_lo||'')}" placeholder="ເຊັ່ນ ໂຢເກິດປັ່ນ Original"></label>
       <div class="row" style="gap:10px">
         <label class="ff" style="flex:1">ราคาหน้าร้าน ฿<input id="mf_price" type="number" inputmode="decimal" value="${m.price||''}"></label>
         <label class="ff" style="flex:1">ราคา Delivery ฿<input id="mf_delivery" type="number" inputmode="decimal" value="${m.price_delivery||''}" placeholder="เว้น=เท่าหน้าร้าน"></label>
@@ -4053,7 +4054,7 @@ async function loadPriceHistory(itemId){ const box=$('mf_hist'); if(!box) return
           <span style="font-size:10.5px;color:${up?'#0f6e56':'var(--danger)'}">${up?'▲':'▼'}${Math.abs(Math.round((r.new_price-r.old_price)*100)/100)}</span></span></div>`;}).join('')}</div></details>`;
 }
 window.saveMenuForm=async()=>{
-  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value, badge:($('mf_badge')&&$('mf_badge').value)||'' };
+  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), name_lo:($('mf_lo')?$('mf_lo').value.trim():undefined), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value, badge:($('mf_badge')&&$('mf_badge').value)||'' };
   if(!body.name){ toast('กรอกชื่อเมนู (ไทย)'); return; }
   const scopeSel=$('mf_scope'); if(scopeSel) body.scope=scopeSel.value;
   // An LSM item with no branch ticked would vanish from every storefront — that is never what the
