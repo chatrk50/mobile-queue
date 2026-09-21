@@ -3634,8 +3634,9 @@ function renderCrSheet(){
   const td=(v,align,col)=>`<td style="border:1px solid var(--line);padding:6px 8px;white-space:nowrap;text-align:${align||'right'}${col?';color:'+col:''}">${v}</td>`;
   const body=rows.map(x=>'<tr>'
     +td(`<b style="color:var(--navy)">${esc(x.label)}</b> <span class="muted" style="font-size:10.5px">${esc(x.kindTh)}</span>`,'left')
-    +td(x.issued)+td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
-    +td(x.rate==null?'—':x.rate+'%')+td(x.expired||0,'right',x.expired?'#b45309':'')
+    +td(x.issued)+td(x.issuedAll==null?'—':x.issuedAll,'right','var(--muted)')+td(x.live==null?'—':x.live,'right',x.live?'#0e7c93':'var(--muted)')
+    +td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
+    +td((x.rateAll==null?'—':x.rateAll+'%')+(x.rate!=null&&x.issued?' <span class="muted" style="font-size:10.5px">(ช่วงนี้ '+x.rate+'%)</span>':''))+td(x.expired||0,'right',x.expired?'#b45309':'')
     +td(x.avgDays==null?'—':x.avgDays+' วัน')+td(x.lastUsed||'—')
     +'</tr>').join('');
   const uses=(_crSheet.uses||[]);
@@ -3644,9 +3645,9 @@ function renderCrSheet(){
   box.innerHTML=rows.length?`
     <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px">
       <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px">
-        <thead><tr>${th('label','คูปอง','left')}${th('issued','ออก')}${th('redeemed','ใช้')}${th('value','฿ ลดจริง')}${th('rate','อัตราใช้')}${th('expired','หมดอายุ')}${th('avgDays','เฉลี่ยกี่วันถึงใช้')}${th('lastUsed','ใช้ล่าสุด')}</tr></thead>
+        <thead><tr>${th('label','คูปอง','left')}${th('issued','ออก (ช่วงนี้)')}${th('issuedAll','ออกทั้งหมด')}${th('live','ยังไม่ใช้')}${th('redeemed','ใช้')}${th('value','฿ ลดจริง')}${th('rateAll','อัตราใช้ (สะสม)')}${th('expired','หมดอายุ')}${th('avgDays','เฉลี่ยกี่วันถึงใช้')}${th('lastUsed','ใช้ล่าสุด')}</tr></thead>
         <tbody>${body}</tbody></table></div>
-    <p class="muted" style="font-size:11px;margin:6px 0 0">แตะหัวตารางเพื่อเรียงลำดับ · "ออก" นับตามวันที่แจก ส่วน "ใช้" นับตามวันที่ลูกค้าใช้จริงในช่วงเดียวกัน</p>
+    <p class="muted" style="font-size:11px;margin:6px 0 0">แตะหัวตารางเพื่อเรียงลำดับ · "ออก (ช่วงนี้)" นับตามวันที่แจก ส่วน "ใช้" นับตามวันที่ลูกค้าใช้จริงในช่วงเดียวกัน — คูปองที่แจกก่อนช่วงนี้แล้วเพิ่งถูกใช้จึงขึ้น ออก 0 · ดู "ออกทั้งหมด" และ "ยังไม่ใช้" (ใบที่ยังอยู่ในกระเป๋าลูกค้า) เพื่อเห็นภาพรวมของคูปองใบนั้น</p>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--navy)">รายการใช้รายใบ (${uses.length}${uses.length>=300?'+':''} ครั้ง) — ใคร ใช้อะไร วันไหน</summary>
       <div style="overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px;margin-top:8px">
@@ -3659,8 +3660,8 @@ function renderCrSheet(){
 window.crExportCsv=()=>{
   if(!_crSheet) return;
   const q=(s)=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
-  const L1=[['คูปอง','ประเภท','ออก (ใบ)','ใช้ (ใบ)','฿ ลดจริง','อัตราใช้ %','หมดอายุ (ใบ)','เฉลี่ยกี่วันถึงใช้','ใช้ล่าสุด'],
-    ...(_crSheet.rows||[]).map(x=>[x.label,x.kindTh,x.issued,x.redeemed,x.value,x.rate==null?'':x.rate,x.expired,x.avgDays==null?'':x.avgDays,x.lastUsed||''])];
+  const L1=[['คูปอง','ประเภท','ออก ช่วงนี้ (ใบ)','ออกทั้งหมด (ใบ)','ยังไม่ใช้ (ใบ)','ใช้ (ใบ)','฿ ลดจริง','อัตราใช้สะสม %','หมดอายุ (ใบ)','เฉลี่ยกี่วันถึงใช้','ใช้ล่าสุด'],
+    ...(_crSheet.rows||[]).map(x=>[x.label,x.kindTh,x.issued,x.issuedAll==null?'':x.issuedAll,x.live==null?'':x.live,x.redeemed,x.value,x.rateAll==null?'':x.rateAll,x.expired,x.avgDays==null?'':x.avgDays,x.lastUsed||''])];
   const L2=[[],['รายการใช้รายใบ'],['วันที่','ลูกค้า','คูปอง','฿'],
     ...(_crSheet.uses||[]).map(u=>[u.d,u.name||u.key,u.label,u.value==null?'':u.value])];
   const csv='﻿'+[...L1,...L2].map(r=>r.map(q).join(',')).join('\r\n');
@@ -4003,6 +4004,7 @@ window.editMenuForm=(id)=>{
     <div style="display:grid;gap:10px">
       <label class="ff">ชื่อเมนู (ไทย) *<input id="mf_name" value="${esc(m.name||'')}"></label>
       <label class="ff">ชื่ออังกฤษ<input id="mf_en" value="${esc(m.name_en||'')}"></label>
+      <label class="ff">ชื่อลาว <span class="muted" style="font-weight:400">— ลูกค้าที่เลือกภาษาลาวจะเห็นชื่อนี้ (ว่าง = ใช้ชื่ออังกฤษ)</span><input id="mf_lo" value="${esc(m.name_lo||'')}" placeholder="ເຊັ່ນ ໂຢເກິດປັ່ນ Original"></label>
       <div class="row" style="gap:10px">
         <label class="ff" style="flex:1">ราคาหน้าร้าน ฿<input id="mf_price" type="number" inputmode="decimal" value="${m.price||''}"></label>
         <label class="ff" style="flex:1">ราคา Delivery ฿<input id="mf_delivery" type="number" inputmode="decimal" value="${m.price_delivery||''}" placeholder="เว้น=เท่าหน้าร้าน"></label>
@@ -4052,7 +4054,7 @@ async function loadPriceHistory(itemId){ const box=$('mf_hist'); if(!box) return
           <span style="font-size:10.5px;color:${up?'#0f6e56':'var(--danger)'}">${up?'▲':'▼'}${Math.abs(Math.round((r.new_price-r.old_price)*100)/100)}</span></span></div>`;}).join('')}</div></details>`;
 }
 window.saveMenuForm=async()=>{
-  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value, badge:($('mf_badge')&&$('mf_badge').value)||'' };
+  const body={ name:$('mf_name').value.trim(), name_en:$('mf_en').value.trim(), name_lo:($('mf_lo')?$('mf_lo').value.trim():undefined), price:Number($('mf_price').value)||0, priceDelivery:$('mf_delivery').value, image:$('mf_img').value.trim(), category:$('mf_cat').value, badge:($('mf_badge')&&$('mf_badge').value)||'' };
   if(!body.name){ toast('กรอกชื่อเมนู (ไทย)'); return; }
   const scopeSel=$('mf_scope'); if(scopeSel) body.scope=scopeSel.value;
   // An LSM item with no branch ticked would vanish from every storefront — that is never what the
@@ -5723,18 +5725,31 @@ window.clSendCampaign=async()=>{
   if(!(await appConfirm({title:'ส่งถึงลูกค้า '+_clSel.size+' คน',message:coupDesc+'ข้อความจะถูกส่งผ่าน LINE OA (มีค่าใช้จ่ายต่อข้อความ)',okText:'ส่งเลย'}))) return;
   const btn=$('clSend'); btn.disabled=true;
   try{ const r=await api('/api/crm/campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[..._clSel],message:msg,coupon})});
-    toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉') : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'));
+    const cpTxt = r.couponAttached ? (' · ออกคูปอง '+r.issuedCoupons+' ใบ'+(r.notIssued?(' (ไม่ได้ออก '+r.notIssued+': '+(r.reasons||[]).map(x=>x.reason+' '+x.n).join(', ')+')'):'')) : '';
+    toast(r.sent ? ('ส่งสำเร็จ '+r.sent+'/'+r.targeted+' คน 🎉'+cpTxt) : ('บันทึกแคมเปญแล้ว '+r.targeted+' คน · LINE ยังไม่เปิดส่งจริง (ทดสอบ)'+cpTxt));
     _clSel.clear(); $('clSelN').textContent='0'; renderCustList(); loadCampaigns(); }
-  catch(e){ const m=err(e); toast(m==='no_targets'?'เลือกได้เฉพาะลูกค้า LINE':(m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ':('ส่งไม่สำเร็จ: '+m))); }
+  catch(e){ const m=err(e); const d=(e&&e.data)||{};
+    toast(m==='no_targets'?'เลือกได้เฉพาะลูกค้า LINE':m==='forbidden'?'เฉพาะผู้จัดการ/เจ้าของ'
+      :m==='coupon_quota_short'?('โควตาคูปองไม่พอ — เหลือ '+(d.remaining!=null?d.remaining:'?')+' ใบ แต่ต้องออก '+(d.needed!=null?d.needed:'?')+' ใบ · เพิ่มโควตาที่หน้าคูปองก่อน แล้วส่งใหม่ (ยังไม่ได้ส่งข้อความ)')
+      :m==='coupon_used_up'?'คูปองนี้ถูกใช้ครบจำนวนแล้ว — เลือกใบอื่นหรือเพิ่มจำนวนครั้งใช้':m==='coupon_expired'?'คูปองนี้หมดอายุแล้ว':('ส่งไม่สำเร็จ: '+m)); }
   finally{ btn.disabled=false; } };
 async function loadCampaigns(){ const box=$('clCampaigns'); if(!box) return;
   let r; try{ r=await api('/api/crm/campaigns'); }catch(e){ box.innerHTML='<span class="muted">—</span>'; return; }
   const cs=r.campaigns||[];
-  box.innerHTML = cs.length ? cs.map(c=>`<div class="row between" style="padding:6px 2px;border-bottom:1px solid var(--line);gap:8px;align-items:flex-start">
+  box.innerHTML = cs.length ? cs.map(c=>`<div style="padding:6px 2px;border-bottom:1px solid var(--line)">
+      <div class="row between" style="gap:8px;align-items:flex-start;cursor:pointer" onclick="toggleCampaignRecipients(${c.id})" title="ดูรายชื่อ: ใครได้รับ / ใครไม่ได้">
       <span style="min-width:0;flex:1"><div style="color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.message)}</div>
       <div class="muted" style="font-size:11px">${fmtDT(c.at)}${c.coupon_label?(' · 🎁 '+esc(c.coupon_label)):''}${c.actor_name?(' · โดย '+esc(c.actor_name)):''}</div></span>
-      <span style="flex:none;text-align:right;font-size:11.5px"><b style="color:${c.sent?'#0f6e56':'var(--muted)'}">ส่งได้ ${c.sent}</b>/${c.targeted}${c.failed?(' · <span style="color:#a32d2d">พลาด '+c.failed+'</span>'):''}</span>
+      <span style="flex:none;text-align:right;font-size:11.5px"><b style="color:${c.sent?'#0f6e56':'var(--muted)'}">ส่งได้ ${c.sent}</b>/${c.targeted}${c.failed?(' · <span style="color:#a32d2d">พลาด '+c.failed+'</span>'):''}${c.coupon_label?('<br>🎁 ออกคูปอง <b>'+(c.issued||0)+'</b>'+((c.issued||0)<c.sent?' <span style="color:#a32d2d">(ไม่ได้ออก '+(c.sent-(c.issued||0))+')</span>':'')):''} <span class="muted">▾</span></span>
+      </div><div id="campRcp-${c.id}" style="display:none;margin-top:6px"></div>
     </div>`).join('') : '<span class="muted">ยังไม่เคยส่งแคมเปญ</span>'; }
+window.toggleCampaignRecipients=async(id)=>{ const box=$('campRcp-'+id); if(!box) return;
+  if(box.style.display!=='none'){ box.style.display='none'; return; }
+  box.style.display=''; box.innerHTML='<span class="muted">กำลังโหลด…</span>';
+  try{ const r=await api('/api/crm/campaigns/'+id+'/recipients'); const rows=r.recipients||[];
+    box.innerHTML = rows.length ? '<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">'+rows.map(x=>'<div class="row between" style="padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name||('ลูกค้า …'+String(x.customer_key||'').slice(-6)))+'</span><span style="flex:none;text-align:right">'+(x.sent?'<span style="color:#0f6e56">✓ ส่งถึง</span>':'<span style="color:#a32d2d">✗ ส่งไม่ถึง</span>')+(x.issued?' · <span style="color:#0f6e56">🎁 ออกคูปองแล้ว</span>':(x.reason?' · <span style="color:#b45309">'+esc(x.reason)+'</span>':''))+'</span></div>').join('')+'</div>'
+      : '<span class="muted">แคมเปญนี้ส่งก่อนมีรายชื่อรายคน — ดูจำนวนรวมด้านบน</span>'; }
+  catch(e){ box.innerHTML='<span style="color:var(--danger)">'+esc(err(e))+'</span>'; } };
 window.redeemOrder=async(tid)=>{ if(!(await appConfirm({title:'🎁 แลกของรางวัล',message:'ใช้แต้มลูกค้าแลกฟรี 1 '+unit()+'?\n(หักดวง + ลดราคาออเดอร์นี้)',okText:'แลกเลย'}))) return;
   try{ const r=await api('/api/tickets/'+tid+'/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}); toast('🎁 แลกแล้ว · ลด ฿'+r.freeAmount+' · เหลือ '+r.balance+' ดวง'); }
   catch(e){ const m=err(e); toast(m==='insufficient_points'?'ดวงไม่พอแลก':(m==='already_redeemed'?'ออเดอร์นี้แลกไปแล้ว':(m==='order_already_paid'?'จ่ายแล้ว แลกไม่ได้':m))); } };

@@ -560,9 +560,30 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
   const expiresAt = !cp ? null
     : cp.days ? db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(cp.days).d
     : (cp.fixedExpiry || db.prepare(`SELECT date(datetime('now','+7 hours'),'+30 days') d`).get().d);
+  const today = db.prepare("SELECT date('now','+7 hours') d").get().d;
+  // Quota FIRST. A coupon that cannot be handed to everyone selected is refused before any push
+  // goes out - otherwise customers are told about a gift that never reaches their wallet
+  // (21 Sep: "the coupons disappeared"). Customers already holding a live copy need no quota.
+  const liveRow = (key) => {
+    if (!cp || !cp.couponId) return null;
+    const r = db.prepare('SELECT * FROM customer_coupons WHERE coupon_id=? AND customer_key=?').get(cp.couponId, key);
+    if (!r) return null;
+    const live = !r.used_at && r.state !== 'cancelled' && r.expires_at >= today;
+    return { row: r, live };
+  };
+  if (cp && cp.couponId) {
+    const c = db.prepare('SELECT issue_limit, issued_count FROM coupons WHERE id=?').get(cp.couponId);
+    if (c && c.issue_limit > 0) {
+      const need = targets.filter((k) => { const x = liveRow(k); return !(x && x.live); }).length;
+      const remaining = Math.max(0, c.issue_limit - c.issued_count);
+      if (need > remaining) { const e = new Error('coupon_quota_short'); e.remaining = remaining; e.needed = need; throw e; }
+    }
+  }
   let sent = 0, failed = 0, issuedCoupons = 0;
+  const log = [];
   for (const key of targets) {
-    let ok = false;
+    let ok = false, reason = null, issued = 0;
+    const had = liveRow(key);
     try {
       // A coupon campaign now goes out as the branded YO-DEE coupon card (Phase 4A) — ONE Flex message
       // carrying the owner's message + the coupon; no attachment, no extra send. Message-only campaigns
@@ -572,37 +593,66 @@ export async function sendCampaign({ keys = [], message, coupon = null, actorId 
         : (await pushQueue(key, msg, shopLink(), 'สั่งเลย', 'winback')) !== false;
     } catch { ok = false; }
     if (!LINE_ENABLED) ok = true;
-    if (ok) sent++; else failed++;
+    if (ok) sent++;
+    else { failed++; const le = lastPushError(); reason = 'LINE ส่งไม่ถึง' + (le && le.detail ? ' (' + String(le.detail).slice(0, 120) + ')' : ''); }
     // Issue the coupon only when the customer was actually TOLD about it — a blocked/failed push
     // must not strand a silent liability in their wallet. With LINE stubbed (UAT/dev) every push
-    // reports false, so we still issue there or the whole flow would be untestable.
-    if (cp && (ok || !LINE_ENABLED)) {
+    // reports ok above, so the flow stays testable there.
+    if (cp && ok) {
       if (cp.couponId) {
-        // Same discipline as claimCoupon: take quota atomically, and the unique
-        // (coupon_id, customer_key) index makes re-sending to the same customer a no-op instead of
-        // stacking duplicate gifts — quota is handed back when that happens.
-        const took = db.prepare(
-          'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
-        ).run(cp.couponId);
-        if (took.changes) {
-          try {
-            db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source) VALUES (?, ?, 'winback', ?, ?, ?, 'campaign')`)
-              .run(key, cp.couponId, cp.label, cp.cap, expiresAt);
-            issuedCoupons++;
-          } catch { db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(cp.couponId); }
+        if (had && had.live) {
+          reason = 'มีคูปองใบนี้อยู่แล้ว ยังไม่ได้ใช้';   // a reminder went out; nothing new to hand over
+        } else {
+          // Same discipline as claimCoupon: take quota atomically. One row per (coupon, customer):
+          // a customer whose earlier copy was used / expired / cancelled gets a FRESH gift on that
+          // row (a re-send after use used to be a silent no-op - the customer was told about a
+          // coupon that never came back); a first-timer gets a new row.
+          const took = db.prepare(
+            'UPDATE coupons SET issued_count = issued_count + 1 WHERE id=? AND active=1 AND (issue_limit<=0 OR issued_count < issue_limit)'
+          ).run(cp.couponId);
+          if (!took.changes) reason = 'โควตาคูปองหมด';
+          else if (had) {
+            db.prepare(`UPDATE customer_coupons SET used_at=NULL, used_order_id=NULL, used_value=NULL, state='claimed', kind='winback', label=?, free_cap=?, expires_at=?, issued_at=datetime('now'), source='campaign' WHERE id=?`)
+              .run(cp.label, cp.cap, expiresAt, had.row.id);
+            issued = 1; issuedCoupons++;
+          } else {
+            try {
+              db.prepare(`INSERT INTO customer_coupons (customer_key, coupon_id, kind, label, free_cap, expires_at, source) VALUES (?, ?, 'winback', ?, ?, ?, 'campaign')`)
+                .run(key, cp.couponId, cp.label, cp.cap, expiresAt);
+              issued = 1; issuedCoupons++;
+            } catch { db.prepare('UPDATE coupons SET issued_count = MAX(0, issued_count - 1) WHERE id=?').run(cp.couponId); reason = 'มีคูปองใบนี้อยู่แล้ว'; }
+          }
         }
       } else {
         db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'winback', ?, ?, ?, 'campaign')`)
           .run(key, cp.label, cp.cap, expiresAt);
-        issuedCoupons++;
+        issued = 1; issuedCoupons++;
       }
     }
+    log.push({ key, sent: ok ? 1 : 0, issued, reason });
   }
   const info = db.prepare(
-    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id)
-     VALUES (?,?,?,?,?,?,?,?)`
-  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId);
-  return { ok: true, campaignId: Number(info.lastInsertRowid), targeted: targets.length, sent, failed, couponAttached: !!cp, issuedCoupons };
+    `INSERT INTO crm_campaigns (message, coupon_label, coupon_cap, coupon_days, targeted, sent, failed, actor_id, issued, coupon_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
+  ).run(msg, cp ? cp.label : null, cp ? cp.cap : null, cp ? cp.days : null, targets.length, sent, failed, actorId, issuedCoupons, cp && cp.couponId ? cp.couponId : null);
+  const campaignId = Number(info.lastInsertRowid);
+  try {
+    const ins = db.prepare('INSERT INTO crm_campaign_recipients (campaign_id, customer_key, sent, issued, reason) VALUES (?,?,?,?,?)');
+    for (const l of log) ins.run(campaignId, l.key, l.sent, l.issued, l.reason);
+  } catch { /* the audit list is best-effort; the campaign row is the tally */ }
+  const notIssued = cp ? log.filter((l) => !l.issued).length : 0;
+  return { ok: true, campaignId, targeted: targets.length, sent, failed, couponAttached: !!cp, issuedCoupons, notIssued,
+           reasons: cp ? Object.entries(log.filter((l) => !l.issued && l.reason).reduce((m, l) => { m[l.reason] = (m[l.reason] || 0) + 1; return m; }, {})).map(([reason, n]) => ({ reason, n })) : [] };
+}
+/** Who a campaign reached, one row per customer: the push result, whether a coupon landed, and why not. */
+export function campaignRecipients(campaignId) {
+  try {
+    return db.prepare(
+      `SELECT r.customer_key, r.sent, r.issued, r.reason, r.at, c.name
+         FROM crm_campaign_recipients r LEFT JOIN customers c ON c.line_user_id = r.customer_key
+        WHERE r.campaign_id=? ORDER BY r.id`
+    ).all(Number(campaignId));
+  } catch { return []; }
 }
 // ---------- แม่แบบคูปอง (coupon templates) ----------
 // ONE registry defines every automatic giveaway's value/expiry, so the owner edits ฿ amounts on a
@@ -785,6 +835,13 @@ export function couponReportSheet({ from = null, to = null } = {}) {
     `SELECT kind, label, COUNT(*) n FROM customer_coupons
       WHERE used_at IS NULL AND state != 'cancelled' AND expires_at BETWEEN ? AND ? AND expires_at < ?
       GROUP BY kind, label`).all(f, t, today);
+  // All-time view of the same coupon: a coupon handed out before the window and used inside it
+  // showed "ออก 0 · ใช้ 1" and read as lost. Total issued, total used and the copies still live
+  // (unused, not expired, not cancelled) make the row self-explanatory.
+  const allTime = db.prepare(
+    `SELECT kind, label, COUNT(*) n, SUM(used_at IS NOT NULL) usedAll,
+            SUM(used_at IS NULL AND state != 'cancelled' AND expires_at >= ?) live
+       FROM customer_coupons GROUP BY kind, label`).all(today);
   const SEP = String.fromCharCode(0);   // labels contain spaces, so join on a char no label can hold
   const keys = [...new Set([...issued, ...used, ...lapsed].map((r) => r.kind + SEP + (r.label || '')))];
   const rows = keys.map((k) => {
@@ -793,9 +850,12 @@ export function couponReportSheet({ from = null, to = null } = {}) {
     const i = pick(issued) || { n: 0, face: 0 };
     const u = pick(used) || { n: 0, value: 0, lastUsed: null, avgDays: null };
     const e = pick(lapsed) || { n: 0 };
+    const a = pick(allTime) || { n: 0, usedAll: 0, live: 0 };
     return { kind, kindTh: COUPON_KIND_TH[kind] || kind, label,
              issued: i.n, faceValue: r2(i.face), redeemed: u.n, value: r2(u.value),
              rate: i.n ? Math.round((u.n / i.n) * 1000) / 10 : null,
+             issuedAll: a.n || 0, usedAll: a.usedAll || 0, live: a.live || 0,
+             rateAll: a.n ? Math.round(((a.usedAll || 0) / a.n) * 1000) / 10 : null,
              expired: e.n, lastUsed: u.lastUsed, avgDays: u.avgDays };
   }).sort((a, b) => b.issued - a.issued || b.redeemed - a.redeemed);
   const uses = db.prepare(
@@ -1583,7 +1643,7 @@ export function updateStore(id, { name, code, address, phone, isOpen, hoursOpen,
 // image may be a short URL or a base64 data: URL (uploaded photo) — allow a large cap.
 const IMG_CAP = 300000;
 export function listMenu(channelId = null, branchId = null) {
-  const rows = db.prepare('SELECT id, name, name_en, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
+  const rows = db.prepare('SELECT id, name, name_en, name_lo, price, image, category, active, soldout, sort, badge, scope FROM menu_items ORDER BY sort, id').all();
   // Branch scoping — the HQ rule, applied in ONE place so the storefront, the till and the order
   // endpoint can never disagree about what a branch sells:
   //   nationwide -> every branch carries it (a branch cannot drop it), at HQ's single price.
@@ -1692,7 +1752,7 @@ export function renameBranch(id, { name, code }) {
 /** Per-branch menu overrides: list catalog items with this branch's enable/price/soldout. */
 export function listBranchMenu(branchId) {
   const rows = db.prepare(
-    `SELECT mi.id, mi.name, mi.name_en, mi.price AS base_price, mi.category, mi.scope,
+    `SELECT mi.id, mi.name, mi.name_en, mi.name_lo, mi.price AS base_price, mi.category, mi.scope,
             COALESCE(bm.enabled, 0) AS assigned, bm.price_override,
             COALESCE(bm.soldout, mi.soldout) AS soldout
        FROM menu_items mi LEFT JOIN branch_menu bm ON bm.item_id = mi.id AND bm.branch_id = ?
@@ -4528,14 +4588,14 @@ export function channelNet(amount, channelId) {
 const VALID_BADGES = ['new', 'promo', 'hot', 'rec', 'free'];
 const normBadge = (b) => (VALID_BADGES.includes(b) ? b : null);
 
-export function addMenuItem({ name, name_en, price, image, category, badge }) {
+export function addMenuItem({ name, name_en, name_lo, price, image, category, badge }) {
   const n = (name || '').toString().trim().slice(0, 80);
   if (!n) throw new Error('name_required');
   const p = Math.max(0, Number(price) || 0);
   const cat = category === 'topping' ? 'topping' : 'drink';
   const s = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM menu_items').get().s;
-  const info = db.prepare('INSERT INTO menu_items (name, name_en, price, image, category, sort, badge) VALUES (?,?,?,?,?,?,?)')
-    .run(n, (name_en || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
+  const info = db.prepare('INSERT INTO menu_items (name, name_en, name_lo, price, image, category, sort, badge) VALUES (?,?,?,?,?,?,?,?)')
+    .run(n, (name_en || '').toString().slice(0, 80) || null, (name_lo || '').toString().slice(0, 80) || null, p, (image || '').toString().slice(0, IMG_CAP) || null, cat, s, normBadge(badge));
   return db.prepare('SELECT * FROM menu_items WHERE id=?').get(info.lastInsertRowid);
 }
 // Append-only price trail. A margin report from last month is only readable against the price that
@@ -4546,11 +4606,12 @@ export function priceHistory(itemId = null, limit = 100) {
     ? db.prepare('SELECT * FROM price_history WHERE item_id=? ORDER BY at DESC, id DESC LIMIT ?').all(Number(itemId), n)
     : db.prepare('SELECT * FROM price_history ORDER BY at DESC, id DESC LIMIT ?').all(n);
 }
-export function updateMenuItem(id, { name, name_en, price, image, active, soldout, category, badge, scope }, actor = null) {
+export function updateMenuItem(id, { name, name_en, name_lo, price, image, active, soldout, category, badge, scope }, actor = null) {
   const cur = db.prepare('SELECT * FROM menu_items WHERE id=?').get(id);
   if (!cur) throw new Error('item_not_found');
   const n = name != null ? (name.toString().trim().slice(0, 80) || cur.name) : cur.name;
   const en = name_en != null ? (name_en.toString().slice(0, 80) || null) : cur.name_en;
+  const lo = name_lo != null ? (name_lo.toString().slice(0, 80) || null) : cur.name_lo;
   const p = price != null ? Math.max(0, Number(price) || 0) : cur.price;
   const img = image != null ? (image.toString().slice(0, IMG_CAP) || null) : cur.image;
   const cat = category != null ? (category === 'topping' ? 'topping' : 'drink') : cur.category;
@@ -4558,7 +4619,7 @@ export function updateMenuItem(id, { name, name_en, price, image, active, soldou
   const so = soldout != null ? (soldout ? 1 : 0) : cur.soldout;
   const bd = badge !== undefined ? normBadge(badge) : (cur.badge || null);
   const sc = scope != null ? (scope === 'lsm' ? 'lsm' : 'nationwide') : (cur.scope || 'nationwide');
-  db.prepare('UPDATE menu_items SET name=?, name_en=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, p, img, cat, a, so, bd, sc, id);
+  db.prepare('UPDATE menu_items SET name=?, name_en=?, name_lo=?, price=?, image=?, category=?, active=?, soldout=?, badge=?, scope=? WHERE id=?').run(n, en, lo, p, img, cat, a, so, bd, sc, id);
   // Record the change, not the save: editing a name or a photo must not fill the trail with noise.
   if (Number(p) !== Number(cur.price)) {
     try {

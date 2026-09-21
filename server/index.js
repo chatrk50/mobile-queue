@@ -1186,11 +1186,16 @@ app.get('/api/crm/customers.xlsx', async (req, res) => {
 app.post('/api/crm/campaign', async (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(await Q.sendCampaign({ keys: req.body?.keys, message: req.body?.message, coupon: req.body?.coupon || null, actorId: req.staff?.id || null })); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) { res.status(400).json({ error: e.message, remaining: e.remaining, needed: e.needed }); }
 });
 app.get('/api/crm/campaigns', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json({ campaigns: Q.listCampaigns() });
+});
+// Per-recipient audit of one campaign: sent? coupon issued? why not?
+app.get('/api/crm/campaigns/:id/recipients', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json({ recipients: Q.campaignRecipients(req.params.id) });
 });
 // CRM win-back: PREVIEW how many lapsed LINE customers a campaign would reach (owner only, no send).
 app.get('/api/crm/lapsed', (req, res) => {

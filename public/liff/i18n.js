@@ -523,6 +523,7 @@
     ['เราจะแจ้งทาง LINE เมื่อเหลืออีก', "We'll message you on LINE when", 'ພວກເຮົາຈະແຈ້ງທາງ LINE ເມື່ອເຫຼືອອີກ'],
     ['🎉 รับสิทธิ์แล้ว — ลด ฿', '🎉 Claimed — ฿', '🎉 ຮັບສິດແລ້ວ — ຫຼຸດ ฿'],
     ['ใช้ K PLUS แล้วยอดไม่ขึ้น? แตะเพื่อใช้ QR แบบกรอกยอดเอง', 'Using K PLUS and the amount is missing? Tap for the type-it-yourself QR', 'ໃຊ້ K PLUS ແລ້ວຍອດບໍ່ຂຶ້ນ? ແຕະເພື່ອໃຊ້ QR ແບບໃສ່ຍອດເອງ'],
+    ['🎁 คูปอง', '🎁 Coupons', '🎁 ຄູປອງ'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS });
