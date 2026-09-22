@@ -2590,6 +2590,9 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
     Q.payPartial(cashSplit.ticket.id, 29, { actorId: vStaff.id, method: "kplus" });
     const pv = Q.payProvenance(db.prepare("SELECT id FROM orders WHERE ticket_id=?").get(cashSplit.ticket.id).id);
     ok(pv.split === true && pv.legs.length === 2 && pv.pay_label === "เงินสด ฿20 + K PLUS Shop ฿29" && pv.verified_by == null, `INVARIANT a split bill lists every leg with its tender (${pv.pay_label})`);
+    const bill = Q.billOf(t2.ticket.id);
+    ok(bill && bill.code === db.prepare("SELECT code FROM tickets WHERE id=?").get(t2.ticket.id).code && bill.order.lines.length === 1 && bill.pay.verified_by === "ตรวจสลิปเอง" && bill.pay.legs[0].label === "K PLUS Shop" && bill.status === "served" && bill.voided == null, `INVARIANT the bill view carries items, tender legs, the slip verdict and the ticket state (${bill && bill.pay.verified_by})`);
+    ok(Q.billOf(999999) === null, "INVARIANT an unknown ticket has no bill");
   }
 
   // The connection test proves a key without spending a slip.

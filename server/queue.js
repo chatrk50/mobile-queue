@@ -1138,6 +1138,23 @@ export function payProvenance(orderId) {
   };
 }
 
+/** Everything one bill needs for the on-screen receipt / the printer (cashier "ดูบิล"). */
+export function billOf(ticketId) {
+  const t = db.prepare('SELECT t.*, z.name AS zone_name FROM tickets t LEFT JOIN zones z ON z.id = t.zone_id WHERE t.id = ?').get(ticketId);
+  if (!t) return null;
+  const o = db.prepare('SELECT o.*, cs.name AS created_by_name, vs.name AS voided_by_name FROM orders o LEFT JOIN staff cs ON cs.id = o.created_by LEFT JOIN staff vs ON vs.id = o.voided_by WHERE o.ticket_id = ? ORDER BY o.id DESC LIMIT 1').get(ticketId);
+  let vat = null;
+  try { const v = getVatConfig(); if (v.enabled) vat = { taxId: v.taxId, bizName: v.bizName, bizAddress: v.bizAddress, rate: v.rate, inclusive: v.inclusive }; } catch { /* VAT optional */ }
+  return {
+    ticketId: t.id, code: t.code, number: t.number, zone: t.zone_name || '', status: t.status, customerName: t.customer_name || null,
+    createdAt: o ? o.created_at : t.created_at, closedAt: t.closed_at || null,
+    order: orderForTicket(ticketId), pay: o ? payProvenance(o.id) : null,
+    createdBy: o ? (o.created_by_name || null) : null, source: o ? (o.source || 'cashier') : null,
+    invoiceNo: o ? (o.invoice_no || null) : null, vat,
+    voided: o && o.void_kind ? { kind: o.void_kind, reason: o.void_reason || null, at: o.voided_at || null, by: o.voided_by_name || null } : null,
+  };
+}
+
 export function orderHistory(limit = 100) {
   const rows = db.prepare(
     `SELECT id, code, status, customer_name, closed_at
@@ -1153,6 +1170,7 @@ export function orderHistory(limit = 100) {
       id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
       closed_at: t.closed_at,
       order_total: o ? o.total : null,
+      order_discount: o ? (o.discount || 0) : 0,
       payment_status: o ? o.payment_status : null,
       void_kind: v ? (v.void_kind || null) : null,
       void_reason: v ? (v.void_reason || null) : null,
