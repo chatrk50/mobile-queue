@@ -2568,6 +2568,30 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   ok(off && off.message === "slip_off" && off.status === 404, "INVARIANT a branch with no SlipOK credentials refuses auto-verify (slip_off)");
   ok(Q.slipReadyAny() === true, "INVARIANT the features page still reports auto-verify as available while branch B is wired");
 
+  // Provenance: the history and the detailed report say which tender, who took it and who checked the slip.
+  {
+    Q.setStatus(tB.ticket.id, "served");
+    const hB = Q.orderHistory(50).find((r) => r.id === tB.ticket.id);
+    ok(hB && hB.pay && hB.pay.verified_by === "SlipOK" && hB.pay.verified_kind === "slipok" && hB.has_slip, `INVARIANT a SlipOK-passed order tells the history it was checked by SlipOK (${hB && hB.pay && hB.pay.verified_by})`);
+    ok(hB.pay.pay_label === "จ่ายออนไลน์ (QR)" && hB.pay.legs.length === 1 && hB.pay.paid_by_name == null, `INVARIANT and names the tender the owner's way, with no staffer on an automatic payment (${hB.pay.pay_label})`);
+    const vStaff = Q.createStaff({ name: "ตรวจสลิปเอง", pin: "424242", role: "cashier", branchIds: [SB] });
+    Q.setOrderPaid(t2.ticket.id, { actorId: vStaff.id, method: "kplus" });   // the cashier looked at the refused slip and took it
+    Q.setStatus(t2.ticket.id, "served");
+    const h2 = Q.orderHistory(50).find((r) => r.id === t2.ticket.id);
+    ok(h2 && h2.pay.verified_by === "ตรวจสลิปเอง" && h2.pay.verified_kind === "staff_after_slipok" && h2.pay.pay_label === "K PLUS Shop" && h2.pay.paid_by_name === "ตรวจสลิปเอง", `INVARIANT a slip SlipOK refused and the cashier accepted is credited to that cashier (${h2 && h2.pay.verified_by} / ${h2 && h2.pay.verified_kind} / ${h2 && h2.pay.pay_label})`);
+    const det2 = Q.detailedReports({});
+    const dB = det2.transactions.find((r) => r.ticket_id === tB.ticket.id), d2 = det2.transactions.find((r) => r.ticket_id === t2.ticket.id);
+    ok(dB && dB.has_slip && dB.verified_by === "SlipOK" && dB.pay_label === "จ่ายออนไลน์ (QR)", "INVARIANT the detailed report carries the slip + SlipOK verdict for the auto-verified order");
+    ok(d2 && d2.has_slip && d2.verified_by === "ตรวจสลิปเอง" && d2.pay_label === "K PLUS Shop", "INVARIANT and the staff name + tender for the hand-checked one");
+    ok(det2.transactions.filter((r) => !r.has_slip).every((r) => r.verified_by == null), "INVARIANT an order without a slip has no slip verifier");
+    ok((det2.payments || []).length > 0 && det2.payments.every((p) => typeof p.label === "string" && p.label.length > 0), "INVARIANT every payments-by-method row carries the tender's label");
+    const cashSplit = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "cashier" });
+    Q.payPartial(cashSplit.ticket.id, 20, { actorId: vStaff.id, method: "cash" });
+    Q.payPartial(cashSplit.ticket.id, 29, { actorId: vStaff.id, method: "kplus" });
+    const pv = Q.payProvenance(db.prepare("SELECT id FROM orders WHERE ticket_id=?").get(cashSplit.ticket.id).id);
+    ok(pv.split === true && pv.legs.length === 2 && pv.pay_label === "เงินสด ฿20 + K PLUS Shop ฿29" && pv.verified_by == null, `INVARIANT a split bill lists every leg with its tender (${pv.pay_label})`);
+  }
+
   // The connection test proves a key without spending a slip.
   const q = await Q.testPayConfig(SB, { fetchImpl: async (url, opts) => ({ ok: true, json: async () => ({ success: true, data: { quota: 87, overQuota: 0 } }) }) });
   ok(q.ok && q.quota === 87, `INVARIANT the connection test returns the remaining quota (${q.quota})`);

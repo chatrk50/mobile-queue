@@ -1098,6 +1098,46 @@ export function dailyReport(branchId = null, dateStr = null) {
 
 /** Order history (since the last daily reset): completed/cancelled tickets with their
  *  order detail, so the cashier can re-check after a customer leaves or a mistake. */
+// ---------- Payment provenance (history + detailed report) ----------
+// Which tender(s) the money came in by, who took it, and - for a slip - who vouched for it: SlipOK
+// when its latest answer was a pass, otherwise the staffer who pressed ชำระแล้ว after looking at it.
+// Labels come from the owner's tenders table (editable), with the built-in codes as fallback.
+const METHOD_TH = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', online: 'ออนไลน์', slip: 'สลิป', linepay: 'LINE Pay', '6040': 'เป๋าตัง', kplus: 'K PLUS', reward: 'แลกแต้ม', other: 'อื่นๆ' };
+function tenderLabelMap() {
+  const m = new Map();
+  try { for (const t of db.prepare('SELECT code, label FROM tenders').all()) if (t.label) m.set(t.code, t.label); } catch { /* no tenders table */ }
+  return (code) => (code ? (m.get(code) || METHOD_TH[code] || code) : '');
+}
+export function tenderLabel(code) { return tenderLabelMap()(code); }
+function slipVerifier({ hasSlip, checkOk, checkSeen, paid, paidByName }) {
+  if (!hasSlip && !checkSeen) return { verified_by: null, verified_kind: null };
+  if (checkOk) return { verified_by: 'SlipOK', verified_kind: 'slipok' };
+  if (!paid) return { verified_by: null, verified_kind: null };
+  return { verified_by: paidByName || 'พนักงาน', verified_kind: checkSeen ? 'staff_after_slipok' : 'staff' };
+}
+export function payProvenance(orderId) {
+  const o = db.prepare('SELECT o.payment_method, o.payment_status, o.paid_at, s.name AS paid_by_name FROM orders o LEFT JOIN staff s ON s.id = o.paid_by WHERE o.id = ?').get(orderId);
+  if (!o) return null;
+  const labelOf = tenderLabelMap();
+  let legs = [];
+  try { legs = db.prepare('SELECT method, amount, kind, at FROM order_payments WHERE order_id = ? ORDER BY id').all(orderId); } catch { /* ledger may predate this build */ }
+  const paidLegs = legs.filter((l) => l.kind === 'payment').map((l) => ({ method: l.method, label: labelOf(l.method), amount: r2(l.amount), at: l.at }));
+  const refunds = legs.filter((l) => l.kind === 'refund');
+  const methods = [...new Set(paidLegs.map((l) => l.method))];
+  const split = methods.length > 1;
+  const method = o.payment_method || methods[0] || null;
+  const hasSlip = !!db.prepare('SELECT 1 FROM slips WHERE order_id = ?').get(orderId);
+  let check = null;
+  try { check = db.prepare('SELECT ok, code, message, at, trans_ref, sender_name, amount FROM slip_checks WHERE order_id = ? ORDER BY id DESC LIMIT 1').get(orderId); } catch { /* table may predate this build */ }
+  return {
+    method, pay_label: split ? paidLegs.map((l) => l.label + ' ฿' + l.amount).join(' + ') : labelOf(method), split, legs: paidLegs,
+    refund_label: refunds.length ? refunds.map((l) => labelOf(l.method) + ' ฿' + r2(Math.abs(l.amount))).join(' + ') : null,
+    paid_by_name: o.paid_by_name || null, paid_at: o.paid_at || null, has_slip: hasSlip,
+    ...slipVerifier({ hasSlip, checkOk: !!(check && check.ok), checkSeen: !!check, paid: o.payment_status === 'paid', paidByName: o.paid_by_name }),
+    slip_check: check ? { ok: !!check.ok, code: check.code, message: check.message, at: check.at, transRef: check.trans_ref, senderName: check.sender_name, amount: check.amount } : null,
+  };
+}
+
 export function orderHistory(limit = 100) {
   const rows = db.prepare(
     `SELECT id, code, status, customer_name, closed_at
@@ -1107,7 +1147,8 @@ export function orderHistory(limit = 100) {
   return rows.map((t) => {
     const o = orderForTicket(t.id);
     const hasSlip = !!db.prepare('SELECT 1 FROM slips s JOIN orders o2 ON o2.id=s.order_id WHERE o2.ticket_id=? LIMIT 1').get(t.id);
-    const v = db.prepare('SELECT void_kind, void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
+    const v = db.prepare('SELECT id, void_kind, void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
+    const pay = v ? payProvenance(v.id) : null;
     return {
       id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
       closed_at: t.closed_at,
@@ -1118,6 +1159,7 @@ export function orderHistory(limit = 100) {
       refund_requested: o ? (o.refund_requested || 0) : 0,
       refund_note: o ? (o.refund_note || null) : null,
       has_slip: hasSlip,
+      pay,
       lines: o ? o.lines : [],
     };
   });
@@ -1171,8 +1213,11 @@ export function detailedReports({ date = null, branchId = null } = {}) {
 
   const transactions = db.prepare(
     `SELECT t.code, t.status AS ticket_status, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
-            o.payment_status, o.payment_method, o.void_kind,
+            o.payment_status, o.payment_method, o.void_kind, t.id AS ticket_id,
             ps.name AS paid_by, cs.name AS created_by,
+            EXISTS(SELECT 1 FROM slips s WHERE s.order_id = o.id) AS has_slip,
+            (SELECT sc.ok FROM slip_checks sc WHERE sc.order_id = o.id ORDER BY sc.id DESC LIMIT 1) AS slip_ok,
+            (SELECT GROUP_CONCAT(p.method || '=' || p.amount, '|') FROM order_payments p WHERE p.order_id = o.id AND p.kind = 'payment') AS legs,
             (SELECT GROUP_CONCAT(oi.qty || 'x ' || oi.name, ', ') FROM order_items oi WHERE oi.order_id = o.id) AS items
        FROM orders o
        JOIN tickets t ON t.id = o.ticket_id
@@ -1181,6 +1226,17 @@ export function detailedReports({ date = null, branchId = null } = {}) {
       WHERE date(COALESCE(o.paid_at, o.created_at), '+7 hours') = ${DAY} AND ${BR}
       ORDER BY o.id`
   ).all(D, ...b);
+  // Tender in the owner's words (a split bill lists each leg), plus who vouched for a slip.
+  const labelOf = tenderLabelMap();
+  for (const r of transactions) {
+    const legs = r.legs ? String(r.legs).split('|').map((s) => { const i = s.lastIndexOf('='); return { method: s.slice(0, i), amount: r2(s.slice(i + 1)) }; }) : [];
+    const methods = [...new Set(legs.map((l) => l.method))];
+    r.pay_split = methods.length > 1;
+    r.pay_label = r.pay_split ? legs.map((l) => labelOf(l.method) + ' ฿' + l.amount).join(' + ') : labelOf(r.payment_method || methods[0] || '');
+    r.has_slip = !!r.has_slip;
+    Object.assign(r, slipVerifier({ hasSlip: r.has_slip, checkOk: r.slip_ok === 1, checkSeen: r.slip_ok != null, paid: r.payment_status === 'paid', paidByName: r.paid_by }));
+    delete r.legs; delete r.slip_ok;
+  }
 
   const payments = db.prepare(
     `SELECT COALESCE(o.payment_method, 'unspecified') AS method, COUNT(*) AS orders,
@@ -1189,6 +1245,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
       WHERE o.payment_status = 'paid' AND date(o.paid_at, '+7 hours') = ${DAY} AND ${BR}
       GROUP BY method ORDER BY amount DESC`
   ).all(D, ...b);
+  for (const p of payments) p.label = labelOf(p.method);
 
   const discounts = db.prepare(
     `SELECT t.code, o.discount AS amount, o.discount_reason AS reason, o.total, cs.name AS by_name, o.created_at
@@ -5342,7 +5399,9 @@ export function slipPrelim(ticketId) {
     const c = db.prepare('SELECT ok, code, message, receiver_name, receiver_acct, sender_name, amount, trans_ref, at FROM slip_checks WHERE order_id=? ORDER BY id DESC LIMIT 1').get(order.id);
     if (c) lastCheck = { ok: !!c.ok, code: c.code, message: c.message, receiverName: c.receiver_name, receiverAcct: c.receiver_acct, senderName: c.sender_name, amount: c.amount, transRef: c.trans_ref, at: c.at };
   } catch { /* table may predate this build */ }
-  return { expectedAmount: Math.max(0, order.total - (order.discount || 0)), today, duplicate, slipNote: order.slip_note || null, lastCheck, branchId: order.branch_id || null };
+  const pv = payProvenance(order.id) || {};
+  return { expectedAmount: Math.max(0, order.total - (order.discount || 0)), today, duplicate, slipNote: order.slip_note || null, lastCheck, branchId: order.branch_id || null,
+           paid: order.payment_status === 'paid', payLabel: pv.pay_label || null, paidByName: pv.paid_by_name || null, paidAt: pv.paid_at || null, verifiedBy: pv.verified_by || null, verifiedKind: pv.verified_kind || null };
 }
 /** Customer asks for a refund (paid online but can't come). Flags the order so the cashier
  *  sees it in history and processes the refund. */

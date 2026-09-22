@@ -1298,7 +1298,7 @@
     <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
     <img id="slipPopImg" alt="สลิป" onclick="zoomSlip()" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 2px;cursor:zoom-in">
     <div class="muted" style="font-size:11.5px;margin-bottom:4px">แตะรูปเพื่อดูขนาดเต็ม</div>
-    <p class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+    <p id="slipHint" class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
     <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
 </div>
@@ -1355,15 +1355,21 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
         ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
         : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
       let okBox='';
-      if(p.slipNote||p.lastCheck){ const c=p.lastCheck||{}; const digits=String(c.receiverAcct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(c.receiverName?String(c.receiverName).replace(/\s*\(.*$/,'').trim():'');
+      const lc=p.lastCheck||{};
+      const whoBox = p.verifiedBy
+        ? '<div style="background:var(--navy,#16314f);color:#fff;border-radius:10px;padding:8px 11px;font-size:13px;font-weight:700">'+(p.verifiedKind==='slipok'?'🤖':'👤')+' <span>ตรวจสอบโดย</span> '+esc(p.verifiedBy)+(p.verifiedKind==='staff_after_slipok'?' <span style="opacity:.85;font-weight:500">(SlipOK ไม่ผ่าน — พนักงานตรวจเอง)</span>':'')+((p.paidAt||p.payLabel)?' <span style="opacity:.85;font-weight:500">· '+[p.payLabel?esc(p.payLabel):'',p.paidAt?fmtDT(p.paidAt):''].filter(Boolean).join(' · ')+'</span>':'')+'</div>'
+        : (p.paid ? '' : '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:8px 11px;font-size:13px;color:#92400e;font-weight:700">⏳ <span>ยังไม่ได้ตรวจ — รอแคชเชียร์ยืนยัน</span></div>');
+      if(lc.ok){ okBox='<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px;color:#047857"><b>🤖 <span>SlipOK ตรวจผ่าน</span></b>'+(lc.message?' · '+esc(lc.message):'')+'<div style="font-size:12px;margin-top:3px;opacity:.9">'+[lc.senderName?'<span>ผู้โอน</span> '+esc(lc.senderName):'', lc.amount!=null?'<span>ยอด</span> ฿'+lc.amount:'', lc.transRef?'<span>อ้างอิง</span> '+esc(lc.transRef):'', lc.at?fmtDT(lc.at):''].filter(Boolean).join(' · ')+'</div></div>'; }
+      else if(p.slipNote||p.lastCheck){ const c=p.lastCheck||{}; const digits=String(c.receiverAcct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(c.receiverName?String(c.receiverName).replace(/\s*\(.*$/,'').trim():'');
         okBox='<div style="background:#fff7ed;border:1px solid #fcd9a8;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px;color:#7c4a03"><b>🤖 SlipOK:</b> '+esc(p.slipNote||(c.message||''))
           +((c.receiverName||c.receiverAcct)?'<div class="muted" style="font-size:12px;margin-top:3px">ธนาคารตอบว่าผู้รับคือ <b>'+esc([c.receiverName,c.receiverAcct].filter(Boolean).join(' '))+'</b>'+(c.amount!=null?' · ยอด ฿'+c.amount:'')+(c.transRef?' · อ้างอิง '+esc(c.transRef):'')+'</div>':'')
           +((c.code===1014&&key&&p.branchId)?'<div style="margin-top:6px"><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay('+p.branchId+',{addReceiver:\''+esc(key)+'\'});toast(\'ยอมรับบัญชี '+esc(key)+' แล้ว — สลิปแบบนี้จะผ่านอัตโนมัติครั้งหน้า\')">ยอมรับบัญชีนี้เป็นของร้าน ('+esc(key)+')</button></div>':'')
           +'</div>'; }
-      pb.innerHTML = okBox + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
+      pb.innerHTML = whoBox + okBox + ((whoBox||okBox)?'<div style="height:8px"></div>':'') + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
     }
     $('slipPop').style.display='flex';
-    if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
+    if($('slipHint')) $('slipHint').style.display = p.paid ? 'none' : '';
+    if($('slipOcr')){ $('slipOcr').innerHTML=''; if(!p.paid) runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory; settled bills are on record already
   }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 // --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
 //     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
@@ -1444,6 +1450,16 @@ applyBrand();
 // Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Payment provenance chips (history + detailed report): tender in the owner's words, who took the
+// money, and for a slip who vouched for it - SlipOK, or the cashier who checked it by eye.
+function verifiedBadge(p){ if(!p||!p.verified_by) return '';
+  const slipok=p.verified_kind==='slipok', after=p.verified_kind==='staff_after_slipok';
+  return '<span class="pill '+(slipok?'open':'soon')+'" style="font-size:11px">'+(slipok?'🤖 ':'👤 ')+'<span>ตรวจสลิปโดย</span> '+esc(p.verified_by)+(after?' <span>(SlipOK ไม่ผ่าน)</span>':'')+'</span>'; }
+function payLine(p){ if(!p||(!p.pay_label&&!p.refund_label)) return '';
+  const bits=[];
+  if(p.pay_label) bits.push(IC.card+' '+esc(p.pay_label)+(p.paid_by_name?' · <span>รับเงินโดย</span> '+esc(p.paid_by_name):''));
+  if(p.refund_label) bits.push('↩️ <span>คืนเงิน</span> '+esc(p.refund_label));
+  return '<div class="muted" style="font-size:12px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">'+bits.map(b=>'<span>'+b+'</span>').join('')+verifiedBadge(p)+'</div>'; }
 // ---------- In-app modal: appPrompt (text/number input) + appConfirm (yes/no). Replace native
 // prompt()/confirm() so dialogs look like the app and tap reliably on the iPad. Promise-based. ----------
 let _amRes=null;
@@ -1713,6 +1729,7 @@ function renderHistory(list, q){
     return `<div class="qitem"><div style="flex:1">
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${isTimeout?' <span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
+      ${payLine(t.pay)}
       ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
       <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canRecover?`<button class="ok" style="padding:6px 12px;font-size:12px" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
   }).join('');
@@ -1928,12 +1945,12 @@ function renderDetail(){
   if(t==='tx'){
     const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
     const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
-    box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
+    box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ / ช่องทาง'},{t:'โดย'}],
       rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=tHM(r.paid_at||r.created_at);
         return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
         <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
         <td style="text-align:right">${baht2(r.total)}</td>
-        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}${r.ticket_status==='no_show'?` <span class="pill closed" style="font-size:11px;background:rgba(146,111,0,.18);color:#946f00">ไม่มารับ</span>`:''}</td>
+        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${(r.pay_label||r.payment_method)?` <span class="muted" style="font-size:11px">${esc(r.pay_label||r.payment_method)}</span>`:''}${r.has_slip?` <button class="ghost" style="padding:2px 7px;font-size:11px;vertical-align:middle" onclick="viewSlip(${r.ticket_id})">${IC.slip}สลิป</button>`:''}${r.ticket_status==='no_show'?` <span class="pill closed" style="font-size:11px;background:rgba(146,111,0,.18);color:#946f00">ไม่มารับ</span>`:''}${r.verified_by?`<div style="margin-top:2px">${verifiedBadge(r)}</div>`:''}</td>
         <td style="color:var(--muted);font-size:12px">${esc(r.paid_by||r.created_by||'')}</td></tr>`; }).join(''));
   } else if(t==='pay'){
     const rec=DET.recon;
@@ -3183,7 +3200,7 @@ async function renderCharts(){
   const top=(det.topItems||[]).slice(0,5).map(r=>({ label:r.name, value:r.qty }));
   const hrs=(det.hourly||[]).map(h=>({ label:h.hr+':00', value:h.orders, sub:h.hr }));
   const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
-  const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
+  const pay=(det.payments||[]).map(p=>({ label:p.label||TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
   // Overall store rating tile (สะสมทุกรีวิว) — the owner asked where to see it; star bars stay in รายงานประจำวัน
   const sat=(ins&&ins.satisfaction)||null;
