@@ -1040,6 +1040,13 @@ app.get('/api/tickets/:ticketId/slip', (req, res) => {
   if (!s) return res.status(404).json({ error: 'no_slip' });
   res.json({ ...s, prelim: Q.slipPrelim(req.params.ticketId), recvAliases: Q.listSlipAliases() });
 });
+// The bill as the cashier sees it on screen / prints it (PIN): items, discount, tender legs, staff, slip verdict.
+app.get('/api/tickets/:ticketId/bill', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const b = Q.billOf(req.params.ticketId);
+  if (!b) return res.status(404).json({ error: 'ticket_not_found' });
+  res.json(b);
+});
 // Slip-OCR learning: cashier verified a slip by eye → teach the reader the receiver text
 // this bank prints, so the same wording matches automatically next time.
 app.post('/api/slip-aliases', (req, res) => {

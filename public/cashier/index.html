@@ -191,13 +191,28 @@
     border-radius:999px; box-shadow:0 1px 4px rgba(16,40,70,.25); z-index:2; line-height:1.5; pointer-events:none; }
   /* Receipt printing: 58/80mm-friendly slip. Hidden on screen; only it prints. */
   #printArea{ display:none; }
-  #printArea .rcpt{ width:72mm; margin:0 auto; color:#000; font-family:"Courier New",ui-monospace,monospace; font-size:12px; line-height:1.45; }
-  #printArea .rcpt h2{ text-align:center; margin:0 0 2px; font-size:16px; }
-  #printArea .rcpt .ctr{ text-align:center; }
-  #printArea .rcpt .big{ font-size:22px; font-weight:800; text-align:center; margin:4px 0; }
-  #printArea .rcpt .hr{ border-top:1px dashed #000; margin:6px 0; }
-  #printArea .rcpt .li{ display:flex; justify-content:space-between; gap:8px; }
-  #printArea .rcpt .sub{ padding-left:10px; font-size:11px; }
+  .rcpt{ width:72mm; margin:0 auto; color:#000; font-family:"Courier New",ui-monospace,monospace; font-size:12px; line-height:1.45; }
+  .rcpt h2{ text-align:center; margin:0 0 2px; font-size:16px; }
+  .rcpt .ctr{ text-align:center; }
+  .rcpt .big{ font-size:22px; font-weight:800; text-align:center; margin:4px 0; }
+  .rcpt .hr{ border-top:1px dashed #000; margin:6px 0; }
+  .rcpt .li{ display:flex; justify-content:space-between; gap:8px; }
+  .rcpt .sub{ padding-left:10px; font-size:11px; }
+  .rcpt-view{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 10px; overflow:auto; text-align:left; }
+  /* Transaction grids (history · detailed report): one bill per row, fixed columns, numbers right-aligned. */
+  .tx-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .tx{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:760px; }
+  .tx th{ position:sticky; top:0; background:var(--surface); color:var(--muted); font-weight:700; font-size:11.5px; text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .tx td{ padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap; }
+  .tx tbody tr:nth-child(even) td{ background:rgba(22,49,79,.025); }
+  .tx tbody tr:last-child td{ border-bottom:none; }
+  .tx .num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .tx .wrap{ white-space:normal; min-width:200px; max-width:320px; line-height:1.3; }
+  .tx .act{ text-align:right; }
+  .tx .act button{ padding:4px 8px; font-size:11.5px; margin-left:4px; min-height:0; }
+  .tx .act .ic-btn{ width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; }
+  .tx .act .ic-btn svg{ margin:0; width:18px; height:18px; }
+  .tx .sub{ color:var(--muted); font-size:11px; }
   @media print {
     body > *:not(#printArea){ display:none !important; }
     #printArea{ display:block !important; }
@@ -390,7 +405,7 @@
   </div>
 
   <!-- ORDER HISTORY -->
-  <div id="historyCard" class="card" style="display:none;max-width:560px;margin:14px auto">
+  <div id="historyCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติออเดอร์</h1><p class="muted" style="margin:2px 0 0">วันนี้ · ตรวจย้อนหลังหลังลูกค้ากลับ/สั่งผิด</p></div>
       <button class="ghost" style="padding:6px 12px;font-size:13px" onclick="hideHistory()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -756,7 +771,7 @@
   </div>
 
   <!-- DETAILED REPORTS (owner/manager) -->
-  <div id="detailCard" class="card" style="display:none;max-width:760px;margin:14px auto">
+  <div id="detailCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
@@ -775,6 +790,7 @@
       <button class="detTab ghost seg" data-t="hour" style="flex:none" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
     <div id="detailSummary" style="margin-top:14px"></div>
+    <input id="detSearch" oninput="detailTab(detView)" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู / ช่องทาง" autocomplete="off" style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px">
     <div id="detailBody" style="margin-top:14px"></div>
   </div>
 
@@ -1285,6 +1301,15 @@
   </div>
 </div>
 
+<div id="billPop" onclick="if(event.target===this)closeBill()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:flex-start;justify-content:center;padding:14px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div class="card" style="max-width:400px;width:100%;margin:auto;padding-top:0">
+    <div style="position:sticky;top:0;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px 10px;z-index:2">
+      <div style="text-align:left;min-width:0"><div style="font-weight:800;color:var(--navy);font-size:16px;line-height:1.2">ดูบิล</div><div class="muted" style="font-size:11px" id="billPopSub"></div></div>
+      <div class="row" style="gap:6px;flex:none"><button class="ghost" style="padding:8px 12px;font-size:13px" onclick="printBillPop()">🖨 พิมพ์</button><button class="ghost" style="padding:8px 13px;font-size:16px" onclick="closeBill()" aria-label="ปิด" title="ปิด">✕</button></div>
+    </div>
+    <div id="billPopBody" class="rcpt-view"></div>
+  </div>
+</div>
 <div id="slipPop" onclick="if(event.target===this)closeSlip()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.55);z-index:55;align-items:flex-start;justify-content:center;padding:14px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch">
   <div class="card" style="max-width:420px;width:100%;margin:auto;text-align:center;max-height:none;padding-top:0">
     <div style="position:sticky;top:0;background:linear-gradient(180deg,#fff 82%,rgba(255,255,255,0));display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px 12px;z-index:2">
@@ -1298,7 +1323,7 @@
     <div id="slipPrelim" style="text-align:left;margin:8px 0"></div>
     <img id="slipPopImg" alt="สลิป" onclick="zoomSlip()" style="width:100%;max-height:44vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;margin:6px 0 2px;cursor:zoom-in">
     <div class="muted" style="font-size:11.5px;margin-bottom:4px">แตะรูปเพื่อดูขนาดเต็ม</div>
-    <p class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
+    <p id="slipHint" class="muted" style="font-size:12px">ยืนยันยอดให้ตรงก่อนกด <b>ชำระแล้ว</b> ที่รายการคิว</p>
     <button class="ghost" style="width:100%;margin-top:8px;min-height:46px" onclick="closeSlip()" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
 </div>
@@ -1355,15 +1380,21 @@ window.viewSlip=async(tid)=>{ try{ const s=await api('/api/tickets/'+tid+'/slip'
         ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;color:var(--danger);font-weight:800;font-size:13px">สลิปนี้ซ้ำ — เคยใช้กับคิว '+esc(p.duplicate.code)+' · อาจใช้สลิปเดิมซ้ำ อย่าเพิ่งกดชำระ</div>'
         : '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;color:#047857;font-weight:800;font-size:13px">ตรวจเบื้องต้นผ่าน · สลิปไม่ซ้ำ</div>';
       let okBox='';
-      if(p.slipNote||p.lastCheck){ const c=p.lastCheck||{}; const digits=String(c.receiverAcct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(c.receiverName?String(c.receiverName).replace(/\s*\(.*$/,'').trim():'');
+      const lc=p.lastCheck||{};
+      const whoBox = p.verifiedBy
+        ? '<div style="background:var(--navy,#16314f);color:#fff;border-radius:10px;padding:8px 11px;font-size:13px;font-weight:700">'+(p.verifiedKind==='slipok'?'🤖':'👤')+' <span>ตรวจสอบโดย</span> '+esc(p.verifiedBy)+(p.verifiedKind==='staff_after_slipok'?' <span style="opacity:.85;font-weight:500">(SlipOK ไม่ผ่าน — พนักงานตรวจเอง)</span>':'')+((p.paidAt||p.payLabel)?' <span style="opacity:.85;font-weight:500">· '+[p.payLabel?esc(p.payLabel):'',p.paidAt?fmtDT(p.paidAt):''].filter(Boolean).join(' · ')+'</span>':'')+'</div>'
+        : (p.paid ? '' : '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:8px 11px;font-size:13px;color:#92400e;font-weight:700">⏳ <span>ยังไม่ได้ตรวจ — รอแคชเชียร์ยืนยัน</span></div>');
+      if(lc.ok){ okBox='<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px;color:#047857"><b>🤖 <span>SlipOK ตรวจผ่าน</span></b>'+(lc.message?' · '+esc(lc.message):'')+'<div style="font-size:12px;margin-top:3px;opacity:.9">'+[lc.senderName?'<span>ผู้โอน</span> '+esc(lc.senderName):'', lc.amount!=null?'<span>ยอด</span> ฿'+lc.amount:'', lc.transRef?'<span>อ้างอิง</span> '+esc(lc.transRef):'', lc.at?fmtDT(lc.at):''].filter(Boolean).join(' · ')+'</div></div>'; }
+      else if(p.slipNote||p.lastCheck){ const c=p.lastCheck||{}; const digits=String(c.receiverAcct||'').replace(/\D/g,''); const key=digits.length>=4?digits.slice(-4):(c.receiverName?String(c.receiverName).replace(/\s*\(.*$/,'').trim():'');
         okBox='<div style="background:#fff7ed;border:1px solid #fcd9a8;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px;color:#7c4a03"><b>🤖 SlipOK:</b> '+esc(p.slipNote||(c.message||''))
           +((c.receiverName||c.receiverAcct)?'<div class="muted" style="font-size:12px;margin-top:3px">ธนาคารตอบว่าผู้รับคือ <b>'+esc([c.receiverName,c.receiverAcct].filter(Boolean).join(' '))+'</b>'+(c.amount!=null?' · ยอด ฿'+c.amount:'')+(c.transRef?' · อ้างอิง '+esc(c.transRef):'')+'</div>':'')
           +((c.code===1014&&key&&p.branchId)?'<div style="margin-top:6px"><button class="ok" style="padding:6px 10px;font-size:12px" onclick="saveBranchPay('+p.branchId+',{addReceiver:\''+esc(key)+'\'});toast(\'ยอมรับบัญชี '+esc(key)+' แล้ว — สลิปแบบนี้จะผ่านอัตโนมัติครั้งหน้า\')">ยอมรับบัญชีนี้เป็นของร้าน ('+esc(key)+')</button></div>':'')
           +'</div>'; }
-      pb.innerHTML = okBox + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
+      pb.innerHTML = whoBox + okBox + ((whoBox||okBox)?'<div style="height:8px"></div>':'') + dupBox + '<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px">ยอดที่ต้องได้: <b style="color:var(--navy);font-size:16px">฿'+(p.expectedAmount!=null?p.expectedAmount:'-')+'</b></div>';
     }
     $('slipPop').style.display='flex';
-    if($('slipOcr')){ $('slipOcr').innerHTML=''; runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory
+    if($('slipHint')) $('slipHint').style.display = p.paid ? 'none' : '';
+    if($('slipOcr')){ $('slipOcr').innerHTML=''; if(!p.paid) runSlipOcr(s.image, p); }   // read the slip text (OCR) + compare — advisory; settled bills are on record already
   }catch(e){ toast(err(e)==='no_slip'?'ลูกค้ายังไม่ได้แนบสลิป (แจ้งชำระเฉยๆ)':err(e)); } };
 // --- OCR helper: read the slip image (tesseract.js, lazy CDN load) and COMPARE amount/date/receiver.
 //     Advisory only — reading pixels can't prove a slip is genuine (that needs SlipOK vs the bank). ---
@@ -1444,6 +1475,18 @@ applyBrand();
 // Product unit label (แก้ว / ถ้วย / ชิ้น / จาน …) from the brand config; defaults to "แก้ว".
 function unit(){ return (window.BRAND&&window.BRAND.unit)||'แก้ว'; }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Payment provenance chips (history + detailed report): tender in the owner's words, who took the
+// money, and for a slip who vouched for it - SlipOK, or the cashier who checked it by eye.
+function verifiedBadge(p,short){ if(!p||!p.verified_by) return '';
+  const slipok=p.verified_kind==='slipok', after=p.verified_kind==='staff_after_slipok';
+  return '<span class="pill '+(slipok?'open':'soon')+'" style="font-size:11px">'+(slipok?'🤖 ':'👤 ')+(short?'':'<span>ตรวจสลิปโดย</span> ')+esc(p.verified_by)+(after?' <span>(SlipOK ไม่ผ่าน)</span>':'')+'</span>'; }
+function payCol(p){ if(!p||(!p.pay_label&&!p.refund_label)) return '';
+  const rows=[];
+  if(p.pay_label) rows.push('<span style="color:var(--navy);font-weight:700;display:inline-flex;align-items:center;gap:4px">'+IC.card+esc(p.pay_label)+'</span>');
+  if(p.paid_by_name) rows.push('<span class="muted"><span>รับเงินโดย</span> '+esc(p.paid_by_name)+'</span>');
+  if(p.refund_label) rows.push('<span class="muted">↩️ <span>คืนเงิน</span> '+esc(p.refund_label)+'</span>');
+  const badge=verifiedBadge(p); if(badge) rows.push(badge);
+  return '<div style="align-self:center;flex:none;min-width:120px;max-width:230px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:12px;text-align:right;padding-right:6px;border-right:1px solid var(--line);margin-right:2px">'+rows.join('')+'</div>'; }
 // ---------- In-app modal: appPrompt (text/number input) + appConfirm (yes/no). Replace native
 // prompt()/confirm() so dialogs look like the app and tap reliably on the iPad. Promise-based. ----------
 let _amRes=null;
@@ -1541,7 +1584,7 @@ async function api(path,opts={}){
   try{ r=await fetch(path,opts); }catch(e){ setNet(false); throw new Error('offline'); }
   setNet(true);
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
+function err(e){ const m={not_today:'คืนเงิน / แก้ไข / กู้คืน ได้เฉพาะบิลของวันนี้ — บิลวันก่อนดูได้อย่างเดียว',offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -1694,28 +1737,49 @@ function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.styl
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
+// ---- One transaction grid for ประวัติออเดอร์ and รายงานละเอียด (owner, 23 Sep) ----
+// Same columns, same order, same cells; only the action buttons differ (the report is read-only,
+// the history can refund / revive today's bills).
+const TX_Q={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon'],waiting:['รอคิว','soon'],called:['เรียกแล้ว','soon'],pending:['รอชำระ','soon']};
+const TX_P={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
+function txItems(s){ return esc(String(s||'').replace(/(\d+)x /g,'$1× ')); }
+function txTable(rowsHtml){
+  return '<div class="tx-wrap"><table class="tx"><thead><tr><th class="num">#</th><th>เวลา</th><th>คิว</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'; }
+function txRow(x,i){
+  const q=x.q?(TX_Q[x.q]||[x.q,'']):null, p=x.p?(TX_P[x.p]||[x.p,'']):null;
+  const pill=(v,extra)=>'<span class="pill '+v[1]+'" style="font-size:11px'+(extra||'')+'">'+v[0]+'</span>';
+  return '<tr>'
+    +'<td class="num sub">'+(i+1)+'</td>'
+    +'<td>'+(x.at?tHM(x.at):'')+'</td>'
+    +'<td><b class="code" style="font-size:13.5px">'+esc(x.code||'')+'</b>'+(x.customer?'<div class="sub">'+esc(x.customer)+'</div>':'')+'</td>'
+    +'<td class="wrap">'+(x.items||'—')
+      +(x.refundReq?'<div><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>'+(x.refundNote?' <span class="sub">'+esc(x.refundNote)+'</span>':'')+'</div>':'')+'</td>'
+    +'<td class="num"><b>'+(x.net!=null?baht2(x.net):'—')+'</b>'+(x.discount?'<div class="sub">ลด '+baht2(x.discount)+'</div>':'')+'</td>'
+    +'<td><div style="display:flex;flex-wrap:nowrap;gap:4px">'+(q?pill(q):'')+(p?pill(p):'')+(x.timeout?'<span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':'')+'</div></td>'
+    +'<td>'+(x.payLabel?esc(x.payLabel):'<span class="sub">—</span>')+(x.refundLabel?'<div class="sub">↩️ '+esc(x.refundLabel)+'</div>':'')+'</td>'
+    +'<td class="sub" style="font-size:12px">'+esc(x.by||'')+'</td>'
+    +'<td>'+(verifiedBadge(x.ver,true)||'<span class="sub">—</span>')+'</td>'
+    +'<td class="act"><button class="ghost ic-btn" onclick="viewBill('+x.tid+')" title="ดูบิล" aria-label="ดูบิล">'+IC.print+'</button>'
+      +(x.hasSlip?'<button class="ghost ic-btn" onclick="viewSlip('+x.tid+')" title="ดูสลิป" aria-label="ดูสลิป">'+IC.slip+'</button>':'')+(x.extra||'')+'</td>'
+    +'</tr>'; }
 function renderHistory(list, q){
-  if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
-  const stMap={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon']};
-  const payMap={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
-  $('historyBody').innerHTML=list.map(t=>{
-    const st=stMap[t.status]||[t.status,''];
-    const pay=t.payment_status?(payMap[t.payment_status]||[t.payment_status,'']):null;
-    const time=fmtDT(t.closed_at);
-    const items=(t.lines||[]).map(l=>`${l.qty}× ${esc(l.name)}${(l.toppings||[]).map(tp=>' -'+esc(tp.name)).join('')}`).join(', ');
-    // A past order can still be voided/refunded later (e.g. the customer comes back).
-    const canVoid = t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
+  if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีบิลของวันนี้</p>'; return; }
+  $('historyBody').innerHTML=txTable(list.map((t,i)=>{
+    const p=t.pay||{};
+    // Refund / cancel / revive only on the bill's own sale day (the server enforces it too).
+    const today=t.refundable!==false;
+    const canVoid = today && t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
     const label = t.payment_status==='paid' ? 'คืนเงิน' : 'ยกเลิก';
     // A cancelled UNPAID void (typically the auto payment-timeout) can be revived when the
     // customer shows up — back into the queue, collect payment, serve. Refunds cannot.
-    const isTimeout = (t.void_reason||'').startsWith('auto:');
-    const canRecover = t.status==='cancelled' && t.payment_status==='void' && t.void_kind!=='refund' && t.order_total!=null;
-    return `<div class="qitem"><div style="flex:1">
-      <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${isTimeout?' <span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
-      ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
-      ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
-      <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canRecover?`<button class="ok" style="padding:6px 12px;font-size:12px" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
-  }).join('');
+    const canRecover = today && t.status==='cancelled' && t.payment_status==='void' && t.void_kind!=='refund' && t.order_total!=null;
+    const items=(t.lines||[]).map(l=>l.qty+'× '+esc(l.name)+(l.toppings||[]).map(tp=>' +'+esc(tp.name)).join('')).join(', ');
+    return txRow({ tid:t.id, code:t.code, customer:t.customer_name, at:t.sale_at||t.closed_at, items,
+      net:t.order_total!=null?Math.round((t.order_total-(t.order_discount||0))*100)/100:null, discount:t.order_discount||0,
+      q:t.status, p:t.payment_status, timeout:(t.void_reason||'').startsWith('auto:'), refundReq:t.refund_requested, refundNote:t.refund_note,
+      payLabel:p.pay_label, refundLabel:p.refund_label, by:p.paid_by_name||t.created_by||'', ver:p, hasSlip:t.has_slip,
+      extra:(canRecover?'<button class="ok" onclick="recoverHistory('+t.id+')">กู้คืน</button>':'')+(canVoid?'<button class="ghost danger" onclick="refundHistory('+t.id+',\''+label+'\')">'+label+'</button>':'') }, i);
+  }).join(''));
 }
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
 // already paid (deducts from sales + drops it from the report); otherwise just void.
@@ -1881,11 +1945,12 @@ window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POS
 
 // ---------- Detailed reports (owner/manager) ----------
 let DET=null, detView='tx';
+Object.defineProperty(window,'detView',{get:()=>detView,configurable:true});   // the report search box re-renders the current tab
 window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
 window.showDetail=async()=>{ hideAllPanels(); if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
   $('detailCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadDetail(); };
-window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
+window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d); if($('detSearch')) $('detSearch').value='';
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
   renderDetailSummary(); renderDetail(); }catch(e){ toast(err(e)); } };
 window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab ghost seg'+(b.dataset.t===v?' on':'')); renderDetail(); };
@@ -1925,16 +1990,17 @@ function noCell(i){ return `<td style="padding:6px 4px;color:var(--muted);font-s
 function renderDetail(){
   if(!DET){ return; }
   const box=$('detailBody'); const t=detView;
+  if($('detSearch')) $('detSearch').style.display = t==='tx' ? '' : 'none';
   if(t==='tx'){
-    const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
-    const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
-    box.innerHTML=detTable([{t:'#',r:1},{t:'เวลา'},{t:'คิว'},{t:'รายการ'},{t:'ยอด',r:1},{t:'ชำระ'},{t:'โดย'}],
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=tHM(r.paid_at||r.created_at);
-        return `<tr style="border-bottom:1px solid var(--line)">${noCell(i)}<td style="padding:6px 4px">${time}</td><td><b>${r.code}</b></td>
-        <td style="color:var(--muted);font-size:12px;max-width:260px">${esc(r.items||'')}</td>
-        <td style="text-align:right">${baht2(r.total)}</td>
-        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.payment_method?` <span class="muted" style="font-size:11px">${esc(r.payment_method)}</span>`:''}${r.ticket_status==='no_show'?` <span class="pill closed" style="font-size:11px;background:rgba(146,111,0,.18);color:#946f00">ไม่มารับ</span>`:''}</td>
-        <td style="color:var(--muted);font-size:12px">${esc(r.paid_by||r.created_by||'')}</td></tr>`; }).join(''));
+    const all=(DET.transactions||[]); if(!all.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
+    const q=(($('detSearch')&&$('detSearch').value)||'').trim().toLowerCase();
+    const rows=q?all.filter(r=>[r.code,r.customer_name,r.items,r.pay_label,r.payment_method,r.paid_by,r.created_by,r.verified_by].some(v=>String(v||'').toLowerCase().includes(q))):all;
+    if(!rows.length){ box.innerHTML='<p class="muted">ไม่พบธุรกรรมที่ตรงกับ "'+esc(q)+'"</p>'; return; }
+    // Read-only: bill + slip only. Refunds happen in ประวัติออเดอร์, on the bill's own day.
+    box.innerHTML=txTable(rows.map((r,i)=>txRow({ tid:r.ticket_id, code:r.code, customer:r.customer_name, at:r.paid_at||r.created_at, items:txItems(r.items),
+      net:Math.round(((r.total||0)-(r.discount||0))*100)/100, discount:r.discount||0, q:r.ticket_status, p:r.payment_status,
+      payLabel:r.pay_label||r.payment_method, by:r.paid_by||r.created_by||'', ver:r, hasSlip:r.has_slip }, i)).join(''));
+    return;
   } else if(t==='pay'){
     const rec=DET.recon;
     if(rec&&rec.lines){
@@ -3183,7 +3249,7 @@ async function renderCharts(){
   const top=(det.topItems||[]).slice(0,5).map(r=>({ label:r.name, value:r.qty }));
   const hrs=(det.hourly||[]).map(h=>({ label:h.hr+':00', value:h.orders, sub:h.hr }));
   const TENDER_TH={cash:'เงินสด',promptpay:'พร้อมเพย์',online:'ออนไลน์',slip:'สลิป',linepay:'LINE Pay','6040':'เป๋าตัง',kplus:'K PLUS',reward:'แลกแต้ม',other:'อื่นๆ'};
-  const pay=(det.payments||[]).map(p=>({ label:TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
+  const pay=(det.payments||[]).map(p=>({ label:p.label||TENDER_TH[p.method]||p.method, value:p.amount })).sort((a,b)=>b.value-a.value);
   const card=(title,inner)=>`<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 10px;font-size:15px;color:var(--navy)">${title}</h2>${inner}</div>`;
   // Overall store rating tile (สะสมทุกรีวิว) — the owner asked where to see it; star bars stay in รายงานประจำวัน
   const sat=(ins&&ins.satisfaction)||null;
@@ -5048,34 +5114,53 @@ window.paySplitItems=async()=>{
 // Renders an 80mm-style slip into #printArea and calls the browser print (works with any
 // AirPrint / connected printer on the iPad). No hardware lock-in.
 const methodTH=(m)=> m==='cash'?'เงินสด':m==='promptpay'?'พร้อมเพย์':m==='online'?'ออนไลน์':m==='slip'?'สลิป':(m||'-');
+// One receipt renderer for the on-screen preview (ดูบิล) and the printer: header (tax-invoice lines
+// when VAT is on), queue + time + staff, items, discount, net, every tender leg, who took the
+// money, the slip verdict, refund / void, closing line.
+let _billHtml='';
+function money2(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function receiptHtml(b){
+  const o=b.order||{}, p=b.pay||{};
+  const when=o.paid_at||b.createdAt; const dt=when?fmtDT(when):'';
+  const li=(a,c,bold)=>`<div class="li"${bold?' style="font-weight:800;font-size:14px"':''}><span>${a}</span><span>${c}</span></div>`;
+  const items=(o.lines||[]).map(l=>{
+    const tops=(l.toppings||[]).map(t=>`<div class="li sub"><span>+ ${esc(t.name)}${t.qty>1?' ×'+t.qty:''}</span><span>${money2(t.price*t.qty)}</span></div>`).join('');
+    return `<div class="li"><span>${l.qty}× ${esc(l.name)}</span><span>${money2(l.price*l.qty)}</span></div>${tops}`;
+  }).join('');
+  const net=Math.round((((o.total||0)-(o.discount||0)))*100)/100;
+  const legs=(p.legs&&p.legs.length)?p.legs:(p.pay_label?[{label:p.pay_label,amount:net}]:[]);
+  const stTh={served:'เสิร์ฟแล้ว',no_show:'ไม่มารับ',cancelled:'ยกเลิก',skipped:'ข้าม',waiting:'รอคิว',called:'เรียกแล้ว'};
+  const vat=b.vat;
+  return `<div class="rcpt">
+    <h2>${esc((vat&&vat.bizName)||'YO-DEE YOGURT')}</h2>
+    ${b.zone?`<div class="ctr">${esc(b.zone)}</div>`:''}
+    ${vat?`<div class="ctr" style="font-size:11px">ใบกำกับภาษีอย่างย่อ${vat.inclusive?' (รวม VAT '+vat.rate+'%)':''}</div>${vat.taxId?`<div class="ctr" style="font-size:11px">เลขประจำตัวผู้เสียภาษี ${esc(vat.taxId)}</div>`:''}${b.invoiceNo?`<div class="ctr" style="font-size:11px">เลขที่ ${esc(b.invoiceNo)}</div>`:''}`:''}
+    <div class="hr"></div>
+    ${li('คิว <b>'+esc(b.code||'-')+'</b>', dt)}
+    ${li('พนักงาน: '+esc(b.createdBy||p.paid_by_name||'-'), '#'+(b.ticketId||''))}
+    ${b.customerName?li('ลูกค้า: '+esc(b.customerName),''):''}
+    ${b.source==='customer'?li('สั่งผ่าน LINE',''):''}
+    <div class="hr"></div>
+    ${items||'<div class="ctr">—</div>'}
+    <div class="hr"></div>
+    ${o.discount?li('รวม',money2(o.total))+li('ส่วนลด'+(o.discount_reason?' ('+esc(o.discount_reason)+')':''),'-'+money2(o.discount)):''}
+    ${li('สุทธิ',money2(net),true)}
+    ${legs.map(l=>li('ชำระ · '+esc(l.label),money2(l.amount))).join('')}
+    ${p.paid_by_name?li('รับเงินโดย',esc(p.paid_by_name)):''}
+    ${p.verified_by?li('ตรวจสลิปโดย',(p.verified_kind==='slipok'?'SlipOK ✓':esc(p.verified_by)+(p.verified_kind==='staff_after_slipok'?' (SlipOK ไม่ผ่าน)':''))):''}
+    ${p.refund_label?li('คืนเงิน · '+esc(p.refund_label),''):''}
+    ${b.voided?`<div class="hr"></div>${li((b.voided.kind==='refund'?'คืนเงิน':'ยกเลิก')+(b.voided.reason?': '+esc(b.voided.reason):''), b.voided.at?fmtDT(b.voided.at):'')}${b.voided.by?li('โดย '+esc(b.voided.by),''):''}`:''}
+    <div class="hr"></div>
+    <div class="ctr">${o.payment_status==='paid'?'— ปิดบิล · '+esc(stTh[b.status]||b.status||'')+' —':(o.payment_status==='void'?'— ยกเลิกแล้ว —':'— ยังไม่ชำระ —')}</div>
+    <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(b.code||'')}</div>
+  </div>`;
+}
+window.viewBill=async(tid)=>{ try{ const b=await api('/api/tickets/'+tid+'/bill'); _billHtml=receiptHtml(b); $('billPopBody').innerHTML=_billHtml; $('billPopSub').textContent=(b.code||'')+(b.closedAt?' · '+fmtDT(b.closedAt):''); $('billPop').style.display='flex'; }catch(e){ toast(err(e)); } };
+window.closeBill=()=>{ $('billPop').style.display='none'; };
+window.printBillPop=()=>{ if(!_billHtml) return; $('printArea').innerHTML=_billHtml; window.print(); };
 window.printReceipt=async(tid)=>{
-  try{
-    const v=await api('/api/tickets/'+tid); const o=v.order||{};
-    const when=o.paid_at||o.created_at; const dt=when?fmtDT(when):'';
-    const itemsHtml=(o.lines||[]).map(l=>{
-      const tops=(l.toppings||[]).map(t=>`<div class="li sub"><span>+ ${esc(t.name)}</span><span>${baht2(t.price*t.qty)}</span></div>`).join('');
-      return `<div class="li"><span>${l.qty}× ${esc(l.name)}</span><span>${baht2(l.price)}</span></div>${tops}`;
-    }).join('');
-    const net=Math.round((((o.total||0)-(o.discount||0)))*100)/100;
-    $('printArea').innerHTML=`<div class="rcpt">
-      <h2>YO-DEE YOGURT</h2>
-      <div class="ctr">${esc(v.zone||'')}</div>
-      <div class="ctr">${dt}</div>
-      <div class="hr"></div>
-      <div class="ctr">หมายเลขคิว</div>
-      <div class="big">${esc(v.code||'-')}</div>
-      <div class="hr"></div>
-      ${itemsHtml||'<div class="ctr">—</div>'}
-      <div class="hr"></div>
-      ${o.discount?`<div class="li"><span>ส่วนลด</span><span>-${baht2(o.discount)}</span></div>`:''}
-      <div class="li" style="font-weight:800;font-size:14px"><span>รวมสุทธิ</span><span>฿${baht2(net)}</span></div>
-      <div class="li"><span>ชำระโดย</span><span>${methodTH(o.method)}${o.paid?' ✓':''}</span></div>
-      <div class="hr"></div>
-      <div class="ctr">ขอบคุณที่ใช้บริการค่ะ 🙏</div>
-      <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(v.code||'')}</div>
-    </div>`;
-    window.print();
-  }catch(e){ toast(err(e)); }
+  try{ const b=await api('/api/tickets/'+tid+'/bill'); $('printArea').innerHTML=receiptHtml(b); window.print(); }
+  catch(e){ toast(err(e)); }
 };
 // Kitchen ticket: what to MAKE (queue#, items, sweetness, toppings) — no prices. Auto-printed
 // on payment so the drink-maker gets it immediately; also reprintable from the ticket row.

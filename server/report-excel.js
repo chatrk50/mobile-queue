@@ -196,12 +196,12 @@ export async function buildDetailedWorkbook(d, { store = 'YO-DEE Yogurt', date }
   if (d.channelTotals) { kv('Channel gross', d.channelTotals.gross || 0); kv('Platform commission', d.channelTotals.commission || 0); kv('Net after commission', d.channelTotals.net || 0); }
 
   sheet(wb, 'Transactions', store + ' — Transactions ' + day,
-    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Items', w: 40 }, { t: 'Total', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Discount', w: 11, fmt: BAHT, align: 'right', sum: true }, { t: 'Status', w: 12 }, { t: 'Method', w: 12 }, { t: 'By', w: 14 }],
-    (d.transactions || []).map((t) => [(t.paid_at || t.created_at || '').slice(11, 16), t.code, t.items || '', t.total || 0, t.discount || 0, t.payment_status || '', t.payment_method || '', t.paid_by || t.created_by || '']));
+    [{ t: 'Time', w: 10 }, { t: 'Code', w: 8 }, { t: 'Items', w: 40 }, { t: 'Total', w: 12, fmt: BAHT, align: 'right', sum: true }, { t: 'Discount', w: 11, fmt: BAHT, align: 'right', sum: true }, { t: 'Status', w: 12 }, { t: 'Method', w: 18 }, { t: 'By', w: 14 }, { t: 'Slip', w: 8 }, { t: 'Slip checked by', w: 16 }],
+    (d.transactions || []).map((t) => [(t.paid_at || t.created_at || '').slice(11, 16), t.code, t.items || '', t.total || 0, t.discount || 0, t.payment_status || '', t.pay_label || t.payment_method || '', t.paid_by || t.created_by || '', t.has_slip ? 'yes' : '', t.verified_by || '']));
 
   sheet(wb, 'Payments', store + ' — Payments by method ' + day,
     [{ t: 'Method', w: 18 }, { t: 'Orders', w: 10, fmt: NUM, align: 'right', sum: true }, { t: 'Amount', w: 14, fmt: BAHT, align: 'right', sum: true }],
-    (d.payments || []).map((p) => [p.method, p.orders || 0, p.amount || 0]));
+    (d.payments || []).map((p) => [p.label || p.method, p.orders || 0, p.amount || 0]));
 
   sheet(wb, 'Channels', store + ' — Sales by channel ' + day,
     [{ t: 'Channel', w: 18 }, { t: 'Comm %', w: 9, fmt: '0', align: 'right' }, { t: 'Orders', w: 9, fmt: NUM, align: 'right', sum: true }, { t: 'Gross', w: 13, fmt: BAHT, align: 'right', sum: true }, { t: 'Commission', w: 13, fmt: BAHT, align: 'right', sum: true }, { t: 'Net', w: 13, fmt: BAHT, align: 'right', sum: true }],
