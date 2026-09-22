@@ -9,6 +9,23 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
+  /* WCAG 2.2 AA audit (23 Sep): the staff pages use deeper tones of the brand colours so text and
+     filled controls reach 4.5:1, and field borders / the focus ring / chart marks reach 3:1.
+     The customer app keeps the brand blue #00b5d8 (it is not changed here). */
+  :root{ --accent:#0b6a7e; --danger:#c8364a; --danger-ink:#b3283a; --muted:#526579; --field-line:#7d8fa3; }
+  button.danger{ color:#fff; }
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]), select, textarea{ border-color:var(--field-line)!important; }
+  #lowStockBanner{ color:var(--danger-ink)!important; }
+  .sr-only{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .zt{ font-size:19px; font-weight:800; color:var(--navy); letter-spacing:-.2px; margin:.2em 0; line-height:1.25; }
+  .zsec{ font-size:14px; font-weight:800; color:var(--navy); margin:.6em 0 .3em; }
+  .kmark{ color:var(--navy); }
+  /* WCAG 2.5.8: customer-list checkboxes and the PDPA delete button were 17px / 18px targets */
+  .cl-row input[type=checkbox], #custListCard input[type=checkbox]{ width:24px!important; height:24px!important; }
+  .cl-row button[data-forget]{ min-width:28px; min-height:28px; }
+  .tlink{ display:inline-flex; align-items:center; min-height:28px; padding:0 4px; }
+  span[role=button]{ display:inline-flex; align-items:center; min-height:24px; }   /* sortable headers etc. made keyboard buttons */
+  @media (prefers-reduced-motion: reduce){ *,*::before,*::after{ animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important; } }
   /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
   :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
   /* Owner/manager tools dropdown rows (under the ⚙ จัดการ button) — left aligned */
@@ -24,11 +41,11 @@
   #adminMenu button.adm, #adminMenu a.adm{ width:100%; display:flex; align-items:center; justify-content:flex-start; gap:8px; padding:10px 14px; font-size:14px; border-radius:10px; text-align:left; }
   #adminMenu button.adm svg{ flex:none; margin:0; }
   #adminMenu button.adm:hover{ background:var(--surface,#f1f5f9); }
-  #adminMenu .admhdr{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#64748b); padding:8px 14px 3px; }
+  #adminMenu .admhdr{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.4px; color:var(--muted,#52606f); padding:8px 14px 3px; }
   #adminMenu .admhdr svg{ width:13px; height:13px; margin:0; vertical-align:0; stroke-width:1.9; }
   /* Per-category accent so the ⚙ groups don't blur together (owner feedback) */
-  #adminMenu .admhdr.c1{ color:#2563eb; } #adminMenu .admhdr.c2{ color:#0f9d6e; }
-  #adminMenu .admhdr.c3{ color:#d6336c; } #adminMenu .admhdr.c4{ color:#64748b; }
+  #adminMenu .admhdr.c1{ color:#1d4ed8; } #adminMenu .admhdr.c2{ color:#15803d; }
+  #adminMenu .admhdr.c3{ color:#b0224a; } #adminMenu .admhdr.c4{ color:#52606f; }
   /* Section headers: one thin accent line-icon per h1/h2 (emoji live in content, not headers) */
   h1 .ic{ width:20px; height:20px; vertical-align:-3.5px; stroke:var(--accent); }
   h2 .ic{ width:16px; height:16px; vertical-align:-3px; stroke:var(--accent); }
@@ -260,7 +277,7 @@
 <!-- Connection state. navigator.onLine only says "a network exists" — it happily reports online
      on a wifi that has no route out, which is exactly the market-stall failure. So this is driven
      by whether the SERVER actually answers. Loud on purpose: a cashier must never tap into a void. -->
-<div id="netBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:#a32d2d;color:#fff;padding:9px 14px;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.2)">
+<div id="netBar" role="alert" style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:#a32d2d;color:#fff;padding:9px 14px;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.2)">
   ⚠️ ออฟไลน์ — ต่อเน็ตไม่ได้ · ยังบันทึกการขายไม่ได้ กรุณาเช็คสัญญาณก่อนรับเงิน
 </div>
 <div class="wrap wide">
@@ -824,7 +841,7 @@
         </div>
         <div class="row" style="gap:8px;margin-top:8px">
           <button class="ghost danger" style="flex:1" onclick="cancelBasket()">ล้างบิล</button>
-          <button class="ghost" id="billHoldBtn" style="flex:1.4;background:rgba(243,203,85,.18);color:#946f00;border-color:#f3cb55" onclick="holdBill()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>พักบิล (จ่ายทีหลัง)</button>
+          <button class="ghost" id="billHoldBtn" style="flex:1.4;background:rgba(243,203,85,.18);color:#7a5c00;border-color:#f3cb55" onclick="holdBill()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>พักบิล (จ่ายทีหลัง)</button>
           <button class="ok" id="billPayBtn" style="flex:2" onclick="confirmBasket()" disabled><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>ชำระเงิน → ออกคิว</button>
           <button class="ok" id="billSaveBtn" style="flex:2;display:none;background:#16876f" onclick="saveEdit()"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>บันทึกการแก้ไข</button>
         </div>
@@ -858,7 +875,7 @@
   <div id="lowStockBanner" onclick="showStock()" style="display:none;margin:10px 0;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.32);color:var(--danger);font-weight:700;cursor:pointer"></div>
   <div id="dash" style="display:none"></div>
 </div>
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="printArea"></div>
 
 <!-- TOPPING PICKER (per drink) -->
@@ -1227,7 +1244,7 @@
         <button class="ckey" onclick="cashKey('0')">0</button><button class="ckey" onclick="cashKey('00')">00</button><button class="ckey" style="color:var(--danger)" onclick="cashClear()" aria-label="ลบ">⌫</button>
       </div>
     </div>
-    <button class="ghost" id="cashToggle" style="width:100%;padding:8px;font-size:13px;font-weight:700;color:#0e7c93;margin-bottom:12px" onclick="toggleCashPad()">ระบุจำนวนเอง</button>
+    <button class="ghost" id="cashToggle" style="width:100%;padding:8px;font-size:13px;font-weight:700;color:#0b6a7e;margin-bottom:12px" onclick="toggleCashPad()">ระบุจำนวนเอง</button>
     <button class="ok" id="cashConfirmBtn" style="width:100%;min-height:54px;font-size:17px" onclick="confirmCash()">ยืนยันรับเงิน</button>
   </div>
 </div>
@@ -2286,7 +2303,7 @@ function renderCountSheet(){ const box=$('countBox'); const rows=STOCK||[];
 window.cntDiff=(id,sys)=>{ const v=$('cnt_'+id).value, el=$('cntd_'+id);
   if(v===''){ el.textContent='—'; el.style.color=''; el.className='muted'; }
   else { const d=Math.round((Number(v)-sys)*100)/100;
-    el.className=''; el.innerHTML=d===0?'<b style="color:#16a34a">ตรง ✓</b>':(d>0?`<b style="color:#b45309">เกิน +${d}</b>`:`<b style="color:var(--danger)">ขาด ${d}</b>`); }
+    el.className=''; el.innerHTML=d===0?'<b style="color:#15803d">ตรง ✓</b>':(d>0?`<b style="color:#b45309">เกิน +${d}</b>`:`<b style="color:var(--danger)">ขาด ${d}</b>`); }
   const rows=(STOCK||[]).map(r=>{const x=$('cnt_'+r.id); return x&&x.value!==''?{r,v:Number(x.value)}:null;}).filter(Boolean);
   const diffs=rows.filter(x=>Math.abs(x.v-x.r.stock_qty)>1e-9);
   $('cntSum').textContent=rows.length?`กรอกแล้ว ${rows.length} รายการ · ต่างจากระบบ ${diffs.length} รายการ`:'ยังไม่ได้กรอก'; };
@@ -2595,7 +2612,7 @@ window.loadSlipokPage=async()=>{
 window.toggleSlipAuto=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slipAuto:!!on})});
     try{ CFG=await (await fetch('/api/config')).json(); }catch(e){} toast(on?'เปิดตรวจสลิปอัตโนมัติแล้ว':'ปิดตรวจสลิปอัตโนมัติแล้ว'); loadSlipokPage(); }catch(e){ toast(err(e)); } };
 function renderTenders(list){ $('tenderList').innerHTML=(list&&list.length)?list.map(t=>`<div class="row between" style="align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;${t.active?'':'opacity:.55'}">
-    <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(t.label)}</b> <span style="font-size:10px;padding:1px 7px;border-radius:999px;background:${t.kind==='online'?'rgba(0,181,216,.15)':'rgba(0,0,0,.05)'};color:${t.kind==='online'?'#0e7c93':'var(--muted)'};font-weight:700">${t.kind==='online'?'ในแอป':'เคาน์เตอร์'}</span></div>
+    <div style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(t.label)}</b> <span style="font-size:10px;padding:1px 7px;border-radius:999px;background:${t.kind==='online'?'rgba(0,181,216,.15)':'rgba(0,0,0,.05)'};color:${t.kind==='online'?'#0b6a7e':'var(--muted)'};font-weight:700">${t.kind==='online'?'ในแอป':'เคาน์เตอร์'}</span></div>
     <button class="tgl ${t.active?'on':'off'}" style="margin:0 10px" aria-label="${t.active?'ปิดใช้':'เปิดใช้'}ช่องทางนี้" onclick="toggleTender(${t.id},${t.active?0:1})"></button>
     <button class="ghost danger" style="padding:5px 10px;font-size:12px" onclick="delTender(${t.id})">ลบ</button>
   </div>`).join(''):'<p class="muted" style="font-size:13px">ยังไม่มีช่องทาง</p>'; }
@@ -2612,7 +2629,7 @@ let COUPONS=[];
 // Lifecycle status shown as one honest chip, so the owner never has to work out from three dates
 // and two counters whether a campaign is actually running right now.
 function cpStatus(c){ const t=bkkToday();
-  if(!c.active) return ['ปิดอยู่','#f1f5f9','#64748b'];
+  if(!c.active) return ['ปิดอยู่','#f1f5f9','#52606f'];
   if(c.expires_at&&c.expires_at<t) return ['หมดอายุแล้ว','#fcebeb','#a32d2d'];
   if(c.valid_from&&c.valid_from>t) return ['ยังไม่เริ่ม · '+c.valid_from,'#e6f1fb','#185fa5'];
   if(c.usage_limit>0&&c.used_count>=c.usage_limit) return ['ใช้ครบโควตาแล้ว','#fcebeb','#a32d2d'];
@@ -2806,7 +2823,7 @@ window.loadCash=async()=>{
 // ---------- Cash-round history: daily Z-report list + monthly rollup ----------
 let CASHHIST=null, _chTab='day';
 window.chSetTab=(t)=>{ _chTab=t; $('chTabDay').className=t==='day'?'ghost seg on':'ghost seg'; $('chTabMonth').className=t==='month'?'ghost seg on':'ghost seg'; renderCashHist(); };
-const osFmt=(os)=> os===0?'<b style="color:#16a34a">พอดี ✓</b>':(os>0?`<b style="color:#16a34a">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
+const osFmt=(os)=> os===0?'<b style="color:#15803d">พอดี ✓</b>':(os>0?`<b style="color:#15803d">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
 function renderCashHist(autoExpand){ const box=$('cashHistList'); if(!box) return;
   if(!CASHHIST){ box.innerHTML='<p class="muted" style="font-size:12px">โหลดไม่สำเร็จ</p>'; return; }
   if(_chTab==='month'){
@@ -2839,7 +2856,7 @@ window.chToggle=async(id)=>{ const box=$('chDet_'+id); if(!box) return;
   if(!_chDet[id]){ box.innerHTML='<p class="muted" style="font-size:12px">กำลังโหลด…</p>';
     try{ _chDet[id]=await api('/api/cash/history/'+id); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดรายละเอียดไม่สำเร็จ</p>'; return; } }
   const d=_chDet[id], s=d.session||{};
-  const mv=(d.moves||[]).map(m=>`<div class="row between" style="font-size:12px;padding:2px 0"><span class="muted">${m.kind==='pay_out'?'จ่ายออก':'รับเข้า'}${m.remark?(' · '+esc(m.remark)):''}</span><span style="color:${m.kind==='pay_out'?'var(--danger)':'#16a34a'}">${m.kind==='pay_out'?'−':'+'}${baht2(m.amount)}</span></div>`).join('');
+  const mv=(d.moves||[]).map(m=>`<div class="row between" style="font-size:12px;padding:2px 0"><span class="muted">${m.kind==='pay_out'?'จ่ายออก':'รับเข้า'}${m.remark?(' · '+esc(m.remark)):''}</span><span style="color:${m.kind==='pay_out'?'var(--danger)':'#15803d'}">${m.kind==='pay_out'?'−':'+'}${baht2(m.amount)}</span></div>`).join('');
   box.innerHTML=`<div style="background:var(--surface);border-radius:10px;padding:10px 12px">
     <div class="row between" style="font-size:12px"><span class="muted">เปิดรอบ</span><span>${chHM(s.opened_at)}${s.opened_by_name?(' · '+esc(s.opened_by_name)):''}</span></div>
     <div class="row between" style="font-size:12px"><span class="muted">ปิดรอบ</span><span>${chHM(s.closed_at)}${s.closed_by_name?(' · '+esc(s.closed_by_name)):''}</span></div>
@@ -2853,7 +2870,7 @@ window.chToggle=async(id)=>{ const box=$('chDet_'+id); if(!box) return;
 // actually landed (PromptPay/bank/wallet statement); the difference is computed + flagged. Saved
 // per round so it's auditable — who reconciled it and when.
 function reconDiff(diff){ if(diff==null) return '<span class="muted" style="font-size:11px">—</span>';
-  return diff===0?'<b style="color:#16a34a;font-size:12px">พอดี ✓</b>':(diff>0?`<b style="color:#16a34a;font-size:12px">+${baht2(diff)}</b>`:`<b style="color:var(--danger);font-size:12px">−${baht2(Math.abs(diff))}</b>`); }
+  return diff===0?'<b style="color:#15803d;font-size:12px">พอดี ✓</b>':(diff>0?`<b style="color:#15803d;font-size:12px">+${baht2(diff)}</b>`:`<b style="color:var(--danger);font-size:12px">−${baht2(Math.abs(diff))}</b>`); }
 function renderRecon(id){ const box=$('chRecon_'+id); if(!box) return; const d=_chDet[id]; if(!d) return;
   const rc=d.reconciliation||{lines:[]};
   if(!rc.lines.length){ box.innerHTML='<div class="muted" style="font-size:12px;border-top:1px solid var(--line);padding-top:6px">— ไม่มีการรับชำระในรอบนี้</div>'; return; }
@@ -2908,11 +2925,11 @@ function renderCashMoves(d){
     return `<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:center">
       <div style="flex:1;min-width:0"><b>${esc(m.remark||(out?'จ่ายออก':'รับเข้า'))}</b>
         <div class="muted" style="font-size:11px">${tHM(m.at)}${m.actor_name?(' · '+esc(m.actor_name)):''}</div></div>
-      <b style="color:${out?'var(--danger)':'#16a34a'};white-space:nowrap">${out?'−':'+'}${baht2(m.amount)}</b>
+      <b style="color:${out?'var(--danger)':'#15803d'};white-space:nowrap">${out?'−':'+'}${baht2(m.amount)}</b>
       <button class="ghost" style="padding:2px 8px;margin-left:8px;font-size:13px;color:var(--danger)" title="ลบ" onclick="delCashMove(${m.id})">✕</button></div>`; }).join('');
   $('cashMovesList').innerHTML=`
     <div style="background:var(--surface);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px">
-      <div class="row between"><span class="muted">รับเข้า (เพิ่มเงินสด · ไม่นับรายได้)</span><b style="color:#16a34a">+${baht2(d.payIn)}</b></div>
+      <div class="row between"><span class="muted">รับเข้า (เพิ่มเงินสด · ไม่นับรายได้)</span><b style="color:#15803d">+${baht2(d.payIn)}</b></div>
       <div class="row between" style="margin-top:4px"><span class="muted">จ่ายออก (หักจากรายได้วันนั้น)</span><b style="color:var(--danger)">−${baht2(d.payOut)}</b></div>
     </div>
     ${rows||'<p class="muted" style="font-size:12px;text-align:center;padding:8px">ยังไม่มีรายการในวันนี้</p>'}`;
@@ -2938,9 +2955,9 @@ function renderCash(){
   box.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px">
     <div class="row between"><span class="muted">เปิดรอบเมื่อ</span><b>${fmtDT(s.session.opened_at)}</b></div>
     <div class="row between" style="margin-top:6px"><span>เงินทอนเริ่มต้น</span><b>${baht2(s.session.open_float)}</b></div>
-    <div class="row between" style="margin-top:6px"><span>เงินสดที่รับ (กะนี้)</span><b style="color:var(--ok,#16a34a)">+${baht2(s.cashIn)}</b></div>
+    <div class="row between" style="margin-top:6px"><span>เงินสดที่รับ (กะนี้)</span><b style="color:var(--ok,#15803d)">+${baht2(s.cashIn)}</b></div>
     ${s.cashRefund?`<div class="row between" style="margin-top:6px"><span>คืนเงินสด</span><b style="color:var(--danger)">−${baht2(s.cashRefund)}</b></div>`:''}
-    ${s.payIn?`<div class="row between" style="margin-top:6px"><span>รับเข้า (pay-in)</span><b style="color:#16a34a">+${baht2(s.payIn)}</b></div>`:''}
+    ${s.payIn?`<div class="row between" style="margin-top:6px"><span>รับเข้า (pay-in)</span><b style="color:#15803d">+${baht2(s.payIn)}</b></div>`:''}
     ${s.payOut?`<div class="row between" style="margin-top:6px"><span>จ่ายออก (pay-out)</span><b style="color:var(--danger)">−${baht2(s.payOut)}</b></div>`:''}
     <div class="row between" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;font-size:18px"><b>เงินสดที่ควรมี</b><b>${baht2(s.expectedCash)}</b></div></div>
   ${(s.preRoundCash>0)?`<div style="margin-top:10px;background:#fffbea;border:1px solid #f3cb55;border-radius:12px;padding:11px 13px;font-size:12.5px;color:#8a6d00">
@@ -2986,8 +3003,8 @@ function renderDenomTotals(){ DENOMS.forEach(d=>{ const el=$('dsub_'+d); if(el) 
 window.denomManual=()=>{ const out=$('denomDiff'); if(!out||!CASH||!CASH.expectedCash&&CASH.expectedCash!==0) return;
   const c=Number($('countedInp').value); if(!($('countedInp').value!=='')||!(c>=0)){ out.textContent=''; return; }
   const diff=Math.round((c-CASH.expectedCash)*100)/100;
-  out.innerHTML=diff===0?'<b style="color:#16a34a">พอดีกับที่ควรมี ✓</b>'
-    :(diff>0?`<b style="color:#16a34a">เกิน ${baht2(diff)}</b> จากที่ควรมี ${baht2(CASH.expectedCash)}`
+  out.innerHTML=diff===0?'<b style="color:#15803d">พอดีกับที่ควรมี ✓</b>'
+    :(diff>0?`<b style="color:#15803d">เกิน ${baht2(diff)}</b> จากที่ควรมี ${baht2(CASH.expectedCash)}`
            :`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(diff))}</b> จากที่ควรมี ${baht2(CASH.expectedCash)}`); };
 window.openDrawer=async()=>{ const f=Number($('openFloatInp').value)||0; try{ await api('/api/cash/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({openFloat:f})}); toast('เปิดรอบแล้ว'); loadCash(); }catch(e){ toast(err(e)==='session_already_open'?'มีรอบที่เปิดอยู่แล้ว':err(e)); } };
 window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(counted>=0)){ toast('ใส่จำนวนเงินที่นับได้'); return; }
@@ -3004,7 +3021,7 @@ window.closeDrawer=async()=>{ const counted=Number($('countedInp').value); if(!(
       const el=$('cashHistList'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ /* history refresh is best-effort */ } }catch(e){ toast(err(e)); } };
 function renderCashResult(r){
   const z=r.zreport||{}; const os=r.overShort;
-  const osTxt= os===0?'<b style="color:var(--ok,#16a34a)">พอดี ✓</b>':(os>0?`<b style="color:var(--ok,#16a34a)">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
+  const osTxt= os===0?'<b style="color:var(--ok,#15803d)">พอดี ✓</b>':(os>0?`<b style="color:var(--ok,#15803d)">เกิน ${baht2(os)}</b>`:`<b style="color:var(--danger)">ขาด ${baht2(Math.abs(os))}</b>`);
   $('cashBody').innerHTML=`<div style="border:1px solid var(--line);border-radius:14px;padding:16px">
     <h2 style="margin:0 0 10px">สรุปปิดรอบ (Z-Report)</h2>
     <div class="row between"><span>เงินทอนเริ่มต้น</span><b>${baht2(r.openFloat)}</b></div>
@@ -3116,7 +3133,7 @@ const money=(n)=>'฿'+Math.round(n||0).toLocaleString();
 const pctf=(n)=>((n||0)*100).toFixed(1)+'%';
 
 // ---------- Overview / charts (owner/manager): lightweight inline charts, no libraries ----------
-const CHART_COLORS=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f','#946f00'];
+const CHART_COLORS=['#0b6a7e','#15803d','#b45309','#c8364a','#1e3a5f','#7a5c00'];   // every mark ≥ 3:1 on white (WCAG 1.4.11)
 // Vertical bars (% heights in a fixed-height flex row) — for time series & peak hours.
 function chartCols(rows, fmt){
   if(!rows.length) return '<p class="muted" style="padding:10px 0">ยังไม่มีข้อมูล</p>';
@@ -3195,7 +3212,7 @@ function renderHome(d){
   const alerts=[];
   if(low.length) alerts.push(['#fcebeb','#a32d2d','วัตถุดิบใกล้หมด '+low.length+' รายการ',low.slice(0,3).map(i=>esc(i.name)).join(', ')+(low.length>3?' …':''),'showStock()']);
   if(expiring.length) alerts.push(['#fff7ed','#b45309','ใกล้/หมดอายุ '+expiring.length+' ล็อต',expiring.some(l=>l.expired)?'มีเลยกำหนดแล้ว':'ภายใน 7 วัน','showStock()']);
-  if(need.length) alerts.push(['#eef7fb','#0e7c93','ควรสั่งซื้อ '+need.length+' รายการ',need.slice(0,3).map(i=>esc(i.name)).join(', ')+(need.length>3?' …':''),'showStock()']);
+  if(need.length) alerts.push(['#eef7fb','#0b6a7e','ควรสั่งซื้อ '+need.length+' รายการ',need.slice(0,3).map(i=>esc(i.name)).join(', ')+(need.length>3?' …':''),'showStock()']);
   const alertBlock=alerts.length?`<div style="display:grid;gap:8px">${alerts.map(([bg,fg,t,s,go])=>
       `<div role="button" tabindex="0" onclick="${go}" style="cursor:pointer;background:${bg};border-radius:12px;padding:10px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px">
         <span style="font-size:13px"><b style="color:${fg}">${t}</b><div class="muted" style="font-size:11.5px">${s}</div></span>
@@ -3315,7 +3332,7 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
         pl('ยอดขายสุทธิ',r.revenue,{bold:true})+
         sec('ต้นทุนขาย (COGS)')+
         pl(p.ingredientActual!=null?'− วัตถุดิบ (ตัดสต๊อกจริง)':'− วัตถุดิบ (ประมาณ % ยอดขาย)',p.ingredient,{neg:true})+
-        (p.ingredientActual!=null&&Math.abs(p.ingredientVariance||0)>=1?`<div class="row between" style="font-size:11px;color:${p.ingredientVariance>0?'#946f00':'#0f6e56'};padding:0 2px 4px"><span>เทียบแผน ${money(p.ingredientPlan)}</span><span>${p.ingredientVariance>0?'ใช้เกินแผน +':'ประหยัดกว่าแผน −'}${money(Math.abs(p.ingredientVariance))}</span></div>`:'')+
+        (p.ingredientActual!=null&&Math.abs(p.ingredientVariance||0)>=1?`<div class="row between" style="font-size:11px;color:${p.ingredientVariance>0?'#7a5c00':'#0f6e56'};padding:0 2px 4px"><span>เทียบแผน ${money(p.ingredientPlan)}</span><span>${p.ingredientVariance>0?'ใช้เกินแผน +':'ประหยัดกว่าแผน −'}${money(Math.abs(p.ingredientVariance))}</span></div>`:'')+
         pl('− แพ็กเกจ',p.packaging,{neg:true})+
         ((p.freight||0)>0?pl('− ค่าขนส่งวัตถุดิบ',p.freight,{neg:true}):'')+
         pl('กำไรขั้นต้น',p.grossProfit,{bold:true,accent:true,pct:p.grossMargin})+
@@ -3344,7 +3361,7 @@ window.showReport=async()=>{ hideAllPanels(); { const mb=$('marginsBox'); if(mb)
       `<p class="muted" style="font-size:11.5px;margin:6px 2px 0">ค่าใช้จ่ายรายเดือนถูกเฉลี่ยเป็นรายวันด้วย "วันขาย/เดือน" · แก้ทุกค่าได้ที่ปุ่ม <b>ต้นทุน</b> ด้านบน</p>`+
       (p.breakEvenCups!=null?`<div class="row between" style="font-size:12px;margin-top:8px;background:var(--surface);border-radius:10px;padding:8px 12px">
         <span class="muted">จุดคุ้มทุน ~<b style="color:var(--navy)">${p.breakEvenCups}</b> ${unit()}/วัน เพื่อครอบคลุมต้นทุน</span>
-        <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#946f00'}">ขายแล้ว ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· เหลืออีก '+(p.breakEvenCups-(p.cups||0))}</span></div>`:'')+
+        <span style="font-weight:700;color:${(p.cups||0)>=p.breakEvenCups?'#16876f':'#7a5c00'}">ขายแล้ว ${p.cups||0} ${(p.cups||0)>=p.breakEvenCups?'✓':'· เหลืออีก '+(p.breakEvenCups-(p.cups||0))}</span></div>`:'')+
       (p.targetDaily!=null?`<p class="muted" style="font-size:12px;margin-top:6px">เป้าหมายวันนี้ ${money(p.targetDaily)} · ส่วนต่าง <b style="color:${(p.revenueVariance||0)>=0?'#16876f':'#c43a4b'}">${(p.revenueVariance||0)>=0?'+':''}${money(p.revenueVariance)}</b></p>`:'')+
       `<div style="margin-top:10px;background:#eef7fb;border:1px solid var(--line);border-radius:12px;padding:12px">
         <div class="row between" style="align-items:center"><b>🎯 เป้ากำไร</b>
@@ -3490,11 +3507,11 @@ window.chLoadTpl=async()=>{
   // EVERY row carries its on/off state at the same top-right spot (owner: "why does only birthday
   // have a checkbox?"). Rules per the design system: a toggle applies INSTANTLY; rows whose state
   // lives elsewhere say so with a status pill + a link to the page that owns it.
-  const pill=(txt,on)=>`<span style="font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:${on?'#e1f5ee':'#f1f5f9'};color:${on?'#0f6b57':'#64748b'};white-space:nowrap">${txt}</span>`;
+  const pill=(txt,on)=>`<span style="font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:${on?'#e1f5ee':'#f1f5f9'};color:${on?'#0f6b57':'#52606f'};white-space:nowrap">${txt}</span>`;
   const state=(t)=>{
     if(t.key==='birthday') return `<button class="tgl ${t.on?'on':'off'}" ${own?'':'disabled'} aria-label="${t.on?'ปิด':'เปิด'}แคมเปญวันเกิด" onclick="chToggleTpl('birthday',${t.on?0:1})"></button>`;
-    if(t.key==='reward') return pill('ตามระบบสะสมแต้ม · '+(r.loyaltyOn?'เปิด':'ปิด'),r.loyaltyOn)+(own?` <a href="#" onclick="showLoyalty();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">ตั้งค่าแต้ม ›</a>`:'');
-    return pill('ส่งเองจากหน้าลูกค้า',true)+(own?` <a href="#" onclick="showCustomers();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">เปิดหน้าลูกค้า ›</a>`:'');
+    if(t.key==='reward') return pill('ตามระบบสะสมแต้ม · '+(r.loyaltyOn?'เปิด':'ปิด'),r.loyaltyOn)+(own?` <a href="#" class="tlink" onclick="showLoyalty();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">ตั้งค่าแต้ม ›</a>`:'');
+    return pill('ส่งเองจากหน้าลูกค้า',true)+(own?` <a href="#" class="tlink" onclick="showCustomers();return false" style="font-size:11.5px;color:var(--accent);font-weight:700;text-decoration:none">เปิดหน้าลูกค้า ›</a>`:'');
   };
   const tplRow=(t)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px">
       <div class="row between" style="align-items:center;gap:8px;flex-wrap:wrap">
@@ -3585,8 +3602,8 @@ window.chLoadOut=async(offset=0)=>{
   const chip=(k,lbl)=>`<button class="ghost seg${st===k?' on':''}" style="flex:1;padding:8px 2px;font-size:12px" onclick="chOutFilter('${k}')">${lbl}<br><b style="font-size:13px">${C[k]??0}</b></button>`;
   const sumLbl={live:['ใบที่ยังไม่ถูกใช้','ภาระรวมถ้าใช้ทั้งหมด','#b45309'],
                 redeemed:['ใช้แล้ว (ใบ)','ส่วนลดที่ให้ไปจริง','#16876f'],
-                expired:['หมดอายุโดยไม่ได้ใช้','มูลค่าที่ไม่ต้องจ่าย','#64748b'],
-                cancelled:['ร้านยกเลิก','มูลค่าที่เรียกคืน','#64748b']}[st];
+                expired:['หมดอายุโดยไม่ได้ใช้','มูลค่าที่ไม่ต้องจ่าย','#52606f'],
+                cancelled:['ร้านยกเลิก','มูลค่าที่เรียกคืน','#52606f']}[st];
   $('chOutSum').innerHTML=
     `<div class="row" style="gap:6px;margin-bottom:8px">${chip('live','คงค้าง')}${chip('redeemed','ใช้แล้ว')}${chip('expired','หมดอายุ')}${chip('cancelled','ยกเลิก')}</div>
      <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px">
@@ -3595,8 +3612,8 @@ window.chLoadOut=async(offset=0)=>{
     </div>`;
   const own=(!ME||ME.role==='owner');
   const right=(x)=>st==='redeemed'?`<b style="color:#16876f">฿${x.usedValue==null?x.cap:x.usedValue}</b><div class="muted" style="font-size:11px">ใช้เมื่อ ${x.usedOn||'—'}</div>`
-    :st==='expired'?`<b style="color:#64748b">฿${x.cap}</b><div class="muted" style="font-size:11px">หมดอายุ ${x.expires}</div>`
-    :st==='cancelled'?`<b style="color:#64748b">฿${x.cap}</b><div class="muted" style="font-size:11px">ยกเลิกแล้ว</div>`
+    :st==='expired'?`<b style="color:#52606f">฿${x.cap}</b><div class="muted" style="font-size:11px">หมดอายุ ${x.expires}</div>`
+    :st==='cancelled'?`<b style="color:#52606f">฿${x.cap}</b><div class="muted" style="font-size:11px">ยกเลิกแล้ว</div>`
     :`<b>฿${x.cap}</b><div class="muted" style="font-size:11px">ถึง ${x.expires}</div>`;
   const rows=(r.rows||[]).map(x=>`<div class="row between" style="padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;gap:8px;align-items:center">
       <span style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(x.name||x.key.slice(0,10)+'…')}</b>
@@ -3677,7 +3694,7 @@ window.loadCouponRep=async(a,b,l)=>{
     <div class="kgrid" style="background:var(--surface);border-radius:14px;padding:12px;margin-bottom:12px">
       ${kpi(c.issued,'ออกให้ (ใบ)')}${kpi(c.redeemed,'กลับมาใช้','#16876f')}${kpi('฿'+c.value,'เป็นเงิน','#16876f')}${kpi(c.redeemRate+'%','อัตราใช้')}
     </div>
-    <div class="muted" style="font-size:11.5px;margin-bottom:6px">หมดอายุโดยไม่ได้ใช้ในช่วงนี้ <b>${c.expired}</b> ใบ${c.unpriced?` · <span style="color:#946f00">${c.unpriced} ใบใช้ก่อนระบบเริ่มเก็บมูลค่าจริง จึงไม่นับเป็นเงิน</span>`:''}</div>
+    <div class="muted" style="font-size:11.5px;margin-bottom:6px">หมดอายุโดยไม่ได้ใช้ในช่วงนี้ <b>${c.expired}</b> ใบ${c.unpriced?` · <span style="color:#7a5c00">${c.unpriced} ใบใช้ก่อนระบบเริ่มเก็บมูลค่าจริง จึงไม่นับเป็นเงิน</span>`:''}</div>
     <div class="row between" style="align-items:center;margin-top:14px"><h2 style="margin:0">ตารางรายคูปอง</h2>
       <button class="ghost" style="padding:6px 12px;font-size:12px" onclick="crExportCsv()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel (CSV)</button></div>
     <div id="crSheetWrap" style="margin-top:8px"></div>
@@ -3704,7 +3721,7 @@ function renderCrSheet(){
   const td=(v,align,col)=>`<td style="border:1px solid var(--line);padding:6px 8px;white-space:nowrap;text-align:${align||'right'}${col?';color:'+col:''}">${v}</td>`;
   const body=rows.map(x=>'<tr>'
     +td(`<b style="color:var(--navy)">${esc(x.label)}</b> <span class="muted" style="font-size:10.5px">${esc(x.kindTh)}</span>`,'left')
-    +td(x.issued)+td(x.issuedAll==null?'—':x.issuedAll,'right','var(--muted)')+td(x.live==null?'—':x.live,'right',x.live?'#0e7c93':'var(--muted)')
+    +td(x.issued)+td(x.issuedAll==null?'—':x.issuedAll,'right','var(--muted)')+td(x.live==null?'—':x.live,'right',x.live?'#0b6a7e':'var(--muted)')
     +td(x.redeemed==null?0:x.redeemed,'right',x.redeemed?'#16876f':'')+td('฿'+(x.value||0),'right','#16876f')
     +td((x.rateAll==null?'—':x.rateAll+'%')+(x.rate!=null&&x.issued?' <span class="muted" style="font-size:10.5px">(ช่วงนี้ '+x.rate+'%)</span>':''))+td(x.expired||0,'right',x.expired?'#b45309':'')
     +td(x.avgDays==null?'—':x.avgDays+' วัน')+td(x.lastUsed||'—')
@@ -3757,7 +3774,7 @@ async function renderShift(keepFocus){
     <div class="feat-row" style="align-items:center">
       <span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14 0M1.4 9a16 16 0 0 1 21.2 0M8.5 16.1a6 6 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></svg></span>
       <div style="flex:1"><b>รับออเดอร์ออนไลน์ (LINE)</b>
-        <div class="muted" style="font-size:12px;margin-top:2px">${s.onlineOrders?'เปิดอยู่ — ลูกค้าสั่งผ่าน LINE ได้':'ปิดอยู่ — ลูกค้าสั่งผ่าน LINE ไม่ได้ ขายหน้าร้านตามปกติ'}${(s.ordering&&s.ordering.paused&&s.onlineOrders)?'<br><span style="color:#946f00">ตอนนี้ระบบพักรับอัตโนมัติ: '+esc(s.ordering.reason||'')+'</span>':''}</div></div>
+        <div class="muted" style="font-size:12px;margin-top:2px">${s.onlineOrders?'เปิดอยู่ — ลูกค้าสั่งผ่าน LINE ได้':'ปิดอยู่ — ลูกค้าสั่งผ่าน LINE ไม่ได้ ขายหน้าร้านตามปกติ'}${(s.ordering&&s.ordering.paused&&s.onlineOrders)?'<br><span style="color:#7a5c00">ตอนนี้ระบบพักรับอัตโนมัติ: '+esc(s.ordering.reason||'')+'</span>':''}</div></div>
       <button class="tgl ${s.onlineOrders?'on':'off'}" aria-label="${s.onlineOrders?'ปิด':'เปิด'}รับออเดอร์ออนไลน์" onclick="shiftOnline(${s.onlineOrders?0:1})"></button>
     </div>
     <div class="feat-row" style="align-items:center;margin-top:10px">
@@ -4192,7 +4209,7 @@ function itemImg(m){
   return fb;
 }
 // Merchandising badges shown on a menu tile (decorative, doesn't disable). Sold-out stays its own pill.
-const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
+const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#15803d'}, new:{t:'ใหม่',bg:'#0b6a7e'}, promo:{t:'โปรโมชั่น',bg:'#c8364a'}, hot:{t:'ขายดี',bg:'#b45309'}, free:{t:'ฟรี',bg:'#7c3aed'} };
 function menuBadge(m){ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="background:${b.bg}">${b.t}</span>`:''; }
 function renderOrderMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
@@ -4200,7 +4217,7 @@ function renderOrderMenu(){
   // (still sells at the counter), unlike the customer; only manual soldout disables it here.
   const mk=(m)=>{ if(m.makeable==null) return '';
     if(m.stockSoldout) return `<div class="men" style="color:var(--danger);font-weight:700">วัตถุดิบหมด · ขายต่อได้</div>`;
-    return `<div class="men" style="${m.makeable<=5?'color:#946f00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} ${unit()}</div>`; };
+    return `<div class="men" style="${m.makeable<=5?'color:#7a5c00;font-weight:700':'color:var(--muted)'}">ทำได้ ${m.makeable} ${unit()}</div>`; };
   const btn=(m)=>`<button class="menu-btn" ${m.soldout?'disabled style="opacity:.55"':`onclick="pickDrink(${m.id})"`}>
     ${menuBadge(m)}<div class="mimg" style="font-size:38px">${itemImg(m)}</div>
     <div class="mth">${esc(m.name)}</div><div class="men">${esc(m.name_en||'')}</div>
@@ -4435,7 +4452,7 @@ function _agoTH(iso){ if(!iso) return '—'; const d=new Date(iso.replace(' ','T
 // "สั่งให้ลูกค้าคนนี้" CTAs — read the stored profile (no fragile inline-string args).
 function _crmCta(p){ if(!p||!p.key) return '';
   const fav=(p.favourites&&p.favourites[0])?p.favourites[0].name:'';
-  return `<button class="ok" style="width:100%;min-height:50px;font-size:16px;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="orderForCurrentCustomer(false)"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>สั่งออเดอร์ให้ลูกค้าคนนี้</button>${fav?`<button class="ghost" style="width:100%;margin-top:8px;color:#0e7c93;border-color:#bfe3ec" onclick="orderForCurrentCustomer(true)">สั่งซ้ำ ${esc(fav)}</button>`:''}`;
+  return `<button class="ok" style="width:100%;min-height:50px;font-size:16px;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="orderForCurrentCustomer(false)"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>สั่งออเดอร์ให้ลูกค้าคนนี้</button>${fav?`<button class="ghost" style="width:100%;margin-top:8px;color:#0b6a7e;border-color:#bfe3ec" onclick="orderForCurrentCustomer(true)">สั่งซ้ำ ${esc(fav)}</button>`:''}`;
 }
 window.orderForCurrentCustomer=(withFav)=>{ const p=window._crmProfile; if(!p||!p.key) return; const fav=(withFav&&p.favourites&&p.favourites[0])?p.favourites[0].name:''; orderForCustomer(p.key, p.name||p.phone||'', fav); };
 function renderCustProfile(p){
@@ -4583,9 +4600,9 @@ async function boot(){
   // "วันนี้ที่ร้าน" pulse strip — managers/owners see today's revenue/cups/queue at a glance
   // without opening the report. Hidden for cashiers (revenue is owner-facing).
   const mgr=(!ME||['owner','manager'].includes(ME.role));
-  zones=[]; let html = mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
+  zones=[]; let html = '<h1 class="sr-only">คิวหน้าร้าน</h1>' + (mgr ? '<div id="todayStrip" style="margin:2px 2px 12px">'
     + '<button id="todayToggle" class="ghost" onclick="toggleToday()" style="font-size:12px;padding:5px 12px;border-radius:999px">'+IC.chart+'สรุปวันนี้ ▾</button>'
-    + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '';
+    + '<div id="todayChips" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div></div>' : '');
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
     html += `<h2 style="margin:20px 2px 2px;font-size:15px;color:var(--accent)">${esc(s.name)}</h2>`;
@@ -4666,7 +4683,7 @@ async function refreshLowStock(){
 function zonePanel(z){
   return `<div class="card" id="zone-${z.id}">
     <div class="row between zone-head">
-      <div><h1 id="zt-${z.id}">${esc(z.name)}</h1>
+      <div><h3 class="zt" id="zt-${z.id}">${esc(z.name)}</h3>
         <span id="zs-${z.id}" class="pill open">—</span>
         <span class="muted" style="margin-left:8px">รอ <b id="zc-${z.id}">0</b> · เรียกล่าสุด <b id="zl-${z.id}">—</b></span>
       </div>
@@ -4682,8 +4699,8 @@ function zonePanel(z){
     </div>
     <div id="zp-${z.id}"></div>
     <div class="zone-cols">
-      <div><h2>กำลังรอ</h2><div id="zw-${z.id}" class="queue-list"></div></div>
-      <div><h2>เรียกแล้ว (ล่าสุด)</h2><div id="zr-${z.id}" class="queue-list"></div></div>
+      <div><h4 class="zsec">กำลังรอ</h4><div id="zw-${z.id}" class="queue-list"></div></div>
+      <div><h4 class="zsec">เรียกแล้ว (ล่าสุด)</h4><div id="zr-${z.id}" class="queue-list"></div></div>
     </div>
   </div>`;
 }
@@ -4737,7 +4754,7 @@ window.toggleKitchen=(tid,i)=>{
   if((ns==='making'||ns==='done') && !_makingSent.has(tid)){ _makingSent.add(tid);
     api('/api/tickets/'+tid+'/start-making',{method:'POST'}).catch(()=>_makingSent.delete(tid)); }
   const chip=document.getElementById('kbtn-'+tid+'-'+i), line=document.getElementById('kline-'+tid+'-'+i);
-  if(chip){ chip.textContent=ns==='making'?'🔥':ns==='done'?'✅':'○'; chip.className='kmark'+(ns?(' '+ns):''); }
+  if(chip){ chip.textContent=ns==='making'?'🔥':ns==='done'?'✅':'○'; chip.className='kmark'+(ns?(' '+ns):''); chip.setAttribute('aria-label',kLabel(ns)); }
   if(line){ line.style.background=ns==='making'?'rgba(243,157,18,.16)':ns==='done'?'rgba(22,135,111,.12)':''; }
   const card=document.getElementById('kcard-'+tid);
   if(card){ const n=Number(card.dataset.klines||0); let done=0,making=0;
@@ -4771,7 +4788,7 @@ function renderZone(snap){
   const nm=(t)=>{
     const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
     const nameTxt = (t.cust&&t.cust.name) ? t.cust.name : (real?t.customer_name:'');
-    const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0e7c93;margin-left:6px">LINE</span>' : '';
+    const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0b6a7e;margin-left:6px">LINE</span>' : '';
     return (nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
@@ -4780,12 +4797,12 @@ function renderZone(snap){
   const pay=(t)=>{
     if(t.order_total==null) return '';
     if(t.payment_status==='paid'){
-      if(t.order_due>0) return ' <span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800;margin-left:6px">ชำระแล้ว · ค้างเพิ่ม ฿'+t.order_due+'</span>';
+      if(t.order_due>0) return ' <span class="pill" style="background:rgba(243,203,85,.3);color:#7a5c00;font-weight:800;margin-left:6px">ชำระแล้ว · ค้างเพิ่ม ฿'+t.order_due+'</span>';
       if(t.order_due<0) return ' <span class="pill" style="background:rgba(229,91,107,.15);color:#c43a4b;font-weight:800;margin-left:6px">ชำระแล้ว · ต้องคืน ฿'+Math.abs(t.order_due)+'</span>';
       return ' <span class="pill open" style="margin-left:6px">ชำระแล้ว ✓</span>';
     }
-    if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
-    return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#946f00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
+    if(t.payment_status==='claimed') return ' <span class="pill" style="background:rgba(26,179,206,.2);color:#0b6a7e;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ ฿'+t.order_total+' — ตรวจสอบ</span>';
+    return ' <span class="pill" style="background:rgba(243,203,85,.25);color:#7a5c00;margin-left:6px">ค้างชำระ ฿'+t.order_total+'</span>';
   };
   const ord=(t)=> ordBody(t);
   const ordBody=(t)=>{
@@ -4795,7 +4812,7 @@ function renderZone(snap){
         const nm=m?m[1]:l.name;
         const sw=m?`<div class="muted" style="margin-left:14px;font-size:13px">• ${esc(m[2])}</div>`:'';
         const ks=_kitchenStatus[t.id+':'+i];
-        const chip=`<button id="kbtn-${t.id}-${i}" class="kmark${ks?(' '+ks):''}" onclick="event.stopPropagation();toggleKitchen(${t.id},${i})" title="แตะเพื่อมาร์ค: กำลังทำ → เสร็จ">${ks==='making'?'🔥':ks==='done'?'✅':'○'}</button>`;
+        const chip=`<button id="kbtn-${t.id}-${i}" class="kmark${ks?(' '+ks):''}" onclick="event.stopPropagation();toggleKitchen(${t.id},${i})" title="แตะเพื่อมาร์ค: กำลังทำ → เสร็จ" aria-label="${kLabel(ks)}">${ks==='making'?'🔥':ks==='done'?'✅':'○'}</button>`;
         const lbg=l.paid?'background:rgba(22,135,111,.10);':ks==='making'?'background:rgba(243,157,18,.16);':ks==='done'?'background:rgba(22,135,111,.12);':'';
         const paidTag=l.paid?` <span class="pill" style="background:rgba(22,135,111,.18);color:#16876f;font-weight:800;font-size:11px">✓ ชำระแล้ว</span>`:'';
         const strike=l.paid?'text-decoration:line-through;color:var(--muted);':'';
@@ -4825,7 +4842,7 @@ function renderZone(snap){
         <button class="ok" style="padding:6px 12px;font-size:13px" onclick="keepOrder(${t.id})">เก็บไว้ / ทำต่อ</button></div>`
     : '';
   const cancelCardStyle=(t)=> t.cancel_requested ? 'border:2px solid var(--danger);border-top:none;border-radius:0 0 12px 12px;background:rgba(220,38,38,.06)' : '';
-  const makingPill=(t)=> (t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0e7c93;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '')
+  const makingPill=(t)=> (t.making_at ? ' <span class="pill" style="background:rgba(26,179,206,.18);color:#0b6a7e;font-size:11px;margin-left:6px">🍳 กำลังทำ</span>' : '')
     + (t.order_remakes>0 ? ' <span class="pill" style="background:rgba(229,91,107,.14);color:#c43a4b;font-size:11px;margin-left:6px" title="บันทึกของเสียแล้ว กำลังทำใหม่ให้ลูกค้า — กดเสิร์ฟเมื่อเสร็จ">🔁 ทำใหม่'+(t.order_remakes>1?(' ×'+t.order_remakes):'')+'</span>' : '');
   // Queue-first: an unpaid order not yet being made → start-making (locks the customer cancel) + nudge to pay.
   const makeBtns=(t)=> (CFG.queueFirst && t.order_total!=null && t.payment_status!=='paid' && !t.making_at)
@@ -4872,7 +4889,7 @@ function renderZone(snap){
     : `<button class="ok" onclick="act(${t.id},'serve')">เสิร์ฟแล้ว</button>`;
   // รวมบิล: when ≥2 bills wait for payment, each gets a tick → pay them together in one tender.
   const mergeChk=(t)=> ((snap.pending||[]).length>=2)
-    ? `<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:12px;color:#946f00;cursor:pointer;vertical-align:middle"><input type="checkbox" class="mc" style="width:17px;height:17px;accent-color:#946f00" onchange="toggleMerge(${t.id},${netOf(t)})" ${_mergeSel.has(t.id)?'checked':''}>รวม</label>`
+    ? `<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:12px;color:#7a5c00;cursor:pointer;vertical-align:middle"><input type="checkbox" class="mc" style="width:17px;height:17px;accent-color:#7a5c00" onchange="toggleMerge(${t.id},${netOf(t)})" ${_mergeSel.has(t.id)?'checked':''}>รวม</label>`
     : '';
   // แยกจ่ายตามเงิน: remaining balance + a "บางส่วน" button + a paid-so-far pill.
   const remainOf=(t)=> Math.round(((netOf(t))-(t.order_paid||0))*100)/100;
@@ -4916,12 +4933,12 @@ function renderZone(snap){
   const zp=$('zp-'+id);
   const staleN = (snap.pending||[]).filter(isStale).length;
   if(zp) zp.innerHTML = (snap.pending&&snap.pending.length) ? (
-    `<h2 style="color:#946f00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h2>`+
+    `<h4 class="zsec" style="color:#7a5c00;margin-top:4px">รอชำระเงิน (${snap.pending.length}) — ยืนยันแล้วจึงออกหมายเลขคิว${staleN?`<button class="ghost danger" style="padding:4px 10px;font-size:12px;margin-left:8px;vertical-align:middle" onclick="sweepPending()">เคลียร์ค้าง ${staleN}</button>`:''}</h4>`+
     `<div class="queue-list" style="margin-bottom:10px">`+snap.pending.map(t=>`${cancelBanner(t)}
       <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${pendingCardBg(t)}">
         <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
-        ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#946f00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
-        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0e7c93;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
+        ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#7a5c00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
+        ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0b6a7e;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
         ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
@@ -5756,26 +5773,26 @@ function renderCustList(){ const all=clRows(); const rows=all.slice(0,_clShown);
       <select data-f="rating" onchange="clSetF('rating',this.value)" style="${fst};padding:4px 2px">${RSTARS.map(([v,l])=>`<option value="${v}"${_clF.rating===v?' selected':''}>${l}</option>`).join('')}</select>
     </div>`;
   const fbar=_clFOn()?`<div style="padding:6px 12px;background:#fffbea;border-bottom:1px solid var(--line);font-size:11.5px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <span style="color:#946f00">กรองอยู่ · พบ <b>${all.length}</b> คน</span>
+      <span style="color:#7a5c00">กรองอยู่ · พบ <b>${all.length}</b> คน</span>
       <button class="ghost" style="padding:3px 10px;font-size:11px" onclick="clClearF()">ล้างตัวกรอง</button></div>`:'';
   // .cl-num carries data-l so the phone layout can print each number's label next to it — the
   // column header it used to rely on is hidden down there.
   $('clList').innerHTML = '<div class="cl-wrap" style="min-width:520px">'+head+filt+fbar+(rows.length ? rows.map(c=>{ const sg=SEG_TH[c.segment]||['-','#eee','#555'];
     const last=c.daysSince==null?'—':(c.daysSince===0?'วันนี้':(c.daysSince+' วัน'));
-    const rating=c.ratingAvg!=null?`<b style="color:#b8860b">★${c.ratingAvg}</b><span class="muted" style="font-size:9.5px"> (${c.ratingCount})</span>`:'<span class="muted">—</span>';
+    const rating=c.ratingAvg!=null?`<b style="color:#8a6508">★${c.ratingAvg}</b><span class="muted" style="font-size:9.5px"> (${c.ratingCount})</span>`:'<span class="muted">—</span>';
     return `<div class="cl-row" style="border-bottom:1px solid var(--line)">
       <label class="row cl-head" style="gap:8px;align-items:center;min-width:0;cursor:${c.canPush?'pointer':'default'};flex-wrap:nowrap">
         <input type="checkbox" ${_clSel.has(c.key)?'checked':''} ${c.canPush?'':'disabled'} onchange="clTog('${c.key}',this.checked)" style="width:17px;height:17px;flex:none">
         <span style="min-width:0;overflow:hidden">
           <div style="font-weight:700;color:var(--navy);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name||'ลูกค้า '+(c.canPush?'LINE':'เบอร์โทร'))}</div>
-          <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}${c.noshows>0?` <span style="background:${c.noshowTier==='blocked'?'#fcebeb':'#fff7e0'};color:${c.noshowTier==='blocked'?'#a32d2d':'#946f00'};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px" title="ไม่มารับออเดอร์ ${c.noshows} ครั้งในช่วงที่นับ">ไม่มารับ ${c.noshows}${c.noshowTier==='blocked'?' · ปิดออนไลน์':(c.noshowTier==='prepay'?' · ต้องจ่ายก่อน':'')}</span>${c.noshowTier?`<button class="ghost" onclick="clForgive('${c.key}')" style="padding:1px 8px;font-size:10px;margin-left:4px">ปลดล็อก</button>`:''}`:''}
+          <span style="background:${sg[1]};color:${sg[2]};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px">${sg[0]}</span>${c.canPush?'':' <span class="muted" style="font-size:9.5px">📵</span>'}${c.noshows>0?` <span style="background:${c.noshowTier==='blocked'?'#fcebeb':'#fff7e0'};color:${c.noshowTier==='blocked'?'#a32d2d':'#7a5c00'};font-size:9.5px;font-weight:800;padding:0 6px;border-radius:999px" title="ไม่มารับออเดอร์ ${c.noshows} ครั้งในช่วงที่นับ">ไม่มารับ ${c.noshows}${c.noshowTier==='blocked'?' · ปิดออนไลน์':(c.noshowTier==='prepay'?' · ต้องจ่ายก่อน':'')}</span>${c.noshowTier?`<button class="ghost" onclick="clForgive('${c.key}')" style="padding:1px 8px;font-size:10px;margin-left:4px">ปลดล็อก</button>`:''}`:''}
         </span>
       </label>
       <span class="cl-num" data-l="มา" style="font-size:12.5px">${c.visits}</span>
       <span class="cl-num" data-l="ใช้จ่าย" style="font-size:12.5px;font-weight:700">฿${c.spend}</span>
       <span class="cl-num muted" data-l="ล่าสุด" style="font-size:11.5px">${last}</span>
       <span class="cl-num" data-l="แต้ม" style="font-size:12px">${c.points?('⭐'+c.points):'—'}</span>
-      <span class="cl-num" data-l="ให้ดาว" style="font-size:12px">${rating}${ME&&ME.role!=='owner'?'':`<button class="ghost" title="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" onclick="clForget('${c.key}','${esc((c.name||'').replace(/'/g,''))}')" style="padding:0 5px;font-size:11px;margin-left:6px;color:var(--muted);border:0;background:transparent">🗑</button>`}</span>
+      <span class="cl-num" data-l="ให้ดาว" style="font-size:12px">${rating}${ME&&ME.role!=='owner'?'':`<button class="ghost" data-forget title="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" aria-label="ลบข้อมูลส่วนตัวของลูกค้ารายนี้ (PDPA)" onclick="clForget('${c.key}','${esc((c.name||'').replace(/'/g,''))}')" style="padding:0 5px;font-size:11px;margin-left:6px;color:var(--muted);border:0;background:transparent">🗑</button>`}</span>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:18px 0">'+((_clQ||_clFOn())?'ไม่พบลูกค้าที่ตรงกับตัวกรอง':'ไม่มีลูกค้าในกลุ่มนี้')+'</p>')+tail+'</div>';
   if(fkey){ const el=$('clList').querySelector('[data-f="'+fkey+'"]'); if(el){ el.focus(); if(fpos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(fpos,fpos); }catch(e){} } } } }
 window.clTog=(k,on)=>{ if(on) _clSel.add(k); else _clSel.delete(k); $('clSelN').textContent=_clSel.size; };
@@ -5847,5 +5864,74 @@ window.toggleZone=async(id)=>{ try{ await api('/api/zones/'+id+'/open',{method:'
 
 $('pin').focus();
 $('imgFile').addEventListener('change',onImgFile);
+</script>
+<script>
+/* WCAG 2.2 A/AA audit (23 Sep) — one place for the behaviour ~20 overlays and every list share,
+   without touching their open/close call sites:
+   - Overlays (…Pop / …Sheet / #appModal): role="dialog" + aria-modal + a name, focus moves in when
+     one opens, the rest of the page is inert (Tab stays inside), Esc closes, focus returns (2.4.3, 4.1.2).
+   - ⚙ จัดการ / ⋯ menus: aria-expanded, focus to the first item, Esc closes (4.1.2).
+   - Fields without a label get an accessible name from their placeholder / nearby text (1.3.1, 4.1.2).
+   - Rows and chips that act on click become keyboard buttons: role, tabindex, Enter/Space (2.1.1). */
+(function(){
+  var OVER='[id$="Pop"],[id$="Sheet"],#appModal,#slipZoom';
+  var NAMES={checkinPop:'ให้ลูกค้าสแกน',scanPop:'สแกนบัตรลูกค้า',basketPop:'ตรวจออเดอร์',ppPop:'PromptPay',payMethodPop:'รับชำระเงิน',cashPop:'รอบเงินสด',appModal:'ยืนยัน',itemSplitPop:'แยกรายการ',voidPop:'ยกเลิกออเดอร์',recipePop:'สูตร',featuresPop:'ตั้งค่าฟีเจอร์',billPop:'ดูบิล',slipPop:'ตรวจสลิปการโอน',slipZoom:'สลิปขนาดเต็ม',topPop:'เลือกท็อปปิ้ง',sweetPop:'เลือกระดับความหวาน',csDrinkSheet:'เลือกเครื่องดื่ม',itemDetailPop:'รายละเอียดรายการ',custPop:'ข้อมูลลูกค้า',scopePop:'เมนูที่ร่วมรายการ'};
+  var shown=function(el){ return !!el && el.style.display!=='none' && getComputedStyle(el).display!=='none' && el.getClientRects().length>0; };
+  var FOC='button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  var stack=[], inerted=[];
+  function release(){ inerted.forEach(function(e){ e.inert=false; }); inerted=[]; }
+  function isolate(d){ release(); var n=d; while(n && n!==document.body){ var p=n.parentElement; if(!p) break;
+      for(var i=0;i<p.children.length;i++){ var s=p.children[i]; if(s!==n && !/^(SCRIPT|STYLE|LINK)$/.test(s.tagName) && s.id!=='toast' && s.id!=='netBar' && !s.inert){ s.inert=true; inerted.push(s); } }
+      n=p; } }
+  function named(d){ if(NAMES[d.id]){ d.removeAttribute('aria-labelledby'); d.setAttribute('aria-label',NAMES[d.id]); return; } var h=d.querySelector('h1,h2,h3'); if(h){ if(!h.id) h.id=d.id+'-title'; d.setAttribute('aria-labelledby',h.id); } else if(!d.getAttribute('aria-label')) d.setAttribute('aria-label',NAMES[d.id]||'หน้าต่าง'); }
+  function opened(d){ if(stack.some(function(x){return x.d===d;})) return;
+    d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true'); named(d);
+    stack.push({d:d, prev:document.activeElement}); isolate(d);
+    setTimeout(function(){ if(!shown(d)) return; if(d.contains(document.activeElement)) return;
+      var f=[].filter.call(d.querySelectorAll(FOC),function(e){ return e.getClientRects().length; });
+      var first=f.find(function(e){ return /^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName); })||f[0];
+      if(first) first.focus({preventScroll:true}); else { d.tabIndex=-1; d.focus({preventScroll:true}); } },30); }
+  function closed(d){ var i=-1; stack.forEach(function(x,k){ if(x.d===d) i=k; }); if(i<0) return;
+    var prev=stack[i].prev; stack.splice(i,1); release(); if(stack.length) isolate(stack[stack.length-1].d);
+    if(prev && document.contains(prev) && prev.getClientRects().length && !stack.length){ try{ prev.focus({preventScroll:true}); }catch(e){} } }
+  function sync(d){ shown(d) ? opened(d) : closed(d); }
+  function watch(){ document.querySelectorAll(OVER).forEach(function(d){ if(d.__a11y) return; d.__a11y=1; new MutationObserver(function(){ sync(d); }).observe(d,{attributes:true,attributeFilter:['style','class','hidden']}); if(shown(d)) opened(d); }); }
+  // menus
+  function menu(btnId,menuId){ var b=document.getElementById(btnId), m=document.getElementById(menuId); if(!b||!m||m.__a11y) return; m.__a11y=1;
+    b.setAttribute('aria-haspopup','true'); b.setAttribute('aria-controls',menuId); b.setAttribute('aria-expanded','false');
+    if(!b.getAttribute('aria-label') && !b.textContent.trim()) b.setAttribute('aria-label', b.title||'เมนู');
+    new MutationObserver(function(){ var open=shown(m); if(b.getAttribute('aria-expanded')===String(open)) return; b.setAttribute('aria-expanded',String(open));
+      if(open){ setTimeout(function(){ var f=[].filter.call(m.querySelectorAll('button,a[href]'),function(e){ return e.getClientRects().length; })[0]; if(f) f.focus({preventScroll:true}); },20); } }).observe(m,{attributes:true,attributeFilter:['style','class']}); }
+  // names for fields and buttons, keyboard for clickable non-buttons
+  function textNear(el){ var p=el.previousElementSibling; if(p && p.textContent.trim() && p.textContent.trim().length<=48) return p.textContent.trim();
+    var lab=el.closest('.ff,.row,label,div'); if(lab){ var t=lab.textContent.replace(/\s+/g,' ').trim(); if(t && t.length<=48) return t; } return ''; }
+  function names(root){
+    root.querySelectorAll('input:not([type=hidden]),select,textarea').forEach(function(el){
+      if(el.getAttribute('aria-label')||el.getAttribute('aria-labelledby')||el.closest('label')||(el.id && document.querySelector('label[for="'+el.id+'"]'))) return;
+      var n=(el.placeholder||'').replace(/^[🔍\s]+/,'').trim()||el.title||textNear(el)||(el.type==='date'?'วันที่':el.type==='number'?'จำนวน':'ช่องกรอก');
+      el.setAttribute('aria-label',n); });
+    root.querySelectorAll('button,[role=button]').forEach(function(el){ if(el.getAttribute('aria-label')||el.textContent.trim()) return; el.setAttribute('aria-label',el.title||'ปุ่ม'); });
+    root.querySelectorAll('[onclick]').forEach(function(el){
+      if(/^(BUTTON|A|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY|DETAILS|OPTION)$/.test(el.tagName) || el.getAttribute('role') || el.hasAttribute('tabindex')) return;
+      var oc=el.getAttribute('onclick')||''; if(/event\.target\s*===\s*this/.test(oc) || /^\s*event\.stopPropagation\(\);?\s*$/.test(oc)) return;
+      if(el.matches(OVER)) return;
+      el.setAttribute('role','button'); el.tabIndex=0; });
+  }
+  var pend=false; function sweep(){ if(pend) return; pend=true; requestAnimationFrame(function(){ pend=false; watch(); names(document.body); menu('adminBtn','adminMenu'); menu('moreBtn','moreMenu'); }); }
+  document.addEventListener('keydown',function(e){
+    if((e.key==='Enter'||e.key===' ') && e.target && e.target.getAttribute && e.target.getAttribute('role')==='button' && e.target.tagName!=='BUTTON'){ e.preventDefault(); e.target.click(); return; }
+    if(e.key!=='Escape') return;
+    var am=document.getElementById('adminMenu'), mm=document.getElementById('moreMenu');
+    if(shown(am)){ am.style.display='none'; var b=document.getElementById('adminBtn'); if(b) b.focus(); return; }
+    if(shown(mm)){ mm.style.display='none'; var b2=document.getElementById('moreBtn'); if(b2) b2.focus(); return; }
+    var top=stack.length && stack[stack.length-1].d; if(!top || !shown(top)) return;
+    e.preventDefault();
+    var c=top.querySelector('[aria-label="ปิด"],[title="ปิด"],button[onclick*="close" i],button[onclick*="hide" i]');
+    if(c) c.click(); else top.style.display='none';
+  });
+  window.kLabel=function(s){ return 'สถานะครัว: '+(s==='making'?'กำลังทำ':s==='done'?'เสร็จแล้ว':'ยังไม่เริ่ม')+' · แตะเพื่อเปลี่ยน'; };
+  new MutationObserver(sweep).observe(document.body,{childList:true,subtree:true});
+  if(document.readyState!=='loading') sweep(); else document.addEventListener('DOMContentLoaded',sweep);
+})();
 </script>
 </body></html>
