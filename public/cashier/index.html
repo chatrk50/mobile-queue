@@ -1455,11 +1455,13 @@ function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>'
 function verifiedBadge(p){ if(!p||!p.verified_by) return '';
   const slipok=p.verified_kind==='slipok', after=p.verified_kind==='staff_after_slipok';
   return '<span class="pill '+(slipok?'open':'soon')+'" style="font-size:11px">'+(slipok?'🤖 ':'👤 ')+'<span>ตรวจสลิปโดย</span> '+esc(p.verified_by)+(after?' <span>(SlipOK ไม่ผ่าน)</span>':'')+'</span>'; }
-function payLine(p){ if(!p||(!p.pay_label&&!p.refund_label)) return '';
-  const bits=[];
-  if(p.pay_label) bits.push(IC.card+' '+esc(p.pay_label)+(p.paid_by_name?' · <span>รับเงินโดย</span> '+esc(p.paid_by_name):''));
-  if(p.refund_label) bits.push('↩️ <span>คืนเงิน</span> '+esc(p.refund_label));
-  return '<div class="muted" style="font-size:12px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">'+bits.map(b=>'<span>'+b+'</span>').join('')+verifiedBadge(p)+'</div>'; }
+function payCol(p){ if(!p||(!p.pay_label&&!p.refund_label)) return '';
+  const rows=[];
+  if(p.pay_label) rows.push('<span style="color:var(--navy);font-weight:700;display:inline-flex;align-items:center;gap:4px">'+IC.card+esc(p.pay_label)+'</span>');
+  if(p.paid_by_name) rows.push('<span class="muted"><span>รับเงินโดย</span> '+esc(p.paid_by_name)+'</span>');
+  if(p.refund_label) rows.push('<span class="muted">↩️ <span>คืนเงิน</span> '+esc(p.refund_label)+'</span>');
+  const badge=verifiedBadge(p); if(badge) rows.push(badge);
+  return '<div style="align-self:center;flex:none;min-width:120px;max-width:230px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:12px;text-align:right;padding-right:6px;border-right:1px solid var(--line);margin-right:2px">'+rows.join('')+'</div>'; }
 // ---------- In-app modal: appPrompt (text/number input) + appConfirm (yes/no). Replace native
 // prompt()/confirm() so dialogs look like the app and tap reliably on the iPad. Promise-based. ----------
 let _amRes=null;
@@ -1729,8 +1731,8 @@ function renderHistory(list, q){
     return `<div class="qitem"><div style="flex:1">
       <div><span class="code">${t.code}</span> <span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${pay?` <span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${isTimeout?' <span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':''}${time?` <span class="muted" style="font-size:11px">· ${time}</span>`:''}</div>
       ${items?`<div class="muted" style="font-size:12px;margin-top:2px">${items}${t.order_total!=null?' · <b>฿'+t.order_total+'</b>':''}</div>`:''}
-      ${payLine(t.pay)}
       ${t.refund_requested?`<div style="margin-top:3px"><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="muted" style="font-size:11px">${esc(t.refund_note)}</span>`:''}</div>`:''}</div>
+      ${payCol(t.pay)}
       <div class="row" style="gap:6px;align-self:center">${t.has_slip?`<button class="ghost" style="padding:6px 10px;font-size:12px" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canRecover?`<button class="ok" style="padding:6px 12px;font-size:12px" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" style="padding:6px 10px;font-size:12px" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</div></div>`;
   }).join('');
 }
