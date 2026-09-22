@@ -201,7 +201,7 @@
   .rcpt-view{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 10px; overflow:auto; text-align:left; }
   /* Transaction grids (history · detailed report): one bill per row, fixed columns, numbers right-aligned. */
   .tx-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
-  .tx{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:760px; }
+  .tx{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:640px; }
   .tx th{ position:sticky; top:0; background:var(--surface); color:var(--muted); font-weight:700; font-size:11.5px; text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
   .tx td{ padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap; }
   .tx tbody tr:nth-child(even) td{ background:rgba(22,49,79,.025); }
@@ -1748,15 +1748,15 @@ const TX_Q={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่
 const TX_P={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
 function txItems(s){ return esc(String(s||'').replace(/(\d+)x /g,'$1× ')); }
 function txTable(rowsHtml){
-  return '<div class="tx-wrap"><table class="tx"><thead><tr><th class="num">#</th><th>เวลา</th><th>คิว</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'; }
+  return '<div class="tx-wrap"><table class="tx"><thead><tr><th class="num">#</th><th>เวลา</th><th>คิว</th><th>ลูกค้า</th><th class="num">ยอด</th><th>สถานะ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'; }
 function txRow(x,i){
   const q=x.q?(TX_Q[x.q]||[x.q,'']):null, p=x.p?(TX_P[x.p]||[x.p,'']):null;
   const pill=(v,extra)=>'<span class="pill '+v[1]+'" style="font-size:11px'+(extra||'')+'">'+v[0]+'</span>';
   return '<tr>'
     +'<td class="num sub">'+(i+1)+'</td>'
     +'<td>'+(x.at?tHM(x.at):'')+'</td>'
-    +'<td><b class="code" style="font-size:13.5px">'+esc(x.code||'')+'</b>'+(x.customer?'<div class="sub">'+esc(x.customer)+'</div>':'')+'</td>'
-    +'<td class="wrap">'+(x.items||'—')
+    +'<td><b class="code" style="font-size:13.5px">'+esc(x.code||'')+'</b></td>'
+    +'<td class="wrap" style="min-width:120px;max-width:220px">'+(x.customer?esc(x.customer):'<span class="sub">—</span>')
       +(x.refundReq?'<div><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>'+(x.refundNote?' <span class="sub">'+esc(x.refundNote)+'</span>':'')+'</div>':'')+'</td>'
     +'<td class="num"><b>'+(x.net!=null?baht2(x.net):'—')+'</b>'+(x.discount?'<div class="sub">ลด '+baht2(x.discount)+'</div>':'')+'</td>'
     +'<td><div style="display:flex;flex-wrap:nowrap;gap:4px">'+(q?pill(q):'')+(p?pill(p):'')+(x.timeout?'<span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':'')+'</div></td>'
