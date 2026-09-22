@@ -212,6 +212,8 @@
   .tx .act button{ padding:4px 8px; font-size:11.5px; margin-left:4px; min-height:0; }
   .tx .act .ic-btn{ width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; }
   .tx .act .ic-btn svg{ margin:0; width:18px; height:18px; }
+  .tx .act .ic-slot{ display:inline-block; width:34px; height:34px; margin-left:4px; vertical-align:middle; }
+  .tx .act .txt-btn, .tx .act .txt-slot{ display:inline-block; min-width:68px; text-align:center; vertical-align:middle; margin-left:6px; }
   .tx .sub{ color:var(--muted); font-size:11px; }
   @media print {
     body > *:not(#printArea){ display:none !important; }
@@ -1520,6 +1522,8 @@ window.closeMoreMenu=()=>{ $('orderMoreMenu').style.display='none'; };
 // Format a stored UTC timestamp as Bangkok date+time (DD/MM HH:MM).
 function fmtDT(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
   return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function fmtDTFull(s){ if(!s) return ''; const d=new Date(String(s).replace(' ','T')+'Z'); if(isNaN(d)) return '';
+  return d.toLocaleString('en-GB',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''); }
 // ⚙ จัดการ dropdown: toggle the owner/manager tools panel. Each tool keeps its own onclick.
 window.toggleAdmin=(e)=>{ if(e) e.stopPropagation(); const m=$('adminMenu'); const opening=m.style.display!=='flex';
   if(opening){ // hide any category whose buttons are all role-hidden (e.g. cashier sees no ตั้งค่าร้าน)
@@ -1759,8 +1763,8 @@ function txRow(x,i){
     +'<td>'+(x.payLabel?esc(x.payLabel):'<span class="sub">—</span>')+(x.refundLabel?'<div class="sub">↩️ '+esc(x.refundLabel)+'</div>':'')+'</td>'
     +'<td class="sub" style="font-size:12px">'+esc(x.by||'')+'</td>'
     +'<td>'+(verifiedBadge(x.ver,true)||'<span class="sub">—</span>')+'</td>'
-    +'<td class="act"><button class="ghost ic-btn" onclick="viewBill('+x.tid+')" title="ดูบิล" aria-label="ดูบิล">'+IC.print+'</button>'
-      +(x.hasSlip?'<button class="ghost ic-btn" onclick="viewSlip('+x.tid+')" title="ดูสลิป" aria-label="ดูสลิป">'+IC.slip+'</button>':'')+(x.extra||'')+'</td>'
+    +'<td class="act">'+(x.hasSlip?'<button class="ghost ic-btn" onclick="viewSlip('+x.tid+')" title="ดูสลิป" aria-label="ดูสลิป">'+IC.slip+'</button>':'<span class="ic-slot"></span>')
+      +'<button class="ghost ic-btn" onclick="viewBill('+x.tid+')" title="ดูบิล" aria-label="ดูบิล">'+IC.print+'</button>'+(x.extra||'')+'</td>'
     +'</tr>'; }
 function renderHistory(list, q){
   if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีบิลของวันนี้</p>'; return; }
@@ -1778,7 +1782,7 @@ function renderHistory(list, q){
       net:t.order_total!=null?Math.round((t.order_total-(t.order_discount||0))*100)/100:null, discount:t.order_discount||0,
       q:t.status, p:t.payment_status, timeout:(t.void_reason||'').startsWith('auto:'), refundReq:t.refund_requested, refundNote:t.refund_note,
       payLabel:p.pay_label, refundLabel:p.refund_label, by:p.paid_by_name||t.created_by||'', ver:p, hasSlip:t.has_slip,
-      extra:(canRecover?'<button class="ok" onclick="recoverHistory('+t.id+')">กู้คืน</button>':'')+(canVoid?'<button class="ghost danger" onclick="refundHistory('+t.id+',\''+label+'\')">'+label+'</button>':'') }, i);
+      extra:(canRecover?'<button class="ok txt-btn" onclick="recoverHistory('+t.id+')">กู้คืน</button>':canVoid?'<button class="ghost danger txt-btn" onclick="refundHistory('+t.id+',\''+label+'\')">'+label+'</button>':'<span class="txt-slot"></span>') }, i);
   }).join(''));
 }
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
@@ -5121,7 +5125,7 @@ let _billHtml='';
 function money2(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function receiptHtml(b){
   const o=b.order||{}, p=b.pay||{};
-  const when=o.paid_at||b.createdAt; const dt=when?fmtDT(when):'';
+  const when=o.paid_at||b.createdAt; const dt=when?fmtDTFull(when):'';
   const li=(a,c,bold)=>`<div class="li"${bold?' style="font-weight:800;font-size:14px"':''}><span>${a}</span><span>${c}</span></div>`;
   const items=(o.lines||[]).map(l=>{
     const tops=(l.toppings||[]).map(t=>`<div class="li sub"><span>+ ${esc(t.name)}${t.qty>1?' ×'+t.qty:''}</span><span>${money2(t.price*t.qty)}</span></div>`).join('');
@@ -5149,13 +5153,13 @@ function receiptHtml(b){
     ${p.paid_by_name?li('รับเงินโดย',esc(p.paid_by_name)):''}
     ${p.verified_by?li('ตรวจสลิปโดย',(p.verified_kind==='slipok'?'SlipOK ✓':esc(p.verified_by)+(p.verified_kind==='staff_after_slipok'?' (SlipOK ไม่ผ่าน)':''))):''}
     ${p.refund_label?li('คืนเงิน · '+esc(p.refund_label),''):''}
-    ${b.voided?`<div class="hr"></div>${li((b.voided.kind==='refund'?'คืนเงิน':'ยกเลิก')+(b.voided.reason?': '+esc(b.voided.reason):''), b.voided.at?fmtDT(b.voided.at):'')}${b.voided.by?li('โดย '+esc(b.voided.by),''):''}`:''}
+    ${b.voided?`<div class="hr"></div>${li((b.voided.kind==='refund'?'คืนเงิน':'ยกเลิก')+(b.voided.reason?': '+esc(b.voided.reason):''), b.voided.at?fmtDTFull(b.voided.at):'')}${b.voided.by?li('โดย '+esc(b.voided.by),''):''}`:''}
     <div class="hr"></div>
     <div class="ctr">${o.payment_status==='paid'?'— ปิดบิล · '+esc(stTh[b.status]||b.status||'')+' —':(o.payment_status==='void'?'— ยกเลิกแล้ว —':'— ยังไม่ชำระ —')}</div>
     <div class="ctr" style="font-size:10px">YO-DEE Yogurt · ${esc(b.code||'')}</div>
   </div>`;
 }
-window.viewBill=async(tid)=>{ try{ const b=await api('/api/tickets/'+tid+'/bill'); _billHtml=receiptHtml(b); $('billPopBody').innerHTML=_billHtml; $('billPopSub').textContent=(b.code||'')+(b.closedAt?' · '+fmtDT(b.closedAt):''); $('billPop').style.display='flex'; }catch(e){ toast(err(e)); } };
+window.viewBill=async(tid)=>{ try{ const b=await api('/api/tickets/'+tid+'/bill'); _billHtml=receiptHtml(b); $('billPopBody').innerHTML=_billHtml; $('billPopSub').textContent=(b.code||'')+(b.closedAt?' · '+fmtDTFull(b.closedAt):''); $('billPop').style.display='flex'; }catch(e){ toast(err(e)); } };
 window.closeBill=()=>{ $('billPop').style.display='none'; };
 window.printBillPop=()=>{ if(!_billHtml) return; $('printArea').innerHTML=_billHtml; window.print(); };
 window.printReceipt=async(tid)=>{
