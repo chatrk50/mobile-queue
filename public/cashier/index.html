@@ -210,6 +210,8 @@
   .tx .wrap{ white-space:normal; min-width:200px; max-width:320px; line-height:1.3; }
   .tx .act{ text-align:right; }
   .tx .act button{ padding:4px 8px; font-size:11.5px; margin-left:4px; min-height:0; }
+  .tx .act .ic-btn{ width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; }
+  .tx .act .ic-btn svg{ margin:0; width:18px; height:18px; }
   .tx .sub{ color:var(--muted); font-size:11px; }
   @media print {
     body > *:not(#printArea){ display:none !important; }
@@ -1760,7 +1762,7 @@ function renderHistory(list, q){
       <td>${p.pay_label?esc(p.pay_label):'<span class="sub">—</span>'}</td>
       <td class="sub" style="font-size:12px">${esc(p.paid_by_name||'')}</td>
       <td>${verifiedBadge(p,true)||'<span class="sub">—</span>'}</td>
-      <td class="act"><button class="ghost" onclick="viewBill(${t.id})">${IC.print}ดูบิล</button>${t.has_slip?`<button class="ghost" onclick="viewSlip(${t.id})">${IC.slip}สลิป</button>`:''}${canRecover?`<button class="ok" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</td>
+      <td class="act"><button class="ghost ic-btn" onclick="viewBill(${t.id})" title="ดูบิล" aria-label="ดูบิล">${IC.print}</button>${t.has_slip?`<button class="ghost ic-btn" onclick="viewSlip(${t.id})" title="ดูสลิป" aria-label="ดูสลิป">${IC.slip}</button>`:''}${canRecover?`<button class="ok" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</td>
     </tr>`;
   }).join('');
   $('historyBody').innerHTML=`<div class="tx-wrap"><table class="tx"><thead><tr><th>คิว</th><th>เวลา</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ชำระ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -1985,7 +1987,7 @@ function renderDetail(){
         <td>${esc(r.pay_label||r.payment_method||'')||'<span class="sub">—</span>'}</td>
         <td class="sub" style="font-size:12px">${esc(r.paid_by||r.created_by||'')}</td>
         <td>${verifiedBadge(r,true)||'<span class="sub">—</span>'}</td>
-        <td class="act"><button class="ghost" onclick="viewBill(${r.ticket_id})">${IC.print}ดูบิล</button>${r.has_slip?`<button class="ghost" onclick="viewSlip(${r.ticket_id})">${IC.slip}สลิป</button>`:''}</td></tr>`; }).join('')
+        <td class="act"><button class="ghost ic-btn" onclick="viewBill(${r.ticket_id})" title="ดูบิล" aria-label="ดูบิล">${IC.print}</button>${r.has_slip?`<button class="ghost ic-btn" onclick="viewSlip(${r.ticket_id})" title="ดูสลิป" aria-label="ดูสลิป">${IC.slip}</button>`:''}</td></tr>`; }).join('')
     }</tbody></table></div>`;
     return;
   } else if(t==='pay'){
