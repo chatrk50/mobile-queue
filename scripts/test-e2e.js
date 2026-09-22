@@ -2593,6 +2593,32 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
     const bill = Q.billOf(t2.ticket.id);
     ok(bill && bill.code === db.prepare("SELECT code FROM tickets WHERE id=?").get(t2.ticket.id).code && bill.order.lines.length === 1 && bill.pay.verified_by === "ตรวจสลิปเอง" && bill.pay.legs[0].label === "K PLUS Shop" && bill.status === "served" && bill.voided == null, `INVARIANT the bill view carries items, tender legs, the slip verdict and the ticket state (${bill && bill.pay.verified_by})`);
     ok(Q.billOf(999999) === null, "INVARIANT an unknown ticket has no bill");
+
+    // Same-day rule: a bill from yesterday is view-only - no refund, no paid edit, no revive - and
+    // it leaves today's history; today's bill still refunds.
+    const yday = (id) => db.prepare("UPDATE orders SET created_at=datetime('now','-1 day'), paid_at=CASE WHEN paid_at IS NULL THEN NULL ELSE datetime('now','-1 day') END WHERE ticket_id=?").run(id);
+    const old = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "cashier" });
+    Q.setOrderPaid(old.ticket.id, { actorId: vStaff.id, method: "cash" });
+    Q.setStatus(old.ticket.id, "served");
+    yday(old.ticket.id);
+    let e1 = null; try { Q.cancelOrderTicket(old.ticket.id, null, { reason: "late refund" }); } catch (e) { e1 = e; }
+    ok(e1 && e1.message === "not_today" && db.prepare("SELECT payment_status FROM orders WHERE ticket_id=?").get(old.ticket.id).payment_status === "paid", `INVARIANT yesterday's paid bill cannot be refunded (${e1 && e1.message})`);
+    let e2 = null; try { Q.editOrderItems(old.ticket.id, [{ name: "SlipCup", price: 49, qty: 2 }], { allowPaid: true }); } catch (e) { e2 = e; }
+    ok(e2 && e2.message === "not_today", `INVARIANT nor edited after payment (${e2 && e2.message})`);
+    ok(!Q.orderHistory().some((r) => r.id === old.ticket.id), "INVARIANT and it is not in today's history");
+    ok(Q.detailedReports({ date: db.prepare("SELECT date('now','+7 hours','-1 day') d").get().d }).transactions.some((r) => r.ticket_id === old.ticket.id), "INVARIANT it still shows in that day's detailed report (read-only)");
+    const oldVoid = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "cashier" });
+    Q.cancelOrderTicket(oldVoid.ticket.id, null, { reason: "auto:timeout" });
+    yday(oldVoid.ticket.id);
+    let e3 = null; try { Q.recoverOrderTicket(oldVoid.ticket.id); } catch (e) { e3 = e; }
+    ok(e3 && e3.message === "not_today", `INVARIANT an old timed-out bill cannot be revived (${e3 && e3.message})`);
+    const fresh = Q.createOrder(ZB, [{ name: "SlipCup", price: 49, qty: 1 }], { source: "cashier" });
+    Q.setOrderPaid(fresh.ticket.id, { actorId: vStaff.id, method: "cash" });
+    Q.setStatus(fresh.ticket.id, "served");
+    const hf = Q.orderHistory().find((r) => r.id === fresh.ticket.id);
+    ok(hf && hf.refundable === true && hf.sale_at && hf.created_by == null, "INVARIANT today's bill is in the history and marked refundable");
+    Q.cancelOrderTicket(fresh.ticket.id, null, { reason: "same-day refund", refundMethod: "cash" });
+    ok(db.prepare("SELECT void_kind FROM orders WHERE ticket_id=?").get(fresh.ticket.id).void_kind === "refund", "INVARIANT and today's bill still refunds");
   }
 
   // The connection test proves a key without spending a slip.

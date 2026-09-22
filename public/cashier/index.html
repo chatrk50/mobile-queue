@@ -771,7 +771,7 @@
   </div>
 
   <!-- DETAILED REPORTS (owner/manager) -->
-  <div id="detailCard" class="card" style="display:none;max-width:760px;margin:14px auto">
+  <div id="detailCard" class="card" style="display:none;max-width:980px;margin:14px auto">
     <div class="row between" style="align-items:flex-start">
       <div><h1><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>รายงานละเอียด</h1><p class="muted" style="margin:2px 0 0">ธุรกรรม · ชำระเงิน · ยกเลิก/คืน · ท็อปปิ้ง · รายชั่วโมง</p></div>
       <div class="row" style="gap:6px;align-items:center">
@@ -790,6 +790,7 @@
       <button class="detTab ghost seg" data-t="hour" style="flex:none" onclick="detailTab('hour')">รายชั่วโมง</button>
     </div>
     <div id="detailSummary" style="margin-top:14px"></div>
+    <input id="detSearch" oninput="detailTab(detView)" placeholder="🔍 ค้นหา เลขคิว / ชื่อลูกค้า / เมนู / ช่องทาง" autocomplete="off" style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px">
     <div id="detailBody" style="margin-top:14px"></div>
   </div>
 
@@ -1583,7 +1584,7 @@ async function api(path,opts={}){
   try{ r=await fetch(path,opts); }catch(e){ setNet(false); throw new Error('offline'); }
   setNet(true);
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
+function err(e){ const m={not_today:'คืนเงิน / แก้ไข / กู้คืน ได้เฉพาะบิลของวันนี้ — บิลวันก่อนดูได้อย่างเดียว',offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -1736,36 +1737,49 @@ function hideAllPanels(){ ADMIN_PANELS.forEach(c=>{const el=$(c); if(el) el.styl
 window.showHistory=async()=>{ hideAllPanels(); try{ const list=await api('/api/history'); HIST=list||[]; if($('histSearch')) $('histSearch').value=''; renderHistory(HIST);
   $('historyCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('detailCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
 }catch(e){ toast(err(e)); } };
+// ---- One transaction grid for ประวัติออเดอร์ and รายงานละเอียด (owner, 23 Sep) ----
+// Same columns, same order, same cells; only the action buttons differ (the report is read-only,
+// the history can refund / revive today's bills).
+const TX_Q={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon'],waiting:['รอคิว','soon'],called:['เรียกแล้ว','soon'],pending:['รอชำระ','soon']};
+const TX_P={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
+function txItems(s){ return esc(String(s||'').replace(/(\d+)x /g,'$1× ')); }
+function txTable(rowsHtml){
+  return '<div class="tx-wrap"><table class="tx"><thead><tr><th class="num">#</th><th>เวลา</th><th>คิว</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'; }
+function txRow(x,i){
+  const q=x.q?(TX_Q[x.q]||[x.q,'']):null, p=x.p?(TX_P[x.p]||[x.p,'']):null;
+  const pill=(v,extra)=>'<span class="pill '+v[1]+'" style="font-size:11px'+(extra||'')+'">'+v[0]+'</span>';
+  return '<tr>'
+    +'<td class="num sub">'+(i+1)+'</td>'
+    +'<td>'+(x.at?tHM(x.at):'')+'</td>'
+    +'<td><b class="code" style="font-size:13.5px">'+esc(x.code||'')+'</b>'+(x.customer?'<div class="sub">'+esc(x.customer)+'</div>':'')+'</td>'
+    +'<td class="wrap">'+(x.items||'—')
+      +(x.refundReq?'<div><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>'+(x.refundNote?' <span class="sub">'+esc(x.refundNote)+'</span>':'')+'</div>':'')+'</td>'
+    +'<td class="num"><b>'+(x.net!=null?baht2(x.net):'—')+'</b>'+(x.discount?'<div class="sub">ลด '+baht2(x.discount)+'</div>':'')+'</td>'
+    +'<td><div style="display:flex;flex-wrap:nowrap;gap:4px">'+(q?pill(q):'')+(p?pill(p):'')+(x.timeout?'<span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span>':'')+'</div></td>'
+    +'<td>'+(x.payLabel?esc(x.payLabel):'<span class="sub">—</span>')+(x.refundLabel?'<div class="sub">↩️ '+esc(x.refundLabel)+'</div>':'')+'</td>'
+    +'<td class="sub" style="font-size:12px">'+esc(x.by||'')+'</td>'
+    +'<td>'+(verifiedBadge(x.ver,true)||'<span class="sub">—</span>')+'</td>'
+    +'<td class="act"><button class="ghost ic-btn" onclick="viewBill('+x.tid+')" title="ดูบิล" aria-label="ดูบิล">'+IC.print+'</button>'
+      +(x.hasSlip?'<button class="ghost ic-btn" onclick="viewSlip('+x.tid+')" title="ดูสลิป" aria-label="ดูสลิป">'+IC.slip+'</button>':'')+(x.extra||'')+'</td>'
+    +'</tr>'; }
 function renderHistory(list, q){
-  if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีประวัติวันนี้</p>'; return; }
-  const stMap={served:['เสิร์ฟแล้ว','open'],no_show:['ไม่มารับ','closed'],cancelled:['ยกเลิก','closed'],skipped:['ข้าม','soon']};
-  const payMap={paid:['ชำระแล้ว ✓','open'],void:['ยกเลิก/คืน','closed'],claimed:['รอยืนยัน','soon'],unpaid:['ค้างชำระ','soon']};
-  const rows=list.map(t=>{
-    const st=stMap[t.status]||[t.status,''];
-    const pay=t.payment_status?(payMap[t.payment_status]||[t.payment_status,'']):null;
-    const items=(t.lines||[]).map(l=>`${l.qty}× ${esc(l.name)}${(l.toppings||[]).map(tp=>' +'+esc(tp.name)).join('')}`).join(', ');
-    // A past order can still be voided/refunded later (e.g. the customer comes back).
-    const canVoid = t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
+  if(!list||!list.length){ $('historyBody').innerHTML = q ? '<p class="muted">ไม่พบออเดอร์ที่ตรงกับ "'+esc(q)+'"</p>' : '<p class="muted">ยังไม่มีบิลของวันนี้</p>'; return; }
+  $('historyBody').innerHTML=txTable(list.map((t,i)=>{
+    const p=t.pay||{};
+    // Refund / cancel / revive only on the bill's own sale day (the server enforces it too).
+    const today=t.refundable!==false;
+    const canVoid = today && t.order_total!=null && t.payment_status!=='void' && t.status!=='cancelled';
     const label = t.payment_status==='paid' ? 'คืนเงิน' : 'ยกเลิก';
     // A cancelled UNPAID void (typically the auto payment-timeout) can be revived when the
     // customer shows up — back into the queue, collect payment, serve. Refunds cannot.
-    const isTimeout = (t.void_reason||'').startsWith('auto:');
-    const canRecover = t.status==='cancelled' && t.payment_status==='void' && t.void_kind!=='refund' && t.order_total!=null;
-    const p=t.pay||{}; const net=t.order_total!=null?Math.round((t.order_total-(t.order_discount||0))*100)/100:null;
-    return `<tr>
-      <td><b class="code" style="font-size:14px">${t.code}</b>${t.customer_name?`<div class="sub">${esc(t.customer_name)}</div>`:''}</td>
-      <td class="sub" style="font-size:12px">${fmtDT(t.closed_at)}</td>
-      <td class="wrap">${items||'—'}${t.refund_requested?`<div><span class="pill closed" style="font-size:11px;background:rgba(220,38,38,.15);color:var(--danger)">🔁 ลูกค้าขอคืนเงิน</span>${t.refund_note?` <span class="sub">${esc(t.refund_note)}</span>`:''}</div>`:''}</td>
-      <td class="num"><b>${net!=null?baht2(net):'—'}</b>${t.order_discount?`<div class="sub">ลด ${baht2(t.order_discount)}</div>`:''}</td>
-      <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${isTimeout?'<div><span class="pill soon" style="font-size:11px">⌛ หมดเวลาชำระ</span></div>':''}</td>
-      <td>${pay?`<span class="pill ${pay[1]}" style="font-size:11px">${pay[0]}</span>`:''}${p.refund_label?`<div class="sub">↩️ ${esc(p.refund_label)}</div>`:''}</td>
-      <td>${p.pay_label?esc(p.pay_label):'<span class="sub">—</span>'}</td>
-      <td class="sub" style="font-size:12px">${esc(p.paid_by_name||'')}</td>
-      <td>${verifiedBadge(p,true)||'<span class="sub">—</span>'}</td>
-      <td class="act"><button class="ghost ic-btn" onclick="viewBill(${t.id})" title="ดูบิล" aria-label="ดูบิล">${IC.print}</button>${t.has_slip?`<button class="ghost ic-btn" onclick="viewSlip(${t.id})" title="ดูสลิป" aria-label="ดูสลิป">${IC.slip}</button>`:''}${canRecover?`<button class="ok" onclick="recoverHistory(${t.id})">กู้คืน</button>`:''}${canVoid?`<button class="ghost danger" onclick="refundHistory(${t.id},'${label}')">${label}</button>`:''}</td>
-    </tr>`;
-  }).join('');
-  $('historyBody').innerHTML=`<div class="tx-wrap"><table class="tx"><thead><tr><th>คิว</th><th>เวลา</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ชำระ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const canRecover = today && t.status==='cancelled' && t.payment_status==='void' && t.void_kind!=='refund' && t.order_total!=null;
+    const items=(t.lines||[]).map(l=>l.qty+'× '+esc(l.name)+(l.toppings||[]).map(tp=>' +'+esc(tp.name)).join('')).join(', ');
+    return txRow({ tid:t.id, code:t.code, customer:t.customer_name, at:t.sale_at||t.closed_at, items,
+      net:t.order_total!=null?Math.round((t.order_total-(t.order_discount||0))*100)/100:null, discount:t.order_discount||0,
+      q:t.status, p:t.payment_status, timeout:(t.void_reason||'').startsWith('auto:'), refundReq:t.refund_requested, refundNote:t.refund_note,
+      payLabel:p.pay_label, refundLabel:p.refund_label, by:p.paid_by_name||t.created_by||'', ver:p, hasSlip:t.has_slip,
+      extra:(canRecover?'<button class="ok" onclick="recoverHistory('+t.id+')">กู้คืน</button>':'')+(canVoid?'<button class="ghost danger" onclick="refundHistory('+t.id+',\''+label+'\')">'+label+'</button>':'') }, i);
+  }).join(''));
 }
 // Void / refund a PAST transaction from the history (with a reason). Refund if it was
 // already paid (deducts from sales + drops it from the report); otherwise just void.
@@ -1931,11 +1945,12 @@ window.reactivateStaff=async(id)=>{ try{ await api('/api/staff/'+id,{method:'POS
 
 // ---------- Detailed reports (owner/manager) ----------
 let DET=null, detView='tx';
+Object.defineProperty(window,'detView',{get:()=>detView,configurable:true});   // the report search box re-renders the current tab
 window.hideDetail=()=>{ $('detailCard').style.display='none'; $('dash').style.display=''; };
 window.showDetail=async()=>{ hideAllPanels(); if(!$('detailDate').value){ const d=new Date(Date.now()+7*3600*1000); $('detailDate').value=d.toISOString().slice(0,10); }
   $('detailCard').style.display=''; $('dash').style.display='none'; $('chartsCard')&&($('chartsCard').style.display='none'); $('reportCard').style.display='none'; $('menuCard').style.display='none'; $('orderCard').style.display='none'; $('historyCard').style.display='none'; $('salesCard').style.display='none'; $('staffCard').style.display='none'; $('cashCard').style.display='none'; $('branchCard').style.display='none'; $('stockCard').style.display='none'; $('loyaltyCard').style.display='none';
   await loadDetail(); };
-window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d);
+window.loadDetail=async()=>{ try{ const d=$('detailDate').value||''; DET=await api('/api/reports/detailed?date='+d); if($('detSearch')) $('detSearch').value='';
   try{ DET.recon=await api('/api/tender-recon?date='+d); }catch(_){ DET.recon=null; }
   renderDetailSummary(); renderDetail(); }catch(e){ toast(err(e)); } };
 window.detailTab=(v)=>{ detView=v; document.querySelectorAll('.detTab').forEach(b=>b.className='detTab ghost seg'+(b.dataset.t===v?' on':'')); renderDetail(); };
@@ -1975,20 +1990,16 @@ function noCell(i){ return `<td style="padding:6px 4px;color:var(--muted);font-s
 function renderDetail(){
   if(!DET){ return; }
   const box=$('detailBody'); const t=detView;
+  if($('detSearch')) $('detSearch').style.display = t==='tx' ? '' : 'none';
   if(t==='tx'){
-    const rows=(DET.transactions||[]); if(!rows.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
-    const stMap={paid:['ชำระแล้ว','open'],void:['ยกเลิก/คืน','closed'],unpaid:['ค้างชำระ','soon'],claimed:['รอยืนยัน','soon']};
-    box.innerHTML=`<div class="tx-wrap"><table class="tx"><thead><tr><th class="num">#</th><th>เวลา</th><th>คิว</th><th>รายการ</th><th class="num">ยอด</th><th>สถานะ</th><th>ช่องทาง</th><th>โดย</th><th>ตรวจสลิป</th><th></th></tr></thead><tbody>${
-      rows.map((r,i)=>{ const st=stMap[r.payment_status]||[r.payment_status,'']; const time=tHM(r.paid_at||r.created_at);
-        return `<tr><td class="num sub">${i+1}</td><td>${time}</td><td><b class="code" style="font-size:13px">${r.code}</b></td>
-        <td class="wrap">${esc(r.items||'')}</td>
-        <td class="num"><b>${baht2((r.total||0)-(r.discount||0))}</b>${r.discount?`<div class="sub">ลด ${baht2(r.discount)}</div>`:''}</td>
-        <td><span class="pill ${st[1]}" style="font-size:11px">${st[0]}</span>${r.ticket_status==='no_show'?` <span class="pill closed" style="font-size:11px;background:rgba(146,111,0,.18);color:#946f00">ไม่มารับ</span>`:''}</td>
-        <td>${esc(r.pay_label||r.payment_method||'')||'<span class="sub">—</span>'}</td>
-        <td class="sub" style="font-size:12px">${esc(r.paid_by||r.created_by||'')}</td>
-        <td>${verifiedBadge(r,true)||'<span class="sub">—</span>'}</td>
-        <td class="act"><button class="ghost ic-btn" onclick="viewBill(${r.ticket_id})" title="ดูบิล" aria-label="ดูบิล">${IC.print}</button>${r.has_slip?`<button class="ghost ic-btn" onclick="viewSlip(${r.ticket_id})" title="ดูสลิป" aria-label="ดูสลิป">${IC.slip}</button>`:''}</td></tr>`; }).join('')
-    }</tbody></table></div>`;
+    const all=(DET.transactions||[]); if(!all.length){ box.innerHTML='<p class="muted">ไม่มีธุรกรรมในวันนี้</p>'; return; }
+    const q=(($('detSearch')&&$('detSearch').value)||'').trim().toLowerCase();
+    const rows=q?all.filter(r=>[r.code,r.customer_name,r.items,r.pay_label,r.payment_method,r.paid_by,r.created_by,r.verified_by].some(v=>String(v||'').toLowerCase().includes(q))):all;
+    if(!rows.length){ box.innerHTML='<p class="muted">ไม่พบธุรกรรมที่ตรงกับ "'+esc(q)+'"</p>'; return; }
+    // Read-only: bill + slip only. Refunds happen in ประวัติออเดอร์, on the bill's own day.
+    box.innerHTML=txTable(rows.map((r,i)=>txRow({ tid:r.ticket_id, code:r.code, customer:r.customer_name, at:r.paid_at||r.created_at, items:txItems(r.items),
+      net:Math.round(((r.total||0)-(r.discount||0))*100)/100, discount:r.discount||0, q:r.ticket_status, p:r.payment_status,
+      payLabel:r.pay_label||r.payment_method, by:r.paid_by||r.created_by||'', ver:r, hasSlip:r.has_slip }, i)).join(''));
     return;
   } else if(t==='pay'){
     const rec=DET.recon;

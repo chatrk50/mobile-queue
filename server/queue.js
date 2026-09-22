@@ -1098,6 +1098,25 @@ export function dailyReport(branchId = null, dateStr = null) {
 
 /** Order history (since the last daily reset): completed/cancelled tickets with their
  *  order detail, so the cashier can re-check after a customer leaves or a mistake. */
+// ---------- Same-day rule (owner, 23 Sep) ----------
+// A bill can be refunded, edited after payment or revived only on its own sale day (Bangkok time).
+// After that its money belongs to a closed day: changing it would silently rewrite a finished report.
+// Sale day = when it was paid (or created, if it never was).
+const bkkDay = (at) => {
+  if (!at) return null;
+  const s = String(at);
+  const d = new Date(s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s.slice(10)) ? '' : 'Z'));
+  return isNaN(d) ? null : new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
+};
+const bkkToday = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+export function saleDayIsToday(order) {
+  const day = bkkDay(order && (order.paid_at || order.created_at));
+  return !day || day === bkkToday();
+}
+function assertSameDay(order) {
+  if (!saleDayIsToday(order)) { const e = new Error('not_today'); e.status = 400; throw e; }
+}
+
 // ---------- Payment provenance (history + detailed report) ----------
 // Which tender(s) the money came in by, who took it, and - for a slip - who vouched for it: SlipOK
 // when its latest answer was a pass, otherwise the staffer who pressed ชำระแล้ว after looking at it.
@@ -1156,15 +1175,19 @@ export function billOf(ticketId) {
 }
 
 export function orderHistory(limit = 100) {
+  // Today's bills only (by sale day, the same day the refund rule uses); older bills live in
+  // รายงานละเอียด, read-only.
   const rows = db.prepare(
-    `SELECT id, code, status, customer_name, closed_at
-     FROM tickets WHERE status IN ('served','no_show','cancelled','skipped')
-     ORDER BY COALESCE(closed_at, created_at) DESC, id DESC LIMIT ?`
-  ).all(Math.max(1, Math.min(500, Number(limit) || 100)));
+    `SELECT t.id, t.code, t.status, t.customer_name, t.closed_at
+     FROM tickets t
+     WHERE t.status IN ('served','no_show','cancelled','skipped')
+       AND date(COALESCE((SELECT COALESCE(o.paid_at, o.created_at) FROM orders o WHERE o.ticket_id = t.id ORDER BY o.id DESC LIMIT 1), t.created_at), '+7 hours') = date('now','+7 hours')
+     ORDER BY COALESCE(t.closed_at, t.created_at) DESC, t.id DESC LIMIT ?`
+  ).all(Math.max(1, Math.min(1000, Number(limit) || 500)));
   return rows.map((t) => {
     const o = orderForTicket(t.id);
     const hasSlip = !!db.prepare('SELECT 1 FROM slips s JOIN orders o2 ON o2.id=s.order_id WHERE o2.ticket_id=? LIMIT 1').get(t.id);
-    const v = db.prepare('SELECT id, void_kind, void_reason FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(t.id);
+    const v = db.prepare('SELECT o.id, o.void_kind, o.void_reason, o.paid_at, o.created_at, cs.name AS created_by FROM orders o LEFT JOIN staff cs ON cs.id = o.created_by WHERE o.ticket_id=? ORDER BY o.id DESC LIMIT 1').get(t.id);
     const pay = v ? payProvenance(v.id) : null;
     return {
       id: t.id, code: t.code, status: t.status, customer_name: t.customer_name,
@@ -1178,6 +1201,9 @@ export function orderHistory(limit = 100) {
       refund_note: o ? (o.refund_note || null) : null,
       has_slip: hasSlip,
       pay,
+      sale_at: v ? (v.paid_at || v.created_at) : null,
+      created_by: v ? (v.created_by || null) : null,
+      refundable: v ? saleDayIsToday(v) : false,
       lines: o ? o.lines : [],
     };
   });
@@ -1231,7 +1257,7 @@ export function detailedReports({ date = null, branchId = null } = {}) {
 
   const transactions = db.prepare(
     `SELECT t.code, t.status AS ticket_status, o.id AS order_id, o.created_at, o.paid_at, o.total, o.discount,
-            o.payment_status, o.payment_method, o.void_kind, t.id AS ticket_id,
+            o.payment_status, o.payment_method, o.void_kind, t.id AS ticket_id, t.customer_name,
             ps.name AS paid_by, cs.name AS created_by,
             EXISTS(SELECT 1 FROM slips s WHERE s.order_id = o.id) AS has_slip,
             (SELECT sc.ok FROM slip_checks sc WHERE sc.order_id = o.id ORDER BY sc.id DESC LIMIT 1) AS slip_ok,
@@ -4826,6 +4852,7 @@ export function editOrderItems(ticketId, items, opts = {}) {
   if (!order) throw new Error('order_not_found');
   const wasPaid = order.payment_status === 'paid';
   if (wasPaid && !allowPaid) throw new Error('already_paid');
+  if (wasPaid) assertSameDay(order);   // editing a paid bill changes its sale: only on its own day
   if (order.payment_status === 'void') throw new Error('order_void');
   if (!wasPaid && (order.paid_amount || 0) > 0) throw new Error('has_partial_payment');
   // A paid order: what was collected stays the truth (paid_amount; older rows never stored it, so
@@ -5707,6 +5734,7 @@ export function cancelOrderTicket(ticketId, threshold, opts = {}) {
   if (!t) throw new Error('ticket_not_found');
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   const wasPaid = !!(order && order.payment_status === 'paid');   // paid => stock was deducted
+  if (wasPaid) assertSameDay(order);   // a refund rewrites a sale: only on its own day
   const kind = wasPaid ? 'refund' : (kindOpt === 'waste' ? 'waste' : 'void');
   // Void/refund: mark the order void (even if it was already paid -> a refund) so it
   // drops out of the report and its revenue is deducted from sales.
@@ -5800,6 +5828,7 @@ export function recoverOrderTicket(ticketId, opts = {}) {
   const order = db.prepare('SELECT * FROM orders WHERE ticket_id=? ORDER BY id DESC LIMIT 1').get(ticketId);
   if (!order || order.payment_status !== 'void') throw new Error('order_not_void');
   if (order.void_kind === 'refund') throw new Error('refund_not_recoverable');
+  assertSameDay(order);   // a late customer is revived the same day; an old cancelled bill stays closed
   // A numbered ticket rejoins the queue as waiting; a never-numbered one goes back to pending
   // (it gets its number at payment, same as any pay-first order).
   const backTo = t.code ? 'waiting' : 'pending';
