@@ -9,8 +9,27 @@
 <link rel="apple-touch-icon" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  /* A11y (WCAG 2.4.7): visible keyboard focus — none was defined before */
-  :focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:6px; }
+  /* WCAG 2.2 A/AA audit, round 2 (23 Sep). The brand blue #00b5d8 stays as a FILL and the text on it
+     is navy (5.42:1); blue / mint used as TEXT take deeper tones of the same hues (≥ 5.4:1); field
+     borders, the focus ring and selection marks reach 3:1; every clickable row is a real control. */
+  :root{ --accent-ink:#0b6a7e; --mint-ink:#0f766e; --field-line:#7d8fa3; --danger:#c8364a; --gold:#a16207; }
+  button{ color:var(--ink); }
+  button.danger, button.ghost.danger{ color:#fff; border-color:var(--danger); }
+  .menu-btn .mpr, .menu-section{ color:var(--accent-ink); }
+  .big-number{ background:linear-gradient(90deg,var(--navy),var(--accent-ink)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea{ border-color:var(--field-line)!important; }
+  html{ scroll-padding-bottom:100px; }
+  .sr-only{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  /* Rows that open or pick something are buttons now — same row look, no default button fill */
+  .rowbtn{ display:flex; width:100%; background:none; border:0; border-radius:0; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+  .linkbtn{ display:inline-flex; align-items:center; min-height:28px; padding:0 4px; background:none; border:0; border-radius:6px; color:var(--accent-ink); font:inherit; font-weight:700; cursor:pointer; }
+  /* 44px hit area around compact icon buttons, drawing unchanged (2.5.5) */
+  .hit44{ position:relative; }
+  .hit44::after, .full-page-head button::after, #flashBar .fx::after{ content:''; position:absolute; top:50%; left:50%; width:44px; height:44px; transform:translate(-50%,-50%); }
+  .full-page-head button, #flashBar .fx{ position:relative; }
+  .tl-now{ font-size:12px; font-weight:800; color:var(--accent-ink); margin-top:1px; }
+  /* A11y (WCAG 2.4.7): visible keyboard focus — 6.22:1 against the page */
+  :focus-visible{ outline:3px solid var(--accent-ink); outline-offset:2px; border-radius:6px; }
   @keyframes loadslide{ 0%{left:-45%} 100%{left:105%} }
   @keyframes loadpulse{ 0%,100%{opacity:.4} 50%{opacity:1} }
   @media (prefers-reduced-motion:reduce){ #loadBar{ left:0!important;width:100%!important;animation:loadpulse 1.2s ease-in-out infinite!important } }
@@ -19,7 +38,8 @@
   .sweetseg-b{flex:1;padding:9px 4px;border:1.5px solid var(--line);background:#fff;color:var(--navy);
     font-size:13px;font-weight:700;border-radius:11px;cursor:pointer;font-family:inherit;
     transition:background .12s,border-color .12s,color .12s}
-  .sweetseg-b.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 12px -4px var(--accent)}
+  .sweetseg-b.on{background:var(--accent);border-color:var(--accent-ink);color:var(--ink);box-shadow:0 4px 12px -4px var(--accent)}
+  .sweetseg-b.on::before{content:"✓ "}
   /* Basket: no trailing divider under the last cart line (cleaner join to the totals).
      !important overrides the per-row inline border-bottom that renderBasket writes. */
   #basketList > div:last-child{ border-bottom:0 !important }
@@ -136,17 +156,17 @@
   .dish-card .dimg svg{ width:46px; height:46px; stroke:var(--accent); fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
   .dish-card .dinfo{ padding:9px 11px 11px; border-top:1px solid var(--line); }
   .dish-card .dname{ font-weight:800; font-size:14px; line-height:1.2; }
-  .dish-card .dsold{ font-size:11px; color:var(--muted); margin-top:3px; }
-  .dish-card .dpr{ font-weight:900; color:var(--accent); font-size:18px; margin-top:6px; }
+  .dish-card .dsold{ font-size:12px; color:var(--muted); margin-top:3px; }
+  .dish-card .dpr{ font-weight:900; color:var(--accent-ink); font-size:18px; margin-top:6px; }
   /* Topping cards reuse the same framed look, more compact, with a selected state */
   .dish-card.top .dimg{ aspect-ratio:auto; height:90px; font-size:40px; }
   .dish-card.top .dinfo{ padding:7px 9px 9px; text-align:center; }
   .dish-card.top .dname{ font-size:13px; }
   .dish-card.top .dpr{ font-size:14px; margin-top:3px; }
-  .dish-card.top.on{ border-color:var(--accent); background:#e9f8fb; }
+  .dish-card.top.on{ border-color:var(--accent-ink); background:#e9f8fb; }
   /* "It's your turn" celebration */
   @keyframes callpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-  .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;
+  .callcard{background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--ink);border-radius:16px;
     padding:18px 16px;text-align:center;box-shadow:0 10px 30px rgba(0,181,216,.35);animation:callpulse 1.2s ease-in-out infinite}
   .callcard .big{font-size:26px;font-weight:800;margin-top:2px}
   /* First-order "wow" celebration */
@@ -178,52 +198,52 @@
      kept on the YO-DEE palette. Saturated hero + huge value + confetti + celebratory badge. */
   .cw-card{width:100%;max-width:330px;position:relative;text-align:center;animation:cwpop .34s cubic-bezier(.2,.9,.3,1.25);filter:drop-shadow(0 28px 46px rgba(20,42,73,.55))}
   .cd{border-radius:24px;overflow:hidden;background:#fff}
-  .cd-hero{position:relative;background:linear-gradient(150deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));padding:24px 20px 22px;color:#fff;overflow:hidden}
+  .cd-hero{position:relative;background:linear-gradient(150deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));padding:24px 20px 22px;color:var(--ink);overflow:hidden}
   .cd-cf{position:absolute;z-index:1;width:9px;height:9px;border-radius:2px;opacity:.95}
   .cd-cf.r{border-radius:50%}
-  .cd-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.24);color:#fff;font-size:11.5px;font-weight:900;letter-spacing:.02em;padding:5px 13px;border-radius:999px;position:relative;z-index:3}
-  .cd-pill svg{width:13px;height:13px;flex:none;fill:none;stroke:#fff;stroke-width:2}
-  .cd-amt{font-family:'Poppins',inherit;font-weight:800;font-size:68px;line-height:.94;letter-spacing:-.02em;margin:10px 0 2px;position:relative;z-index:3;text-shadow:0 8px 18px rgba(4,40,60,.22)}
+  .cd-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.6);color:var(--ink);font-size:11.5px;font-weight:900;letter-spacing:.02em;padding:5px 13px;border-radius:999px;position:relative;z-index:3;font-size:12px}
+  .cd-pill svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:2}
+  .cd-amt{font-family:'Poppins',inherit;font-weight:800;font-size:68px;line-height:.94;letter-spacing:-.02em;margin:10px 0 2px;position:relative;z-index:3;text-shadow:0 4px 14px rgba(255,255,255,.35)}
   .cd-amt small{font-size:.4em;font-weight:800;vertical-align:.6em;margin-right:2px}
-  .cd-lab{font-weight:800;font-size:15px;opacity:.97;position:relative;z-index:3;line-height:1.3;padding:0 6px}
+  .cd-lab{font-weight:800;font-size:15px;position:relative;z-index:3;line-height:1.3;padding:0 6px}
   .cd-badge{position:absolute;top:12px;right:11px;width:70px;height:70px;border-radius:50%;background:#FFE24D;color:#16314f;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:10.5px;line-height:1.1;box-shadow:0 10px 20px -6px rgba(4,40,60,.4);transform:rotate(9deg);z-index:4}
   .cd-badge svg{width:21px;height:21px;fill:#16314f;margin-bottom:1px}
   .cd-perf{height:0;border-top:2px dashed #d6dee6;margin:0 16px}
   .cd-body{padding:16px 22px 18px;text-align:center}
-  .cd-cond{color:var(--accent2,#2fc2a6);font-weight:800;font-size:13.5px}
+  .cd-cond{color:var(--mint-ink);font-weight:800;font-size:13.5px}
   .cd-exp{color:var(--muted);font-size:12px;margin-top:6px}
-  .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#d8497a;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
+  .cd-urg{display:inline-flex;align-items:center;gap:5px;color:#be185d;background:#fdeef4;font-weight:800;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-top:11px}
   .cd-urg svg{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2}
   .cw-acts{padding-top:14px}
   /* Wallet coupon ticket — shared template for "คูปองของฉัน" list + cart picker.
      Clean dotted perforation (no floating notches), brand-gradient value stub, one clear action. */
   .cpn{position:relative;display:flex;background:#fff;border-radius:18px;margin-bottom:13px;box-shadow:0 8px 20px -12px rgba(20,42,73,.32);border:1px solid #eef1f5;overflow:hidden}
-  .cpn.sel{border-color:var(--accent,#00b5d8);box-shadow:0 10px 24px -10px rgba(0,181,216,.5)}
+  .cpn.sel{border-color:var(--accent-ink);box-shadow:0 0 0 1.5px var(--accent-ink),0 10px 24px -10px rgba(0,181,216,.5)}
   .cpn.off{opacity:.5}
-  .cpn-stub{flex:none;width:98px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:15px 8px;color:#fff;text-align:center}
-  .cpn-stub .ic{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:1.9;opacity:.92}
+  .cpn-stub{flex:none;width:98px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:15px 8px;color:var(--ink);text-align:center}
+  .cpn-stub .ic{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9}
   .cpn-stub .big{font-family:'Poppins',inherit;font-weight:800;font-size:27px;line-height:1;letter-spacing:-.01em}
   .cpn-stub .big.sm{font-size:19px}
-  .cpn-stub .sub{font-size:9.5px;font-weight:800;letter-spacing:.03em;opacity:.95}
+  .cpn-stub .sub{font-size:10.5px;font-weight:800;letter-spacing:.03em}
   .cpn-perf{flex:none;align-self:stretch;border-left:2px dotted #d3dbe3;margin:11px 0}
   .cpn-body{flex:1;min-width:0;padding:12px 10px 12px 14px}
   .cpn-title{font-weight:800;color:var(--navy);font-size:14px;line-height:1.34;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .cpn-disc{color:var(--accent2,#2fc2a6);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3}
-  .cpn-meta{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.4}
-  .cpn-exp{color:var(--muted);font-size:11.5px;margin-top:2px;display:flex;align-items:center;gap:4px}
-  .cpn-bad{font-size:11px;color:#b3283a;font-weight:700;margin-top:3px}
+  .cpn-disc{color:var(--mint-ink);font-weight:800;font-size:12.5px;margin-top:3px;line-height:1.3}
+  .cpn-meta{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.4}
+  .cpn-exp{color:var(--muted);font-size:12px;margin-top:2px;display:flex;align-items:center;gap:4px}
+  .cpn-bad{font-size:12px;color:#b3283a;font-weight:700;margin-top:3px}
   .cpn-act{flex:none;display:flex;align-items:center;padding:0 11px 0 2px}
-  .cpn-use{border:none;border-radius:999px;background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:#fff;font-family:inherit;font-weight:800;font-size:13.5px;padding:0 19px;min-height:44px;cursor:pointer;box-shadow:0 8px 16px -8px rgba(0,181,216,.7)}
+  .cpn-use{border:none;border-radius:999px;background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:var(--ink);font-family:inherit;font-weight:800;font-size:13.5px;padding:0 19px;min-height:44px;cursor:pointer;box-shadow:0 8px 16px -8px rgba(0,181,216,.7)}
   .cpn-check{width:23px;height:23px;fill:none;stroke-width:2}
   /* Flash-sale bar (Phase 4 #4) — thin, dismissible, top of screen during the happy-hour window. */
-  #flashBar{position:fixed;left:0;right:0;top:0;z-index:70;display:none;align-items:center;gap:8px;padding:9px 14px;color:#fff;font-weight:800;font-size:13px;background:linear-gradient(135deg,#ff9a3d,#f2683b);box-shadow:0 6px 16px -8px rgba(242,104,59,.75)}
+  #flashBar{position:fixed;left:0;right:0;top:0;z-index:70;display:none;align-items:center;gap:8px;padding:9px 14px;color:var(--ink);font-weight:800;font-size:13px;background:linear-gradient(135deg,#ff9a3d,#f7794a);box-shadow:0 6px 16px -8px rgba(242,104,59,.75)}
   #flashBar #flashMsg{flex:1;min-width:0;line-height:1.35}
-  #flashBar .fx{flex:none;border:none;background:rgba(255,255,255,.22);color:#fff;font-weight:900;font-size:13px;line-height:1;width:26px;height:26px;border-radius:50%;cursor:pointer;font-family:inherit}
+  #flashBar .fx{flex:none;border:none;background:rgba(255,255,255,.55);color:var(--ink);font-weight:900;font-size:13px;line-height:1;width:26px;height:26px;border-radius:50%;cursor:pointer;font-family:inherit}
   .cw-title{font-weight:800;font-size:18px;color:var(--navy);margin:9px 0 3px;position:relative;z-index:2}
   .cw-desc{font-size:12.5px;color:var(--muted);line-height:1.45;margin-bottom:14px;position:relative;z-index:2}
   .cw-desc b{color:var(--navy)}
   .cw-btn{display:block;width:100%;border:none;border-radius:14px;font-weight:800;font-size:15px;padding:13px 0;cursor:pointer;font-family:inherit;position:relative;z-index:2;min-height:48px}
-  .cw-primary{background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:#fff;box-shadow:0 10px 20px -8px rgba(0,181,216,.7);margin-bottom:8px}
+  .cw-primary{background:linear-gradient(135deg,var(--accent,#00b5d8),var(--accent2,#2fc2a6));color:var(--ink);box-shadow:0 10px 20px -8px rgba(0,181,216,.7);margin-bottom:8px}
   .cw-later{background:#fff;color:var(--muted);border:1.5px solid var(--line)}
   /* Coach mark: the profile chip is the door to คูปองของคุณ, but a small round photo reads as decoration. */
   @keyframes coachIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
@@ -244,7 +264,7 @@
     <div style="width:180px;height:7px;border-radius:999px;background:rgba(255,255,255,.3);overflow:hidden;position:relative">
       <div id="loadBar" style="position:absolute;top:0;bottom:0;left:-45%;width:42%;background:#fff;border-radius:999px;animation:loadslide 1.15s ease-in-out infinite"></div>
     </div>
-    <div id="loadMsg" style="color:rgba(255,255,255,.92);font-size:12.5px;font-weight:600;letter-spacing:.02em">กำลังโหลด…</div>
+    <div id="loadMsg" style="color:var(--ink);font-size:12.5px;font-weight:600;letter-spacing:.02em">กำลังโหลด…</div>
   </div>
 </div>
 <!-- Promo/ad splash (capture 2): owner-uploaded banner, shown once per session after loading -->
@@ -261,15 +281,15 @@
     <span><span></span><span></span><span></span><span></span></span>
     <div class="spdr-base"><span></span><div class="spdr-face"></div></div>
   </div></div>
-  <div id="sendTitle" style="color:#fff;font-weight:800;font-size:18px">กำลังส่งออเดอร์ไปยังร้าน…</div>
-  <div id="sendSub" style="display:none;color:#fff;font-weight:600;font-size:13px;opacity:.88">รอสักครู่นะคะ ระบบกำลังออกหมายเลขคิวให้ค่ะ</div>
-  <div id="sendCountdown" style="color:#fff;font-weight:900;font-size:15px;opacity:.9">00:03</div>
+  <div id="sendTitle" style="color:var(--ink);font-weight:800;font-size:18px">กำลังส่งออเดอร์ไปยังร้าน…</div>
+  <div id="sendSub" style="display:none;color:var(--ink);font-weight:600;font-size:13px">รอสักครู่นะคะ ระบบกำลังออกหมายเลขคิวให้ค่ะ</div>
+  <div id="sendCountdown" aria-hidden="true" style="color:var(--ink);font-weight:900;font-size:15px">00:03</div>
   <button id="sendCancelBtn" class="ghost" style="background:rgba(255,255,255,.92);min-width:150px" onclick="cancelSending()">ยกเลิก</button>
 </div>
 <!-- Bottom nav removed: the order flow is a straight line (Home → order → ticket), and everything
      account-related (member card, stamps, coupons, history) lives behind the avatar chip on Home
      that opens the account hub. One door, no persistent tab bar to overlap the full-page views. -->
-<div class="wrap">
+<main class="wrap">
   <div class="brand hero"><img class="logo" src="/assets/logo.png" onerror="this.remove();var f=document.getElementById('brandFb');if(f)f.style.display=''" alt=""><div id="brandFb" data-brand-name style="display:none;font-weight:800;color:var(--navy);font-size:20px;letter-spacing:.3px">YO-DEE Yogurt</div></div>
   <!-- Mascot greeting (owner toggle mascotOn, default off) -->
   <div id="mascotGreet" style="display:none;text-align:center;font-size:13px;color:var(--navy);font-weight:700;margin:-6px 0 12px">สวัสดีค่ะ! วันนี้อยากดื่มอะไรดี? 🥤</div>
@@ -299,14 +319,14 @@
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
-        <div style="font-weight:800;color:var(--navy);font-size:13.5px;margin-bottom:7px">📱 สะสมแต้ม? กรอกเบอร์โทร</div>
+        <label for="guestPhoneInp" style="display:block;font-weight:800;color:var(--navy);font-size:13.5px;margin-bottom:7px">📱 สะสมแต้ม? กรอกเบอร์โทร</label>
         <div class="row" style="gap:6px">
           <input id="guestPhoneInp" type="tel" inputmode="numeric" placeholder="08X-XXX-XXXX" maxlength="12" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:15px" oninput="fmtGuestPhone(this)">
           <button class="ok" style="padding:9px 16px" onclick="saveGuestPhone()">บันทึก</button>
         </div>
         <div class="muted" style="font-size:11px;margin-top:5px">ได้แต้มอัตโนมัติเมื่อชำระเงิน · ไม่ต้องมีไลน์</div>
       </div>
-      <div id="guestPhoneDone" style="display:none;font-size:13px;color:#047857;font-weight:700">✓ จะสะสมแต้มให้เบอร์ <span id="guestPhoneMask"></span> · <span style="color:var(--accent);cursor:pointer" onclick="editGuestPhone()">แก้ไข</span></div>
+      <div id="guestPhoneDone" style="display:none;font-size:13px;color:#047857;font-weight:700">✓ จะสะสมแต้มให้เบอร์ <span id="guestPhoneMask"></span> · <button type="button" class="linkbtn" onclick="editGuestPhone()">แก้ไข</button></div>
     </div>
     <!-- queue load shown up front so the customer can decide before ordering -->
     <div id="queueStatus" style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0">
@@ -317,7 +337,7 @@
     <!-- Store rating: real customer reviews shown on the FIRST screen — "others liked it here"
          is the strongest nudge to order. Only appears once real reviews exist; always on. -->
     <div id="storeRating" style="display:none;align-items:center;justify-content:center;gap:6px;font-size:13px;margin:-4px 0 10px">
-      <span id="ratingStars" style="color:#f4b400;font-size:15px;letter-spacing:1px"></span>
+      <span id="ratingStars" style="color:var(--gold);font-size:15px;letter-spacing:1px"></span>
       <b id="ratingAvg" style="color:var(--ink)"></b>
       <span class="muted" id="ratingCount" style="font-size:12px"></span>
     </div>
@@ -327,7 +347,7 @@
     <div id="reorderCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;margin:0 0 14px;text-align:left">
       <div id="reorderHi" style="font-weight:800;color:var(--navy);margin-bottom:10px;text-align:center"></div>
       <button id="reorderBtn" style="width:100%;display:flex;align-items:center;gap:10px;justify-content:center" onclick="reorderFav()">
-        <img id="reorderImg" src="" onerror="this.style.display='none'" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:none">
+        <img id="reorderImg" src="" alt="" onerror="this.style.display='none'" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:none">
         <span id="reorderLbl">สั่งเหมือนเดิม</span>
       </button>
     </div>
@@ -358,7 +378,7 @@
     <div class="row between" style="align-items:center">
       <h1 style="margin:0">สั่งเครื่องดื่ม</h1>
       <div class="row" style="gap:8px">
-        <button class="ok" id="basketBtn" style="padding:8px 12px;position:relative" onclick="openBasket()">
+        <button class="ok" id="basketBtn" aria-label="ตะกร้า" style="padding:8px 12px;position:relative" onclick="openBasket()">
           <svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
           <span id="basketCount" style="position:absolute;top:-8px;right:-8px;background:var(--danger);color:#fff;border:2px solid #fff;border-radius:999px;font-size:12px;font-weight:800;min-width:22px;height:22px;line-height:18px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.3);display:none">0</span>
         </button>
@@ -366,7 +386,7 @@
       </div>
     </div>
     <p class="muted" style="margin-top:6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">เลือกเครื่องดื่ม → ท็อปปิ้ง → ความหวาน</p>
-    <button id="surpriseBtn" onclick="openRandom()" style="width:100%;margin:12px 0 0;padding:13px;border:none;border-radius:16px;background:linear-gradient(135deg,#ff9d2f,#ff6a3d 55%,#ff4e62);color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 12px rgba(255,94,73,.34);display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent">เลือกไม่ถูก ให้เราสุ่มให้</button>
+    <button id="surpriseBtn" onclick="openRandom()" style="width:100%;margin:12px 0 0;padding:13px;border:none;border-radius:16px;background:linear-gradient(135deg,#ffb347,#ff8a5c 55%,#ff7a8a);color:var(--ink);font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 12px rgba(255,94,73,.34);display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent">เลือกไม่ถูก ให้เราสุ่มให้</button>
     <div id="orderLoyChip" style="display:none;margin:8px 0 0;font-size:13px;font-weight:700;color:var(--navy);background:rgba(0,181,216,.10);border:1px solid rgba(0,181,216,.3);border-radius:999px;padding:7px 12px;text-align:center"></div>
     <div id="menuButtons" style="margin:10px 0"></div>
     <p class="muted" style="font-size:12px;margin-top:8px">💳 ชำระเงินก่อน — ระบบจะออกหมายเลขคิวให้ทันทีหลังชำระเสร็จ</p>
@@ -374,18 +394,19 @@
   </div>
 
   <!-- Sticky cart bar: stays pinned to the bottom while the menu scrolls (only on the order screen, when cart has items). Tapping opens the basket. -->
-  <div id="cartBar" onclick="openBasket()" role="button" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;padding:0 14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));pointer-events:none">
-    <div style="max-width:472px;margin:0 auto;pointer-events:auto;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 24px rgba(0,124,147,.36);-webkit-tap-highlight-color:transparent">
+  <div id="cartBar" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;padding:0 14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));pointer-events:none">
+    <button type="button" id="cartBarBtn" onclick="openBasket()" style="width:100%;border:0;font:inherit;text-align:left;max-width:472px;margin:0 auto;pointer-events:auto;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--ink);border-radius:16px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 24px rgba(0,124,147,.36);-webkit-tap-highlight-color:transparent">
       <span style="display:flex;align-items:center;gap:11px;font-weight:800;font-size:15px">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1-5h12l1 5"/><path d="M3 11h18l-1.5 8a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M9 11V7M15 11V7"/></svg>
         <span id="cartBarCount">0 แก้ว</span>
       </span>
-      <span style="display:flex;align-items:center;gap:10px"><span id="cartBarTotal" style="font-weight:900;font-size:16px">฿0</span><span style="font-size:13px;font-weight:700;opacity:.92">ดูตะกร้า ›</span></span>
-    </div>
+      <span style="display:flex;align-items:center;gap:10px"><span id="cartBarTotal" style="font-weight:900;font-size:16px">฿0</span><span style="font-size:13px;font-weight:700">ดูตะกร้า ›</span></span>
+    </button>
   </div>
 
   <!-- STEP: my ticket -->
   <div id="ticketCard" class="card" style="display:none;text-align:center">
+    <h1 id="tHead" class="sr-only" tabindex="-1">คิวของฉัน</h1>
     <h2 id="tStore" class="muted">—</h2>
     <p id="tCodeLabel" class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
@@ -400,11 +421,11 @@
     </div>
     <div id="tTimeline" style="display:none;margin:6px 2px 16px"></div>
     <!-- compact order-details row → tap opens the order-details bottom sheet (itemized breakdown) -->
-    <div id="tOrderCompact" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px;cursor:pointer" onclick="openOrderDetail()">
+    <div id="tOrderCompact" role="button" tabindex="0" aria-haspopup="dialog" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:6px 0 12px;cursor:pointer" onclick="openOrderDetail()">
       <div class="row between" style="align-items:center"><b>ออเดอร์ของคุณ</b><span id="tPayPill" class="pill"></span></div>
       <div class="row between" style="margin-top:8px;align-items:center">
         <span class="muted" style="font-size:13px" id="tOrderSummaryTxt">—</span>
-        <span style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px;flex:none">ดูรายละเอียด <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+        <span style="color:var(--accent-ink);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px;flex:none">ดูรายละเอียด <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </div>
     </div>
     <div id="tOrder" style="display:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 12px">
@@ -449,11 +470,11 @@
           <!-- bank-app strip: tap opens that bank's app (best-effort deep link) — when payMethod is
                kbank, setQrFor() hides all but K PLUS since that QR only works with Kbank's app. -->
           <div id="bankIconStrip" style="display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:wrap;margin-top:8px">
-            <span data-bank="kplus" onclick="openBankApp('kplus')" style="cursor:pointer;background:#138f2d;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">K PLUS</span>
-            <span data-bank="scbeasy" onclick="openBankApp('scbeasy')" style="cursor:pointer;background:#4e2e7f;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">SCB EASY</span>
-            <span data-bank="ktbnext" onclick="openBankApp('ktbnext')" style="cursor:pointer;background:#1ba5e1;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">KTB NEXT</span>
-            <span data-bank="bualuang" onclick="openBankApp('bualuang')" style="cursor:pointer;background:#1e4598;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">Bualuang</span>
-            <span data-bank="ttbtouch" onclick="openBankApp('ttbtouch')" style="cursor:pointer;background:#0857a6;color:#fff;font-size:10px;font-weight:800;padding:5px 9px;border-radius:6px">ttb touch</span>
+            <button type="button" data-bank="kplus" onclick="openBankApp('kplus')" style="cursor:pointer;background:#0e7a2a;color:#fff;font-size:12px;font-weight:800;padding:0 10px;min-height:32px;border:0;border-radius:6px">K PLUS</button>
+            <button type="button" data-bank="scbeasy" onclick="openBankApp('scbeasy')" style="cursor:pointer;background:#4e2e7f;color:#fff;font-size:12px;font-weight:800;padding:0 10px;min-height:32px;border:0;border-radius:6px">SCB EASY</button>
+            <button type="button" data-bank="ktbnext" onclick="openBankApp('ktbnext')" style="cursor:pointer;background:#0b6fa4;color:#fff;font-size:12px;font-weight:800;padding:0 10px;min-height:32px;border:0;border-radius:6px">KTB NEXT</button>
+            <button type="button" data-bank="bualuang" onclick="openBankApp('bualuang')" style="cursor:pointer;background:#1e4598;color:#fff;font-size:12px;font-weight:800;padding:0 10px;min-height:32px;border:0;border-radius:6px">Bualuang</button>
+            <button type="button" data-bank="ttbtouch" onclick="openBankApp('ttbtouch')" style="cursor:pointer;background:#0857a6;color:#fff;font-size:12px;font-weight:800;padding:0 10px;min-height:32px;border:0;border-radius:6px">ttb touch</button>
           </div>
           </details>
           <input id="slipFile" type="file" accept="image/*" style="display:none">
@@ -469,7 +490,7 @@
       </div>
       <!-- paid online but can't come — request a refund (cashier processes it) -->
       <button id="refundReqBtn" class="ghost" style="width:100%;display:none;margin-top:10px;font-size:13px;color:var(--danger);border-color:var(--danger)" onclick="requestRefund()">ขอคืนเงิน (จ่ายแล้วแต่มารับไม่ได้)</button>
-      <div id="refundReqDone" class="muted" style="display:none;margin-top:10px;font-size:12px;text-align:center;color:var(--accent2)">✅ ส่งคำขอคืนเงินแล้ว · ทางร้านจะดำเนินการให้ค่ะ</div>
+      <div id="refundReqDone" class="muted" style="display:none;margin-top:10px;font-size:12px;text-align:center;color:var(--mint-ink)">✅ ส่งคำขอคืนเงินแล้ว · ทางร้านจะดำเนินการให้ค่ะ</div>
     </div>
     <p class="muted" id="tLastCalled" style="font-size:13px"></p>
     <p class="muted" id="tNotifyNote" style="font-size:12px"></p>
@@ -480,22 +501,23 @@
       <div id="tRateAsk">
         <div style="font-size:19px;font-weight:800;color:var(--navy);line-height:1.3">แก้วนี้เป็นอย่างไรบ้าง?</div>
         <p class="muted" style="font-size:13px;margin:5px 0 16px">ให้คะแนนสั้นๆ ช่วยให้เราทำให้ดีขึ้นได้ค่ะ</p>
-        <div id="tStars" style="display:flex;align-items:center;justify-content:center;gap:6px"></div>
-        <div id="tRateLabel" style="font-size:14px;font-weight:800;color:var(--accent);margin-top:10px;min-height:20px"></div>
+        <div id="tStars" role="radiogroup" aria-label="ให้คะแนน" style="display:flex;align-items:center;justify-content:center;gap:6px"></div>
+        <div id="tRateLabel" style="font-size:14px;font-weight:800;color:var(--accent-ink);margin-top:10px;min-height:20px"></div>
         <!-- Reason chips + comment stay hidden until a star is picked: an empty form up front is
              noise, and the chips can't even be chosen correctly before the score is known. -->
         <div id="tRateMore" style="display:none">
           <div id="tTagHint" class="muted" style="font-size:12.5px;margin:14px 0 8px"></div>
-          <div id="tTags" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center"></div>
+          <div id="tTags" role="group" aria-labelledby="tTagHint" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center"></div>
           <div style="position:relative;margin-top:14px">
-            <textarea id="tComment" maxlength="500" rows="3" placeholder="อยากบอกอะไรเพิ่มเติมไหมคะ? (ไม่บังคับ)"
+            <label for="tComment" style="display:block;text-align:left;font-size:13px;font-weight:700;color:var(--navy);margin:0 0 6px">ความคิดเห็นเพิ่มเติม</label>
+            <textarea id="tComment" maxlength="500" rows="3" aria-describedby="tCommentN" placeholder="อยากบอกอะไรเพิ่มเติมไหมคะ? (ไม่บังคับ)"
               oninput="tCommentCount()" style="width:100%;box-sizing:border-box;padding:12px 13px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;font-family:inherit;color:var(--ink);resize:vertical;line-height:1.5"></textarea>
-            <div id="tCommentN" class="muted" style="font-size:11px;text-align:right;margin-top:2px">0/500</div>
+            <div id="tCommentN" class="muted" style="font-size:12px;text-align:right;margin-top:2px">0/500</div>
           </div>
         </div>
         <button id="tRateSend" class="ok" style="width:100%;margin-top:14px;min-height:50px;font-size:16px;font-weight:800" onclick="sendReview()">ส่งรีวิว</button>
       </div>
-      <div id="tRateThanks" style="display:none;flex-direction:column;align-items:center;gap:6px;color:var(--accent2);font-weight:800;font-size:16px;padding:8px 0">
+      <div id="tRateThanks" style="display:none;flex-direction:column;align-items:center;gap:6px;color:var(--mint-ink);font-weight:800;font-size:16px;padding:8px 0">
         <svg class="ic" viewBox="0 0 24 24" style="width:30px;height:30px;margin:0"><path d="M20 6L9 17l-5-5"/></svg>
         ขอบคุณสำหรับรีวิวค่ะ
         <span class="muted" style="font-weight:500;font-size:12.5px">ร้านอ่านทุกความคิดเห็นจริงๆ นะคะ</span>
@@ -513,8 +535,11 @@
     <b id="errMsg" style="display:block;color:var(--navy);font-size:16px"></b>
     <button class="ok" style="width:100%;margin-top:16px" onclick="location.reload()">ลองใหม่อีกครั้ง</button>
   </div>
-</div>
-<div id="toast" class="toast"></div>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<!-- Status messages for screen readers (4.1.3): render() says what changed — queue count, your turn, paid -->
+<div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="srAlert" class="sr-only" role="alert" aria-atomic="true"></div>
 <!-- Phase 4 #4: flash-sale bar — shown only while the owner's happy-hour window is live -->
 <div id="flashBar"><span id="flashMsg">⚡ FLASH SALE</span><button class="fx" onclick="dismissFlash()" aria-label="ปิด">✕</button></div>
 
@@ -534,7 +559,7 @@
   <div class="card" style="max-width:360px;width:100%;margin:0;text-align:center;padding:26px 20px">
     <div style="font-size:46px;line-height:1">🎉</div>
     <h1 style="margin:8px 0 2px;font-size:22px">ยินดีด้วย!</h1>
-    <p class="muted" style="margin:0;font-size:13.5px">คุณได้คิวเลข <b id="lkNum" style="color:var(--accent)">67</b> — เลขนำโชคของวันนี้</p>
+    <p class="muted" style="margin:0;font-size:13.5px">คุณได้คิวเลข <b id="lkNum" style="color:var(--accent-ink)">67</b> — เลขนำโชคของวันนี้</p>
     <div style="margin:16px 0;background:linear-gradient(160deg,#eafaf4,#fff);border:1px solid #a7e8d2;border-radius:16px;padding:16px">
       <div style="font-size:30px;font-weight:800;color:#0f7a5f">รับฟรี ฿<span id="lkVal">40</span></div>
       <div class="muted" style="font-size:12.5px;margin-top:4px">เลือกเมนูไหนก็ได้ · ถ้าราคาเกิน ฿<span id="lkVal2">40</span> จ่ายเพิ่มเฉพาะส่วนต่าง</div>
@@ -546,13 +571,13 @@
 </div>
 
 <!-- Generic in-app modal (replaces native prompt()/confirm() so dialogs match the app). -->
-<div id="appModal" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
+<div id="appModal" class="glass-ovl" aria-labelledby="amTitle" aria-describedby="amMsg" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:130;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:380px;width:100%;margin:0">
     <h1 id="amTitle" style="margin:0 0 6px"></h1>
     <p id="amMsg" class="muted" style="font-size:14px;line-height:1.45;margin:0 0 6px;white-space:pre-line"></p>
-    <input id="amInput" onkeydown="if(event.key==='Enter')amOk()" style="display:none;width:100%;box-sizing:border-box;margin:8px 0 2px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;color:var(--ink)">
+    <input id="amInput" aria-labelledby="amTitle" onkeydown="if(event.key==='Enter')amOk()" style="display:none;width:100%;box-sizing:border-box;margin:8px 0 2px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;color:var(--ink)">
     <div class="row" style="gap:8px;margin-top:14px">
-      <button id="amCancel" class="ghost" style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
+      <button id="amCancel" class="ghost" data-esc style="flex:1;min-height:48px" onclick="amCancel()">ยกเลิก</button>
       <button id="amOk" class="ok" style="flex:1.4;min-height:48px" onclick="amOk()">ตกลง</button>
     </div>
   </div>
@@ -581,9 +606,9 @@
 </div>
 
 <!-- PRODUCT DETAIL SHEET (LINE-MAN style): image + ความหวาน (radio) + ท็อปปิ้ง (checkbox) + sticky add bar -->
-<div id="drinkSheet" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
+<div id="drinkSheet" aria-labelledby="dsName" onclick="if(event.target===this)closeDrinkSheet()" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:56;align-items:flex-end;justify-content:center">
   <div class="card" style="max-width:460px;width:100%;margin:0;border-radius:20px 20px 0 0;max-height:90vh;overflow:auto;padding:0;position:relative">
-    <button class="ghost" onclick="closeDrinkSheet()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
+    <button class="ghost hit44" onclick="closeDrinkSheet()" aria-label="ปิด" style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(255,255,255,.92);width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;line-height:1">✕</button>
     <div id="dsImg" style="width:100%;height:148px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden"></div>
     <div style="padding:13px 16px 4px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -591,15 +616,15 @@
         <!-- Organic ❤️: the customer's own tick. Counts merge with real buyers, deduped per person. -->
         <button id="dsLikeBtn" class="ghost" onclick="dsToggleLike()" style="flex:none;display:flex;align-items:center;gap:5px;padding:8px 12px;border-radius:999px;font-size:12.5px;min-height:38px"></button>
       </div>
-      <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
+      <div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ความหวาน</b><span style="font-size:12px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">จำเป็น · เลือก 1</span></div>
       <div id="dsSweet"></div>
-      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:10.5px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
+      <div id="dsTopsWrap"><div style="margin:14px 0 0;display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px;color:var(--navy)">ท็อปปิ้ง</b><span style="font-size:12px;font-weight:800;background:#eef3f6;color:var(--muted);padding:2px 9px;border-radius:999px">สูงสุด 3 อย่าง</span></div><div id="dsTops"></div></div>
     </div>
     <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:11px 14px;display:flex;align-items:center;gap:11px">
       <div style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:4px 5px;flex:none">
-        <button class="ghost" onclick="dsDecQty()" aria-label="ลด" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1">−</button>
+        <button class="ghost hit44" onclick="dsDecQty()" aria-label="ลด" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1">−</button>
         <b id="dsQtyN" style="min-width:16px;text-align:center;font-size:16px;color:var(--navy)">1</b>
-        <button class="ghost" onclick="dsIncQty()" aria-label="เพิ่ม" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1;color:var(--accent)">+</button>
+        <button class="ghost hit44" onclick="dsIncQty()" aria-label="เพิ่ม" style="width:34px;height:34px;padding:0;border-radius:50%;font-size:20px;line-height:1;color:var(--accent-ink)">+</button>
       </div>
       <button class="ok" onclick="dsAdd()" style="flex:1;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:800;padding:14px 16px"><span id="dsAddLbl">เพิ่มลงตะกร้า</span><span>฿<span id="dsAddAmt">0</span></span></button>
     </div>
@@ -613,7 +638,7 @@
     <div id="randomReveal" style="min-height:188px;display:flex;align-items:center;justify-content:center;margin:8px 0 4px"></div>
     <button class="ok" id="randomAddBtn" style="width:100%;min-height:52px;font-size:16px;margin-bottom:9px" onclick="addRandomToCart()">เลือกเมนูนี้</button>
     <div class="row" style="gap:9px">
-      <button class="ghost" id="randomAgainBtn" style="flex:1;padding:12px;font-weight:800;color:#0e7c93" onclick="spinRandom()">สุ่มใหม่</button>
+      <button class="ghost" id="randomAgainBtn" style="flex:1;padding:12px;font-weight:800;color:#0b6a7e" onclick="spinRandom()">สุ่มใหม่</button>
       <button class="ghost" style="flex:1;padding:12px" onclick="closeRandom()">เลือกเอง</button>
     </div>
   </div>
@@ -631,24 +656,26 @@
   <div class="full-page-body" style="max-width:420px;width:100%;margin:0 auto">
     <!-- Only shown when the stamp card is eligible (per===10 stamp programme) — lets the customer
          switch between the identity card and the stamp card instead of both stacked at once. -->
-    <div id="memberTabs" style="display:none;gap:6px;margin-bottom:10px;background:var(--surface);border-radius:999px;padding:3px">
-      <button id="memberTabCard" class="ok" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('card')">บัตรสมาชิก</button>
-      <button id="memberTabStamp" class="ghost" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('stamp')">สะสมแต้ม</button>
+    <div id="memberTabs" role="tablist" aria-label="บัตรของฉัน" style="display:none;gap:6px;margin-bottom:10px;background:var(--surface);border-radius:999px;padding:3px">
+      <button id="memberTabCard" class="ok" role="tab" aria-selected="true" aria-controls="memberFlipWrap" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('card')">บัตรสมาชิก</button>
+      <button id="memberTabStamp" class="ghost" role="tab" aria-selected="false" aria-controls="memberStampCard" style="flex:1;padding:7px 4px;border-radius:999px;font-size:12px" onclick="showMemberTab('stamp')">สะสมแต้ม</button>
     </div>
     <!-- FLIP CARD: tap anywhere to flip. front = tier card (art + boxes), back = QR + details (same tier colour). -->
     <div id="memberFlipWrap" style="perspective:1400px">
       <div id="memberFlipInner" style="position:relative;width:100%;aspect-ratio:1/1;transition:transform .55s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d">
         <!-- FRONT: data dropped into the art's baked boxes -->
-        <div onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
+        <div id="memberFront" role="button" tabindex="0" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;overflow:hidden;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);cursor:pointer">
           <div id="memberVCard" style="position:absolute;inset:0;background:#cfe6f5 center/cover no-repeat"></div>
           <div id="memberName" style="position:absolute;top:7.2%;left:6.9%;width:45%;height:17%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#16314f;text-align:center;line-height:1.05;padding:0 6px;overflow:hidden"></div>
           <div id="memberLevel" style="position:absolute;top:23%;left:65.5%;width:31%;text-align:center;color:#16314f;font-size:10px;font-weight:800;letter-spacing:.5px"></div>
           <div id="memberVisits" style="position:absolute;top:75.6%;left:4%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:12px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
           <div id="memberNext" style="position:absolute;top:75.7%;left:53.8%;width:42%;height:18%;display:flex;align-items:center;justify-content:center;color:#16314f;font-size:10.5px;font-weight:700;text-align:center;line-height:1.05;padding:0 4px"></div>
-          <div style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
+          <span class="sr-only">แตะเพื่อพลิกดู QR สมาชิก</span>
+          <div aria-hidden="true" style="position:absolute;bottom:6px;right:7px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#16314f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg></div>
         </div>
         <!-- BACK: QR + details on the same tier colour -->
-        <div id="memberBack" onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
+        <div id="memberBack" role="button" tabindex="0" inert onclick="flipMember()" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);border-radius:18px;overflow:hidden;background:#cfe6f5;box-shadow:0 16px 40px -16px rgba(14,40,55,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:pointer">
+          <span class="sr-only">แตะเพื่อพลิกกลับ</span>
           <div style="background:#fff;border-radius:13px;padding:9px;box-shadow:0 4px 14px rgba(14,40,55,.18)"><img id="memberQR" alt="QR สมาชิก" style="width:132px;height:132px;display:block;object-fit:contain"></div>
           <p style="font-size:11px;margin:7px 0 0;text-align:center;color:#16314f;font-weight:600">แสดง QR ที่เคาน์เตอร์ — ไม่ต้องบอกเบอร์</p>
           <div id="memberStamp" style="display:none;margin-top:7px;background:rgba(255,255,255,.8);border-radius:10px;padding:6px 10px;font-size:12px;color:#7c3aed;font-weight:700;text-align:center"></div>
@@ -705,18 +732,18 @@
       </div>
     </div>
     <div style="background:#fff;border-radius:14px;border:1px solid var(--line);overflow:hidden">
-      <div id="acctCardRow" class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
+      <button type="button" id="acctCardRow" class="row between rowbtn" style="align-items:center;padding:15px 14px;border-bottom:1px solid var(--line)" onclick="closeAccount();openMember()">
         <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>บัตรสมาชิก / สะสมแต้ม</span>
-        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
-      </div>
-      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="closeAccount();openCoupon('browse')">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;fill:none;stroke:var(--field-line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="row between rowbtn" style="align-items:center;padding:15px 14px;border-bottom:1px solid var(--line)" onclick="closeAccount();openCoupon('browse')">
         <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปองของฉัน</span>
-        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
-      </div>
-      <div class="row between" style="align-items:center;padding:15px 14px;cursor:pointer" onclick="closeAccount();openOrderHistory()">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;fill:none;stroke:var(--field-line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="row between rowbtn" style="align-items:center;padding:15px 14px" onclick="closeAccount();openOrderHistory()">
         <span style="font-weight:700;color:var(--navy);display:flex;align-items:center;gap:10px"><svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>ประวัติการสั่งซื้อ</span>
-        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:var(--line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
-      </div>
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;fill:none;stroke:var(--field-line);stroke-width:2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -748,7 +775,7 @@
     </div>
     <div class="cw-acts">
       <button class="cw-btn cw-primary" onclick="cwUse()">ใช้เลย</button>
-      <button class="cw-btn cw-later" onclick="cwLater()">ไว้ก่อน</button>
+      <button class="cw-btn cw-later" data-esc onclick="cwLater()">ไว้ก่อน</button>
     </div>
   </div>
 </div>
@@ -759,19 +786,19 @@
     <div id="basketList" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:8px 0"></div>
     <div style="flex:none;padding-top:2px">
       <div class="row between" style="font-size:13.5px;margin-bottom:4px"><span class="muted">ยอดรวมย่อย</span><span style="font-weight:700">฿<span id="basketSub">0</span></span></div>
-      <div id="basketDiscRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:var(--accent2);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
+      <div id="basketDiscRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:var(--mint-ink);font-weight:700"><span>ส่วนลดของแถม (ฟรี)</span><span id="basketDisc">-฿0</span></div>
       <div id="basketCouponRow" class="row between" style="display:none;font-size:13.5px;margin-bottom:4px;color:#7c3aed;font-weight:700"><span id="basketCouponLbl">คูปอง</span><span id="basketCouponDisc">-฿0</span></div>
       <div class="row between" style="align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:4px"><span style="font-weight:800;color:var(--navy)">ยอดสุทธิ</span><div style="font-size:22px;font-weight:900;color:var(--navy)">฿<span id="basketTotal">0</span></div></div>
     </div>
     <div style="flex:none;margin-top:8px;border-top:1px solid var(--line)">
-      <div class="row between" style="align-items:center;padding:8px 2px;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openCoupon()">
+      <button type="button" class="row between rowbtn" style="align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)" onclick="openCoupon()">
         <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M15 5V3M15 21v-2M15 13v-2M15 9V7"/><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 6v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-6z"/></svg>คูปอง / สิทธิ์</span>
-        <span id="cartCouponVal" style="color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
-      </div>
-      <div class="row between" style="align-items:center;padding:8px 2px;cursor:pointer" onclick="openPayPicker()">
+        <span id="cartCouponVal" style="color:var(--accent-ink);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือกใช้ <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
+      </button>
+      <button type="button" class="row between rowbtn" style="align-items:center;padding:8px 2px" onclick="openPayPicker()">
         <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
         <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
-      </div>
+      </button>
     </div>
     <div id="basketUpsell" style="flex:none;display:none;margin:8px 0 0"></div>
     <div class="row" style="flex:none;gap:8px;margin-top:8px">
@@ -806,6 +833,24 @@ let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId
 const $ = (id) => document.getElementById(id);
 const show = (id, on=true) => { const el=$(id); if(el) el.style.display = on ? '' : 'none'; };
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+// WCAG 4.1.3: status changes reach screen readers without moving focus. urgent → role="alert".
+function announce(msg, urgent){ const el=$(urgent?'srAlert':'srStatus'); if(!el||!msg) return; el.textContent=''; setTimeout(()=>{ el.textContent=msg; },80); }
+// WCAG 2.4.3: a control that re-renders its own list (sweetness, toppings, stars, chips, basket ±)
+// keeps keyboard focus — the pressed control's data-k is focused again after the repaint.
+function focusSoon(el){ if(!el) return; setTimeout(()=>{ try{ if(el.tabIndex<0 && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) el.tabIndex=-1; el.focus({preventScroll:true}); }catch(e){} },90); }
+function keepFocus(fn, fallback){ const a=document.activeElement, k=a&&a.getAttribute&&a.getAttribute('data-k'); fn(); if(!k) return;
+  const el=document.querySelector('[data-k="'+k+'"]')||(fallback&&document.querySelector(fallback)); if(el&&el!==document.activeElement){ try{ el.focus({preventScroll:true}); }catch(e){} } }
+// One colour rule for every coupon ticket (wallet, basket picker, welcome popup): each gradient keeps
+// its brand hue and carries text at ≥ 4.7:1 across the whole ramp (navy on light ramps, white on indigo).
+function couponLook(c){ const isReward=c.disc_type==='reward';
+  const k=c.couponKind;
+  if(k==='streak') return {bg:'linear-gradient(150deg,#5a62cf,#4650b8)', ink:'#fff'};
+  if(k==='bounceback') return {bg:'linear-gradient(150deg,#12b8b0,#22aab4)', ink:'var(--ink)'};
+  if(k==='flash') return {bg:'linear-gradient(150deg,#ff9a3d,#f7794a)', ink:'var(--ink)'};
+  if(isReward) return k==='birthday' ? {bg:'linear-gradient(150deg,#f68cae,#f07ba3)', ink:'var(--ink)'}
+    : k==='winback' ? {bg:'linear-gradient(150deg,#f7c458,#ef9c2a)', ink:'var(--ink)'}
+    : {bg:'linear-gradient(150deg,#33c9ac,#1fb38f)', ink:'var(--ink)'};
+  return {bg:'linear-gradient(150deg,#00b5d8,#2fc2a6)', ink:'var(--ink)'}; }
 // These full-screen popups are mutually exclusive — nothing used to close the others before opening
 // a new one, so e.g. tapping "บัญชี" while the member card was open left BOTH stacked on screen at
 // once. Every open*() below calls this first.
@@ -935,7 +980,7 @@ const MEMBER_LEVELS=[
   // คนพิเศษ — gold card with diagonal shine streaks + sparkles, dark text
   {min:15, name:'คนพิเศษ', icon:'🏅', text:'#5a3a02', grad:'repeating-linear-gradient(115deg,rgba(255,255,255,.14) 0 11px,transparent 11px 42px),radial-gradient(circle at 80% 28%,rgba(255,255,255,.6) 0 2px,transparent 3px),radial-gradient(circle at 24% 66%,rgba(255,255,255,.5) 0 2px,transparent 3px),linear-gradient(135deg,#d99a08,#f6d264 55%,#e0a512)'},
   // ขาประจำ — teal with soft floating bubbles
-  {min:5,  name:'ขาประจำ', icon:'⭐', text:'#fff', grad:'radial-gradient(circle at 86% 18%,rgba(255,255,255,.2) 0 26px,transparent 27px),radial-gradient(circle at 10% 82%,rgba(255,255,255,.15) 0 34px,transparent 35px),radial-gradient(circle at 55% 52%,rgba(255,255,255,.1) 0 16px,transparent 17px),linear-gradient(135deg,#0e7c93,#1ab3ce 55%,#2fc2a6)'},
+  {min:5,  name:'ขาประจำ', icon:'⭐', text:'#fff', grad:'radial-gradient(circle at 86% 18%,rgba(255,255,255,.2) 0 26px,transparent 27px),radial-gradient(circle at 10% 82%,rgba(255,255,255,.15) 0 34px,transparent 35px),radial-gradient(circle at 55% 52%,rgba(255,255,255,.1) 0 16px,transparent 17px),linear-gradient(135deg,#0b6a7e,#1ab3ce 55%,#2fc2a6)'},
   // สมาชิกใหม่ — playful mint with sprinkle dots
   {min:0,  name:'สมาชิกใหม่', icon:'🌱', text:'#fff', grad:'radial-gradient(circle at 18% 28%,rgba(255,255,255,.4) 0 5px,transparent 6px),radial-gradient(circle at 78% 22%,rgba(255,255,255,.3) 0 4px,transparent 5px),radial-gradient(circle at 62% 74%,rgba(255,255,255,.32) 0 5px,transparent 6px),radial-gradient(circle at 30% 80%,rgba(255,255,255,.25) 0 3px,transparent 4px),radial-gradient(circle at 88% 60%,rgba(255,255,255,.22) 0 4px,transparent 5px),linear-gradient(135deg,#2fc2a6,#7ed9c3)'}
 ];
@@ -946,6 +991,8 @@ window.showMemberTab=(tab)=>{
   const isCard = tab!=='stamp';
   $('memberTabCard').className = isCard?'ok':'ghost';
   $('memberTabStamp').className = isCard?'ghost':'ok';
+  $('memberTabCard').setAttribute('aria-selected', String(isCard)); $('memberTabStamp').setAttribute('aria-selected', String(!isCard));
+  $('memberTabCard').style.fontWeight = isCard?'800':'600'; $('memberTabStamp').style.fontWeight = isCard?'600':'800';
   $('memberFlipWrap').style.display = isCard?'':'none';
   $('memberStampCard').style.display = isCard?'none':'block';
 };
@@ -964,7 +1011,7 @@ window.openMember=async()=>{
   let bal={points:0};
   if(conf.enabled){ try{ bal=await api('/api/loyalty/'+encodeURIComponent(lineUserId)); }catch(e){} }
   setNavTab('member');
-  $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; }
+  $('memberPop').style.display='flex'; { const _fi=$('memberFlipInner'); if(_fi) _fi.style.transform='rotateY(0deg)'; flipFaces(false); }
   $('memberStamp').style.display='none'; $('memberFav').textContent=''; $('memberReorder').style.display='none';
   // Both switches off → open the page anyway, but show an honest empty state instead of card data.
   const emptyBox=$('memberEmpty');
@@ -1037,7 +1084,9 @@ window.openMember=async()=>{
 };
 window.closeMember=()=>{ $('memberPop').style.display='none'; const el=$('memberFlipInner'); if(el) el.style.transform='rotateY(0deg)'; setNavTab('home'); };
 // Tap the card to flip between identity (front) and QR (back).
-window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; el.style.transform = (el.style.transform||'').includes('180') ? 'rotateY(0deg)' : 'rotateY(180deg)'; };
+window.flipMember=()=>{ const el=$('memberFlipInner'); if(!el) return; const back=!(el.style.transform||'').includes('180'); el.style.transform = back ? 'rotateY(180deg)' : 'rotateY(0deg)'; flipFaces(back, true); };
+// Only the face on show can be reached by Tab / a screen reader; focus follows the flip.
+function flipFaces(back, move){ const f=$('memberFront'), b=$('memberBack'); if(!f||!b) return; f.inert=back; b.inert=!back; if(move){ try{ (back?b:f).focus({preventScroll:true}); }catch(e){} } }
 window.memberReorder=()=>{ closeMember(); reorderFav(); };
 
 // Claim-a-coupon landing: the customer tapped a shared link. Every outcome gets its own screen —
@@ -1085,7 +1134,7 @@ async function doCouponClaim(){
     +'<div class="cd-exp">'+(info.minSpend>0?('เมื่อซื้อครบ ฿'+info.minSpend):'ไม่มีขั้นต่ำ · ทุกเมนู')+'</div>'
     +'<div class="cd-exp" style="display:flex;align-items:center;justify-content:center;gap:5px"><svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+life+'</div>'
     +'</div></div>';
-  const terms='<p class="muted" style="font-size:11px;line-height:1.5;margin:2px 0 0">รับได้ 1 สิทธิ์ต่อบัญชี · เฉพาะเจ้าของสิทธิ์ โอนต่อไม่ได้ · ใช้จากเมนู "คูปองของฉัน"</p>';
+  const terms='<p class="muted" style="font-size:12px;line-height:1.5;margin:2px 0 0">รับได้ 1 สิทธิ์ต่อบัญชี · เฉพาะเจ้าของสิทธิ์ โอนต่อไม่ได้ · ใช้จากเมนู "คูปองของฉัน"</p>';
   if(info.state==='already'){
     couponScreen('<div style="font-size:44px">✅</div><h1 style="margin:8px 0;color:var(--navy)">คุณรับคูปองนี้แล้ว</h1>'+card
       +'<p class="muted" style="font-size:12.5px">อยู่ในเมนู "คูปองของฉัน" พร้อมใช้ได้เลย</p>'
@@ -1292,7 +1341,7 @@ async function loadReorder(){
     const _vbadge = _visits>=3 ? (' <span style="color:#c2410c">· เจอกันครั้งที่ '+_visits+' แล้วนะคะ 💛</span>') : '';
     $('reorderHi').innerHTML = _greet + _vbadge + '<br><span style="font-weight:600;font-size:.92em;opacity:.9">วันนี้สั่งเหมือนเดิมไหม?</span>';
     const favNm = (fav.name||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="color:#fff3bf;font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
+    $('reorderLbl').innerHTML = '<span style="opacity:.92">สั่ง</span> <b style="font-size:1.12em;letter-spacing:.2px">'+favNm+'</b> <span style="opacity:.92">เหมือนเดิม</span>';
     if(fav.image){ $('reorderImg').src=fav.image; $('reorderImg').style.display=''; }
     show('reorderCard', true);
     // Returning customer: reorder is the primary CTA → demote "สั่งเลย" to a secondary "เลือกเมนูอื่น".
@@ -1327,8 +1376,8 @@ function updateNudges(){
   if(nudge){
     const earnsNew = Math.floor(projected/per) > Math.floor(now/per);
     const needFromProjected = (per-(projected%per))%per;
-    if(inCart>0 && earnsNew){ nudge.innerHTML='🎉 ตะกร้านี้ทำให้คุณครบ '+per+' ดวง — รอบหน้าแลกฟรีได้เลย!'; nudge.style.background='rgba(47,194,166,.16)'; nudge.style.color='#178a72'; nudge.style.display=''; }
-    else if(needFromProjected>0 && needFromProjected<=2){ nudge.innerHTML='🥤 เพิ่มอีก '+needFromProjected+' '+unit()+' ได้ฟรี 1 '+unit()+'!'; nudge.style.background='rgba(243,203,85,.20)'; nudge.style.color='#946f00'; nudge.style.display=''; }
+    if(inCart>0 && earnsNew){ nudge.innerHTML='🎉 ตะกร้านี้ทำให้คุณครบ '+per+' ดวง — รอบหน้าแลกฟรีได้เลย!'; nudge.style.background='rgba(47,194,166,.16)'; nudge.style.color='#0f766e'; nudge.style.display=''; }
+    else if(needFromProjected>0 && needFromProjected<=2){ nudge.innerHTML='🥤 เพิ่มอีก '+needFromProjected+' '+unit()+' ได้ฟรี 1 '+unit()+'!'; nudge.style.background='rgba(243,203,85,.20)'; nudge.style.color='#7a5c00'; nudge.style.display=''; }
     else nudge.style.display='none';
   }
 }
@@ -1357,8 +1406,8 @@ function renderBday(bal, boxId){
   const maxD=new Date(); maxD.setFullYear(maxD.getFullYear()-1);
   const max=maxD.toISOString().slice(0,10);
   box.innerHTML=`<div style="background:rgba(255,255,255,.1);border-radius:12px;padding:10px">
-    <div style="font-size:12px;opacity:.9;margin-bottom:6px">🎂 เพิ่มวันเกิด รับเครื่องดื่มฟรีในวันเกิด <span style="opacity:.7">(ไม่บังคับ)</span></div>
-    <div class="row" style="gap:6px"><input id="bdayInp_${boxId||'loyBday'}" class="bdayInp" type="date" max="${max}" style="flex:1;padding:8px;border-radius:8px;border:none;font-size:13px;color:var(--ink)">
+    <label for="bdayInp_${boxId||'loyBday'}" style="display:block;font-size:12.5px;margin-bottom:6px;color:var(--navy)">🎂 เพิ่มวันเกิด รับเครื่องดื่มฟรีในวันเกิด <span class="muted">(ไม่บังคับ)</span></label>
+    <div class="row" style="gap:6px"><input id="bdayInp_${boxId||'loyBday'}" class="bdayInp" type="date" max="${max}" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--field-line);font-size:13px;color:var(--ink)">
       <button class="ok" style="padding:8px 14px" onclick="saveBirthday('${boxId||'loyBday'}')">บันทึก</button></div>
   </div>`;
 }
@@ -1386,7 +1435,7 @@ async function loadReferral(){
       <div class="row" style="gap:6px;align-items:center"><div style="flex:1;font-weight:900;font-size:18px;letter-spacing:1px;background:var(--surface);border-radius:8px;padding:9px 10px;text-align:center">${esc(s.code)}</div>
       <button class="ok" style="padding:10px 16px" onclick="shareRef('${esc(s.code)}')">แชร์</button></div>`; }
     if(s.eligible){ html += `<div style="margin-top:${s.code?'12px':'0'};${s.code?'border-top:1px solid var(--line);padding-top:10px':''}">
-      <div style="font-size:13px;color:var(--navy);font-weight:700;margin-bottom:6px">🎁 ได้รับโค้ดเพื่อนมา? ใส่รับ 5 ดวง</div>
+      <label for="refInp" style="display:block;font-size:13px;color:var(--navy);font-weight:700;margin-bottom:6px">🎁 ได้รับโค้ดเพื่อนมา? ใส่รับ 5 ดวง</label>
       <div class="row" style="gap:6px"><input id="refInp" placeholder="เช่น YD1A" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-transform:uppercase">
       <button class="ghost" style="padding:9px 16px" onclick="applyRef()">ใช้โค้ด</button></div></div>`; }
     if(!html) return;
@@ -1446,8 +1495,8 @@ let MY_LIKES=new Set();
 const HEART=(fill)=>`<svg viewBox="0 0 24 24" style="width:15px;height:15px;vertical-align:-2px;${fill?'fill:#e55b6b;stroke:#e55b6b':'fill:none;stroke:#e55b6b'};stroke-width:1.8"><path d="M12 20.5s-6.5-4.3-9-7.8C1 9.9 2.3 6.5 5.6 6.5c1.9 0 3.1 1 4.4 2.4 1.3-1.4 2.5-2.4 4.4-2.4 3.3 0 4.6 3.4 2.6 6.2-2.5 3.5-9 7.8-9 7.8z"/></svg>`;
 function dsPaintLike(){ const b=$('dsLikeBtn'), d=pendingDrink; if(!b||!d) return;
   const mine=MY_LIKES.has(d.id);
-  b.innerHTML=HEART(mine)+`<span style="font-weight:800;color:${mine?'#e55b6b':'var(--muted)'}">${d.likes>0?d.likes:''} ถูกใจ</span>`;
-  b.style.borderColor=mine?'#e55b6b':'var(--line)'; }
+  b.innerHTML=HEART(mine)+`<span style="font-weight:800;color:${mine?'var(--danger)':'var(--muted)'}">${d.likes>0?d.likes:''} ถูกใจ</span>`;
+  b.style.borderColor=mine?'var(--danger)':'var(--line)'; b.setAttribute('aria-pressed', String(mine)); }
 window.dsToggleLike=async()=>{ const d=pendingDrink; if(!d) return;
   if(!/^U[0-9a-f]{32}$/i.test(lineUserId||'')){ toast('เปิดผ่าน LINE เพื่อกดถูกใจนะคะ 💛'); return; }
   // Optimistic: flip immediately, reconcile with the server's merged count (buyers ∪ likes).
@@ -1474,6 +1523,7 @@ window.showOrderUI=async(opts={})=>{
   counterConfirmed=false; payMethod=null; cartPayMethod=null; submitting=false;
   paintMenu();
   _onMenu=true; renderBasketCount(); show('getCard',false); show('orderCard',true);
+  { const oc=$('orderCard'); if(!oc.contains(document.activeElement)) focusSoon(oc.querySelector('h1')); }
   armPendingCoupon(); return true; };
 // A claim link ends in a page RELOAD (สั่งเลย → /liff/?zone=…), so the freshly claimed coupon is
 // carried across it in sessionStorage and armed the first time the menu opens.
@@ -1492,14 +1542,14 @@ async function armPendingCoupon(){
 // callable bare from showOrderUI/dsAdd/basket ops inside this module).
 function paintMenu(){
   const drinks=MENU.filter(m=>m.active && m.category!=='topping');
-  const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#16a34a'}, new:{t:'ใหม่',bg:'#1ab3ce'}, promo:{t:'โปรโมชั่น',bg:'#e55b6b'}, hot:{t:'ขายดี',bg:'#f3961a'}, free:{t:'ฟรี',bg:'#7c3aed'} };
+  const MENU_BADGE={ rec:{t:'แนะนำ',bg:'#15803d'}, new:{t:'ใหม่',bg:'#0b6a7e'}, promo:{t:'โปรโมชั่น',bg:'#c8364a'}, hot:{t:'ขายดี',bg:'#b45309'}, free:{t:'ฟรี',bg:'#7c3aed'} };   // white text ≥ 5:1
   const badge=(m)=>{ const b=m&&m.badge&&MENU_BADGE[m.badge]; return b?`<span class="mbadge" style="position:absolute;top:6px;left:6px;background:${b.bg};color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(16,40,70,.25);z-index:2;line-height:1.5;pointer-events:none">${b.t}</span>`:''; };
   window._BADGE=badge;   // reuse for the topping picker
   const btn=(m)=>{ const out=m.soldout||m.stockSoldout; const n=cart.filter(e=>e.name===m.name).length;
     const sold = (m.likes>0) ? `<div class="dsold"><svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;fill:#e55b6b;stroke:#e55b6b;stroke-width:1.5"><path d="M12 20.5s-6.5-4.3-9-7.8C1 9.9 2.3 6.5 5.6 6.5c1.9 0 3.1 1 4.4 2.4 1.3-1.4 2.5-2.4 4.4-2.4 3.3 0 4.6 3.4 2.6 6.2-2.5 3.5-9 7.8-9 7.8z"/></svg> ${m.likes} ถูกใจ</div>` : '';
     const cnr = out ? '' : (n>0
-      ? `<span aria-hidden="true" style="min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--accent2);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;font-weight:800;font-size:14px;box-sizing:border-box">${n}</span>`
-      : '<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>');
+      ? `<span aria-hidden="true" style="min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--accent2);color:var(--ink);display:flex;align-items:center;justify-content:center;flex:none;font-weight:800;font-size:14px;box-sizing:border-box">${n}</span>`
+      : '<span aria-hidden="true" style="width:24px;height:24px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--ink);stroke-width:2.6;fill:none;stroke-linecap:round"><path d="M12 5v14M5 12h14"/></svg></span>');
     return `<button class="dish-card${n>0?' ordered':''}" ${out?'disabled':`onclick="pickDrink(${m.id})"`}>
     ${badge(m)}<div class="dimg">${itemImg(m)}</div>
     <div class="dinfo"><div class="dname">${esc(m.name)}</div>${sold}
@@ -1512,7 +1562,7 @@ function paintMenu(){
 window.closeOrderUI=()=>{ _onMenu=false; ['orderCard','topPop','sweetPop','drinkSheet','basketPop','cartBar'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
   // Return to the ticket if one is being tracked (e.g. ordering was somehow entered mid-ticket) —
   // otherwise home. Prevents getCard and ticketCard ever stacking on screen together.
-  const tk=$('ticketCard'); if(tk && tk.style.display!=='none') return; show('getCard',true); };
+  const tk=$('ticketCard'); if(tk && tk.style.display!=='none') return; show('getCard',true); focusSoon($('orderNowBtn')); };
 // LINE-MAN-style single detail sheet: sweetness (radio) + toppings (checkbox) + qty + sticky add bar.
 let dsSweet=100, dsQty=1, dsEditSig=null;
 const SWEET_LABEL={0:'0% · ไม่หวานเลย',25:'25% · หวานน้อย',50:'50% · ปานกลาง',100:'100% · ปกติ',125:'125% · เพิ่มหวาน'};
@@ -1523,25 +1573,25 @@ window.editDrinkItem=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const d=ME
   pendingDrink=d; pendingTops={}; (g.e.toppings||[]).forEach(t=>{ const tm=MENU.find(x=>x.name===t.name && x.category==='topping'); if(tm) pendingTops[tm.id]={name:t.name,price:t.price,qty:t.qty||1}; });
   dsSweet=(g.e.sweet==null?100:g.e.sweet); dsQty=g.qty; dsEditSig=g.sig; renderDrinkSheet(); $('drinkSheet').style.display='flex'; };
 window.closeDrinkSheet=()=>{ $('drinkSheet').style.display='none'; };
-function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
+function dsCheck(on){ return on?'<svg viewBox="0 0 24 24" aria-hidden="true" style="width:23px;height:23px;flex:none"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent-ink)"/><path d="M7 12l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true" style="width:23px;height:23px;flex:none;fill:none;stroke:var(--field-line);stroke-width:2"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'; }
 function renderDrinkSheet(){ const d=pendingDrink; if(!d) return;
   $('dsImg').innerHTML=itemImg(d); $('dsName').textContent=d.name; dsPaintLike();
-  $('dsSweet').innerHTML='<div class="sweetseg">'+SWEETS.map(s=>{ const on=dsSweet===s;
-    return '<button type="button" class="sweetseg-b'+(on?' on':'')+'" onclick="dsSetSweet('+s+')">'+s+'%</button>'; }).join('')+
-    '</div><div class="muted" style="font-size:11.5px;margin-top:6px;text-align:center">'+((SWEET_LABEL[dsSweet]||'').split('· ')[1]||'')+'</div>';
+  $('dsSweet').innerHTML='<div class="sweetseg" role="radiogroup" aria-label="ความหวาน">'+SWEETS.map(s=>{ const on=dsSweet===s;
+    return '<button type="button" role="radio" aria-checked="'+on+'" data-k="sw'+s+'" class="sweetseg-b'+(on?' on':'')+'" onclick="dsSetSweet('+s+')">'+s+'%</button>'; }).join('')+
+    '</div><div class="muted" style="font-size:12px;margin-top:6px;text-align:center">'+((SWEET_LABEL[dsSweet]||'').split('· ')[1]||'')+'</div>';
   const tops=MENU.filter(m=>m.active&&m.category==='topping'); const tw=$('dsTopsWrap'); if(tw) tw.style.display=tops.length?'':'none';
   $('dsTops').innerHTML=tops.map(m=>{ const on=!!pendingTops[m.id], out=m.soldout||m.stockSoldout;
-    return '<div '+(out?'':'onclick="dsTogTop('+m.id+')"')+' style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'cursor:pointer')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></div>'; }).join('');
+    return '<button type="button" class="rowbtn" role="checkbox" aria-checked="'+on+'" data-k="tp'+m.id+'"'+(out?' disabled':' onclick="dsTogTop('+m.id+')"')+' style="align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);'+(out?'opacity:.45':'')+'"><span style="font-size:14px;color:var(--navy)">'+esc(m.name)+'</span><span style="display:flex;align-items:center;gap:11px"><span class="muted" style="font-size:13px">'+(out?'หมด':'+฿'+m.price)+'</span>'+dsCheck(on)+'</span></button>'; }).join('');
   dsUpdateBar();
 }
-window.dsSetSweet=(s)=>{ dsSweet=s; renderDrinkSheet(); };
+window.dsSetSweet=(s)=>{ dsSweet=s; keepFocus(renderDrinkSheet); };
 window.dsTogTop=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m) return;
-  if(pendingTops[id]){ delete pendingTops[id]; renderDrinkSheet(); return; }
+  if(pendingTops[id]){ delete pendingTops[id]; keepFocus(renderDrinkSheet); return; }
   // adding: max 3 toppings, but only 2 if a bulky one (เฉาก๋วย/บุก/บัวลอย) is in the mix (fits the cup)
   const names=[...Object.values(pendingTops).map(t=>t.name), m.name];
   const bulky=names.some(n=>BULKY_TOP.some(b=>n.includes(b))); const lim=bulky?2:3;
   if(names.length>lim){ toast(bulky?'ท็อปปิ้งชิ้นใหญ่ (เฉาก๋วย/บุก/บัวลอย) เลือกได้รวม 2 อย่าง':'เลือกท็อปปิ้งได้สูงสุด 3 อย่าง'); return; }
-  pendingTops[id]={name:m.name,price:m.price,qty:1}; renderDrinkSheet(); };
+  pendingTops[id]={name:m.name,price:m.price,qty:1}; keepFocus(renderDrinkSheet); };
 window.dsIncQty=()=>{ dsQty=Math.min(20,dsQty+1); dsUpdateBar(); };
 window.dsDecQty=()=>{ dsQty=Math.max(1,dsQty-1); dsUpdateBar(); };
 function dsUnit(){ let p=pendingDrink?pendingDrink.price:0; Object.values(pendingTops).forEach(t=>p+=t.price*t.qty); return p; }
@@ -1554,7 +1604,7 @@ function renderTopPop(){
   const tops=MENU.filter(m=>m.active && m.category==='topping');
   $('topPopBtns').innerHTML = tops.length ? `<div class="menu-grid">`+tops.map(m=>{
     const on=!!pendingTops[m.id];
-    return `<button class="dish-card top${on?' on':''}"${m.soldout?' style="opacity:.55"':''} ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
+    return `<button class="dish-card top${on?' on':''}" aria-pressed="${on}"${m.soldout?' style="opacity:.55"':''} ${m.soldout?'disabled':`onclick="togTop(${m.id})"`}>${(window._BADGE&&window._BADGE(m))||''}
       <div class="dimg">${itemImg(m)}</div>
       <div class="dinfo"><div class="dname">${esc(m.name)}${on?' ✓':''}</div>
       <div class="dpr">${m.soldout?'หมด':'+฿'+m.price}</div></div></button>`;
@@ -1580,7 +1630,7 @@ window.chooseSweet=(s)=>{ cart.push({ name:pendingDrink.name, price:pendingDrink
 // traps the customer. Picking "เลือกเมนูนี้" hands off to the normal sweetness step so the customer
 // chooses their own sweetness (not randomised).
 let _randomPick=null, _randomSpinning=false, _randomGen=0;   // gen counter aborts orphan spin loops on close
-const RANDOM_BADGE={ rec:{t:'⭐ แนะนำ',bg:'#16a34a'}, hot:{t:'🔥 ขายดี',bg:'#f3961a'}, new:{t:'✨ ใหม่',bg:'#1ab3ce'}, promo:{t:'🏷️ โปรโมชั่น',bg:'#e55b6b'}, free:{t:'🎁 ฟรี',bg:'#7c3aed'} };
+const RANDOM_BADGE={ rec:{t:'⭐ แนะนำ',bg:'#15803d'}, hot:{t:'🔥 ขายดี',bg:'#b45309'}, new:{t:'✨ ใหม่',bg:'#0b6a7e'}, promo:{t:'🏷️ โปรโมชั่น',bg:'#c8364a'}, free:{t:'🎁 ฟรี',bg:'#7c3aed'} };
 function randomPool(){ return (MENU||[]).filter(m=>m.active && m.category!=='topping' && !(m.soldout||m.stockSoldout)); }
 function randomCard(m, spinning){
   const b = (!spinning && m.badge) ? RANDOM_BADGE[m.badge] : null;
@@ -1588,7 +1638,7 @@ function randomCard(m, spinning){
     <div style="font-size:62px;line-height:1">${itemImg(m)}</div>
     <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:6px">${esc(m.name)}</div>
     ${m.name_en?`<div class="muted mn-en" style="font-size:12px">${esc(m.name_en)}</div>`:''}
-    <div style="font-size:23px;font-weight:800;color:var(--accent);margin-top:4px">฿${m.price}</div>
+    <div style="font-size:23px;font-weight:800;color:var(--accent-ink);margin-top:4px">฿${m.price}</div>
     ${b?`<div style="margin-top:7px"><span style="background:${b.bg};color:#fff;font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px">${b.t}</span></div>`:''}
   </div>`;
 }
@@ -1612,6 +1662,7 @@ window.spinRandom=()=>{
       const pick=pool[Math.floor(Math.random()*pool.length)];
       _randomPick={ drink:pick };
       reveal.innerHTML=randomCard(pick, false);
+      announce(pick.name+' ฿'+pick.price);
       _randomSpinning=false; add.disabled=false; add.style.opacity=1; again.disabled=false; again.style.opacity=1;
       try{ navigator.vibrate && navigator.vibrate(28); }catch(e){}
       return;
@@ -1633,6 +1684,7 @@ function cartNet(){ const FREE=freeNameSet(); const sub=cart.reduce((s,e)=>s+ent
   let disc=0; cart.forEach(e=>{ if(FREE.has(e.name)) disc+=e.price; (e.toppings||[]).forEach(t=>{ if(FREE.has(t.name)) disc+=t.price*t.qty; }); });
   return sub-Math.min(disc,sub); }
 function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.textContent=n; c.style.display=n?'':'none';
+  { const bb=$('basketBtn'); if(bb) bb.setAttribute('aria-label', n ? ('ตะกร้า '+n+' '+unit()) : 'ตะกร้า'); }
   const bar=$('cartBar'), sp=$('cartBarSpacer'), oc=$('orderCard');
   const orderOpen = oc && oc.style.display!=='none';
   if(bar){ if(n && orderOpen){ $('cartBarCount').textContent=n+' '+unit(); $('cartBarTotal').textContent='฿'+cartNet(); bar.style.display='block'; if(sp) sp.style.display=''; }
@@ -1661,16 +1713,16 @@ function renderBasket(){
         <div style="font-weight:700;color:#5c7187;font-size:14px;line-height:1.2">${esc(e.name)}${FREE.has(e.name)?FREE_TAG:''}</div>
         ${sweet}${tops}
         <div style="display:inline-flex;align-items:center;gap:10px;margin-top:6px">
-          <button class="ghost qstep" onclick="decOne(${gi})" aria-label="ลดจำนวน">−</button>
+          <button class="ghost qstep" data-k="qm${gi}" onclick="decOne(${gi})" aria-label="ลดจำนวน">−</button>
           <b style="min-width:16px;text-align:center;font-size:14px;color:var(--navy)">${g.qty}</b>
-          <button class="ghost qstep" style="color:var(--accent)" onclick="addOne(${gi})" aria-label="เพิ่มจำนวน">+</button>
+          <button class="ghost qstep" data-k="qp${gi}" style="color:var(--accent-ink)" onclick="addOne(${gi})" aria-label="เพิ่มจำนวน">+</button>
         </div>
       </div>
       <div style="text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div style="font-weight:800;color:var(--navy);font-size:15px">฿${line}</div>
         <div style="display:flex;gap:6px">
-          <button class="ghost" style="width:30px;height:30px;padding:0;border-radius:50%;color:var(--accent)" onclick="editDrinkItem(${gi})" aria-label="แก้ไข"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
-          <button class="ghost danger" style="width:30px;height:30px;padding:0;border-radius:50%" onclick="removeOne(${gi})" aria-label="ลบ"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+          <button class="ghost hit44" style="width:30px;height:30px;padding:0;border-radius:50%;color:var(--accent-ink)" onclick="editDrinkItem(${gi})" aria-label="แก้ไข"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button class="ghost danger hit44" style="width:30px;height:30px;padding:0;border-radius:50%" onclick="removeOne(${gi})" aria-label="ลบ"><svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
         </div>
       </div>
     </div>`;}).join('') : '<p class="muted" style="text-align:center;padding:24px 0">ตะกร้าว่าง</p>';
@@ -1708,9 +1760,9 @@ function renderUpsell(){
     + '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">'
     + picks.map(m=>`<div style="flex:none;display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:4px 5px 4px 4px;background:#fff">
         <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;flex:none;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center"><img src="/assets/logo.png" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover"></div>
-        <div style="min-width:0"><div style="font-size:11.5px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:98px">${esc(m.name)}</div>
-          <div style="font-size:11px;font-weight:800;color:var(--accent2);line-height:1.1">฿${m.price}</div></div>
-        <button class="ok" style="flex:none;width:32px;height:32px;min-height:32px;padding:0;border-radius:50%;font-size:18px;font-weight:800;line-height:1" aria-label="เพิ่ม ${esc(m.name)}" onclick="upsellAdd(${m.id})">+</button>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:700;color:var(--navy);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:112px;line-height:1.2">${esc(m.name)}</div>
+          <div style="font-size:12px;font-weight:800;color:var(--mint-ink);line-height:1.1">฿${m.price}</div></div>
+        <button class="ok hit44" style="flex:none;width:32px;height:32px;min-height:32px;padding:0;border-radius:50%;font-size:18px;font-weight:800;line-height:1" aria-label="เพิ่ม ${esc(m.name)}" onclick="upsellAdd(${m.id})">+</button>
       </div>`).join('')
     + '</div>';
 }
@@ -1719,8 +1771,8 @@ window.upsellAdd=(id)=>{ const m=MENU.find(x=>x.id===id); if(!m||m.soldout||m.st
   renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} }
   if(window.toast) toast('เพิ่ม '+m.name+' แล้ว 🥄'); };
 // Qty stepper in the cart (+ adds another identical cup, − removes one). Identical cups collapse to one line.
-window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
-window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); renderBasket(); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
+window.addOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; cart.push({name:g.e.name,price:g.e.price,sweet:g.e.sweet,toppings:(g.e.toppings||[]).map(t=>({...t}))}); renderBasketCount(); keepFocus(renderBasket,'#basketList .qstep'); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
+window.decOne=(gi)=>{ const g=cartGroups()[gi]; if(!g) return; const i=cart.findIndex(e=>entrySig(e)===g.sig); if(i>=0) cart.splice(i,1); renderBasketCount(); keepFocus(renderBasket,'#basketList .qstep'); if(typeof paintMenu==='function'){ try{ paintMenu(); }catch(e){} } };
 // ---------- ประวัติการสั่ง (customer order history) ----------
 window.openOrderHistory=async()=>{ if(!lineUserId) return;
   closeAllPopups();
@@ -1749,7 +1801,7 @@ window.openAccount=async()=>{
 };
 window.closeAccount=()=>{ $('accountPop').style.display='none'; setNavTab('home'); };
 function fmtHistDate(at){ if(!at) return ''; try{ return new Date(at.replace(' ','T')+'Z').toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Bangkok'}); }catch(e){ return at; } }
-const HIST_COLOR={paid:'var(--accent2)',void:'var(--danger)',pending:'#946f00'};
+const HIST_COLOR={paid:'var(--mint-ink)',void:'var(--danger)',pending:'#7a5c00'};
 let _histOrders=[];
 function renderOrderHistory(orders){ const box=$('historyLiffList'); _histOrders=orders;
   if(!orders.length){ box.innerHTML='<p class="muted" style="text-align:center;padding:24px 0">ยังไม่มีประวัติการสั่ง 🙂</p>'; return; }
@@ -1757,8 +1809,8 @@ function renderOrderHistory(orders){ const box=$('historyLiffList'); _histOrders
     const summary=o.items.filter(it=>it.kind!=='addon').map(it=>(it.qty>1?it.qty+'× ':'')+esc(it.name)).join(', ')||'—';
     const detail=o.items.map(it=>`<div class="row between" style="font-size:13px;padding:2px 0${it.kind==='addon'?';padding-left:14px':''}"><span${it.kind==='addon'?' class="muted"':''}>${it.kind==='addon'?'+ ':''}${it.qty>1?it.qty+'× ':''}${esc(it.name)}</span><span class="muted">฿${it.price*it.qty}</span></div>`).join('');
     return `<div style="border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:10px">
-      <div class="row" style="align-items:flex-start;gap:11px;cursor:pointer" onclick="toggleHistDetail(${i})">
-        <div style="width:40px;height:40px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/></svg></div>
+      <button type="button" class="row rowbtn" id="histBtn${i}" aria-expanded="false" aria-controls="histDetail${i}" style="align-items:flex-start;gap:11px;padding:0" onclick="toggleHistDetail(${i})">
+        <div aria-hidden="true" style="width:40px;height:40px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--accent-ink);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M6 3h12l-1.4 17a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M5 7.5h14"/></svg></div>
         <div style="flex:1;min-width:0">
           <div class="row between" style="align-items:flex-start">
             <div style="font-weight:800;color:var(--navy);font-size:15px">${o.code?('คิว '+o.code):('ออเดอร์ #'+o.ticketId)}</div>
@@ -1766,14 +1818,14 @@ function renderOrderHistory(orders){ const box=$('historyLiffList'); _histOrders
           </div>
           <div class="muted" style="font-size:12px;margin-top:2px">${fmtHistDate(o.at)}</div>
           <div class="muted" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summary}</div>
-          <span style="display:inline-block;font-size:10.5px;margin-top:6px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
+          <span style="display:inline-block;font-size:12px;margin-top:6px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.04);color:${HIST_COLOR[o.kind]||'var(--muted)'};font-weight:700">${o.status}</span>
         </div>
-      </div>
-      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:11px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--accent2);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
-      <button class="ghost" style="width:100%;margin-top:11px;color:var(--accent);border-color:var(--accent)" onclick="event.stopPropagation();reorderOrder(${i})"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v4h-4"/></svg>สั่งอีกครั้ง</button>
+      </button>
+      <div id="histDetail${i}" style="display:none;border-top:1px dashed var(--line);margin-top:11px;padding-top:10px">${detail}${o.discount>0?`<div class="row between" style="font-size:13px;color:var(--mint-ink);font-weight:700;margin-top:4px"><span>ส่วนลด</span><span>-฿${o.discount}</span></div>`:''}<div class="row between" style="font-weight:800;color:var(--navy);margin-top:6px"><span>ยอดสุทธิ</span><span>฿${o.total}</span></div></div>
+      <button class="ghost" aria-describedby="histBtn${i}" style="width:100%;margin-top:11px;color:var(--accent-ink);border-color:var(--accent-ink)" onclick="event.stopPropagation();reorderOrder(${i})"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v4h-4"/></svg>สั่งอีกครั้ง</button>
     </div>`;}).join('');
 }
-window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(d) d.style.display=(d.style.display==='none')?'':'none'; };
+window.toggleHistDetail=(i)=>{ const d=$('histDetail'+i); if(!d) return; const open=d.style.display==='none'; d.style.display=open?'':'none'; const b=$('histBtn'+i); if(b) b.setAttribute('aria-expanded',String(open)); };
 // Reorder: reconstruct cart entries from a past order. Orders are always serialized as
 // drink-item, then its toppings immediately after (same order confirmBasket() writes them in),
 // so we can regroup toppings under the drink that precedes them. Items no longer on the live
@@ -1871,6 +1923,7 @@ window.confirmBasket=async()=>{
     // Ticket shows before the first poll answers — pulse a placeholder instead of a frozen "—".
     { const tc=$('tCode'); tc.textContent='· · ·'; tc.classList.add('ldg'); }
     _onMenu=false; show('ticketCard',true); startPolling();
+    focusSoon($('tHead'));
   }catch(e){
     hideSending();
     if(e.data && e.data.error==='already_in_queue'){   // not a duplicate — the guard caught a retry; show the existing ticket
@@ -1908,12 +1961,12 @@ function showWow(loy){
     <div class="wowemoji">🎉</div>
     <h1 style="margin:10px 0 2px;color:var(--navy)">ยินดีต้อนรับสมาชิกใหม่!</h1>
     <p class="muted" style="margin:0 0 12px">ขอบคุณที่สั่งผ่านไลน์ครั้งแรก 💛</p>
-    <div style="background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:14px;padding:14px">
-      <div style="font-size:13px;opacity:.9">คุณได้รับ</div>
+    <div style="background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--ink);border-radius:14px;padding:14px">
+      <div style="font-size:13px">คุณได้รับ</div>
       <div style="font-size:34px;font-weight:900;line-height:1.1">+${loy.bonus} ดวงต้อนรับ 🎁</div>
-      <div style="font-size:13px;margin-top:4px;opacity:.95">สะสมแล้ว ${bal} ดวง · อีก ${toGo} ${unit()} ได้ฟรี 1 ${unit()}!</div>
+      <div style="font-size:13px;margin-top:4px">สะสมแล้ว ${bal} ดวง · อีก ${toGo} ${unit()} ได้ฟรี 1 ${unit()}!</div>
     </div>
-    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow()">เยี่ยมเลย!</button>
+    <button class="ok" data-esc style="width:100%;margin-top:14px" onclick="closeWow()">เยี่ยมเลย!</button>
   </div>`;
   p.style.display='flex';
   try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
@@ -1930,13 +1983,13 @@ function showReward(loy){
     <div class="wowemoji">🎉</div>
     <h1 style="margin:10px 0 2px;color:var(--navy)">สะสมครบ ${per} ดวงแล้ว!</h1>
     <p class="muted" style="margin:0 0 12px">คุณได้รางวัลฟรีแล้ว 🥤</p>
-    <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:#fff;border-radius:14px;padding:16px">
-      <div style="font-size:13px;opacity:.95">รางวัลของคุณ</div>
+    <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:var(--ink);border-radius:14px;padding:16px">
+      <div style="font-size:13px">รางวัลของคุณ</div>
       <div style="font-size:26px;font-weight:900;line-height:1.15">คูปองฟรี 1 ${unit()}</div>
-      <div style="font-size:12px;margin-top:4px;opacity:.95">อยู่ในเมนูคูปองแล้ว · ใช้ได้ภายใน 30 วัน</div>
+      <div style="font-size:12px;margin-top:4px">อยู่ในเมนูคูปองแล้ว · ใช้ได้ภายใน 30 วัน</div>
     </div>
     <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openCoupon('browse')">ดูคูปองของฉัน</button>
-    <button class="ghost" style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
+    <button class="ghost" data-esc style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
   </div>`;
   p.style.display='flex';
   try{ if(navigator.vibrate) navigator.vibrate([40,50,40]); }catch(e){}
@@ -1974,12 +2027,12 @@ function renderOrderBlock(v){
     show('tOrder',false); show('payChoice',false); show('counterInfo',false);
     return;
   }
-  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; if(v.order&&v.order.due>0){ pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML+=' · ค้างเพิ่ม ฿'+v.order.due+' ชำระที่เคาน์เตอร์'; } else { pill.style.background=''; pill.style.color=''; } show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
+  if(st==='paid'){ stopQrCountdown(); if(ticketId){ try{ localStorage.removeItem('paymethod_'+ticketId); localStorage.removeItem('counterOK_'+ticketId); }catch(e){} } pill.className='pill open'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> ชำระแล้ว'; if(v.order&&v.order.due>0){ pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#7a5c00'; pill.innerHTML+=' · ค้างเพิ่ม ฿'+v.order.due+' ชำระที่เคาน์เตอร์'; } else { pill.style.background=''; pill.style.color=''; } show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); payMethod=null;
     if(v.loyalty && v.loyalty.firstOrder) maybeWow(v);
     else if(v.loyalty && v.loyalty.rewardJustReady) maybeReward(v); }
-  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0e7c93'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
+  else if(st==='claimed'){ stopQrCountdown(); pill.className='pill'; pill.style.background='rgba(26,179,206,.18)'; pill.style.color='#0b6a7e'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> รอแคชเชียร์ยืนยันการชำระ'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); show('counterConfirmedMsg',false); }
   else if(cfg.promptPay || cfg.linePay){
-    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
+    pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#7a5c00'; pill.innerHTML='<svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ยังไม่ชำระ ฿'+total;
     _orderTotal = total;   // remembered for the QR (set per bank choice in setQrFor)
     show('tOrder',true); show('payChoice',true);
     // Restore a confirmed "จ่ายที่เคาน์เตอร์" across a reload/app-return so the customer keeps their locked
@@ -2012,7 +2065,7 @@ function renderOrderBlock(v){
       applyPayChoice();
     }
   }
-  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#946f00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
+  else { pill.className='pill'; pill.style.background='rgba(243,203,85,.25)'; pill.style.color='#7a5c00'; pill.textContent='ชำระ ฿'+total+' ที่เคาน์เตอร์'; show('tOrder',false); show('payChoice',false); show('counterInfo',false); }
 }
 let payMethod=null, counterConfirmed=false, _orderTotal=0, _payDeadline=null, _resumeConfirm=false;
 // Payment method chosen IN THE CART (reference-style row → picker) and carried onto the ticket.
@@ -2030,12 +2083,12 @@ window.openPayPicker=(mode)=>{
   // the PromptPay options need an active online tender (cfg.promptPay already folds in payOnline).
   let opts = PAY_OPTS.filter(o => o.m==='counter' ? (cfg.payCounter!==false) : o.m==='kbank' ? !!cfg.payKplus : !!cfg.promptPay);
   if(!opts.length) opts = PAY_OPTS.filter(o=>o.m==='counter');   // safety: never brick checkout if all tenders are off
-  $('payPickerList').innerHTML = opts.map(o=>{ const sel=cur===o.m;
-    return `<div class="row between" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent)':'var(--line)'};border-radius:14px;margin-bottom:10px;cursor:pointer;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
-      <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" style="width:26px;height:26px;flex:none;stroke:var(--accent)">${o.ic}</svg>
+  $('payPickerList').innerHTML = '<div role="radiogroup" aria-label="ช่องทางชำระเงิน">' + opts.map(o=>{ const sel=cur===o.m;
+    return `<button type="button" role="radio" aria-checked="${sel}" class="row between rowbtn" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent-ink)':'var(--line)'};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
+      <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width:26px;height:26px;flex:none;stroke:var(--accent-ink)">${o.ic}</svg>
         <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div>${o.s?`<div class="muted" style="font-size:12px">${o.s}</div>`:''}</span></span>
-      <svg viewBox="0 0 24 24" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent)':'var(--line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
-    </div>`;}).join('')
+      <svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent-ink)':'var(--field-line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
+    </button>`;}).join('') + '</div>'
     + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.onerror=null;this.src=\'/assets/4060.min.png\'"></div>' : '');
   $('payPickerPop').style.display='flex';
 };
@@ -2079,7 +2132,7 @@ function updateCartCouponLabel(){ const el=$('cartCouponVal'); if(!el) return;
   let extra='';
   if(cartCoupon){
     const net=cartPreCouponNet(), min=cartCoupon.min_spend||0;
-    if(net<min) extra='<div style="font-size:11px;color:#b48a00;font-weight:700;margin-top:2px">ซื้อเพิ่มอีก ฿'+(Math.round((min-net)*100)/100)+' เพื่อใช้คูปองนี้</div>';
+    if(net<min) extra='<div style="font-size:11px;color:#7a5c00;font-weight:700;margin-top:2px">ซื้อเพิ่มอีก ฿'+(Math.round((min-net)*100)/100)+' เพื่อใช้คูปองนี้</div>';
   }
   el.innerHTML = (cartCoupon ? (esc(cartCoupon.label||cartCoupon.code)+' '+chev) : ('เลือกใช้ '+chev)) + extra; }
 window.closeCoupon=()=>{ $('couponPickerPop').style.display='none'; if(_couponMode!=='cart') setNavTab('home'); };
@@ -2139,15 +2192,8 @@ async function maybeCouponWelcome(){
     const c=_cwCoupon, isReward=c.disc_type==='reward';
     const isValue = c.couponKind==='bounceback' || c.couponKind==='streak' || c.couponKind==='flash' || c.couponKind==='winback';
     const cap = c.freeCap||49;
-    const grad = c.couponKind==='streak' ? 'linear-gradient(150deg,#7c83e0,#5560c8)'
-      : c.couponKind==='bounceback' ? 'linear-gradient(150deg,#12b8b0,#0a8f9c)'
-      : c.couponKind==='flash' ? 'linear-gradient(150deg,#ff9a3d,#f2683b)'
-      : isReward
-        ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
-          : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
-          : 'linear-gradient(150deg,#33c9ac,#10a582)')
-        : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
-    $('cwStub').style.background = grad;
+    const look = couponLook(c);
+    $('cwStub').style.background = look.bg; $('cwStub').style.color = look.ink;
     $('cwAmt').innerHTML = isValue ? ('<small>฿</small>'+cap) : isReward ? 'ฟรี' : (c.disc_type==='percent'?(c.disc_value+'%'):('<small>฿</small>'+c.disc_value));
     $('cwLab').textContent = c.label || (isReward&&!isValue?'ฟรี 1 แก้ว':'คูปองส่วนลด');
     $('cwCond').textContent = (isReward&&!isValue) ? 'ฟรี 1 แก้ว · ทุกเมนู'
@@ -2198,7 +2244,7 @@ window.openCoupon=async(mode)=>{
     </div>`;
     return;
   }
-  const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
+  const clr = (_couponMode==='cart' && cartCoupon) ? `<div class="row between" role="radio" aria-checked="false" tabindex="0" style="align-items:center;padding:11px 14px;border:1.5px dashed var(--field-line);border-radius:14px;margin-bottom:10px;cursor:pointer;color:var(--muted)" onclick="clearCoupon()"><span style="font-weight:700">ไม่ใช้คูปอง</span></div>` : '';
   const card=(c)=>{
     const isReward = c.disc_type==='reward';
     const sel = cartCoupon && cartCoupon.code===c.code;
@@ -2231,31 +2277,25 @@ window.openCoupon=async(mode)=>{
     // Shared premium ticket (.cpn): brand-gradient value stub, clean dotted tear line (no floating
     // notches — the owner flagged those), details, then ONE clear action — "ใช้" in browse mode
     // (arms + jumps to the menu), a check circle in cart mode.
-    const grad = c.couponKind==='streak' ? 'linear-gradient(150deg,#7c83e0,#5560c8)'
-      : c.couponKind==='bounceback' ? 'linear-gradient(150deg,#12b8b0,#0a8f9c)'
-      : c.couponKind==='flash' ? 'linear-gradient(150deg,#ff9a3d,#f2683b)'
-      : isReward
-        ? (c.couponKind==='birthday' ? 'linear-gradient(150deg,#f68cae,#e0608f)'
-          : c.couponKind==='winback' ? 'linear-gradient(150deg,#f7c458,#ef9c2a)'
-          : 'linear-gradient(150deg,#33c9ac,#10a582)')
-        : 'linear-gradient(150deg,#00b5d8,#2fc2a6)';
+    const look = couponLook(c);
     const TICKET='<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/>';
     const GIFT='<rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M4 13h16M12 9v11"/><path d="M8.5 9C6 9 6 5.5 8.5 5.5 10.6 5.5 12 9 12 9s1.4-3.5 3.5-3.5C18 5.5 18 9 15.5 9"/>';
     const icon = (isReward && !isValue) ? GIFT : TICKET;
     const big = isValue ? ('฿'+cap) : isReward ? 'ฟรี' : (c.disc_type==='percent' ? (c.disc_value+'%') : ('฿'+c.disc_value));
     const clickable = _couponMode==='cart' && c.usable;
     const action = _couponMode==='browse'
-      ? (c.usable?`<div class="cpn-act"><button class="cpn-use" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
-      : `<div class="cpn-act"><svg class="cpn-check" viewBox="0 0 24 24" style="stroke:${sel?'var(--accent)':'#c7d0da'}">${sel?'<circle cx="12" cy="12" r="9" fill="var(--accent)"/><path d="M8 12l3 3 5-6" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg></div>`;
-    return `<div class="cpn${sel?' sel':''}${c.usable?'':' off'}" ${clickable?`onclick="selectCoupon('${c.code}')" style="cursor:pointer"`:''}>
-      <div class="cpn-stub" style="background:${grad}">
+      ? (c.usable?`<div class="cpn-act"><button class="cpn-use" aria-describedby="cpt-${esc(c.code)}" onclick="useCouponNow('${c.code}')">ใช้</button></div>`:'')
+      : `<div class="cpn-act"><svg class="cpn-check" viewBox="0 0 24 24" aria-hidden="true" style="stroke:${sel?'var(--accent-ink)':'var(--field-line)'}">${sel?'<circle cx="12" cy="12" r="9" fill="var(--accent-ink)"/><path d="M8 12l3 3 5-6" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg></div>`;
+    const pick = _couponMode==='cart' ? (clickable ? ` role="radio" aria-checked="${!!sel}" tabindex="0"` : ' role="radio" aria-checked="false" aria-disabled="true"') : '';
+    return `<div class="cpn${sel?' sel':''}${c.usable?'':' off'}"${pick} ${clickable?`onclick="selectCoupon('${c.code}')" style="cursor:pointer"`:''}>
+      <div class="cpn-stub" style="background:${look.bg};color:${look.ink}">
         <svg class="ic" viewBox="0 0 24 24">${icon}</svg>
         <div class="big${big.length>3?' sm':''}">${big}</div>
         <div class="sub">${(isReward&&!isValue)?('ไม่เกิน ฿'+cap):'ส่วนลด'}</div>
       </div>
       <div class="cpn-perf"></div>
       <div class="cpn-body">
-        <div class="cpn-title">${esc(c.label)}</div>
+        <div class="cpn-title" id="cpt-${esc(c.code)}">${esc(c.label)}</div>
         <div class="cpn-disc">${discLine}</div>
         <div class="cpn-meta">${meta}</div>
         ${c.expires_at?`<div class="cpn-exp"><svg viewBox="0 0 24 24" style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>ใช้ได้ถึง ${c.expires_at}</div>`:''}
@@ -2265,11 +2305,12 @@ window.openCoupon=async(mode)=>{
     </div>`;};
   // Two groups, labelled: what the shop gave THIS customer, then the open promo codes anyone may use.
   // Without the split a public "ลด 20" read as a personal gift — and looked broken when it was gone.
-  const hdr=(t,s)=>`<div style="display:flex;align-items:baseline;gap:8px;margin:14px 2px 8px"><span style="font-size:13.5px;font-weight:800;color:var(--navy)">${t}</span><span class="muted" style="font-size:11.5px">${s}</span></div>`;
+  const hdr=(t,s)=>`<div style="display:flex;align-items:baseline;gap:8px;margin:14px 2px 8px"><span style="font-size:13.5px;font-weight:800;color:var(--navy)">${t}</span><span class="muted" style="font-size:12px">${s}</span></div>`;
   const mine=_availCoupons.filter(c=>c.isReward), open=_availCoupons.filter(c=>!c.isReward);
-  box.innerHTML = clr
+  const list = clr
     + (mine.length ? hdr('🎁 คูปองของฉัน','ร้านมอบให้คุณโดยเฉพาะ') + mine.map(card).join('') : '')
     + (open.length ? hdr('🏷️ โปรโมชั่นของร้าน','โค้ดส่วนลดที่ใช้ได้ทุกคน') + open.map(card).join('') : '');
+  box.innerHTML = _couponMode==='cart' ? '<div role="radiogroup" aria-label="เลือกคูปองส่วนลด">'+list+'</div>' : list;
 };
 // Phase 7: once the customer picks a QR method, auto-trigger the save-to-album flow
 // (same share-sheet/download path as the manual button) so they don't need a second tap.
@@ -2314,11 +2355,11 @@ function setQrFor(isKbank){
   if(isKbank){
     $('ppQrImg').src='/api/promptpay-qr?kplus=1&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='สแกนด้วย <b>K PLUS</b> แล้ว <b style="color:var(--navy);font-size:15px">กรอกยอด ฿'+_orderTotal+' เอง</b><br>จ่ายแล้ว <b>แนบสลิป</b> — แคชเชียร์ตรวจสลิปแล้วยืนยันให้';
-    if(cfg.payToKplus&&(cfg.payToKplus.name||cfg.payToKplus.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payToKplus.name,cfg.payToKplus.id].filter(Boolean).join(' · '))+'</div>';
+    if(cfg.payToKplus&&(cfg.payToKplus.name||cfg.payToKplus.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:12px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payToKplus.name,cfg.payToKplus.id].filter(Boolean).join(' · '))+'</div>';
   } else {
     $('ppQrImg').src='/api/promptpay-qr?amount='+_orderTotal+'&ticket='+encodeURIComponent(ticketId||'');
     $('ppQrNote').innerHTML='ยอด <b style="color:var(--navy);font-size:15px">฿'+_orderTotal+'</b> ใส่ให้อัตโนมัติแล้ว · สแกนแล้วจ่ายได้เลย';
-    if(cfg.payTo&&(cfg.payTo.name||cfg.payTo.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:11px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payTo.name,cfg.payTo.id].filter(Boolean).join(' · '))+'</div>';
+    if(cfg.payTo&&(cfg.payTo.name||cfg.payTo.id)) $('ppQrNote').innerHTML+='<div class="muted" style="font-size:12px;margin-top:4px">ผู้รับเงิน: '+esc([cfg.payTo.name,cfg.payTo.id].filter(Boolean).join(' · '))+'</div>';
   }
   // Bank shortcuts follow the channel: K PLUS alone on the KBank QR; every other bank on PromptPay.
   const strip=$('bankIconStrip');
@@ -2530,20 +2571,31 @@ function renderTimeline(idx){ const el=$('tTimeline'); if(!el) return;
     <div style="position:absolute;top:20px;left:12.5%;right:12.5%;height:3px;background:var(--line)"></div>
     <div class="tl-fill" style="position:absolute;top:20px;left:12.5%;width:${prevProg}%;height:3px;background:var(--accent2)"></div>
     ${last?'':`<div class="tl-flow" style="position:absolute;top:20px;left:calc(12.5% + ${prog}%);width:${seg}%;height:3px"></div>`}
-    <div style="position:relative;display:flex;justify-content:space-between">`
+    <ol aria-label="สถานะออเดอร์" style="position:relative;display:flex;justify-content:space-between;list-style:none;margin:0;padding:0">`
     +TL_STEPS.map((s,i)=>{ const done=i<idx,cur=i===idx; const bg=done?'var(--accent2)':cur?'var(--accent)':'#fff';
-      const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--line)'; const icCol=(done||cur)?'#fff':'var(--muted)';
-      const tcol=cur?'var(--navy)':done?'var(--accent2)':'var(--muted)';
+      const brd=done?'var(--accent2)':cur?'var(--accent)':'var(--field-line)'; const icCol=(done||cur)?'var(--ink)':'var(--muted)';
+      const tcol=cur?'var(--navy)':done?'var(--mint-ink)':'var(--muted)';
+      const st=done?'เสร็จแล้ว':cur?'ขั้นปัจจุบัน':'ยังไม่ถึง';
       // The กำลังทำ icon is a circular arrow — spinning it while current reads as "in progress".
       const spin=cur&&i===1&&!done?' tl-spin':'';
-      const svg=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="stroke:${icCol};stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${done?TL_CHECK:s.ic}</svg>`;
-      return `<div style="flex:1;text-align:center"><div class="${cur?'tl-cur':''}${spin}" style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:11px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}</div></div>`;
-    }).join('')+`</div></div>`;
+      const svg=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true" style="stroke:${icCol};stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${done?TL_CHECK:s.ic}</svg>`;
+      return `<li${cur?' aria-current="step"':''} style="flex:1;text-align:center"><div class="${cur?'tl-cur':''}${spin}" style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid ${brd}">${svg}</div><div style="font-size:12px;margin-top:5px;color:${tcol};font-weight:${cur?'800':'600'};line-height:1.15">${s.t}<span class="sr-only"> · ${st}</span></div>${cur&&!last?'<div class="tl-now" aria-hidden="true">ตอนนี้</div>':''}</li>`;
+    }).join('')+`</ol></div>`;
   // Next frame: slide the solid fill from the previous step's position to the new one.
   const fill=el.querySelector('.tl-fill');
   if(fill) requestAnimationFrame(()=>requestAnimationFrame(()=>{ fill.style.width=prog+'%'; }));
 }
+// WCAG 4.1.3: one sentence per real change — polite for progress, assertive when it is your turn.
+let _said='';
+function sayStatus(v){ const mpg=cfg.minutesPerGroup||4, a=Math.max(0,v.ahead|0);
+  const m = v.status==='pending' ? ((v.order&&v.order.status==='claimed') ? 'รอแคชเชียร์ยืนยันการชำระเงิน แล้วระบบจะออกหมายเลขคิวให้' : 'ชำระเงินเพื่อรับหมายเลขคิว')
+    : v.status==='waiting' ? (a>0 ? ('รออีก '+a+' คิว ประมาณ '+(a*mpg)+' นาที') : 'คุณเป็นคิวถัดไป — เตรียมตัวรับได้เลย')
+    : v.status==='called' ? 'ถึงคิวของคุณแล้ว เชิญรับเครื่องดื่มที่เคาน์เตอร์'
+    : v.status==='served' ? 'รับเครื่องดื่มเรียบร้อย'
+    : v.status==='cancelled' ? 'ออเดอร์นี้ถูกยกเลิกแล้ว' : '';
+  if(m && m!==_said){ _said=m; announce(m, v.status==='called'); } }
 function render(v){
+  try{ sayStatus(v); }catch(e){}
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
   const isPending = v.status==='pending';
@@ -2623,7 +2675,7 @@ let _revStars=0, _revTags=[];
 // Tapping a star no longer submits. It only opens the rest of the form — the customer still has to
 // press ส่งรีวิว. A stray tap while scrolling used to publish a permanent 1-star instantly.
 function renderStars(sel){
-  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<button type="button" onclick="pickStar(${n})" aria-label="${n} ดาว" style="background:none;border:none;padding:4px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent"><svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:${n<=sel?'#f3cb55':'#eef2f5'};stroke:${n<=sel?'#d9a520':'#dfe5ea'};stroke-width:1"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg></button>`).join('');
+  $('tStars').innerHTML=[1,2,3,4,5].map(n=>`<button type="button" role="radio" aria-checked="${n===sel}" data-k="st${n}" onclick="pickStar(${n})" aria-label="${n} ดาว" style="background:none;border:none;padding:4px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:40px;height:40px;fill:${n<=sel?'#f4b400':'#fff'};stroke:${n<=sel?'var(--gold)':'var(--field-line)'};stroke-width:1.6"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg></button>`).join('');
   $('tRateLabel').textContent = sel>0 ? RATE_LABELS[sel-1] : '';
 }
 // The chip vocabulary comes from the server (/api/config → ratingTags), so the customer can never
@@ -2635,7 +2687,7 @@ function ratingTagsFor(stars){
 }
 window.pickStar=(n)=>{
   if(_revStars!==n) _revTags=[];            // switching bands invalidates the picked reasons
-  _revStars=n; renderStars(n);
+  _revStars=n; keepFocus(()=>renderStars(n));
   $('tTagHint').textContent = n<=3 ? 'เกิดอะไรขึ้นคะ? (เลือกได้มากกว่า 1)' : 'อะไรที่คุณชอบคะ? (เลือกได้มากกว่า 1)';
   renderRateTags();
   $('tRateMore').style.display='';
@@ -2643,13 +2695,13 @@ window.pickStar=(n)=>{
 function renderRateTags(){
   const list=ratingTagsFor(_revStars);
   $('tTags').innerHTML=list.map(t=>{ const on=_revTags.includes(t.id);
-    return `<button type="button" onclick="toggleRateTag('${t.id}')" style="border:1.5px solid ${on?'var(--accent)':'var(--line)'};background:${on?'var(--accent)':'#fff'};color:${on?'#fff':'var(--navy)'};font-family:inherit;font-size:13px;font-weight:700;padding:9px 14px;border-radius:999px;cursor:pointer;min-height:40px">${esc(t.label)}</button>`;
+    return `<button type="button" aria-pressed="${on}" data-k="tg${t.id}" onclick="toggleRateTag('${t.id}')" style="border:1.5px solid ${on?'var(--accent-ink)':'var(--line)'};background:${on?'var(--accent)':'#fff'};color:${on?'var(--ink)':'var(--navy)'};font-family:inherit;font-size:13px;font-weight:700;padding:9px 14px;border-radius:999px;cursor:pointer;min-height:40px">${on?'✓ ':''}${esc(t.label)}</button>`;
   }).join('');
 }
 window.toggleRateTag=(id)=>{
   const i=_revTags.indexOf(id);
   if(i>=0) _revTags.splice(i,1); else _revTags.push(id);
-  renderRateTags();
+  keepFocus(renderRateTags);
 };
 window.tCommentCount=()=>{ const v=$('tComment').value||''; $('tCommentN').textContent=v.length+'/500'; };
 window.goHome=()=>{ try{ localStorage.removeItem('ticket_'+zoneId); }catch(e){} if(poll) clearInterval(poll); location.reload(); };   // #4 back to home / start over
@@ -2783,5 +2835,71 @@ async function maybePromo(){ try{ const p=await api('/api/promo'); if(p&&p.enabl
   if(normal){ try{ if(sessionStorage.getItem('openWallet')){ sessionStorage.removeItem('openWallet'); _openedWallet=true; openCoupon('browse'); } }catch(e){} }
   if(normal && !_openedWallet) maybeCouponWelcome();   // Phase 4A: greet a returning customer who holds an unused coupon
 })().catch(e=>{ hideSplash(); err(e.message); });
+</script>
+<script>
+/* WCAG 2.2 A/AA audit, round 2 (23 Sep) — the behaviour every sheet, full page and popup shares,
+   without touching their open/close call sites (same model as the staff pages):
+   - Overlays: role="dialog" + aria-modal + a name, focus moves in when one opens, the page behind is
+     inert (Tab stays inside), Esc presses the overlay's own close / later button, focus returns (2.4.3, 4.1.2).
+   - Anything still clickable that is not a control becomes a keyboard button (2.1.1), and
+     role="button|radio|checkbox|tab" elements that are not <button> answer Enter / Space. */
+(function(){
+  var OVER='[id$="Pop"],[id$="Sheet"],#appModal,#historyLiffCard,#promoOvl,#sendingScreen';
+  var NAMES={topPop:'เลือกท็อปปิ้ง',sweetPop:'เลือกระดับความหวาน',randomPop:'สุ่มเมนูให้คุณ',memberPop:'บัตรสมาชิก',historyLiffCard:'ประวัติการสั่ง',accountPop:'บัญชีของฉัน',basketPop:'ตะกร้าของฉัน',payPickerPop:'เลือกช่องทางชำระเงิน',orderDetailSheet:'รายละเอียดออเดอร์',luckyPop:'ยินดีด้วย!',wowPop:'ยินดีด้วย!',promoOvl:'โปรโมชั่น',sendingScreen:'กำลังส่งออเดอร์ไปยังร้าน…'};
+  var KEEP={toast:1,srStatus:1,srAlert:1};
+  var shown=function(el){ return !!el && el.style.display!=='none' && getComputedStyle(el).display!=='none' && el.getClientRects().length>0; };
+  var FOC='button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  var stack=[], inerted=[];
+  function release(){ inerted.forEach(function(e){ e.inert=false; }); inerted=[]; }
+  function isolate(d){ release(); var n=d; while(n && n!==document.body){ var p=n.parentElement; if(!p) break;
+      for(var i=0;i<p.children.length;i++){ var s=p.children[i]; if(s!==n && !/^(SCRIPT|STYLE|LINK)$/.test(s.tagName) && !KEEP[s.id] && !s.inert){ s.inert=true; inerted.push(s); } }
+      n=p; } }
+  function named(d){ if(d.getAttribute('aria-labelledby')||d.getAttribute('aria-label')) return;
+    if(NAMES[d.id]){ d.setAttribute('aria-label',NAMES[d.id]); return; }
+    var h=d.querySelector('h1,h2,h3'); if(h){ if(!h.id) h.id=d.id+'-title'; d.setAttribute('aria-labelledby',h.id); } else d.setAttribute('aria-label','หน้าต่าง'); }
+  function first(d){ var f=[].filter.call(d.querySelectorAll(FOC),function(e){ return e.getClientRects().length && !e.closest('[inert]'); });
+    return f.find(function(e){ return /^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName); })||f[0]; }
+  function opened(d){ if(stack.some(function(x){return x.d===d;})) return;
+    d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true'); named(d);
+    var p=document.activeElement; stack.push({d:d, prev:p, loc:locator(p)}); isolate(d);
+    setTimeout(function(){ if(!shown(d)) return; if(d.contains(document.activeElement)) return;
+      var f=first(d); if(f) f.focus({preventScroll:true}); else { d.tabIndex=-1; d.focus({preventScroll:true}); } },30); }
+  function locator(el){ if(!el||el===document.body||!el.getAttribute) return null; if(el.id) return '#'+CSS.escape(el.id);
+    var k=el.getAttribute('data-k'); if(k) return '[data-k="'+k.replace(/"/g,'\\"')+'"]';
+    var oc=el.getAttribute('onclick'); return oc ? '[onclick="'+oc.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]' : null; }
+  function closed(d){ var i=-1; stack.forEach(function(x,k){ if(x.d===d) i=k; }); if(i<0) return;
+    var prev=stack[i].prev, loc=stack[i].loc; stack.splice(i,1); release();
+    if(!(prev && document.contains(prev) && prev.getClientRects().length) && loc){ try{ prev=document.querySelector(loc)||prev; }catch(e){} }
+    var top=stack.length ? stack[stack.length-1].d : null; if(top) isolate(top);
+    if(prev && document.contains(prev) && prev.getClientRects().length && (!top || top.contains(prev))){ try{ prev.focus({preventScroll:true}); }catch(e){} }
+    else if(top && !top.contains(document.activeElement)){ var f=first(top); if(f) try{ f.focus({preventScroll:true}); }catch(e){} } }
+  function sync(d){ shown(d) ? opened(d) : closed(d); }
+  function watch(){ document.querySelectorAll(OVER).forEach(function(d){ if(d.__a11y) return; d.__a11y=1; new MutationObserver(function(){ sync(d); }).observe(d,{attributes:true,attributeFilter:['style','class','hidden']}); if(shown(d)) opened(d); }); }
+  function names(root){
+    root.querySelectorAll('input:not([type=hidden]):not([type=file]),select,textarea').forEach(function(el){
+      if(el.getAttribute('aria-label')||el.getAttribute('aria-labelledby')||el.closest('label')||(el.id && document.querySelector('label[for="'+el.id+'"]'))) return;
+      el.setAttribute('aria-label',(el.placeholder||'').trim()||el.title||'ช่องกรอก'); });
+    root.querySelectorAll('button,[role=button]').forEach(function(el){ var fb=el.hasAttribute('data-name-fb');
+      if(fb && el.textContent.trim()){ el.removeAttribute('aria-label'); el.removeAttribute('data-name-fb'); return; }
+      if(fb || el.getAttribute('aria-label') || el.textContent.trim() || !el.getClientRects().length) return;
+      el.setAttribute('aria-label',el.title||'ปุ่ม'); el.setAttribute('data-name-fb',''); });
+    root.querySelectorAll('[onclick]').forEach(function(el){
+      if(/^(BUTTON|A|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY|DETAILS|OPTION)$/.test(el.tagName) || el.getAttribute('role') || el.hasAttribute('tabindex')) return;
+      var oc=el.getAttribute('onclick')||''; if(/event\.target\s*===\s*this/.test(oc) || /^\s*event\.stopPropagation\(\);?\s*$/.test(oc)) return;
+      if(el.matches(OVER)) return;
+      el.setAttribute('role','button'); el.tabIndex=0; });
+  }
+  var pend=false; function sweep(){ if(pend) return; pend=true; setTimeout(function(){ pend=false; watch(); names(document.body); },30); }
+  document.addEventListener('keydown',function(e){
+    var t=e.target;
+    if((e.key==='Enter'||e.key===' ') && t && t.getAttribute && /^(button|radio|checkbox|tab)$/.test(t.getAttribute('role')||'') && t.tagName!=='BUTTON' && t.getAttribute('aria-disabled')!=='true'){ e.preventDefault(); t.click(); return; }
+    if(e.key!=='Escape') return;
+    var top=stack.length && stack[stack.length-1].d; if(!top || !shown(top)) return;
+    var c=[].find.call(top.querySelectorAll('[aria-label="ปิด"],[data-esc]'),function(x){ return x.getClientRects().length; });
+    if(c){ e.preventDefault(); c.click(); }
+  });
+  new MutationObserver(sweep).observe(document.body,{childList:true,subtree:true});
+  if(document.readyState!=='loading') sweep(); else document.addEventListener('DOMContentLoaded',sweep);
+})();
 </script>
 </body></html>

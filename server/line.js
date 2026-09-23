@@ -134,7 +134,7 @@ function buildQueueMessage(text, link, label) {
       footer: {
         type: 'box', layout: 'vertical',
         contents: [{
-          type: 'button', style: 'primary', color: '#1ab3ce', height: 'sm',
+          type: 'button', style: 'primary', color: '#0B6A7E', height: 'sm',
           action: { type: 'uri', label: label, uri: link },
         }],
       },
@@ -151,7 +151,9 @@ function buildQueueMessage(text, link, label) {
 // Emoji rendered at a different size on every device and made the card read as a chat message
 // rather than an order status.
 const STAGE_LABELS = ['รับออเดอร์', 'กำลังทำ', 'พร้อมรับ'];
-const ON = '#1ab3ce', DONE = '#2fc2a6', OFF = '#E4ECF1', INK = '#284B63', MUT = '#8A9299';
+// WCAG 1.4.3 (round-2 audit): LINE draws primary buttons with WHITE text, so the button colour is the
+// deep teal #0B6A7E (6.2:1); secondary text is #6B7280 (4.8:1). The progress rail keeps the brand tones.
+const ON = '#1ab3ce', DONE = '#2fc2a6', OFF = '#E4ECF1', INK = '#284B63', MUT = '#6B7280', BTN = '#0B6A7E';
 function buildStageMessage({ stage, title, subtitle, code, link, label }) {
   // One column per step: a 4px rail above its label. Done = mint, current = teal, later = grey.
   const step = (i) => {
@@ -189,7 +191,7 @@ function buildStageMessage({ stage, title, subtitle, code, link, label }) {
       ...(link ? {
         footer: {
           type: 'box', layout: 'vertical', paddingAll: '14px', paddingTop: '0px',
-          contents: [{ type: 'button', style: 'primary', color: ON, height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
+          contents: [{ type: 'button', style: 'primary', color: BTN, height: 'sm', action: { type: 'uri', label: label || 'ดูคิวของฉัน', uri: link } }],
         },
       } : {}),
     },
@@ -221,13 +223,14 @@ export async function pushStage(userId, opts, kind = 'queue') {
  *  the LIFF. `msg` (optional) lets a campaign carry its own line instead of the generic congrats, so
  *  the whole thing is ONE Flex message — no extra LINE cost over the old text push. */
 function buildCouponFlex(c, link, msg) {
-  const NAVY = '#284B63', MUTED = '#5C7187', TEAL = '#00B5D8', HAIR = '#EEF1F5';
+  const NAVY = '#284B63', MUTED = '#5C7187', TEAL = '#0B6A7E', HAIR = '#EEF1F5', HERO = '#16314F', SUB = '#6B7280';
   const isReward = c.isReward || c.disc_type === 'reward';
   const kind = c.couponKind || c.kind || (isReward ? 'reward' : 'discount');
-  // Per-kind gradient hero, mirroring the in-app .cpn / .cw-ticket value stub.
+  // Per-kind gradient hero, mirroring the in-app .cpn / .cw-ticket value stub (couponLook in the LIFF):
+  // navy text on every ramp, ≥ 4.9:1 at the darkest stop.
   const GRAD = {
-    birthday: ['#F68CAE', '#E0608F'], winback: ['#F7C458', '#EF9C2A'],
-    reward: ['#33C9AC', '#10A582'], discount: ['#00B5D8', '#2FC2A6'],
+    birthday: ['#F68CAE', '#F07BA3'], winback: ['#F7C458', '#EF9C2A'],
+    reward: ['#33C9AC', '#1FB38F'], discount: ['#00B5D8', '#2FC2A6'],
   };
   const [g0, g1] = GRAD[kind] || GRAD.discount;
   const big = isReward ? 'ฟรี 1 แก้ว'
@@ -247,14 +250,14 @@ function buildCouponFlex(c, link, msg) {
           { type: 'box', layout: 'horizontal', paddingStart: '20px', paddingEnd: '20px', paddingTop: '18px', paddingBottom: '10px',
             contents: [
               { type: 'text', text: 'YO-DEE Yogurt', size: 'sm', weight: 'bold', color: NAVY, flex: 1, gravity: 'center' },
-              { type: 'text', text: 'คูปอง', size: 'xs', color: '#8A9299', align: 'end', gravity: 'center' },
+              { type: 'text', text: 'คูปอง', size: 'xs', color: SUB, align: 'end', gravity: 'center' },
             ] },
           { type: 'box', layout: 'vertical', paddingAll: '22px',
             background: { type: 'linearGradient', angle: '135deg', startColor: g0, endColor: g1 },
             contents: [
-              { type: 'text', text: kicker, size: 'xs', color: '#FFFFFF', weight: 'bold' },
-              { type: 'text', text: big, size: '3xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' },
-              { type: 'text', text: cond, size: 'xxs', color: '#FFFFFF', margin: 'sm' },
+              { type: 'text', text: kicker, size: 'xs', color: HERO, weight: 'bold' },
+              { type: 'text', text: big, size: '3xl', color: HERO, weight: 'bold', margin: 'sm' },
+              { type: 'text', text: cond, size: 'xxs', color: HERO, margin: 'sm' },
             ] },
           { type: 'box', layout: 'vertical', paddingAll: '18px',
             contents: [
@@ -263,7 +266,7 @@ function buildCouponFlex(c, link, msg) {
               { type: 'separator', margin: 'lg', color: HAIR },
               ...(c.expiresAt ? [{ type: 'box', layout: 'baseline', margin: 'lg', contents: [
                 { type: 'text', text: '⏳', flex: 0, size: 'sm' },
-                { type: 'text', text: `ใช้ได้ถึง ${c.expiresAt}`, size: 'xs', color: '#8A9299', margin: 'sm' },
+                { type: 'text', text: `ใช้ได้ถึง ${c.expiresAt}`, size: 'xs', color: SUB, margin: 'sm' },
               ] }] : []),
               { type: 'button', style: 'primary', color: TEAL, margin: 'lg', height: 'sm',
                 action: { type: 'uri', label: 'เปิดคูปอง · ใช้เลย', uri: link || 'https://line.me' } },
@@ -292,7 +295,7 @@ export async function pushCouponFlex(userId, coupon, link, msg, kind = 'coupon')
  *  ยอดขาย/กำไร, groups the rest, and always carries the same text as altText so a notification
  *  preview (and any client that cannot render Flex) still says everything. */
 function buildSummaryFlex(s, fallbackText) {
-  const NAVY = '#284B63', MUTED = '#8A9299', TEAL = '#1ab3ce', GREEN = '#0f6b57', RED = '#b3283a', WARN = '#946f00';
+  const NAVY = '#284B63', MUTED = '#6B7280', TEAL = '#0B6A7E', GREEN = '#0f6b57', RED = '#b3283a', WARN = '#7A5C00';
   const money = (n) => '฿' + Number(n || 0).toLocaleString('en-US');
   const row = (label, value, color, bold) => ({
     type: 'box', layout: 'horizontal', margin: 'sm',
@@ -335,7 +338,7 @@ function buildSummaryFlex(s, fallbackText) {
   }
   if (s.rating || s.cashLine) {
     body.push(sep());
-    if (s.rating) body.push(row('รีวิวเฉลี่ย', `★ ${s.rating}${s.ratingCount ? ` (${s.ratingCount})` : ''}`, '#d9a520'));
+    if (s.rating) body.push(row('รีวิวเฉลี่ย', `★ ${s.rating}${s.ratingCount ? ` (${s.ratingCount})` : ''}`, '#A16207'));
     if (s.cashLine) body.push(row('เงินสด', s.cashLine.text, s.cashLine.ok ? GREEN : RED, true));
   }
   if (s.lowCount || s.expiringCount || (s.buyList || []).length) {
