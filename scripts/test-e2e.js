@@ -3054,6 +3054,43 @@ console.log('\n== Price assistant ==');
   db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi);
 }
 
+console.log('\n== Table QR (สั่งที่โต๊ะ) ==');
+{
+  ok(JSON.stringify(Q.parseTableSpec('1-3, VIP, A1-A2, 2')) === JSON.stringify(['1', '2', '3', 'VIP', 'A1', 'A2']),
+    'INVARIANT a table list expands ranges, keeps the order and drops duplicates');
+  ok(Q.parseTableSpec('1-500').length === 1 && Q.parseTableSpec(Array.from({ length: 80 }, (_, i) => 'T' + i)).length === 60,
+    'INVARIANT a runaway range is kept as one label and a list stops at 60 tables');
+  Q.setZoneTables(1, '1-4');
+  const uA = 'U' + 'd4'.repeat(16), uB = 'U' + 'd5'.repeat(16), uC = 'U' + 'd6'.repeat(16);
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uA, tableLabel: '3' });
+  const snap = Q.zoneSnapshot(1, { reveal: true });
+  const card = [...snap.pending, ...snap.waiting].find((t) => t.id === r.ticket.id);
+  ok(card && card.table_label === '3' && Q.ticketView(r.ticket.id).table === '3' && (snap.zone.tables || []).length === 4,
+    'INVARIANT a table-QR order carries its table to the cashier card and the customer ticket');
+  const r2 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uB, tableLabel: '<b>99</b>' });
+  ok(Q.ticketView(r2.ticket.id).table === null, 'INVARIANT a label that is not one of the zone tables is dropped (no free text reaches a screen)');
+  let bad = false; try { Q.setTicketTable(r2.ticket.id, '9'); } catch (e) { bad = e.message === 'bad_table'; }
+  ok(bad, 'INVARIANT the cashier cannot put an order on a table the zone does not have');
+  ok(Q.setTicketTable(r2.ticket.id, '4').table === '4' && Q.setTicketTable(r2.ticket.id, '').table === null,
+    'INVARIANT the cashier can move an order onto a table and back to counter pickup');
+  const al = Q.staffAlertData(r.ticket.id, 'new', 'https://x.test');
+  ok(al && al.table === '3', 'INVARIANT the team LINE alert names the table');
+  const captured = []; const orig = console.log;
+  const run = (fn) => { captured.length = 0; console.log = (...a) => { captured.push(a.join(' ')); }; try { return fn(); } finally { console.log = orig; } };
+  Q.setOrderPaid(r.ticket.id, { method: 'promptpay' });
+  run(() => Q.markReady(r.ticket.id));
+  ok(captured.some((l) => l.includes('กำลังนำไปเสิร์ฟที่โต๊ะ 3')), 'INVARIANT the ready message tells a table customer the drink is on its way to table 3');
+  Q.setTableServe(false);
+  const r3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uC, tableLabel: '2' });
+  Q.setOrderPaid(r3.ticket.id, { method: 'promptpay' });
+  run(() => Q.markReady(r3.ticket.id));
+  ok(captured.some((l) => l.includes('เชิญรับที่เคาน์เตอร์')) && !captured.some((l) => l.includes('เสิร์ฟที่โต๊ะ')),
+    'INVARIANT with table service off the table is a reference only and the customer collects at the counter');
+  Q.setTableServe(true);
+  Q.setZoneTables(1, '');
+  ok(Q.getZoneTables(1).length === 0 && Q.validTable(1, '3') === null, 'INVARIANT clearing the list switches table QR off for the zone');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

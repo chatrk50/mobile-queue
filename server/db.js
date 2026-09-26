@@ -779,6 +779,9 @@ for (const stmt of [
   // turned into an accepted receiver by the owner with one tap.
   `ALTER TABLE slip_checks ADD COLUMN receiver_acct TEXT`,
   `ALTER TABLE slip_checks ADD COLUMN sender_acct TEXT`,
+  // Table QR (สั่งที่โต๊ะ): the table an order is brought to — from that table's QR (?table=5) or set by
+  // the cashier. Always one of the zone's own labels (setting tables:<zoneId>); NULL = counter pickup.
+  `ALTER TABLE tickets ADD COLUMN table_label TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

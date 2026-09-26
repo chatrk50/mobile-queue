@@ -1617,7 +1617,7 @@ async function api(path,opts={}){
   try{ r=await fetch(path,opts); }catch(e){ setNet(false); throw new Error('offline'); }
   setNet(true);
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||r.status);}return r.json();}
-function err(e){ const m={not_today:'คืนเงิน / แก้ไข / กู้คืน ได้เฉพาะบิลของวันนี้ — บิลวันก่อนดูได้อย่างเดียว',offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้'}; return m[e.message]||e.message; }
+function err(e){ const m={not_today:'คืนเงิน / แก้ไข / กู้คืน ได้เฉพาะบิลของวันนี้ — บิลวันก่อนดูได้อย่างเดียว',offline:'ต่อเน็ตไม่ได้ — ยังบันทึกไม่ได้ กรุณาเช็คสัญญาณแล้วลองใหม่',bad_pin:'PIN ไม่ถูกต้อง',order_unpaid:'กรุณาเก็บเงินก่อน (กดชำระแล้ว) จึงจะเสิร์ฟได้',balance_due:'มียอดค้างเพิ่มจากการแก้ไข — กด "รับเงินเพิ่ม" ก่อนเสิร์ฟ',too_many_attempts:'ลองมากเกินไป กรุณารอสักครู่',store_closed:'ร้านปิดอยู่ (นอกเวลาทำการ) — เปิดร้าน/แก้เวลาได้ที่เมนู "สาขา"',zone_closed:'โซนนี้ปิดอยู่ — เปิดได้ที่ปุ่มโซน',forbidden:'สิทธิ์ไม่พอสำหรับรายการนี้',bad_table:'ไม่มีโต๊ะนี้ในโซน — ตั้งรายชื่อโต๊ะได้ที่ ⚙ ตั้งค่าฟีเจอร์ → QR สั่งที่โต๊ะ'}; return m[e.message]||e.message; }
 // Shared SVG line icons (same .ic theme as the nav) so action buttons match the rest of the UI.
 const IC={
   cash:'<svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
@@ -4874,11 +4874,13 @@ function renderZone(snap){
   // Auto-recognition chip: a returning customer is greeted on the card itself (no lookup needed).
   const recoChip=(t)=> (t.cust && t.cust.visits>=2)
     ? ` <span class="pill" style="background:rgba(255,138,61,.15);color:#c2410c;font-weight:700;margin-left:6px;font-size:11px">★ มา ${t.cust.visits} ครั้ง${t.cust.fav?' · ชอบ'+esc(t.cust.fav):''}</span>` : '';
+  // Table QR: where the order goes, in the card's most visible spot.
+  const tblChip=(t)=> t.table_label ? ` <span class="pill" style="background:#16314f;color:#fff;font-weight:800;margin-left:6px">โต๊ะ ${esc(t.table_label)}</span>` : '';
   const nm=(t)=>{
     const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
     const nameTxt = (t.cust&&t.cust.name) ? t.cust.name : (real?t.customer_name:'');
     const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0b6a7e;margin-left:6px">LINE</span>' : '';
-    return (nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
+    return tblChip(t)+(nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)
@@ -4992,6 +4994,8 @@ function renderZone(snap){
   // แก้ไขออเดอร์: change drink/topping/sweet in place instead of cancel+rekey (unpaid, no partial).
   const editBtn=(t)=> (t.order_total!=null && t.payment_status!=='void' && !(t.payment_status!=='paid' && t.order_paid>0))
     ? `<button class="ghost" style="padding:8px 10px;color:#0e6b7e;border-color:#bfe3ec" onclick="editOrder(${t.id},${id})" title="แก้เมนู/ท็อปปิ้ง/ความหวาน">${IC.edit}แก้ไข</button>` : '';
+  const tableBtn=(t)=> ((snap.zone&&snap.zone.tables||[]).length && t.payment_status!=='void')
+    ? `<button class="ghost" style="padding:8px 10px" onclick="setTable(${t.id},${id})"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9h18M6 9v11M18 9v11M8 5h8"/></svg>${t.table_label?'ย้ายโต๊ะ':'ตั้งโต๊ะ'}</button>` : '';
   // "เพิ่มเติม" overflow: collect the occasional actions into one menu so the card row stays tidy.
   // Each card passes its own applicable secondary buttons (pending vs waiting differ); openMoreMenu shows them.
   window._moreCache = window._moreCache || {};
@@ -5028,19 +5032,19 @@ function renderZone(snap){
         <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div>
         ${mergeChk(t)}<span class="code" style="background:var(--navy);color:#fff;padding:1px 8px;border-radius:6px;font-size:13px;margin-right:4px">ออเดอร์ #${t.id}</span><span class="pill" style="background:rgba(243,203,85,.3);color:#7a5c00;font-weight:800">🕓 รอชำระ ฿${netOf(t)}</span>${paidPill(t)}${agePill(t)}${nm(t)}
         ${t.payment_status==='claimed'?' <span class="pill" style="background:rgba(26,179,206,.2);color:#0b6a7e;font-weight:800;margin-left:6px">🔔 ลูกค้าแจ้งชำระ — ตรวจสอบ</span>':''}</div>${ord(t)}</div></div>
-        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
+        ${actionCol(`<button style="width:100%;padding:13px 16px;font-size:16px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:#f4d98a;color:#6b4e00" onclick="markPaid(${t.id},'${t.payment_status}',${remainOf(t)})">${IC.cash}รับเงิน → ออกคิว</button>`, `${moreBtn(t, editBtn(t)+tableBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}`)}</div>`).join('')+`</div>`
   ) : '';
   const zw=$('zw-'+id); if(zw) zw.innerHTML = snap.waiting.length ? snap.waiting.map(t=>`${cancelBanner(t)}
     <div id="kcard-${t.id}" data-klines="${(t.order_lines||[]).length}" class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;${waitingCardBg(t)}">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}${makingPill(t)}
       ${t.notified_soon?'<span class="pill soon" style="margin-left:6px">แจ้งแล้ว</span>':''}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${makeBtns(t)}${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+tableBtn(t)+phoneBtn(t)+checkinBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${makeBtns(t)}${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'skip')">ข้าม</button>`)}</div>`).join('')
     : '<p class="muted">ว่าง</p>';
   const called=snap.recentCalled||[];
   const calledCard=(t)=>`
     <div class="qitem" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
       <div style="flex:1 1 230px;min-width:0"><div>${tsTop(t)}<div><span class="code">${t.code}</span>${nm(t)}${pay(t)}</div>${ord(t)}</div></div>
-      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`;
+      ${actionCol(payOrServe(t), `${moreBtn(t, editBtn(t)+tableBtn(t)+ppBtn(t)+discBtn(t)+redeemBtn(t)+partBtn(t)+splitBtn(t)+printBtn(t))}<span style="flex:1"></span>${verifyBtn(t)}${voidBtn(t)}<button class="ghost danger" style="padding:8px 10px" onclick="act(${t.id},'noshow')">ไม่มารับ</button>`)}</div>`;
   const zr=$('zr-'+id);
   if(zr){
     if(!called.length){ zr.innerHTML='<p class="muted">—</p>'; }
@@ -5286,6 +5290,7 @@ window.printKitchen=async(tid)=>{
     $('printArea').innerHTML=`<div class="rcpt">
       <div class="ctr" style="font-weight:800">★ ใบทำเครื่องดื่ม ★</div>
       <div class="big">${esc(v.code||'-')}</div>
+      ${v.table?`<div class="ctr" style="font-size:20px;font-weight:900">โต๊ะ ${esc(v.table)}</div>`:''}
       <div class="ctr">${dt}</div>
       <div class="hr"></div>
       ${itemsHtml||'<div class="ctr">—</div>'}
@@ -5475,6 +5480,11 @@ window.showFeatures=async()=>{
       <div class="muted" style="font-size:11.5px;width:100%">ℹ️ ตั้งค่าล่วงหน้าได้ — พอจดทะเบียน VAT เสร็จค่อยใส่เลขผู้เสียภาษีแล้วเปิดสวิตช์ · เลขที่ใบกำกับเดินต่อเนื่องไม่ข้าม (กฎหมายกำหนด) · เลขเริ่มนับปรับขึ้นได้อย่างเดียว กันเลขซ้ำ</div>
     </div>`+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 21v.01M17 21v.01"/></svg></span><div><b>QR สั่งที่โต๊ะ</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ติด QR ประจำโต๊ะ ลูกค้าสแกนสั่งได้เลยโดยไม่ต้องต่อคิวหน้าเคาน์เตอร์ เลขโต๊ะขึ้นบนการ์ดออเดอร์ ใบทำเครื่องดื่ม และ LINE ของทีม · ใส่รายชื่อโต๊ะต่อโซน เช่น <b>1-12</b> หรือ <b>A1-A6, VIP</b> · เว้นว่าง = ปิด</div></div></div>
+      <div id="tablesBox" style="width:100%;display:flex;flex-direction:column;gap:8px"><div class="muted" style="font-size:12px">กำลังโหลด…</div></div>
+    </div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.bell}</span><div><b>แจ้งเตือนออเดอร์เข้า LINE ของทีม</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ LINE ใหม่ สลิปรอตรวจ และคำขอยกเลิก ส่งเข้า LINE ของคนที่เชื่อมไว้ กดเริ่มทำหรือพร้อมรับจากแชทได้</div></div></div>
       <div id="staffAlertsBox" style="width:100%;display:flex;flex-direction:column;gap:8px"><div class="muted" style="font-size:12px">กำลังโหลด…</div></div>
@@ -5485,8 +5495,40 @@ window.showFeatures=async()=>{
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
   $('featuresPop').style.display='flex';
-  loadStaffAlerts(); loadLineQuota();
+  loadStaffAlerts(); loadLineQuota(); loadTables();
 };
+// ---- QR สั่งที่โต๊ะ (⚙ ตั้งค่าฟีเจอร์): table list per zone + printable table QRs ----
+// Consecutive labels fold back into a range for editing: ['1','2','3','VIP'] → "1-3, VIP".
+function compactTables(list){ const out=[]; let i=0;
+  const num=(s)=>{ const m=String(s).match(/^(\D*)([1-9]\d*|0)$/); return m?{p:m[1],n:Number(m[2])}:null; };
+  while(i<list.length){ const a=num(list[i]); let j=i;
+    if(a){ while(j+1<list.length){ const b=num(list[j+1]); if(b&&b.p===a.p&&b.n===a.n+(j+1-i)) j++; else break; } }
+    if(j>i+1){ out.push(list[i]+'-'+list[j]); i=j+1; } else { out.push(list[i]); i++; } }
+  return out.join(', '); }
+async function loadTables(){ const box=$('tablesBox'); if(!box) return;
+  let d; try{ d=await api('/api/tables'); }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px;color:var(--danger)">'+esc(err(e))+'</div>'; return; }
+  box.innerHTML=(d.zones||[]).map(z=>`<div style="background:var(--surface,#f1f5f9);border-radius:10px;padding:9px 12px">
+      <label for="tblSpec-${z.id}" style="font-size:12.5px;font-weight:700;color:var(--navy)">${esc(z.store)} · ${esc(z.name)} <span class="muted" style="font-weight:600">(${z.tables.length?z.tables.length+' โต๊ะ':'ยังไม่เปิดใช้'})</span></label>
+      <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+        <input id="tblSpec-${z.id}" value="${esc(compactTables(z.tables))}" placeholder="เช่น 1-12 หรือ A1-A6, VIP" style="flex:1;min-width:150px;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <button class="ok" style="padding:8px 12px" onclick="saveTables(${z.id})">บันทึก</button>
+        ${z.tables.length?`<a class="btn ghost" style="padding:8px 12px;font-size:13px" href="/print/?zone=${z.id}&tables=1" target="_blank" rel="noopener">พิมพ์ QR โต๊ะ</a>`:''}</div></div>`).join('')
+    +`<label class="row" style="gap:8px;align-items:flex-start;flex-wrap:nowrap;font-size:12.5px;cursor:pointer"><input type="checkbox" ${d.serve?'checked':''} onchange="saveTableServe(this.checked)" style="width:18px;height:18px;flex:none;margin-top:1px">
+      <span style="flex:1;min-width:0">พนักงานนำไปเสิร์ฟที่โต๊ะ <span class="muted">— ข้อความ "พร้อมแล้ว" บอกลูกค้าว่ากำลังนำไปเสิร์ฟ แทน "เชิญรับที่เคาน์เตอร์" · ปิดไว้ถ้าลูกค้ามารับเอง (เลขโต๊ะเป็นแค่ข้อมูลให้พนักงาน)</span></span></label>`; }
+window.saveTables=async(zid)=>{ const inp=$('tblSpec-'+zid);
+  try{ const d=await api('/api/tables',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zoneId:zid,spec:inp?inp.value:''})});
+    const z=(d.zones||[]).find(x=>x.id===zid); toast(z&&z.tables.length?('บันทึกแล้ว · '+z.tables.length+' โต๊ะ'):'ปิด QR สั่งที่โต๊ะของโซนนี้แล้ว'); loadTables(); }
+  catch(e){ toast(err(e)); } };
+window.saveTableServe=async(on)=>{ try{ await api('/api/tables',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serve:!!on})}); toast('บันทึกแล้ว'); }catch(e){ toast(err(e)); loadTables(); } };
+// Card action: put an order on a table / move it / back to counter pickup.
+window.setTable=async(tid,zid)=>{
+  const s=_lastSnap[zid]||{}, tabs=(s.zone&&s.zone.tables)||[];
+  const t=[...(s.pending||[]),...(s.waiting||[]),...(s.recentCalled||[])].find(x=>x.id===tid)||{};
+  const v=await appPrompt({title:'โต๊ะของออเดอร์'+(t.code?(' '+t.code):(' #'+tid)),message:'โต๊ะในโซนนี้: '+tabs.join(', ')+' · เว้นว่าง = รับที่เคาน์เตอร์',value:t.table_label||'',placeholder:'เลขโต๊ะ',okText:'บันทึก'});
+  if(v===null) return;
+  try{ const r=await api('/api/tickets/'+tid+'/table',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:v.trim()})});
+    toast(r.table?('ย้ายไปโต๊ะ '+r.table+' แล้ว'):'เปลี่ยนเป็นรับที่เคาน์เตอร์แล้ว'); }
+  catch(e){ toast(err(e)); } };
 // ---- แจ้งเตือนออเดอร์เข้า LINE ของทีม (⚙ ตั้งค่าฟีเจอร์ + เมนู ⋯ "เชื่อม LINE รับแจ้งเตือน") ----
 const ALERT_MODE_TXT={off:'ปิด',away:'เฉพาะตอนไม่มีเครื่องแคชเชียร์เปิดอยู่',always:'ทุกครั้งที่มีออเดอร์'};
 async function loadStaffAlerts(){ const box=$('staffAlertsBox'); if(!box) return;

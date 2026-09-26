@@ -145,7 +145,7 @@ export function callNext(zoneId, threshold) {
   const nextPaid = !nextOrder || nextOrder.payment_status === 'paid';
   pushStage(next.line_user_id, nextPaid
     ? { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
-        subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
+        subtitle: tablePickupLine(next) || 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
     : { stage: 2, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
         subtitle: 'กรุณามาชำระเงินที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
@@ -166,7 +166,7 @@ export function markReady(ticketId, threshold) {
   db.prepare("UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?").run(ticketId);
   if (t.number > 0) db.prepare('UPDATE zones SET last_called=? WHERE id=?').run(t.number, t.zone_id);
   if (t.line_user_id) pushStage(t.line_user_id, { stage: 3, title: 'เครื่องดื่มพร้อมรับแล้ว!', code: t.code,
-    subtitle: 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
+    subtitle: tablePickupLine(t) || 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true, zoneId: t.zone_id };
 }
@@ -4993,7 +4993,7 @@ function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
   return p == null ? null : r2(p);
 }
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null, tableLabel = null } = opts;
   let prepayOnly = false;   // set below for a customer on the no-show prepay tier
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
@@ -5116,6 +5116,8 @@ export function createOrder(zoneId, items, opts = {}) {
          VALUES (?,?,?,?,?,?,?,'pending',?)`
       ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label, clientToken);
     }
+    const table = tableLabel ? validTable(zoneId, tableLabel) : null;   // only a real table of this zone
+    if (table) db.prepare('UPDATE tickets SET table_label=? WHERE id=?').run(table, tinfo.lastInsertRowid);
     const freeDisc = freeGiveawayDiscount(lines, total);
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id, discount, discount_reason) VALUES (?,?,?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId, freeDisc, freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
@@ -6025,20 +6027,20 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   // All currently-called (called but not yet served) tickets, newest first. The cashier UI shows the
   // 5 most recent by default with a "แสดงทั้งหมด" toggle for the rest. Capped at 100 as a sane bound
   // ('called' is transient — it clears on serve/no-show — so this is effectively unbounded in practice).
   const recentCalled = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
+    `SELECT id, code, number, party_size, customer_name, called_at, table_label FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 100`
   ).all(zoneId);
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
   const pending = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested FROM tickets
+    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label FROM tickets
      WHERE zone_id=? AND status='pending' ORDER BY id ASC`
   ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
@@ -6079,7 +6081,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   };
   waiting.forEach(attach); recentCalled.forEach(attach); pending.forEach(attach);
   // Only the cashier (reveal) needs the awaiting-payment list; public/display omit it.
-  return { zone, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
+  return { zone: { ...zone, tables: getZoneTables(zoneId) }, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
 
 // Customer-safe cancellation reason: whitelist-maps an internal void_reason to wording that's
@@ -6145,6 +6147,7 @@ export function ticketView(ticketId) {
     // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
     canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
     cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
+    table: t.table_label || null, tableServe: t.table_label ? tableServeOn() : false,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', due: o.due || 0, status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
@@ -6286,7 +6289,7 @@ export function staffAlertData(ticketId, event, base = '') {
   if (cashier) actions.push({ label: ['claim', 'slip'].includes(event) ? 'ตรวจสลิปในแคชเชียร์' : 'เปิดแคชเชียร์', uri: cashier });
   const title = ALERT_TITLE[event] || 'แจ้งเตือน';
   return {
-    event, title, code: t.code || '', zone: t.zone_name, time: bkkClock(t.created_at), customer: t.customer_name || 'ลูกค้า LINE',
+    event, title, code: t.code || '', zone: t.zone_name, table: t.table_label || null, time: bkkClock(t.created_at), customer: t.customer_name || 'ลูกค้า LINE',
     lines, total: net, pay, actions, branchId: branchOfTicket(t.id),
     note: event === 'cancel' ? 'ยืนยันหรือเก็บออเดอร์ไว้ได้ในหน้าแคชเชียร์' : null,
     alt: `${title} ${t.code || ''} · ฿${net} · ${lines.length} รายการ`,
@@ -6464,4 +6467,64 @@ export function periodCompare({ days = 7, branchId = null } = {}) {
       platform: pct(current.channels.platform.revenue, previous.channels.platform.revenue),
     },
   };
+}
+
+// ==== Table QR (สั่งที่โต๊ะ) =======================================================================
+// A zone may carry a list of table labels. Each table's own QR opens the LIFF with ?table=<label>;
+// the order then carries the label, so the counter knows where to bring it and the customer's
+// "ready" message says it is on its way instead of "come to the counter". Labels are checked
+// against the zone's list on every write, so a hand-edited link never puts free text on a screen.
+const TABLE_MAX = 60;
+/** "1-12, VIP, A1-A6" → ['1',…,'12','VIP','A1',…,'A6'] (order kept, duplicates dropped, max 60). */
+export function parseTableSpec(spec) {
+  const out = [];
+  const add = (s) => { const v = String(s).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 12); if (v && !out.includes(v) && out.length < TABLE_MAX) out.push(v); };
+  const parts = Array.isArray(spec) ? spec : String(spec || '').split(/[,\n]/);
+  for (const raw of parts) {
+    const p = String(raw).trim();
+    const m = p.match(/^([^\d\s-]*)(\d{1,3})\s*-\s*(?:\1)?(\d{1,3})$/);   // 1-12 · A1-A6 · A1-6
+    if (m) {
+      const a = Number(m[2]), b = Number(m[3]);
+      if (b >= a && b - a < TABLE_MAX) { for (let i = a; i <= b; i++) add(m[1] + i); continue; }
+    }
+    add(p);
+  }
+  return out;
+}
+export function getZoneTables(zoneId) {
+  try { const a = JSON.parse(getSetting('tables:' + Number(zoneId), '[]')); return Array.isArray(a) ? a.map(String) : []; }
+  catch { return []; }
+}
+export function setZoneTables(zoneId, spec) {
+  if (!getZone(zoneId)) throw new Error('zone_not_found');
+  const tables = parseTableSpec(spec);
+  setSetting('tables:' + Number(zoneId), JSON.stringify(tables));
+  return { zoneId: Number(zoneId), tables };
+}
+/** Staff bring the order to the table (default) — or the table is only a reference and the
+ *  customer still collects at the counter. */
+export function tableServeOn() { return getSetting('tables:serve', '1') === '1'; }
+export function setTableServe(on) { setSetting('tables:serve', on ? '1' : '0'); return { serve: !!on }; }
+/** The label, if it names a table of this zone; otherwise null. */
+export function validTable(zoneId, label) {
+  const v = String(label == null ? '' : label).trim();
+  return v && getZoneTables(zoneId).includes(v) ? v : null;
+}
+/** Cashier: put an order on a table, move it, or send it back to counter pickup ('' / null). */
+export function setTicketTable(ticketId, label) {
+  const t = db.prepare('SELECT id, zone_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  const raw = String(label == null ? '' : label).trim();
+  const v = raw ? validTable(t.zone_id, raw) : null;
+  if (raw && !v) throw new Error('bad_table');
+  db.prepare('UPDATE tickets SET table_label=? WHERE id=?').run(v, t.id);
+  return { ticketId: t.id, table: v, zoneId: t.zone_id };
+}
+export function tablesOverview() {
+  const zones = db.prepare('SELECT z.id, z.name, s.name AS store FROM zones z JOIN stores s ON s.id=z.store_id ORDER BY s.id, z.id').all();
+  return { serve: tableServeOn(), zones: zones.map((z) => ({ ...z, tables: getZoneTables(z.id) })) };
+}
+/** What the "ready" message tells a table customer; null → the usual counter line. */
+function tablePickupLine(t) {
+  return t && t.table_label && tableServeOn() ? `กำลังนำไปเสิร์ฟที่โต๊ะ ${t.table_label} ค่ะ` : null;
 }

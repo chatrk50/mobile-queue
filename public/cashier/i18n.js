@@ -911,6 +911,14 @@
     ['มีคูปองใบนี้อยู่แล้ว ยังไม่ได้ใช้', 'Already holds this coupon, unused', 'ມີຄູປອງໃບນີ້ຢູ່ແລ້ວ ຍັງບໍ່ໄດ້ໃຊ້'],
     ['โควตาคูปองหมด', 'Coupon quota exhausted', 'ໂຄຕາຄູປອງໝົດ'],
     ['แคมเปญนี้ส่งก่อนมีรายชื่อรายคน — ดูจำนวนรวมด้านบน', 'Sent before per-person records existed — see the totals above', 'ແຄມເປນນີ້ສົ່ງກ່ອນມີລາຍຊື່ລາຍຄົນ — ເບິ່ງຈຳນວນລວມຂ້າງເທິງ'],
+    ['โต๊ะ {n}', 'Table {n}', 'ໂຕະ {n}'],
+    ['ตั้งโต๊ะ', 'Set table', 'ຕັ້ງໂຕະ'],
+    ['ย้ายโต๊ะ', 'Move table', 'ຍ້າຍໂຕະ'],
+    ['QR สั่งที่โต๊ะ', 'Table QR ordering', 'QR ສັ່ງທີ່ໂຕະ'],
+    ['พิมพ์ QR โต๊ะ', 'Print table QRs', 'ພິມ QR ໂຕະ'],
+    ['(ยังไม่เปิดใช้)', '(not in use)', '(ຍັງບໍ່ເປີດໃຊ້)'],
+    ['({n} โต๊ะ)', '({n} tables)', '({n} ໂຕະ)'],
+    ['พนักงานนำไปเสิร์ฟที่โต๊ะ', 'Staff serve to the table', 'ພະນັກງານນຳໄປເສີບທີ່ໂຕະ'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS, into: '.hdr-actions', before: '#logoutBtn', className: 'ghost ic-btn' });

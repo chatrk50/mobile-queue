@@ -457,7 +457,7 @@ export function buildStaffAlertFlex(a) {
     { type: 'text', text: l.name, size: 'sm', color: STAFF_INK, wrap: true, flex: 8 } ] }));
   if ((a.lines || []).length > 6) items.push({ type: 'text', text: `และอีก ${a.lines.length - 6} รายการ`, size: 'xs', color: STAFF_SUB });
   const body = [
-    kv('โซน', a.zone || '-'), kv('เวลา', a.time || '-'), kv('ลูกค้า', a.customer || 'ลูกค้า LINE'), kv('ชำระ', a.pay || '-'),
+    kv('โซน', a.zone || '-'), ...(a.table ? [kv('โต๊ะ', a.table)] : []), kv('เวลา', a.time || '-'), kv('ลูกค้า', a.customer || 'ลูกค้า LINE'), kv('ชำระ', a.pay || '-'),
     { type: 'separator', margin: 'md', color: STAFF_RULE },
     { type: 'box', layout: 'vertical', margin: 'md', spacing: 'xs', contents: items.length ? items : [{ type: 'text', text: 'ไม่มีรายการ', size: 'sm', color: STAFF_SUB }] },
     { type: 'separator', margin: 'md', color: STAFF_RULE },

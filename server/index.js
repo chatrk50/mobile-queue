@@ -790,15 +790,19 @@ app.get('/api/stores/:storeId/zones', (req, res) => {
 app.get('/api/zones/:zoneId', (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).json({ error: 'zone_not_found' });
-  res.json(z);
+  res.json({ ...z, tables: Q.getZoneTables(z.id), tableServe: Q.tableServeOn() });   // the LIFF checks a table QR's label against this
 });
 // QR PNG for a zone (points at the LIFF URL when configured) — used by the print poster.
 app.get('/api/qr/:zoneId', async (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).end();
+  // ?table=5 → that table's own QR (only a table the zone really has).
+  const table = req.query.table ? Q.validTable(z.id, req.query.table) : null;
+  if (req.query.table && !table) return res.status(404).end();
+  const tq = table ? `&table=${encodeURIComponent(table)}` : '';
   const url = LIFF_ID
-    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}`
-    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}`;
+    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}${tq}`
+    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}${tq}`;
   try {
     const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.type('png').send(buf);
@@ -897,6 +901,7 @@ app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) =>
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
       couponCode: (req.body?.couponCode || '').toString().slice(0, 40) || null,
+      tableLabel: (req.body?.table || '').toString().slice(0, 12) || null,
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
@@ -936,6 +941,26 @@ app.post('/api/tickets/:ticketId/cancel', (req, res) => {
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true, requested: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: put an order on a table / move it / back to counter pickup (table QR).
+app.post('/api/tickets/:ticketId/table', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const r = Q.setTicketTable(req.params.ticketId, req.body?.table);
+    emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal })); res.json(r); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Owner: table lists per zone + whether staff serve to the table.
+app.get('/api/tables', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.tablesOverview());
+});
+app.post('/api/tables', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    if (req.body?.serve != null) Q.setTableServe(!!req.body.serve);
+    if (req.body?.zoneId != null) Q.setZoneTables(req.body.zoneId, req.body.spec);
+    res.json(Q.tablesOverview());
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier: commit to making a queued order → locks the customer's self-cancel.

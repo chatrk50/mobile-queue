@@ -310,6 +310,7 @@
       <h1 id="zoneName" style="margin:0">—</h1>
       <span id="zoneState" class="pill open">เปิด</span>
     </div>
+    <div id="tableChip" style="display:none;margin-top:6px"><span class="pill" style="background:#16314f;color:#fff;font-weight:800;padding:4px 12px;display:inline-flex;align-items:center;gap:6px"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px" aria-hidden="true"><path d="M3 9h18M6 9v11M18 9v11M8 5h8"/></svg><span>โต๊ะ</span> <span id="tableChipLbl"></span></span></div>
     <!-- Account entry: a compact avatar chip (top-left, mirrors the ✕). Opens the account hub — the
          single door to the member card, stamps, coupons and history. Shown only for LINE members. -->
     <button id="acctChip" onclick="openAccount()" aria-label="บัญชีของฉัน" style="display:none;position:absolute;top:8px;left:8px;width:38px;height:38px;border-radius:50%;padding:0;border:1px solid var(--line);background:#fff;overflow:hidden;cursor:pointer;align-items:center;justify-content:center">
@@ -410,6 +411,7 @@
     <h2 id="tStore" class="muted">—</h2>
     <p id="tCodeLabel" class="muted" style="margin:6px 0;font-size:13px;white-space:nowrap">หมายเลขคิวของคุณ</p>
     <div class="big-number" id="tCode">—</div>
+    <p id="tTable" style="display:none;margin:2px 0 0;font-weight:800;color:var(--navy);font-size:15px"></p>
     <div id="tStatusWrap" style="margin:14px 0">
       <div id="tAheadWrap"><div class="waitline" id="tWait"></div></div>
       <div id="tCalled" style="display:none">
@@ -799,6 +801,10 @@
         <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>ช่องทางชำระเงิน</span>
         <span id="cartPayVal" style="color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;gap:2px">เลือก <svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 6l6 6-6 6"/></svg></span>
       </button>
+      <div id="cartTableRow" class="row between" style="display:none;align-items:center;padding:8px 2px;border-top:1px solid var(--line)">
+        <span style="font-weight:600;font-size:13.5px;color:var(--navy);display:flex;align-items:center;gap:8px"><svg class="ic" viewBox="0 0 24 24" style="width:17px;height:17px" aria-hidden="true"><path d="M3 9h18M6 9v11M18 9v11M8 5h8"/></svg><span id="cartTableLbl">เสิร์ฟที่โต๊ะ</span></span>
+        <b id="cartTableVal" style="font-size:14px;color:var(--navy)"></b>
+      </div>
     </div>
     <div id="basketUpsell" style="flex:none;display:none;margin:8px 0 0"></div>
     <div class="row" style="flex:none;gap:8px;margin-top:8px">
@@ -828,6 +834,7 @@ const qs = new URLSearchParams(location.search);
 let zoneId = qs.get('zone');   // `let` so a marketing link with no ?zone= can fall back to the shop's open zone (cfg.defaultZone)
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
 let couponTok = qs.get('coupon');                          // claim-a-coupon link (?coupon=TOKEN); `let` so we can restore it after a login redirect drops the query
+let tableLabel = (qs.get('table')||'').trim().slice(0,12) || null, tableServe = true;   // table QR (?table=5): the order is brought to that table (tableServe: staff bring it vs customer collects)
 let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
 const $ = (id) => document.getElementById(id);
@@ -908,12 +915,14 @@ async function initLiff(){
         // The LINE login redirect can drop the ?coupon= query (esp. when a RAW endpoint URL is
         // opened rather than a liff.line.me link) — stash the token so the claim resumes on return.
         try{ if(couponTok) sessionStorage.setItem('pendingCoupon', couponTok); }catch(e){}
+        try{ if(tableLabel) sessionStorage.setItem('pendingTable', tableLabel); }catch(e){}
         liff.login(); return;
       }
       inLine = true;
       // Restore a coupon token dropped by that redirect. Consume it either way so it can never leak
       // into a later normal open.
       try{ const pc=sessionStorage.getItem('pendingCoupon'); if(pc){ sessionStorage.removeItem('pendingCoupon'); if(!couponTok) couponTok=pc; } }catch(e){}
+      try{ const pt=sessionStorage.getItem('pendingTable'); if(pt){ sessionStorage.removeItem('pendingTable'); if(!tableLabel) tableLabel=pt; } }catch(e){}
       const p = await liff.getProfile();
       lineUserId = p.userId; displayName = p.displayName; pictureUrl = p.pictureUrl||null;
       $('liffNote').textContent = `เข้าสู่ระบบ LINE: ${p.displayName}`;
@@ -1222,6 +1231,11 @@ async function loadZone(){
   const store = stores.find(s=>s.id===z.store_id);
   $('storeName').textContent = store ? store.name : '';
   $('zoneName').textContent = z.name;
+  // Table QR: keep the label only when this zone really has that table (an old or edited link falls
+  // back to counter pickup instead of sending a runner to a table that does not exist).
+  if(tableLabel && !(z.tables||[]).includes(tableLabel)) tableLabel=null;
+  tableServe = z.tableServe!==false;
+  { const tc=$('tableChip'); if(tc){ tc.style.display=tableLabel?'':'none'; $('tableChipLbl').textContent=tableLabel||''; } }
   const ahead = snap.waitingCount, mpg = cfg.minutesPerGroup || 4;
   $('aheadNow').textContent = ahead;
   $('etaNow').textContent = ahead>0 ? ('~'+ahead*mpg+' นาที') : "ไม่ต้องรอ — คุณเป็นคิวถัดไป!";
@@ -1691,7 +1705,9 @@ function renderBasketCount(){ const n=cart.length; const c=$('basketCount'); c.t
     else { bar.style.display='none'; if(sp) sp.style.display='none'; } }
   updateNudges(); persistCart(); }   // CUS-H7: mirror every cart change to sessionStorage
 // Step 4: review basket -> confirm or cancel.
-window.openBasket=()=>{ closeAllPopups(); renderBasket(); $('basketPop').style.display='flex'; };
+window.openBasket=()=>{ closeAllPopups(); renderBasket();
+  { const tr=$('cartTableRow'); if(tr){ tr.style.display=tableLabel?'':'none'; $('cartTableVal').textContent=tableLabel||''; $('cartTableLbl').textContent=tableServe?'เสิร์ฟที่โต๊ะ':'โต๊ะ'; } }   // table QR: say where the order goes before it is placed
+  $('basketPop').style.display='flex'; };
 window.closeBasket=()=>{ $('basketPop').style.display='none'; };
 window.removeEntry=(i)=>{ cart.splice(i,1); renderBasket(); renderBasketCount(); };
 // Identical drinks (same name + sweetness + toppings) collapse to one line "N× …"; any
@@ -1914,7 +1930,7 @@ window.confirmBasket=async()=>{
   cartGroups().forEach(g=>{ const e=g.e; items.push({name:e.name+sweetLabel(e.sweet),price:e.price,qty:g.qty}); (e.toppings||[]).forEach(t=>items.push({name:t.name,price:t.price,qty:t.qty*g.qty})); });
   try{
     const r=await api('/api/zones/'+zoneId+'/order',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null})});
+      body:JSON.stringify({items,lineUserId,customerName:displayName,couponCode:cartCoupon?cartCoupon.code:null,table:tableLabel})});
     ticketId=r.ticketId; localStorage.setItem('ticket_'+zoneId,ticketId); payMethod=cartPayMethod;   // carry the cart's chosen channel onto the ticket → show only that channel
     if(!lineUserId && guestPhone){ try{ await api('/api/tickets/'+ticketId+'/guest-phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:guestPhone})}); }catch(e){} }   // non-LINE: link phone for loyalty
     // renderBasketCount() is what mirrors the cart to sessionStorage — clearing the array alone
@@ -2590,12 +2606,13 @@ let _said='';
 function sayStatus(v){ const mpg=cfg.minutesPerGroup||4, a=Math.max(0,v.ahead|0);
   const m = v.status==='pending' ? ((v.order&&v.order.status==='claimed') ? 'รอแคชเชียร์ยืนยันการชำระเงิน แล้วระบบจะออกหมายเลขคิวให้' : 'ชำระเงินเพื่อรับหมายเลขคิว')
     : v.status==='waiting' ? (a>0 ? ('รออีก '+a+' คิว ประมาณ '+(a*mpg)+' นาที') : 'คุณเป็นคิวถัดไป — เตรียมตัวรับได้เลย')
-    : v.status==='called' ? 'ถึงคิวของคุณแล้ว เชิญรับเครื่องดื่มที่เคาน์เตอร์'
+    : v.status==='called' ? ((v.table&&v.tableServe) ? ('ถึงคิวของคุณแล้ว กำลังนำไปเสิร์ฟที่โต๊ะ '+v.table) : 'ถึงคิวของคุณแล้ว เชิญรับเครื่องดื่มที่เคาน์เตอร์')
     : v.status==='served' ? 'รับเครื่องดื่มเรียบร้อย'
     : v.status==='cancelled' ? 'ออเดอร์นี้ถูกยกเลิกแล้ว' : '';
   if(m && m!==_said){ _said=m; announce(m, v.status==='called'); } }
 function render(v){
   try{ sayStatus(v); }catch(e){}
+  { const tt=$('tTable'); if(tt){ tt.style.display=v.table?'':'none'; if(v.table) tt.innerHTML='<span>'+(v.tableServe?'เสิร์ฟที่โต๊ะ':'โต๊ะ')+'</span> '+esc(v.table); } }
   // Pay-first: a 'pending' ticket has NO queue number yet — show a "pay to get your number"
   // prompt instead of an (empty) code, and hide the waiting/ahead block until payment is in.
   const isPending = v.status==='pending';
@@ -2642,7 +2659,7 @@ function render(v){
       : `(โหมดทดสอบ) แจ้งเตือนเมื่อเหลือ ${cfg.threshold} คิว — ดูที่ server log`;
   } else if(v.status==='called'){
     show('tAheadWrap',false); show('tCalled',true);
-    $('tCalledPill').textContent='คิว '+v.code+' · เชิญรับที่เคาน์เตอร์';
+    $('tCalledPill').innerHTML=esc('คิว '+v.code)+' · '+((v.table&&v.tableServe)?('<span>กำลังนำไปเสิร์ฟที่โต๊ะ</span> '+esc(v.table)):'<span>เชิญรับที่เคาน์เตอร์</span>');
     $('tNotifyNote').textContent='';
   } else if(v.status==='served'){
     // Order's done — the queue number and the progress bar have no job left, so they shrink out of
