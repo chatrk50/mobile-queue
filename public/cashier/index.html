@@ -3467,6 +3467,8 @@ async function loadInsights(){
   let d; try{ d=await api('/api/reports/insights'); }catch(e){ return; }
   renderInsightsBody(d, box); }
 // กำไรต่อเมนู: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ย) + the day's REAL ingredient spend.
+window.savePriceTarget=async()=>{ const v=Number(($('priceTargetInp')||{}).value); try{ await api('/api/pricing/target',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pct:v})});
+    const box=$('marginsBox'); if(box){ box.style.display='none'; } await toggleMargins(); toast('คำนวณราคาแนะนำใหม่แล้ว'); }catch(e){ toast(err(e)); } };
 window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!=='none'){ box.style.display='none'; return; }
   box.style.display=''; box.innerHTML='<p class="muted" style="font-size:12px">กำลังคำนวณ…</p>';
   let d; try{ d=await api('/api/reports/margins'+(_reportDate?('?date='+encodeURIComponent(_reportDate)):'')); }catch(e){ box.innerHTML='<p class="muted" style="font-size:12px;color:var(--danger)">โหลดไม่สำเร็จ: '+err(e)+'</p>'; return; }
@@ -3477,9 +3479,18 @@ window.toggleMargins=async()=>{ const box=$('marginsBox'); if(box.style.display!
         <span style="white-space:nowrap"><b style="color:${i.margin>=0?'#0f6e56':'var(--danger)'}">฿${i.margin}</b> <span class="muted" style="font-size:11px">(${i.marginPct}%)</span></span></div>
       <div class="row between" style="align-items:center;gap:8px">
         <div style="flex:1;height:6px;background:#fff;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(2,(i.margin/maxM*100)).toFixed(0)}%;background:${i.margin>=0?'linear-gradient(90deg,var(--accent),var(--accent2))':'var(--danger)'}"></div></div>
-        <span class="muted" style="font-size:11px;white-space:nowrap">ขาย ฿${i.price} · ทุน ฿${i.cost}</span></div></div>`;
+        <span class="muted" style="font-size:11px;white-space:nowrap">ขาย ฿${i.price} · ทุน ฿${i.cost}${i.pack?(' + แพ็กเกจ ฿'+i.pack):''}</span></div>
+      ${i.suspect&&i.suspectPart?`<div style="margin-top:4px;font-size:12px;font-weight:700;color:#b3283a;background:#fbe9ec;border-radius:8px;padding:5px 9px">ต้นทุนสูตรสูงผิดปกติ ตรวจหน่วยของ ${esc(i.suspectPart.ing)} ในสูตร (${i.suspectPart.qty} ${esc(i.suspectPart.unit||'')} = ฿${i.suspectPart.cost} ต่อแก้ว) เช่น ใส่ 1 ลอตแทน 1 ใบ</div>`:''}
+      ${i.suggested!=null?`<div class="row between" style="align-items:center;gap:8px;margin-top:4px;font-size:12px">
+        <span class="muted">ต้นทุน ${i.costPct}% ของราคา</span>
+        <span style="font-weight:800;color:${i.underTarget?'#7a5c00':'#15803d'};background:${i.underTarget?'#fbf3dc':'#e6f4ea'};border-radius:999px;padding:2px 10px">${i.underTarget?'ราคาแนะนำ ฿'+i.suggested+' · ต่ำกว่าเป้า':'ถึงเป้าแล้ว · แนะนำ ฿'+i.suggested}</span></div>`:''}</div>`;
   box.innerHTML=`<h2 style="margin:0 0 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>กำไรต่อเมนู (ราคาขาย − ต้นทุนสูตร)</h2>
     <div class="muted" style="font-size:11.5px;margin-bottom:8px">ต้นทุนจากสูตร (BOM) × ต้นทุนถัวเฉลี่ยวัตถุดิบปัจจุบัน · เรียงกำไรมาก → น้อย</div>
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+      <label for="priceTargetInp" style="font-size:12.5px;font-weight:700">ผู้ช่วยตั้งราคา · เป้าต้นทุนวัตถุดิบ + แพ็กเกจ</label>
+      <input id="priceTargetInp" type="number" inputmode="numeric" min="5" max="90" value="${d.targetPct||30}" style="width:74px;padding:6px 8px;border-radius:8px;font-size:13px"> <span class="muted" style="font-size:12.5px">% ของราคาขาย</span>
+      <button class="ok" style="padding:6px 12px;margin-left:auto" onclick="savePriceTarget()">คำนวณใหม่</button>
+      <div class="muted" style="font-size:11.5px;width:100%">ราคาแนะนำ = (ต้นทุนสูตร + แพ็กเกจต่อแก้ว) ÷ เป้า % ปัดขึ้นเป็นหลัก ฿5</div></div>
     ${(d.cogsActual>0||d.wasteCost>0)?`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12.5px">
       <div class="row between"><span>ต้นทุนวัตถุดิบที่ใช้จริง${_reportDate?(' ('+_reportDate+')'):'วันนี้'} <span class="muted" style="font-size:10.5px">จากการตัดสต๊อกอัตโนมัติ</span></span><b>฿${d.cogsActual}</b></div>
       ${d.wasteCost>0?`<div class="row between" style="color:var(--danger)"><span>ของเสีย (waste)</span><b>฿${d.wasteCost}</b></div>`:''}</div>`:''}

@@ -2344,16 +2344,42 @@ export function menuMakeable() {
 }
 /** Per-menu margin: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ยของวัตถุดิบ), ranked by margin.
  *  Items without a recipe show cost 0 + hasRecipe:false so the owner can see what's un-costed. */
+// Price assistant: price = (recipe cost + packaging per cup) ÷ the target food-cost share, rounded UP to
+// the next ฿5. Default target 30% (a common ceiling for a drinks shop); the owner sets their own.
+export function getPriceTarget() { const v = Number(getSetting('price:target_cost_pct', '30')); return v >= 5 && v <= 90 ? v : 30; }
+export function setPriceTarget(pct) {
+  const v = Math.round(Number(pct));
+  if (!(v >= 5 && v <= 90)) throw new Error('bad_target');
+  setSetting('price:target_cost_pct', String(v));
+  return { targetPct: v };
+}
+const PACK_RE = /แก้ว|ฝา|หลอด|ถุง|กล่อง|ช้อน|cup|lid|straw|bag/i;   // packaging lines inside a recipe
+export function suggestPrice(cost, packaging, targetPct) {
+  const base = (Number(cost) || 0) + (Number(packaging) || 0);
+  if (!(base > 0) || !(targetPct > 0)) return null;
+  return Math.ceil(base / (targetPct / 100) / 5) * 5;
+}
 export function menuMargins() {
   const items = db.prepare(`SELECT id, name, price, category FROM menu_items WHERE active=1 ORDER BY price DESC`).all();
+  const target = getPriceTarget(), packPerCup = Number(getFinanceSettings().packagingPerCup) || 0;
   return items.map((it) => {
     const parts = db.prepare(
       `SELECT r.qty, i.name AS ing, i.unit, i.avg_cost FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.menu_item_id=?`
     ).all(it.id);
     const cost = r2(parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.avg_cost) || 0), 0));
     const margin = r2(it.price - cost);
+    // Packaging per cup is added only when the recipe does not already carry cups / lids / straws.
+    const pack = (it.category === 'topping' || parts.some((p) => PACK_RE.test(p.ing || ''))) ? 0 : packPerCup;
+    // A recipe costing far more than the price is nearly always a unit slip (1 lot of cups instead of
+    // 1 cup). Say where it comes from instead of suggesting an absurd price.
+    const suspect = parts.length > 0 && it.price > 0 && (cost + pack) > it.price * 1.5;
+    const top = suspect ? parts.reduce((a, p) => ((p.qty || 0) * (p.avg_cost || 0) > (a.qty || 0) * (a.avg_cost || 0) ? p : a)) : null;
+    const suggested = parts.length && !suspect ? suggestPrice(cost, pack, target) : null;
     return { id: it.id, name: it.name, category: it.category, price: it.price, cost, margin,
       marginPct: it.price > 0 ? r2((margin / it.price) * 100) : 0, hasRecipe: parts.length > 0,
+      pack: r2(pack), costPct: it.price > 0 ? r2(((cost + pack) / it.price) * 100) : null, suggested, targetPct: target,
+      underTarget: suggested != null && it.price < suggested,
+      suspect, suspectPart: top ? { ing: top.ing, qty: top.qty, unit: top.unit, cost: r2((top.qty || 0) * (top.avg_cost || 0)) } : null,
       parts: parts.map((p) => ({ ing: p.ing, qty: p.qty, unit: p.unit, cost: r2((p.qty || 0) * (p.avg_cost || 0)) })) };
   }).sort((a, b) => b.margin - a.margin);
 }

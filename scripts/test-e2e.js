@@ -3030,6 +3030,30 @@ console.log('\n== LINE message saver ==');
   Q.setLineSaver(false);
 }
 
+console.log('\n== Price assistant ==');
+{
+  const ing = Q.addIngredient({ name: 'นมทดสอบราคา', unit: 'ml', costPrice: 0.1 });
+  const mi = Number(db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('PriceTest', 45, 'drink')").run().lastInsertRowid);
+  Q.setRecipe(mi, [{ ingredientId: ing.id, qty: 100 }]);   // recipe cost ฿10
+  Q.setPriceTarget(30);
+  const pack = Number(Q.getFinanceSettings().packagingPerCup) || 0;
+  const m = Q.menuMargins().find((x) => x.name === 'PriceTest');
+  const expect = Math.ceil((10 + pack) / 0.3 / 5) * 5;
+  ok(m && m.suggested === expect, `INVARIANT suggested price = (cost ฿10 + pack ฿${pack}) ÷ 30%, rounded up to ฿5 → ${expect} (got ${m && m.suggested})`);
+  ok(m.underTarget === (45 < expect) && Math.abs(m.costPct - ((10 + pack) / 45) * 100) < 0.01, 'INVARIANT the row says whether the current price is below the suggestion and its cost share');
+  let bad = false; try { Q.setPriceTarget(2); } catch (e) { bad = e.message === 'bad_target'; }
+  ok(bad && Q.getPriceTarget() === 30, 'INVARIANT a target outside 5–90% is refused and the old one stays');
+  ok(Q.menuMargins().filter((x) => !x.hasRecipe).every((x) => x.suggested === null), 'INVARIANT no price is suggested for an item without a recipe');
+  const lot = Q.addIngredient({ name: 'แก้วทดสอบลอต', unit: 'ลอต', costPrice: 165 });
+  const mi2 = Number(db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('PriceLot', 49, 'drink')").run().lastInsertRowid);
+  Q.setRecipe(mi2, [{ ingredientId: ing.id, qty: 100 }, { ingredientId: lot.id, qty: 1 }]);   // 1 LOT of cups per drink: a unit slip
+  const m2 = Q.menuMargins().find((x) => x.name === 'PriceLot');
+  ok(m2 && m2.suspect && m2.suggested === null && m2.suspectPart && m2.suspectPart.ing === 'แก้วทดสอบลอต', 'INVARIANT a recipe costing far above the price is flagged with its biggest line, not priced');
+  ok(m2.pack === 0, 'INVARIANT packaging per cup is not added again when the recipe already has cups');
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi2);
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

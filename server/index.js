@@ -1511,7 +1511,12 @@ app.get('/api/reports/compare', (req, res) => {
 app.get('/api/reports/margins', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
-  res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
+  res.json({ items: Q.menuMargins(), targetPct: Q.getPriceTarget(), ...Q.cogsForDay(date) });
+});
+// Price assistant target (ต้นทุนวัตถุดิบ + แพ็กเกจ เป็น % ของราคาขาย).
+app.post('/api/pricing/target', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setPriceTarget(req.body?.pct)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 // cashBranch is defined with the auth helpers above (branch-scoped for non-owner staff, 3C).
