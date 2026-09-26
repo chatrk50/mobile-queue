@@ -2823,22 +2823,13 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
  *  the first time the customer's coupons are looked at. */
 export function convertReadyRewards(customerKey) {
   if (!customerKey || !loyaltyEnabled()) return [];
+  if (getRedeemMode() === 'choose') return [];   // catalog mode: stamps add up until the customer picks a reward
   const issued = [];
   for (;;) {
     const bal = loyaltyBalance(customerKey).points;
     const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
     if (!reward) break;
-    const tpl = couponTemplate('reward');
-    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
-    let ccId = null;
-    db.transaction(() => {
-      db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
-      db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
-        .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
-      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, ?, ?, 'reward')`)
-        .run(customerKey, reward.name, tpl.value, expiresAt).lastInsertRowid;
-    })();
-    issued.push({ id: Number(ccId), label: reward.name, expiresAt });
+    try { issued.push(issueRewardCoupon(customerKey, reward, 'สะสมครบ → แลกเป็นคูปอง: ')); } catch { break; }
   }
   return issued;
 }
@@ -4175,14 +4166,6 @@ export function setTierConfig(p = {}) {
   if (p.essencePerk != null) setSetting('loyalty:tier_essence_perk', String(p.essencePerk).slice(0, 200));
   return getTierConfig();
 }
-/** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
-export function loyaltyTier(lifetime) {
-  const l = lifetime || 0;
-  if (l >= 100) return { key: 'vip', label: 'VIP', emoji: '👑' };
-  if (l >= 50) return { key: 'gold', label: 'ลูกค้าประจำ', emoji: '🏅' };
-  if (l >= 20) return { key: 'silver', label: 'ขาประจำ', emoji: '⭐' };
-  return null;
-}
 /** Bangkok-local helpers for the birthday free drink. */
 function bkkMonthDay() { return db.prepare("SELECT strftime('%m-%d', datetime('now','+7 hours')) md").get().md; }
 function bkkYear() { return db.prepare("SELECT strftime('%Y', datetime('now','+7 hours')) y").get().y; }
@@ -4205,9 +4188,9 @@ export function setCustomerBirthday(key, birthday) {
 /** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier + birthday. */
 export function loyaltyBalance(key) {
   if (!key) return { key, points: 0, lifetime: 0, tier: null, birthday: null, isBirthday: false };
-  const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=?').get(key);
+  const c = db.prepare('SELECT points, lifetime_points, birthday, order_count FROM customers WHERE line_user_id=?').get(key);
   const lifetime = c ? (c.lifetime_points || 0) : 0;
-  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
+  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: memberTier(c ? c.order_count : 0), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
 // ---- Phone-keyed loyalty (Package 1 — no LINE) ----
 // A walk-in customer is identified by phone; the loyalty key is 'tel:<digits>'. The cashier
@@ -4628,21 +4611,26 @@ export function issueBirthdayCoupons() {
 export function listRewards(all = false) {
   return db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active=1'} ORDER BY sort, cost_points, id`).all();
 }
-export function addReward({ name, cost_points, image = null } = {}) {
+const rewardValue = (v) => (Number(v) > 0 ? Math.round(Number(v) * 100) / 100 : null);
+const rewardDesc = (d) => (String(d == null ? '' : d).trim().slice(0, 120) || null);
+export function addReward({ name, cost_points, image = null, value = null, description = null } = {}) {
   const nm = (name || '').toString().trim().slice(0, 60);
   const cost = Math.max(1, Math.round(Number(cost_points) || 0));
   if (!nm) throw new Error('name_required');
-  const info = db.prepare('INSERT INTO rewards (name, cost_points, image) VALUES (?,?,?)').run(nm, cost, image ? image.toString() : null);
+  const info = db.prepare('INSERT INTO rewards (name, cost_points, image, value, description) VALUES (?,?,?,?,?)')
+    .run(nm, cost, image ? image.toString() : null, rewardValue(value), rewardDesc(description));
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateReward(id, { name, cost_points, active, image } = {}) {
+export function updateReward(id, { name, cost_points, active, image, value, description } = {}) {
   const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
   if (!cur) throw new Error('reward_not_found');
   const nm = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const cost = cost_points != null ? Math.max(1, Math.round(Number(cost_points) || 0)) : cur.cost_points;
   const a = active != null ? (active ? 1 : 0) : cur.active;
   const img = image !== undefined ? (image || null) : cur.image;
-  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=? WHERE id=?').run(nm, cost, a, img, id);
+  const val = value !== undefined ? rewardValue(value) : cur.value;
+  const desc = description !== undefined ? rewardDesc(description) : cur.description;
+  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=?, value=?, description=? WHERE id=?').run(nm, cost, a, img, val, desc, id);
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
 }
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
@@ -5569,7 +5557,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
   ).get(order.id)?.p;
   const room = Math.max(0, order.total - (order.discount || 0));
-  const free = Math.round(Math.min(couponTemplate('reward').value, cheapest || room, room) * 100) / 100;
+  const free = Math.round(Math.min(rewardCap(reward), cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = '🎁 แลกแต้ม: ' + reward.name;
   // Spending the stamps and applying the discount must be one unit — the discount used to run
@@ -6074,7 +6062,7 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       if (ck) { const m = customerMini(ck); if (m) t.cust = m; }
       if (loyaltyEnabled()) {
         const li = r && (r.line_user_id || r.customer_key);
-        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji + ' ' + b.tier.label : null; t.loy_redeemable = canRedeemNow(li); t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
       }
     }
     return t;
@@ -6527,4 +6515,59 @@ export function tablesOverview() {
 /** What the "ready" message tells a table customer; null → the usual counter line. */
 function tablePickupLine(t) {
   return t && t.table_label && tableServeOn() ? `กำลังนำไปเสิร์ฟที่โต๊ะ ${t.table_label} ค่ะ` : null;
+}
+
+// ==== Reward catalog (แลกของรางวัล) =================================================================
+// 'auto'   = a full card turns itself into a coupon (the original behaviour; simplest with one reward).
+// 'choose' = stamps keep adding up and the customer picks a reward in the LIFF when they want it —
+//            the only mode that works with several rewards at different costs: in 'auto' the cheapest
+//            reward converts the moment it is affordable, so nobody ever saves up for a bigger one.
+export function getRedeemMode() { return getSetting('loyalty:redeem_mode', 'auto') === 'choose' ? 'choose' : 'auto'; }
+export function setRedeemMode(m) { const v = m === 'choose' ? 'choose' : 'auto'; setSetting('loyalty:redeem_mode', v); return { redeemMode: v }; }
+/** The free-drink cap a reward's coupon carries: its own value, else the reward coupon template's. */
+function rewardCap(reward) { const v = Number(reward && reward.value); return v > 0 ? v : couponTemplate('reward').value; }
+/** Spend stamps on one reward → a coupon in the customer's wallet. The balance guard sits in the
+ *  UPDATE itself, so two taps at once can never both spend the same stamps. */
+function issueRewardCoupon(customerKey, reward, note) {
+  const tpl = couponTemplate('reward');
+  const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
+  const cap = rewardCap(reward);
+  let ccId = null;
+  db.transaction(() => {
+    const spent = db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=? AND points >= ?').run(reward.cost_points, customerKey, reward.cost_points);
+    if (!spent.changes) throw new Error('insufficient_points');
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`).run(customerKey, -reward.cost_points, note + reward.name);
+    ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, ?, ?, 'reward')`)
+      .run(customerKey, reward.name, cap, expiresAt).lastInsertRowid;
+  })();
+  return { id: Number(ccId), label: reward.name, freeCap: cap, expiresAt };
+}
+/** Catalog mode: the customer spends their own stamps on a reward from the LIFF. */
+export function customerRedeem(customerKey, rewardId) {
+  if (!customerKey) throw new Error('customer_required');
+  if (!loyaltyEnabled()) throw new Error('loyalty_off');
+  if (getRedeemMode() !== 'choose') throw new Error('auto_mode');
+  const reward = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(Number(rewardId));
+  if (!reward) throw new Error('reward_not_found');
+  if (loyaltyBalance(customerKey).points < reward.cost_points) throw new Error('insufficient_points');
+  const coupon = issueRewardCoupon(customerKey, reward, 'แลกของรางวัล: ');
+  return { ok: true, coupon, balance: loyaltyBalance(customerKey).points };
+}
+/** The member level (PURE → BLOOM → ESSENCE by paid visits, owner's thresholds). The LIFF card and
+ *  the counter both read THIS, so staff and customer never see two different levels. */
+/** Can this customer take a reward at the counter right now: enough stamps for the cheapest active
+ *  reward, or a reward coupon already in their wallet. Stamps-per-card is not the test — in catalog
+ *  mode the balance runs past it, and rewards can cost more or less than one card. */
+export function canRedeemNow(key) {
+  if (!key) return false;
+  const min = db.prepare('SELECT MIN(cost_points) m FROM rewards WHERE active=1').get().m;
+  if (min != null && loyaltyBalance(key).points >= min) return true;
+  return customerCoupons(key).some((c) => c.kind === 'reward');
+}
+export function memberTier(visits) {
+  const num = (k, d) => Math.max(0, Math.round(Number(getSetting(k, String(d))) || d));
+  const v = Number(visits) || 0;
+  if (v >= num('loyalty:tier_essence_min', 25)) return { key: 'essence', label: 'ESSENCE', emoji: '👑' };
+  if (v >= num('loyalty:tier_bloom_min', 10)) return { key: 'bloom', label: 'BLOOM', emoji: '🌷' };
+  return { key: 'pure', label: 'PURE', emoji: '🌱' };
 }

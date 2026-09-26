@@ -481,7 +481,7 @@ const customerKeyOK = (req, key) => {
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
-app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), redeemMode: Q.getRedeemMode(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => {
   if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
@@ -500,6 +500,12 @@ app.post('/api/customers/:key/redeem-birthday', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
+// Reward catalog: the customer spends their own stamps on a reward (shop set to "ให้ลูกค้าเลือกแลกเอง").
+app.post('/api/loyalty/:key/claim-reward', rateLimit('claimreward', 10, 60e3), (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.customerRedeem(req.params.key, req.body?.rewardId)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/loyalty/:key/birthday', (req, res) => {
   if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
@@ -524,7 +530,7 @@ app.post('/api/loyalty/:key/refer', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner: manage loyalty settings + rewards.
-app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(true) }); });
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), redeemMode: Q.getRedeemMode(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
@@ -536,6 +542,7 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.earnMode != null) Object.assign(out, Q.setEarnMode(req.body.earnMode));
     if (req.body?.bahtPerStar != null) Object.assign(out, Q.setBahtPerStar(req.body.bahtPerStar));
     if (req.body?.tier != null) out.tier = Q.setTierConfig(req.body.tier);
+    if (req.body?.redeemMode != null) Object.assign(out, Q.setRedeemMode(req.body.redeemMode));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

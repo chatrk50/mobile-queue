@@ -584,10 +584,17 @@
     <p class="muted" style="font-size:12px;margin:6px 0 0">จ่ายเงินแล้วได้ 1 ดวง/<span data-unit>แก้ว</span> — ลูกค้าหน้าร้านผูกเบอร์ที่เคาน์เตอร์ (ปุ่ม 📱 แต้ม) ก่อนรับเงิน · ลูกค้าสั่งผ่านไลน์ได้อัตโนมัติ · โบนัสต้อนรับช่วยให้เริ่มสะสมเร็วขึ้น</p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <h2 style="margin:0 0 8px;font-size:15px">ของรางวัล</h2>
+      <div role="radiogroup" aria-label="วิธีแลกของรางวัล" style="display:flex;flex-direction:column;gap:7px;background:var(--surface);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+        <label class="row" style="gap:8px;align-items:flex-start;flex-wrap:nowrap;cursor:pointer"><input type="radio" name="redeemMode" id="rmAuto" onchange="saveRedeemMode('auto')" style="width:18px;height:18px;flex:none;margin-top:2px"><span style="flex:1;min-width:0"><b>แลกอัตโนมัติเมื่อสะสมครบ</b> <span class="muted" style="font-size:12px">— ครบแล้วได้คูปองเข้ากระเป๋าเลย ง่ายสุด เหมาะกับของรางวัลชิ้นเดียว</span></span></label>
+        <label class="row" style="gap:8px;align-items:flex-start;flex-wrap:nowrap;cursor:pointer"><input type="radio" name="redeemMode" id="rmChoose" onchange="saveRedeemMode('choose')" style="width:18px;height:18px;flex:none;margin-top:2px"><span style="flex:1;min-width:0"><b>ให้ลูกค้าเลือกแลกเอง</b> <span class="muted" style="font-size:12px">— ดวงสะสมต่อได้เรื่อยๆ ลูกค้าเลือกของรางวัลในแอปเมื่อพร้อม เหมาะกับหลายรางวัลหลายราคา</span></span></label>
+        <div id="redeemModeWarn" role="note" style="display:none;font-size:12px;font-weight:700;color:#7a5c00;background:#fbf3dc;border-radius:8px;padding:6px 9px"></div>
+      </div>
       <div id="rewardsBody"></div>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="rwName" placeholder="ชื่อของรางวัล" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="rwCost" type="number" inputmode="numeric" placeholder="กี่แก้ว" data-unit-ph="กี่" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwValue" type="number" inputmode="decimal" min="0" placeholder="มูลค่าไม่เกิน ฿" aria-label="มูลค่าไม่เกิน (บาท)" style="width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <input id="rwDesc" maxlength="120" placeholder="คำอธิบายให้ลูกค้า (ไม่บังคับ)" aria-label="คำอธิบายให้ลูกค้า" style="flex:1 1 100%;padding:8px;border:1px solid var(--line);border-radius:8px">
         <input id="rwImg" placeholder="ลิงก์รูป (ไม่บังคับ)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--line);border-radius:8px">
         <button class="ok" style="padding:8px 16px" onclick="addReward()">เพิ่ม</button>
       </div>
@@ -2249,23 +2256,43 @@ window.showLoyalty=async()=>{ hideAllPanels(); $('dash').style.display='none'; $
   await loadLoyaltyAdmin(); };
 let REWARDS=[];
 window.onEarnMode=()=>{ const baht=$('earnBaht')&&$('earnBaht').checked; if($('loyBahtInp')) $('loyBahtInp').disabled=!baht; };
-window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; $('loyEnabledInp').checked=!!d.enabled; if($('memberEnabledInp'))$('memberEnabledInp').checked=(d.memberEnabled!==false); $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
+window.loadLoyaltyAdmin=async()=>{ try{ const d=await api('/api/rewards/all'); REWARDS=d.rewards||[]; REDEEM_MODE=d.redeemMode==='choose'?'choose':'auto'; if($('rmAuto'))$('rmAuto').checked=REDEEM_MODE==='auto'; if($('rmChoose'))$('rmChoose').checked=REDEEM_MODE==='choose'; $('loyEnabledInp').checked=!!d.enabled; if($('memberEnabledInp'))$('memberEnabledInp').checked=(d.memberEnabled!==false); $('loyStampsInp').value=d.stampsPerReward||10; $('loyWelcomeInp').value=(d.welcomeBonus!=null?d.welcomeBonus:2);
   const em=d.earnMode==='baht'?'baht':'cup'; if($('earnCup'))$('earnCup').checked=em==='cup'; if($('earnBaht'))$('earnBaht').checked=em==='baht'; if($('loyBahtInp'))$('loyBahtInp').value=d.bahtPerStar||25; onEarnMode();
   const t=d.tier||{}; if($('tierBloomMin'))$('tierBloomMin').value=(t.bloomMin!=null?t.bloomMin:10); if($('tierEssenceMin'))$('tierEssenceMin').value=(t.essenceMin!=null?t.essenceMin:25); if($('tierPurePerk'))$('tierPurePerk').value=t.purePerk||''; if($('tierBloomPerk'))$('tierBloomPerk').value=t.bloomPerk||''; if($('tierEssencePerk'))$('tierEssencePerk').value=t.essencePerk||'';
   renderRewards(); }catch(e){ toast(err(e)); } };
-function renderRewards(){ const box=$('rewardsBody'); if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
+let _editRw=null, REDEEM_MODE='auto';
+function renderRewards(){ const box=$('rewardsBody');
+  // Several reward prices + auto conversion = the cheapest converts the moment it is affordable and
+  // nobody ever saves up for the bigger one. Say so where the owner sets both.
+  const costs=new Set(REWARDS.filter(r=>r.active).map(r=>r.cost_points)), warn=$('redeemModeWarn');
+  if(warn){ const w=REDEEM_MODE==='auto'&&costs.size>1; warn.style.display=w?'':'none';
+    if(w) warn.textContent='มีของรางวัลหลายราคาในโหมดอัตโนมัติ — ลูกค้าจะได้รางวัลที่ถูกที่สุดทันทีที่ดวงถึง และสะสมไปถึงรางวัลใหญ่ไม่ได้ · แนะนำ "ให้ลูกค้าเลือกแลกเอง"'; }
+  if(!REWARDS.length){ box.innerHTML='<p class="muted">ยังไม่มีของรางวัล</p>'; return; }
   box.innerHTML=REWARDS.map(r=>{
+    if(_editRw===r.id) return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">
+      <input id="erName" value="${esc(r.name)}" aria-label="ชื่อของรางวัล" style="flex:1;min-width:150px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <input id="erCost" type="number" inputmode="numeric" min="1" value="${r.cost_points}" aria-label="ใช้กี่ดวง" style="width:84px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <input id="erValue" type="number" inputmode="decimal" min="0" value="${r.value||''}" placeholder="มูลค่าไม่เกิน ฿" aria-label="มูลค่าไม่เกิน (บาท)" style="width:120px;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <input id="erDesc" value="${esc(r.description||'')}" maxlength="120" placeholder="คำอธิบายให้ลูกค้า (ไม่บังคับ)" aria-label="คำอธิบายให้ลูกค้า" style="flex:1 1 100%;padding:7px;border:1px solid var(--line);border-radius:8px">
+      <button class="ok" style="padding:6px 14px" onclick="saveRewardEdit(${r.id})">บันทึก</button><button class="ghost" style="padding:6px 14px" onclick="editReward(null)">ยกเลิก</button></div>`;
     const thumb = r.image ? `<img src="${esc(r.image)}" onerror="this.style.display='none'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">` : `<div style="width:40px;height:40px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">🥤</div>`;
-    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1">${esc(r.name)} <b>(${r.cost_points} ${unit()})</b>${r.active?'':' <span class="muted">— ปิด</span>'}</span>
+    return `<div class="row" style="gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${thumb}<span style="flex:1;min-width:0">${esc(r.name)} <b>(${r.cost_points} ${unit()})</b>${r.value?` <span class="muted" style="font-size:12px">· มูลค่าไม่เกิน ฿${r.value}</span>`:''}${r.active?'':' <span class="muted">— ปิด</span>'}${r.description?`<div class="muted" style="font-size:12px">${esc(r.description)}</div>`:''}</span>
       <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="uploadRewardImg(${r.id})">📷 รูป</button>
+      <button class="ghost" style="padding:4px 8px;font-size:12px" onclick="editReward(${r.id})">แก้ไข</button>
       <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="toggleReward(${r.id},${r.active?0:1})">${r.active?'ปิด':'เปิด'}</button></div>`;
   }).join(''); }
+window.editReward=(id)=>{ _editRw=id; renderRewards(); if(id) setTimeout(()=>{ const e=$('erName'); if(e) e.focus(); },30); };
+window.saveRewardEdit=async(id)=>{ const body={ name:$('erName').value.trim(), cost_points:Number($('erCost').value)||0, value:Number($('erValue').value)||0, description:$('erDesc').value.trim() };
+  if(!body.name||body.cost_points<1){ toast('กรอกชื่อ + จำนวนดวง'); return; }
+  try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); _editRw=null; toast('บันทึกแล้ว'); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+window.saveRedeemMode=async(m)=>{ try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({redeemMode:m})}); REDEEM_MODE=m; renderRewards();
+    toast(m==='choose'?'ลูกค้าเลือกแลกของรางวัลเองในแอปแล้ว':'แลกอัตโนมัติเมื่อสะสมครบแล้ว'); }catch(e){ toast(err(e)); loadLoyaltyAdmin(); } };
 window.saveLoyaltySettings=async()=>{ const enabled=$('loyEnabledInp').checked, memberEnabled=!$('memberEnabledInp')||$('memberEnabledInp').checked, stampsPerReward=Number($('loyStampsInp').value)||10, welcomeBonus=Math.max(0,Number($('loyWelcomeInp').value)||0);
   const earnMode=($('earnBaht')&&$('earnBaht').checked)?'baht':'cup', bahtPerStar=Math.max(1,Number($('loyBahtInp').value)||25);
   const tier={ bloomMin:Math.max(0,Number($('tierBloomMin').value)||0), essenceMin:Math.max(0,Number($('tierEssenceMin').value)||0), purePerk:$('tierPurePerk').value.trim(), bloomPerk:$('tierBloomPerk').value.trim(), essencePerk:$('tierEssencePerk').value.trim() };
   try{ await api('/api/loyalty/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,memberEnabled,stampsPerReward,welcomeBonus,earnMode,bahtPerStar,tier})}); toast('บันทึกการตั้งค่าแล้ว'); }catch(e){ toast(err(e)); } };
-window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null; if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
-  try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
+window.addReward=async()=>{ const name=$('rwName').value.trim(), cost_points=Number($('rwCost').value)||0, image=$('rwImg').value.trim()||null, value=Number(($('rwValue')||{}).value)||0, description=(($('rwDesc')||{}).value||'').trim(); if(!name||cost_points<1){ toast('กรอกชื่อ + จำนวนแต้ม'); return; }
+  try{ await api('/api/rewards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cost_points,image,value,description})}); $('rwName').value='';$('rwCost').value='';$('rwImg').value=''; if($('rwValue'))$('rwValue').value=''; if($('rwDesc'))$('rwDesc').value=''; loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 window.uploadRewardImg=(id)=>{ uploadTargetId=id; _uploadKind='reward'; const f=$('imgFile'); f.value=''; f.click(); };
 window.toggleReward=async(id,active)=>{ try{ await api('/api/rewards/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})}); loadLoyaltyAdmin(); }catch(e){ toast(err(e)); } };
 let LOY_KEY=null;
@@ -4884,7 +4911,7 @@ function renderZone(snap){
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
   const loyChip=(t)=> (t.loy_points!=null)
-    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?t.loy_tier+' ':'⭐ '}${t.loy_points} ดวง${t.loy_points>=(CFG.loyaltyStamps||10)?' · แลกได้!':''}</span>` : '';
+    ? ` <span class="pill" style="background:rgba(124,58,237,.13);color:#7c3aed;margin-left:6px;font-weight:700">${t.loy_tier?esc(t.loy_tier)+' · ':''}${t.loy_points} ดวง${t.loy_redeemable?' · แลกได้!':''}</span>` : '';
   const pay=(t)=>{
     if(t.order_total==null) return '';
     if(t.payment_status==='paid'){
@@ -4945,7 +4972,7 @@ function renderZone(snap){
   const discBtn=(t)=> (t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ghost" style="padding:8px 10px" onclick="discountTicket(${t.id},${t.order_total})">${IC.discount}ลด</button>` : '';
   // Loyalty redeem: shown only when this LINE customer has enough stamps for a free drink.
-  const redeemBtn=(t)=> (t.loy_points!=null && t.loy_points>=(CFG.loyaltyStamps||10) && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
+  const redeemBtn=(t)=> (t.loy_redeemable && t.order_total!=null && t.payment_status!=='paid' && t.payment_status!=='void')
     ? `<button class="ok" style="padding:8px 10px;background:#7c3aed" title="ลูกค้ามี ${t.loy_points} ดวง" onclick="redeemOrder(${t.id})"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8zM12 8h3.5a2.5 2.5 0 1 0-2.5-2.5V8z"/></svg>แลกฟรี</button>` : '';
   // Phone-keyed loyalty (Pkg 1, no LINE): attach a phone to a walk-in ticket so it earns stamps
   // on payment. Shows the balance once attached. Hidden for LINE self-orders (they earn already).

@@ -667,6 +667,8 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
+  `ALTER TABLE rewards ADD COLUMN value REAL`,             // the free-drink cap (฿) this reward's coupon carries; NULL = the reward coupon template's
+  `ALTER TABLE rewards ADD COLUMN description TEXT`,       // one line for the customer's reward catalog
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN name_lo TEXT`,        // Lao name (shown when the customer picks ລາວ)

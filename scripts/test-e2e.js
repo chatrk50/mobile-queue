@@ -3091,6 +3091,57 @@ console.log('\n== Table QR (สั่งที่โต๊ะ) ==');
   ok(Q.getZoneTables(1).length === 0 && Q.validTable(1, '3') === null, 'INVARIANT clearing the list switches table QR off for the zone');
 }
 
+console.log('\n== Reward catalog + one member tier ==');
+{
+  const wasOn = Q.loyaltyEnabled();
+  Q.setLoyaltyEnabled(true);
+  const K = 'U' + 'e7'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K, 0, 0, 0);
+  const prevActive = db.prepare('SELECT id FROM rewards WHERE active=1').all().map((r) => r.id);
+  db.prepare('UPDATE rewards SET active=0').run();   // the test owns the catalog
+  const small = Q.addReward({ name: 'ท็อปปิ้งฟรี', cost_points: 5, value: 10, description: 'เลือกท็อปปิ้งได้ 1 อย่าง' });
+  const big = Q.addReward({ name: 'แก้วฟรี', cost_points: 12, value: 49 });
+  ok(small.value === 10 && small.description === 'เลือกท็อปปิ้งได้ 1 อย่าง' && big.description === null,
+    'INVARIANT a reward keeps its own value cap and description');
+  const lastCoupon = () => db.prepare("SELECT * FROM customer_coupons WHERE customer_key=? AND kind='reward' ORDER BY id DESC LIMIT 1").get(K);
+
+  Q.setRedeemMode('auto');
+  db.prepare('UPDATE customers SET points=5 WHERE line_user_id=?').run(K);
+  const conv = Q.convertReadyRewards(K);
+  ok(conv.length === 1 && lastCoupon().free_cap === 10 && Q.loyaltyBalance(K).points === 0,
+    "INVARIANT auto mode converts a full card into a coupon worth that reward's own cap");
+
+  Q.setRedeemMode('choose');
+  db.prepare('UPDATE customers SET points=14 WHERE line_user_id=?').run(K);
+  ok(Q.convertReadyRewards(K).length === 0 && Q.loyaltyBalance(K).points === 14,
+    'INVARIANT in choose mode stamps keep adding up — nothing converts by itself');
+  const r1 = Q.customerRedeem(K, big.id);
+  const c2 = lastCoupon();
+  ok(r1.ok && r1.balance === 2 && c2.free_cap === 49 && c2.label === 'แก้วฟรี',
+    'INVARIANT the customer picks a reward: 12 stamps spent, a ฿49 coupon lands in their wallet');
+  let e1 = ''; try { Q.customerRedeem(K, small.id); } catch (e) { e1 = e.message; }
+  ok(e1 === 'insufficient_points' && Q.loyaltyBalance(K).points === 2, 'INVARIANT a reward the customer cannot afford is refused and nothing is spent');
+  let e3 = ''; try { Q.customerRedeem(K, 999999); } catch (e) { e3 = e.message; }
+  ok(e3 === 'reward_not_found', 'INVARIANT an unknown or switched-off reward cannot be redeemed');
+  Q.setRedeemMode('auto');
+  let e2 = ''; try { Q.customerRedeem(K, small.id); } catch (e) { e2 = e.message; }
+  ok(e2 === 'auto_mode', 'INVARIANT customers cannot self-redeem while the shop converts automatically');
+
+  const tc = Q.getTierConfig();
+  const tierAt = (n) => { db.prepare('UPDATE customers SET order_count=? WHERE line_user_id=?').run(n, K); return Q.loyaltyBalance(K).tier.key; };
+  ok(tierAt(0) === 'pure' && tierAt(tc.bloomMin) === 'bloom' && tierAt(tc.essenceMin) === 'essence' && tierAt(tc.bloomMin - 1) === 'pure',
+    "INVARIANT the counter's tier follows visits with the owner's thresholds (PURE → BLOOM → ESSENCE), the same as the member card");
+
+  const K2 = 'U' + 'e8'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K2, 4, 4, 0);
+  const below = Q.canRedeemNow(K2);
+  db.prepare('UPDATE customers SET points=5 WHERE line_user_id=?').run(K2);
+  ok(!below && Q.canRedeemNow(K2) && Q.canRedeemNow(K), 'INVARIANT "แลกได้" means enough stamps for the cheapest active reward, or a reward coupon already in the wallet');
+  db.prepare('UPDATE rewards SET active=0 WHERE id IN (?,?)').run(small.id, big.id);
+  for (const id of prevActive) db.prepare('UPDATE rewards SET active=1 WHERE id=?').run(id);
+  Q.setLoyaltyEnabled(wasOn);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

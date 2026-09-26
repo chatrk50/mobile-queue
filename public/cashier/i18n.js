@@ -919,6 +919,11 @@
     ['(ยังไม่เปิดใช้)', '(not in use)', '(ຍັງບໍ່ເປີດໃຊ້)'],
     ['({n} โต๊ะ)', '({n} tables)', '({n} ໂຕະ)'],
     ['พนักงานนำไปเสิร์ฟที่โต๊ะ', 'Staff serve to the table', 'ພະນັກງານນຳໄປເສີບທີ່ໂຕະ'],
+    ['แลกอัตโนมัติเมื่อสะสมครบ', 'Convert automatically when the card is full', 'ແລກອັດຕະໂນມັດເມື່ອສະສົມຄົບ'],
+    ['ให้ลูกค้าเลือกแลกเอง', 'Let customers choose their reward', 'ໃຫ້ລູກຄ້າເລືອກແລກເອງ'],
+    ['มูลค่าไม่เกิน ฿', 'Worth up to ฿', 'ມູນຄ່າບໍ່ເກີນ ฿'],
+    ['คำอธิบายให้ลูกค้า (ไม่บังคับ)', 'Description for customers (optional)', 'ຄຳອະທິບາຍໃຫ້ລູກຄ້າ (ບໍ່ບັງຄັບ)'],
+    ['· มูลค่าไม่เกิน ฿{n}', '· worth up to ฿{n}', '· ມູນຄ່າບໍ່ເກີນ ฿{n}'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS, into: '.hdr-actions', before: '#logoutBtn', className: 'ghost ic-btn' });
