@@ -4894,6 +4894,7 @@ export function editOrderItems(ticketId, items, opts = {}) {
   const toppingNames = new Set(db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name));
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_items WHERE order_id=?').run(order.id);
+    db.prepare('UPDATE tickets SET kitchen=NULL WHERE id=?').run(ticketId);   // lines changed → old kitchen marks are stale
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(order.id, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
     // Recompute the free-giveaway discount for the new item set. Don't clobber a manual bill
@@ -5379,6 +5380,13 @@ export function setOrderPaid(ticketId, opts = {}) {
     if (!lineSaverOn()) pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
+  // Queue-first: the kitchen can finish before the money lands. Once paid, an order whose every drink
+  // is marked done is announced ready at once, instead of sitting finished with nobody told.
+  try {
+    const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId), ol = orderForTicket(ticketId);
+    const n = ol ? (ol.lines || []).length : 0, k = kitchenOf(tk);
+    if (tk && tk.status === 'waiting' && n > 0 && Array.from({ length: n }, (_, j) => k[j] === 'done').every(Boolean)) markReady(ticketId, null);
+  } catch { /* never block a payment */ }
   return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
@@ -5720,6 +5728,7 @@ export function recordWaste(ticketId, { reason = null, byShop = false, actorId =
       }
     }
     db.prepare('UPDATE orders SET remakes = COALESCE(remakes,0) + 1 WHERE id=?').run(order.id);
+    db.prepare('UPDATE tickets SET kitchen=NULL WHERE id=?').run(ticketId);   // the drink is made again from scratch
     logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'waste_remake', amount: order.total, actor: actorId, meta: { reason: rsn, byShop, cups } });
   })();
   return { ok: true, cups, cost: Math.round(cost * 100) / 100, byShop, reason: rsn };
@@ -6015,26 +6024,27 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label, kitchen FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   // All currently-called (called but not yet served) tickets, newest first. The cashier UI shows the
   // 5 most recent by default with a "แสดงทั้งหมด" toggle for the rest. Capped at 100 as a sane bound
   // ('called' is transient — it clears on serve/no-show — so this is effectively unbounded in practice).
   const recentCalled = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, called_at, table_label FROM tickets
+    `SELECT id, code, number, party_size, customer_name, called_at, table_label, kitchen FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 100`
   ).all(zoneId);
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
   const pending = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label FROM tickets
+    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label, kitchen FROM tickets
      WHERE zone_id=? AND status='pending' ORDER BY id ASC`
   ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
                  recentCalled.forEach((t) => { t.customer_name = maskName(t.customer_name); });
                  pending.forEach((t) => { t.customer_name = maskName(t.customer_name); }); }
   const attach = (t) => {
+    t.kitchen = kitchenOf(t);   // per-line marks, shared with จอครัว
     const o = orderForTicket(t.id);
     if (o) {
       t.order_total = o.total;
@@ -6570,4 +6580,31 @@ export function memberTier(visits) {
   if (v >= num('loyalty:tier_essence_min', 25)) return { key: 'essence', label: 'ESSENCE', emoji: '👑' };
   if (v >= num('loyalty:tier_bloom_min', 10)) return { key: 'bloom', label: 'BLOOM', emoji: '🌷' };
   return { key: 'pure', label: 'PURE', emoji: '🌱' };
+}
+
+// ==== Kitchen marks (จอครัว / KDS) ==================================================================
+// Per-drink-line progress (○ → กำลังทำ → เสร็จ) lives on the ticket, so the counter, a kitchen tablet
+// and a page refresh all see the same state. tickets.kitchen = JSON {"<lineIdx>": "making"|"done"}.
+// The first mark locks the customer's self-cancel (startMaking); the last line done announces a PAID
+// order ready (markReady refuses an unpaid one, so nobody is called to collect before paying).
+export function kitchenOf(t) {
+  try { const o = JSON.parse((t && t.kitchen) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; }
+  catch { return {}; }
+}
+export function setKitchenMark(ticketId, line, status, { actorId = null, threshold = null } = {}) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (['served', 'cancelled', 'no_show', 'skipped'].includes(t.status)) throw new Error('ticket_closed');
+  const o = orderForTicket(t.id);
+  const n = o ? (o.lines || []).length : 0;
+  const i = Number(line);
+  if (!Number.isInteger(i) || i < 0 || i >= n) throw new Error('bad_line');
+  const st = status === 'making' || status === 'done' ? status : null;
+  const k = kitchenOf(t);
+  if (st) k[i] = st; else delete k[i];
+  db.prepare('UPDATE tickets SET kitchen=? WHERE id=?').run(Object.keys(k).length ? JSON.stringify(k) : null, t.id);
+  if (st && !t.making_at) startMaking(t.id, { actorId });
+  const allDone = n > 0 && Array.from({ length: n }, (_, j) => k[j] === 'done').every(Boolean);
+  const ready = allDone && t.status !== 'called' ? markReady(t.id, threshold) : null;
+  return { ticketId: t.id, zoneId: t.zone_id, kitchen: k, allDone, ready };
 }

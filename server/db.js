@@ -784,6 +784,8 @@ for (const stmt of [
   // Table QR (สั่งที่โต๊ะ): the table an order is brought to — from that table's QR (?table=5) or set by
   // the cashier. Always one of the zone's own labels (setting tables:<zoneId>); NULL = counter pickup.
   `ALTER TABLE tickets ADD COLUMN table_label TEXT`,
+  // Kitchen marks per drink line ({"0":"making","1":"done"}) — shared by the till and จอครัว.
+  `ALTER TABLE tickets ADD COLUMN kitchen TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

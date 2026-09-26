@@ -950,6 +950,13 @@ app.post('/api/tickets/:ticketId/cancel', (req, res) => {
     res.json({ ok: true, requested: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+// Kitchen mark for one drink line (the till's ○/🔥/✅ and จอครัว) — shared, so every screen agrees.
+app.post('/api/tickets/:ticketId/kitchen', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const r = Q.setKitchenMark(req.params.ticketId, req.body?.line, req.body?.status, { actorId: req.staff?.id || null, threshold: THRESHOLD });
+    emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal })); res.json(r); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Cashier: put an order on a table / move it / back to counter pickup (table QR).
 app.post('/api/tickets/:ticketId/table', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });

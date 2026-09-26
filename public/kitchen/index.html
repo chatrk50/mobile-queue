@@ -1,0 +1,174 @@
+<!doctype html><html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#16314f">
+<title>จอครัว — YO-DEE Yogurt</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  body{background:#eef2f6;margin:0}
+  .kds-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:10px 16px;background:#16314f;color:#fff}
+  .kds-top h1{font-size:18px;margin:0;color:#fff;display:flex;align-items:center;gap:8px}
+  .kds-top .hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .kds-top .hdr-actions button{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 12px;font-size:14px;border-radius:10px;min-height:40px;display:inline-flex;align-items:center;gap:6px}
+  .kds-top svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px 16px;align-items:start}
+  @media (max-width:900px){ .cols{grid-template-columns:1fr} }
+  .col h2{font-size:15px;margin:0 0 8px;color:#16314f;display:flex;align-items:center;gap:8px}
+  .col h2 .n{background:#16314f;color:#fff;border-radius:999px;padding:1px 10px;font-size:13px}
+  .kcard{background:#fff;border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(22,49,79,.08);border-left:6px solid #9fb3c8}
+  .kcard.making{border-left-color:#f39d12}
+  .kcard.ready{border-left-color:#16876f}
+  .kcard .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .kcard .code{font-size:28px;font-weight:900;color:#16314f;letter-spacing:.5px;line-height:1.1}
+  .chip{border-radius:999px;padding:3px 10px;font-size:13px;font-weight:800}
+  .chip.table{background:#16314f;color:#fff}
+  .chip.unpaid{background:#fbf3dc;color:#6b4e00}
+  .chip.line{background:#e9f8fb;color:#0b5f70}
+  .age{margin-left:auto;font-size:13px;font-weight:700;color:#4a5f75}
+  .age.late{color:#a3202f}
+  .kline{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:#f4f7fa;border:0;border-radius:12px;padding:10px 12px;margin-top:8px;min-height:56px;cursor:pointer;color:#16314f;font:inherit}
+  .kline:disabled{cursor:default}
+  .kline.making{background:#fdf0dc}
+  .kline.done{background:#e3f4ee}
+  .kline .mk{flex:none;width:32px;height:32px;border-radius:50%;border:2px solid #9fb3c8;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .kline .mk svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+  .kline.making .mk{border-color:#d9820a;background:#d9820a}
+  .kline.done .mk{border-color:#16876f;background:#16876f}
+  .kline .nm{font-size:18px;font-weight:800;line-height:1.25}
+  .kline .sub{font-size:14px;color:#4a5f75;font-weight:600;margin-top:2px}
+  .kline.done .nm{text-decoration:line-through;opacity:.75}
+  .serve{width:100%;margin-top:10px;background:#a9e3d0;color:#0c5e48;font-weight:800;border:0;border-radius:12px;padding:12px;font-size:16px;min-height:48px}
+  .empty{color:#4a5f75;font-size:14px;text-align:center;padding:24px 8px;background:#fff;border-radius:14px}
+  #login{max-width:360px;margin:60px auto;background:#fff;border-radius:18px;padding:22px;text-align:center;box-shadow:0 10px 30px rgba(22,49,79,.12)}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#16314f;color:#fff;padding:10px 16px;border-radius:12px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
+  #toast.show{opacity:1}
+  @media (prefers-reduced-motion:reduce){ #toast{transition:none} }
+</style>
+</head><body>
+<header class="kds-top">
+  <h1><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13.9A4 4 0 0 1 7.5 6a5 5 0 0 1 9 0A4 4 0 0 1 18 13.9V21H6z"/><path d="M6 17h12"/></svg>จอครัว</h1>
+  <div class="hdr-actions">
+    <button id="soundBtn" type="button" onclick="toggleSound()" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="soundTxt">เสียงเปิด</span></button>
+    <button id="logoutBtn" type="button" onclick="logout()" style="display:none">ออกจากระบบ</button>
+  </div>
+</header>
+
+<main>
+  <div id="login" style="display:none">
+    <h2 style="margin:0 0 6px;color:var(--navy)">เข้าสู่ระบบจอครัว</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 14px">ใช้ PIN พนักงานเดียวกับหน้าแคชเชียร์</p>
+    <label for="pin" class="muted" style="display:block;text-align:left;font-size:13px;margin-bottom:4px">PIN พนักงาน</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" style="width:100%;padding:12px;font-size:18px;border:1px solid var(--line);border-radius:10px;text-align:center;letter-spacing:4px" onkeydown="if(event.key==='Enter')kLogin()">
+    <div id="loginErr" role="alert" style="color:var(--danger);font-size:13px;min-height:18px;margin-top:6px"></div>
+    <button class="ok" id="loginBtn" style="width:100%;margin-top:6px" onclick="kLogin()">เข้าสู่ระบบ</button>
+  </div>
+  <div id="board" class="cols" style="display:none" aria-live="off">
+    <section class="col" aria-labelledby="hTodo"><h2 id="hTodo">รอทำ <span class="n" id="nTodo">0</span></h2><div id="cTodo"></div></section>
+    <section class="col" aria-labelledby="hMaking"><h2 id="hMaking">กำลังทำ <span class="n" id="nMaking">0</span></h2><div id="cMaking"></div></section>
+    <section class="col" aria-labelledby="hReady"><h2 id="hReady">พร้อมเสิร์ฟ <span class="n" id="nReady">0</span></h2><div id="cReady"></div></section>
+  </div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="srAlert" role="alert" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+
+<script type="module">
+// Kitchen display: every open order's drinks, line by line. Marks are server-side (shared with the
+// cashier board), so any number of screens stay in step. Live via the same per-zone SSE stream the
+// cashier uses, plus a 5 s re-pull in case a proxy drops the stream.
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const IC_OK='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const IC_FIRE='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-2.7 7-7 0-3.5-2.3-6.4-4-8-.4 2.4-1.8 4-3 4.5C12.5 8.4 11 5 8 2c.3 3.4-3 6.6-3 11 0 5 3.4 9 7 9z"/></svg>';
+let PIN=null, ZONES=[], SNAP={}, streams=[], pollTimer=null, seen=null, _ac=null;
+let soundOn=true; try{ soundOn=localStorage.getItem('yd_kds_sound')!=='0'; }catch(e){}
+
+async function api(path,opts={}){ if(PIN) opts.headers={...(opts.headers||{}),'x-cashier-pin':PIN};
+  const r=await fetch(path,opts); if(!r.ok){ const e=await r.json().catch(()=>({})); const er=new Error(e.error||r.status); er.status=r.status; throw er; } return r.json(); }
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function announce(m){ const el=$('srAlert'); el.textContent=''; setTimeout(()=>{ el.textContent=m; },60); }
+function chime(){ if(!soundOn) return; try{ _ac=_ac||new (window.AudioContext||window.webkitAudioContext)();
+  [0,180].forEach(d=>{ const o=_ac.createOscillator(), g=_ac.createGain(); o.connect(g); g.connect(_ac.destination); o.frequency.value=1046;
+    const t0=_ac.currentTime+d/1000; g.gain.setValueAtTime(.16,t0); g.gain.exponentialRampToValueAtTime(.0001,t0+.2); o.start(t0); o.stop(t0+.2); }); }catch(e){} }
+document.addEventListener('pointerdown',()=>{ try{ if(_ac&&_ac.state==='suspended') _ac.resume(); }catch(e){} });
+function paintSound(){ $('soundTxt').textContent=soundOn?'เสียงเปิด':'เสียงปิด'; $('soundBtn').setAttribute('aria-pressed',String(soundOn)); }
+window.toggleSound=()=>{ soundOn=!soundOn; try{ localStorage.setItem('yd_kds_sound',soundOn?'1':'0'); }catch(e){} paintSound(); if(soundOn) chime(); };
+
+function showLogin(){ $('board').style.display='none'; $('logoutBtn').style.display='none'; $('login').style.display=''; setTimeout(()=>{ try{ $('pin').focus(); }catch(e){} },50); }
+window.kLogin=async()=>{ const pin=$('pin').value.trim(); if(!pin){ $('loginErr').textContent='กรอก PIN ก่อน'; return; }
+  const lb=$('loginBtn'); lb.disabled=true;
+  try{ const sr=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+    if(sr.status===429){ $('loginErr').textContent='ใส่ PIN ผิดหลายครั้ง — รอสักครู่แล้วลองใหม่'; $('pin').value=''; return; }
+    if(sr.ok){ PIN=null; }
+    else { const lr=await fetch('/api/auth',{method:'POST',headers:{'x-cashier-pin':pin}});
+      const ok=lr.ok && ((await lr.json().catch(()=>({}))).ok);
+      if(!ok){ $('loginErr').textContent='PIN ไม่ถูกต้อง — กรอกใหม่อีกครั้ง'; $('pin').value=''; return; }
+      PIN=pin; }
+    $('pin').value=''; $('loginErr').textContent=''; start();
+  }catch(e){ $('loginErr').textContent='เชื่อมต่อไม่ได้ — ลองใหม่อีกครั้ง'; }
+  finally{ lb.disabled=false; } };
+window.logout=async()=>{ try{ await fetch('/api/staff/logout',{method:'POST'}); }catch(e){} PIN=null; streams.forEach(s=>s.close()); streams=[]; clearInterval(pollTimer); showLogin(); };
+
+async function start(){
+  $('login').style.display='none'; $('board').style.display=''; $('logoutBtn').style.display='';
+  const want=new URLSearchParams(location.search).get('branch');
+  const stores=await api('/api/stores'); ZONES=[];
+  for(const s of stores){ if(want && String(s.id)!==want) continue; (await api('/api/stores/'+s.id+'/zones')).forEach(z=>ZONES.push(z)); }
+  streams.forEach(s=>s.close()); streams=[];
+  for(const z of ZONES){ const es=new EventSource('/api/zones/'+z.id+'/stream'+(PIN?('?pin='+encodeURIComponent(PIN)):''));
+    es.addEventListener('update',e=>{ try{ SNAP[z.id]=JSON.parse(e.data); render(); }catch(_){} }); streams.push(es); }
+  clearInterval(pollTimer);
+  pollTimer=setInterval(()=>{ if(document.hidden) return; ZONES.forEach(async z=>{ try{ SNAP[z.id]=await api('/api/zones/'+z.id+'/snapshot'); render(); }catch(e){} }); render(); }, 5000);
+  render();
+}
+
+function ageMin(t){ const s=t.order_created_at; if(!s) return 0; const ms=Date.now()-Date.parse(String(s).replace(' ','T')+'Z'); return ms>0?Math.floor(ms/60000):0; }
+function findT(tid){ for(const z of ZONES){ const s=SNAP[z.id]; if(!s) continue; const t=[...(s.waiting||[]),...(s.recentCalled||[])].find(x=>x.id===tid); if(t) return t; } return null; }
+function card(t, col){
+  const k=t.kitchen||{}, lines=t.order_lines||[], ready=col==='ready';
+  const age=ageMin(t), late=!ready && age>=10, unpaid=t.payment_status && t.payment_status!=='paid';
+  return `<article class="kcard ${ready?'ready':(col==='making'?'making':'')}" aria-label="คิว ${esc(t.code||('#'+t.id))}">
+    <div class="head"><span class="code">${esc(t.code||('#'+t.id))}</span>
+      ${t.table_label?`<span class="chip table">โต๊ะ ${esc(t.table_label)}</span>`:''}
+      ${t.order_source==='customer'?'<span class="chip line">LINE</span>':''}
+      ${unpaid?'<span class="chip unpaid">ยังไม่ชำระ</span>':''}
+      <span class="age${late?' late':''}">${ready?'พร้อมแล้ว':(age+' นาที')}</span></div>
+    ${lines.map((l,i)=>{ const [nm,sw]=String(l.name||'').split(' · '), s=k[i]||'', tops=(l.toppings||[]).map(x=>x.name+(x.qty>1?(' ×'+x.qty):''));
+      const state=s==='done'?'เสร็จแล้ว':s==='making'?'กำลังทำ':'ยังไม่เริ่ม';
+      return `<button type="button" class="kline ${s}" ${ready?'disabled':''} onclick="mark(${t.id},${i})" aria-label="${esc((l.qty||1)+'× '+nm)} — ${state}">
+        <span class="mk">${s==='done'?IC_OK:s==='making'?IC_FIRE:''}</span>
+        <span style="flex:1;min-width:0"><span class="nm" style="display:block">${l.qty||1}× ${esc(nm)}</span>${sw?`<span class="sub" style="display:block">${esc(sw)}</span>`:''}${tops.length?`<span class="sub" style="display:block">+ ${esc(tops.join(', '))}</span>`:''}</span></button>`; }).join('')}
+    ${ready && t.payment_status==='paid' ? `<button type="button" class="serve" onclick="serve(${t.id})">เสิร์ฟแล้ว</button>`:''}
+  </article>`; }
+function render(){
+  if($('board').style.display==='none') return;
+  const todo=[], making=[], ready=[];
+  for(const z of ZONES){ const s=SNAP[z.id]; if(!s) continue;
+    for(const t of (s.waiting||[])){ if(!(t.order_lines||[]).length) continue; (Object.keys(t.kitchen||{}).length||t.making_at ? making : todo).push(t); }
+    for(const t of (s.recentCalled||[]).slice(0,12)) if((t.order_lines||[]).length) ready.push(t); }
+  const byNum=(a,b)=>(a.number||0)-(b.number||0); todo.sort(byNum); making.sort(byNum);
+  // New work arrived → chime (not on the first paint).
+  const ids=new Set(todo.map(t=>t.id)); if(seen){ const fresh=[...ids].filter(id=>!seen.has(id)); if(fresh.length){ chime(); announce('ออเดอร์ใหม่ '+fresh.length+' รายการ'); } }
+  seen=new Set([...(seen||[]), ...ids]);
+  const put=(id,nId,list,col)=>{ $(nId).textContent=list.length; $(id).innerHTML=list.length?list.map(t=>card(t,col)).join(''):'<div class="empty">ไม่มีออเดอร์</div>'; };
+  put('cTodo','nTodo',todo,'todo'); put('cMaking','nMaking',making,'making'); put('cReady','nReady',ready,'ready');
+}
+// Tap a drink: ○ → กำลังทำ → เสร็จ → ○. Optimistic, then the server's answer (and the SSE push) wins.
+window.mark=async(tid,i)=>{ const t=findT(tid); if(!t) return;
+  const k=t.kitchen||(t.kitchen={}), cur=k[i]||null, nx=cur==null?'making':cur==='making'?'done':null;
+  if(nx) k[i]=nx; else delete k[i]; if(nx && !t.making_at) t.making_at='now'; render();
+  try{ const r=await api('/api/tickets/'+tid+'/kitchen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({line:i,status:nx})});
+    t.kitchen=r.kitchen;
+    if(r.ready&&r.ready.ok&&!r.ready.already){ toast((t.code||'')+' พร้อมเสิร์ฟ · แจ้งลูกค้าแล้ว'); }
+    else if(r.allDone&&r.ready&&r.ready.reason==='unpaid'){ toast((t.code||'')+' ทำเสร็จแล้ว · รอลูกค้าชำระก่อนแจ้ง'); }
+    render(); }
+  catch(e){ if(cur) k[i]=cur; else delete k[i]; render();
+    if(e.status===401){ toast('หมดเวลาเข้าสู่ระบบ — เข้าใหม่อีกครั้ง'); showLogin(); } else toast('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง'); } };
+window.serve=async(tid)=>{ try{ await api('/api/tickets/'+tid+'/serve',{method:'POST'}); toast('เสิร์ฟแล้ว'); }
+  catch(e){ toast(e.message==='order_unpaid'?'ยังไม่ได้ชำระ — เก็บเงินที่แคชเชียร์ก่อน':e.message==='balance_due'?'มียอดค้างเพิ่ม — ให้แคชเชียร์เก็บก่อน':'เสิร์ฟไม่สำเร็จ'); } };
+
+paintSound();
+(async()=>{ try{ const d=await api('/api/staff/me'); if(d.staff||d.legacyAdmin) start(); else showLogin(); }catch(e){ showLogin(); } })();
+</script>
+<script src="/assets/brand.js"></script>
+<script src="/assets/i18n-core.js?v=2" defer></script>
+<script src="/cashier/i18n.js?v=1" defer></script>
+</body></html>

@@ -3142,6 +3142,44 @@ console.log('\n== Reward catalog + one member tier ==');
   Q.setLoyaltyEnabled(wasOn);
 }
 
+console.log('\n== Kitchen marks (shared across devices) ==');
+{
+  const uA = 'U' + 'f3'.repeat(16), uB = 'U' + 'f4'.repeat(16);
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }, { name: 'Drink50', price: 0, qty: 1 }], { source: 'customer', lineUserId: uA });
+  const tid = r.ticket.id;
+  Q.setOrderPaid(tid, { method: 'promptpay' });
+  const a = Q.setKitchenMark(tid, 0, 'making');
+  ok(a.kitchen[0] === 'making' && !!db.prepare('SELECT making_at FROM tickets WHERE id=?').get(tid).making_at,
+    "INVARIANT the first mark flips the order to being-made (the customer's self-cancel locks)");
+  const snap = Q.zoneSnapshot(1, { reveal: true });
+  const card = [...snap.waiting, ...snap.pending].find((t) => t.id === tid);
+  ok(card && card.kitchen && card.kitchen[0] === 'making', 'INVARIANT the mark rides the board snapshot, so every device and a refresh see it');
+  let bad = ''; try { Q.setKitchenMark(tid, 5, 'done'); } catch (e) { bad = e.message; }
+  ok(bad === 'bad_line', 'INVARIANT a line the order does not have is refused');
+  Q.setKitchenMark(tid, 0, 'done');
+  const b = Q.setKitchenMark(tid, 1, 'done');
+  ok(b.allDone && b.ready && b.ready.ok && db.prepare('SELECT status FROM tickets WHERE id=?').get(tid).status === 'called',
+    'INVARIANT the last drink done announces a paid order ready (called)');
+  const r2 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uB });
+  const c2 = Q.setKitchenMark(r2.ticket.id, 0, 'done');
+  ok(c2.allDone && c2.ready && c2.ready.ok === false && c2.ready.reason === 'unpaid',
+    'INVARIANT an unpaid order is never announced ready, even with every drink done');
+  const c3 = Q.setKitchenMark(r2.ticket.id, 0, null);
+  ok(Object.keys(c3.kitchen).length === 0 && !db.prepare('SELECT kitchen FROM tickets WHERE id=?').get(r2.ticket.id).kitchen,
+    'INVARIANT a mark can go back to not-started');
+  Q.setKitchenMark(r2.ticket.id, 0, 'making');
+  Q.editOrderItems(r2.ticket.id, [{ name: 'Drink50', price: 0, qty: 2 }]);
+  ok(!db.prepare('SELECT kitchen FROM tickets WHERE id=?').get(r2.ticket.id).kitchen, 'INVARIANT editing an order clears its kitchen marks (the lines changed)');
+  const uC = 'U' + 'f5'.repeat(16);
+  const r3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uC });
+  Q.setKitchenMark(r3.ticket.id, 0, 'done');   // made before payment (queue-first)
+  Q.setOrderPaid(r3.ticket.id, { method: 'promptpay' });
+  ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(r3.ticket.id).status === 'called', 'INVARIANT a drink finished before payment is announced ready the moment it is paid');
+  Q.setStatus(tid, 'served', 2);
+  let closed = ''; try { Q.setKitchenMark(tid, 0, 'making'); } catch (e) { closed = e.message; }
+  ok(closed === 'ticket_closed', 'INVARIANT a served order can no longer be marked');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
