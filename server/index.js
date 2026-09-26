@@ -1495,6 +1495,12 @@ app.get('/api/reports/insights', (req, res) => {
   res.json(Q.customerInsights());
 });
 // Per-menu margin (sell price vs BOM cost) + the day's REAL ingredient cost from the stock ledger.
+// Last 7 / 30 days against the period before: money, orders, bill size, channels, new vs returning.
+app.get('/api/reports/compare', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.periodCompare({ days: Number(req.query.days) || 7, branchId: scopedBranch(req, req.query.branchId) })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/reports/margins', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;

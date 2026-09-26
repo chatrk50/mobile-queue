@@ -6366,3 +6366,64 @@ export async function handleStaffLineEvent(ev, { threshold = null, base = '' } =
   }
   return null;
 }
+
+// ==== Period comparison: the last N days against the N days before them ============================
+// The home tiles only compared with yesterday. This answers "is the shop growing": money, orders,
+// ticket size, where orders came from (LINE / counter / delivery platforms) and who bought (new vs
+// returning customers, repeat rate). Paid orders by payment day in Bangkok, net of discounts, the
+// same basis as the channel report. Today is included in the current window.
+const CMP_DAYS = [7, 14, 30, 90];
+const custKeySql = "COALESCE(NULLIF(t.line_user_id,''), NULLIF(t.customer_key,''))";
+const addDays = (ymd, n) => new Date(Date.parse(ymd + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+export function periodCompare({ days = 7, branchId = null } = {}) {
+  const n = CMP_DAYS.includes(Number(days)) ? Number(days) : 7;
+  const B = [branchId, branchId];
+  const today = db.prepare("SELECT date('now','+7 hours') AS d").get().d;
+  const curFrom = addDays(today, -(n - 1)), prevTo = addDays(curFrom, -1), prevFrom = addDays(prevTo, -(n - 1));
+  const rows = db.prepare(
+    `SELECT date(o.paid_at,'+7 hours') AS day, o.source AS src, c.name AS channel, COALESCE(c.commission_pct,0) AS fee,
+            (o.total - COALESCE(o.discount,0)) AS net, ${custKeySql} AS cust
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours') BETWEEN ? AND ? AND (? IS NULL OR o.branch_id = ?)`
+  ).all(prevFrom, today, ...B);
+  // A customer is NEW in a window when their first paid order ever falls inside it.
+  const firstDay = new Map(db.prepare(
+    `SELECT ${custKeySql} AS cust, MIN(date(o.paid_at,'+7 hours')) AS first
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id
+      WHERE o.payment_status = 'paid' AND ${custKeySql} IS NOT NULL AND (? IS NULL OR o.branch_id = ?)
+      GROUP BY ${custKeySql}`
+  ).all(...B).map((r) => [r.cust, r.first]));
+  const r2 = (x) => Math.round((x || 0) * 100) / 100;
+  const win = (from, to) => {
+    const rs = rows.filter((r) => r.day >= from && r.day <= to);
+    const revenue = r2(rs.reduce((s, r) => s + (r.net || 0), 0));
+    const channels = { line: { orders: 0, revenue: 0 }, counter: { orders: 0, revenue: 0 }, platform: { orders: 0, revenue: 0 } };
+    const perCust = new Map();
+    for (const r of rs) {
+      const k = r.src === 'customer' ? 'line' : (r.channel && r.fee > 0) ? 'platform' : 'counter';
+      channels[k].orders++; channels[k].revenue = r2(channels[k].revenue + (r.net || 0));
+      if (r.cust) perCust.set(r.cust, (perCust.get(r.cust) || 0) + 1);
+    }
+    const known = perCust.size;
+    const fresh = [...perCust.keys()].filter((k) => (firstDay.get(k) || '') >= from).length;
+    const repeat = [...perCust.values()].filter((v) => v >= 2).length;
+    const series = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) series.push({ day: d, revenue: r2(rs.filter((r) => r.day === d).reduce((s, r) => s + (r.net || 0), 0)) });
+    return { from, to, revenue, orders: rs.length, avgTicket: rs.length ? r2(revenue / rs.length) : 0, channels,
+      customers: { known, new: fresh, returning: known - fresh, repeat, repeatRate: known ? Math.round((repeat / known) * 1000) / 10 : 0, anonymousOrders: rs.filter((r) => !r.cust).length },
+      series };
+  };
+  const current = win(curFrom, today), previous = win(prevFrom, prevTo);
+  const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
+  return {
+    days: n, today, current, previous,
+    delta: {
+      revenue: pct(current.revenue, previous.revenue), orders: pct(current.orders, previous.orders),
+      avgTicket: pct(current.avgTicket, previous.avgTicket), repeatRate: current.customers.repeatRate - previous.customers.repeatRate,
+      newCustomers: pct(current.customers.new, previous.customers.new),
+      line: pct(current.channels.line.revenue, previous.channels.line.revenue),
+      counter: pct(current.channels.counter.revenue, previous.channels.counter.revenue),
+      platform: pct(current.channels.platform.revenue, previous.channels.platform.revenue),
+    },
+  };
+}

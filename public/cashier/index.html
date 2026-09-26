@@ -3182,10 +3182,10 @@ window.showHome=async()=>{ hideAllPanels(); closeAdmin();
   $('homeBody').innerHTML='<p class="muted" style="font-size:13px">กำลังโหลด…</p>';
   // Fetch in parallel; every source is optional so one slow/failing call can't blank the page.
   const grab=(p)=>api(p).catch(()=>null);
-  const [rep,det,hist,cash,plan,exp]=await Promise.all([
+  const [rep,det,hist,cash,plan,exp,cmp]=await Promise.all([
     grab('/api/report'), grab('/api/reports/detailed'), grab('/api/sales-history'),
-    grab('/api/cash/session'), grab('/api/stock/plan'), grab('/api/stock/expiring')]);
-  renderHome({rep,det,hist,cash,plan,exp}); };
+    grab('/api/cash/session'), grab('/api/stock/plan'), grab('/api/stock/expiring'), grab('/api/reports/compare?days=7')]);
+  renderHome({rep,det,hist,cash,plan,exp,cmp}); };
 function renderHome(d){
   const box=$('homeBody'); if(!box) return;
   const rep=d.rep||{}, p=rep.pnl||{}, det=d.det||{}, cash=d.cash||{};
@@ -3203,6 +3203,7 @@ function renderHome(d){
   const net=p.netProfit||0;
   const kpis=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
       ${tile('ยอดขายวันนี้',money(rep.revenue||0),(prev?('เมื่อวาน '+money(prev.revenue||0)+' '+delta(rep.revenue||0,prev.revenue)):`${(rep.pnl&&rep.pnl.cups)||0} ${unit()}`))}
+      ${d.cmp?tile('7 วันล่าสุด',money(d.cmp.current.revenue),'เทียบ 7 วันก่อน '+money(d.cmp.previous.revenue)+' '+delta(d.cmp.current.revenue,d.cmp.previous.revenue)):''}
       ${tile('กำไรสุทธิ',money(net),(p.netMargin!=null?('อัตรากำไร '+pctf(p.netMargin)):''),net>=0?'#0f6e56':'var(--danger)')}
       ${tile('ขายแล้ว',(p.cups||0)+' '+unit(),(det.paidOrders!=null?det.paidOrders+' ออเดอร์':''))}
       ${tile('คะแนนร้าน',rep.avgRating!=null?('★ '+rep.avgRating):'—',(rep.ratingCount?rep.ratingCount+' รีวิววันนี้':'ยังไม่มีรีวิววันนี้'))}
@@ -3266,6 +3267,57 @@ function renderHome(d){
       </div>`;
   const sub=$('homeSub'); if(sub) sub.textContent='ภาพรวมวันนี้ · '+today+(prev?(' · เทียบกับ '+prev.date):'');
 }
+// ---- เทียบช่วงเวลา: the last 7 / 30 days against the period before (money, orders, bill size, channels, customers) ----
+let _cmpDays=7;
+window.loadCompare=async(days)=>{ if(days) _cmpDays=days; const box=$('cmpBox'); if(!box) return;
+  box.innerHTML='<p class="muted" style="font-size:13px;padding:6px 0">กำลังโหลดการเปรียบเทียบ…</p>';
+  let d; try{ d=await api('/api/reports/compare?days='+_cmpDays); }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px">โหลดการเปรียบเทียบไม่สำเร็จ — '+esc(err(e))+'</p>'; return; }
+  box.innerHTML=renderCompare(d); };
+const cmpDelta=(pc,points)=>{ if(pc==null) return '<span class="muted" style="font-size:11.5px">ช่วงก่อนไม่มียอด</span>';
+  const up=pc>=0; return `<span style="font-size:11.5px;font-weight:800;color:${up?'#15803d':'#b3283a'}">${up?'▲':'▼'} ${Math.abs(pc)}${points?' จุด':'%'}</span>`; };
+function renderCompare(d){
+  const c=d.current, p=d.previous, dl=d.delta, baht=(n)=>'฿'+Math.round(n||0).toLocaleString('en-US');
+  const lbl=d.days+' วันล่าสุด', plbl=d.days+' วันก่อนหน้า';
+  const tile=(k,v,delta,prev)=>`<div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-width:0">
+      <div class="muted" style="font-size:12px">${k}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--navy);line-height:1.25">${v}</div>
+      <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">${delta}<span class="muted" style="font-size:11.5px">ช่วงก่อน ${prev}</span></div></div>`;
+  const seg=[7,30].map(n=>`<button class="${n===d.days?'ok':'ghost'}" aria-pressed="${n===d.days}" style="padding:6px 14px;font-size:12.5px;min-height:36px" onclick="loadCompare(${n})">${n} วัน</button>`).join('');
+  // Daily bars for the current window; the dashed marker is the same position in the previous window.
+  const max=Math.max(1,...c.series.map(s=>s.revenue),...p.series.map(s=>s.revenue));
+  const bars=c.series.map((s,i)=>{ const pv=(p.series[i]||{}).revenue||0, h=Math.round(s.revenue/max*100), ph=Math.round(pv/max*100);
+    return `<div title="${s.day}: ${baht(s.revenue)} · ช่วงก่อน ${baht(pv)}" style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative">
+      ${pv?`<div style="position:absolute;left:6%;right:6%;bottom:${ph}%;border-top:2px dashed var(--muted)"></div>`:''}
+      <div style="height:${h}%;min-height:${s.revenue?'3px':'0'};background:var(--accent);border-radius:3px 3px 0 0;margin:0 14%"></div></div>`; }).join('');
+  const every=Math.max(1,Math.round(c.series.length/7));
+  const axis=c.series.map((s,i)=>`<div style="flex:1;min-width:0;text-align:center;font-size:10.5px;color:var(--muted);white-space:nowrap">${(i%every===0||i===c.series.length-1)?(s.day.slice(8)+'/'+s.day.slice(5,7)):''}</div>`).join('');
+  const chans=[['line','สั่งผ่าน LINE'],['counter','หน้าร้าน'],['platform','แพลตฟอร์มเดลิเวอรี่']].filter(([k])=>c.channels[k].orders||p.channels[k].orders);
+  const chanRows=chans.map(([k,t],i)=>{ const share=c.revenue?Math.round(c.channels[k].revenue/c.revenue*100):0;
+    return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) auto;gap:8px;align-items:center;font-size:13px">
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</span>
+      <span style="background:var(--surface);border-radius:6px;height:16px;overflow:hidden"><span style="display:block;height:100%;width:${share}%;background:${CHART_COLORS[i%CHART_COLORS.length]};border-radius:6px"></span></span>
+      <span style="white-space:nowrap"><b>${baht(c.channels[k].revenue)}</b> <span class="muted" style="font-size:11.5px">${share}%</span> ${cmpDelta(dl[k])}</span></div>`; }).join('');
+  const cu=c.customers;
+  return `<div style="border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px">
+    <div class="row between" style="align-items:center;gap:8px;margin-bottom:10px"><h2 style="margin:0;font-size:15px;color:var(--navy)">เทียบช่วงเวลา · ${lbl} กับ ${plbl}</h2><div class="row" style="gap:6px" role="group" aria-label="ช่วงเวลาที่เทียบ">${seg}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      ${tile('ยอดขายสุทธิ',baht(c.revenue),cmpDelta(dl.revenue),baht(p.revenue))}
+      ${tile('ออเดอร์',c.orders.toLocaleString('en-US'),cmpDelta(dl.orders),p.orders.toLocaleString('en-US'))}
+      ${tile('บิลเฉลี่ย',baht(c.avgTicket),cmpDelta(dl.avgTicket),baht(p.avgTicket))}
+      ${tile('ลูกค้าซื้อซ้ำในช่วงนี้',cu.repeatRate+'%',cmpDelta(Math.round(dl.repeatRate*10)/10,true),p.customers.repeatRate+'%')}
+    </div>
+    <div style="margin-top:14px"><div class="row between" style="font-size:12.5px;margin-bottom:4px;gap:8px"><b style="color:var(--navy)">ยอดขายรายวัน</b>
+        <span class="muted"><span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;vertical-align:-1px"></span> ${lbl} · <span style="display:inline-block;width:14px;border-top:2px dashed var(--muted);vertical-align:3px"></span> ${plbl}</span></div>
+      <div style="display:flex;align-items:flex-end;height:120px;gap:2px">${bars}</div><div style="display:flex;gap:2px;margin-top:4px">${axis}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px">
+      <div><b style="font-size:12.5px;color:var(--navy)">มาจากช่องทางไหน</b><div style="display:grid;gap:8px;margin-top:8px">${chanRows||'<p class="muted" style="font-size:12.5px">ยังไม่มีข้อมูล</p>'}</div></div>
+      <div><b style="font-size:12.5px;color:var(--navy)">ใครซื้อ</b>
+        <div class="row between" style="font-size:13px;margin-top:8px"><span>ลูกค้าใหม่</span><span><b>${cu.new}</b> คน ${cmpDelta(dl.newCustomers)}</span></div>
+        <div class="row between" style="font-size:13px;margin-top:4px"><span>ลูกค้าเก่ากลับมาซื้อ</span><b>${cu.returning} คน</b></div>
+        <div class="row between" style="font-size:13px;margin-top:4px"><span>ซื้อมากกว่า 1 ครั้งในช่วงนี้</span><b>${cu.repeat} คน</b></div>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">นับเฉพาะลูกค้าที่รู้ตัวตน (LINE หรือเบอร์โทร) · ออเดอร์ไม่ระบุตัวตน ${cu.anonymousOrders} ออเดอร์</div></div>
+    </div></div>`;
+}
 window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none';
   ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
   $('dash').style.display='none'; $('chartsCard').style.display='';
@@ -3293,7 +3345,7 @@ async function renderCharts(){
         <div class="muted" style="font-size:12px">จาก ${sat.total} รีวิวสะสมทั้งหมด · <b style="color:var(--accent)">แตะเพื่อดูรายชื่อลูกค้าที่ให้ดาว</b> · แยกรายดาวที่ "รายงานประจำวัน" ล่างสุด</div></div>
       <svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px;margin:0;opacity:.5"><path d="M9 18l6-6-6-6"/></svg>
     </div>`:'';
-  $('chartsBody').innerHTML = ratingCard +
+  $('chartsBody').innerHTML = '<div id="cmpBox"></div>' + ratingCard +
     card('<svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>ยอดขาย 7 วันล่าสุด (สุทธิ)', chartCols(days, baht)) +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">`+
       card('<svg class="ic" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg>เมนูขายดี Top 5 (วันนี้)', chartBars(top, v=>v+' '+unit()))+
@@ -3303,6 +3355,7 @@ async function renderCharts(){
     (wk.length?card('📅 แนวโน้มรายสัปดาห์ (กำไรสุทธิ · 12 สัปดาห์)', chartCols(wk, baht)):'') +
     (mo.length?card('🗓️ แนวโน้มรายเดือน (กำไรสุทธิ · 12 เดือน)', chartCols(mo, baht)):'') +
     (yr.length?card('📆 แนวโน้มรายปี (กำไรสุทธิ)', chartCols(yr, baht)):'');
+  loadCompare();
 }
 let _reportDate='';   // '' = today (live); 'YYYY-MM-DD' = a past Bangkok day (from the durable orders table)
 const bkkToday=()=> new Date(Date.now()+7*3600*1000).toISOString().slice(0,10);

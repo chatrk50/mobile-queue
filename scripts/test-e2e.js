@@ -2973,6 +2973,41 @@ console.log('\n== Staff LINE alerts: orders reach the team in LINE ==');
   Q.setQueueFirst(false); Q.setStaffAlertConfig({ mode: 'off' }); Q.setOwnerLineId('');
 }
 
+console.log('\n== Period comparison: last 7 / 30 days vs the period before ==');
+{
+  const back = (tid, daysAgo) => db.prepare(`UPDATE orders SET paid_at=datetime('now', '-${daysAgo} days') WHERE ticket_id=?`).run(tid);
+  const paidCustomer = (uid, item, daysAgo) => {
+    const r = Q.createOrder(1, [{ name: item, price: 0, qty: 1 }], { source: 'customer', lineUserId: uid });
+    Q.setOrderPaid(r.ticket.id, { method: 'promptpay' });
+    Q.setStatus(r.ticket.id, 'served', 2);
+    if (daysAgo) back(r.ticket.id, daysAgo);
+    return r.ticket.id;
+  };
+  const before7 = Q.periodCompare({ days: 7 }), before30 = Q.periodCompare({ days: 30 });
+  const A = 'U' + 'c1'.repeat(16), Bk = 'U' + 'c2'.repeat(16), C = 'U' + 'c3'.repeat(16);
+  paidCustomer(A, 'Drink', 0);        // ฿100 today         (A: new, two orders in the window)
+  paidCustomer(A, 'Drink50', 2);      // ฿50  2 days ago
+  paidCustomer(Bk, 'Drink65', 20);    // ฿65  20 days ago   (B: first ever order long before)
+  paidCustomer(Bk, 'Drink49', 0);     // ฿49  today         (…so B is RETURNING this week)
+  paidCustomer(C, 'Drink', 9);        // ฿100 9 days ago    (previous 7-day window only)
+  const g = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { channelId: grab });
+  Q.setOrderPaid(g.ticket.id, { method: 'other' });   // a Grab order today → platform
+  const after7 = Q.periodCompare({ days: 7 }), after30 = Q.periodCompare({ days: 30 });
+  const d = (a, b, f) => Math.round((f(a) - f(b)) * 100) / 100;
+  ok(d(after7, before7, (x) => x.current.revenue) === 299, `INVARIANT the current 7 days gained ฿299 (100+50+49+Grab 100) — got ${d(after7, before7, (x) => x.current.revenue)}`);
+  ok(d(after7, before7, (x) => x.previous.revenue) === 100, `INVARIANT the order 9 days ago lands in the previous 7 days — got ${d(after7, before7, (x) => x.previous.revenue)}`);
+  ok(d(after30, before30, (x) => x.current.revenue) === 464, `INVARIANT 30 days include the order 20 days ago (299+100+65) — got ${d(after30, before30, (x) => x.current.revenue)}`);
+  ok(d(after7, before7, (x) => x.current.channels.line.revenue) === 199 && d(after7, before7, (x) => x.current.channels.platform.revenue) === 100,
+    'INVARIANT channels split LINE ฿199 and platform ฿100');
+  ok(d(after7, before7, (x) => x.current.customers.new) === 1 && d(after7, before7, (x) => x.current.customers.returning) === 1 && d(after7, before7, (x) => x.current.customers.repeat) === 1,
+    'INVARIANT A counts as new (and repeat, 2 orders), B as returning');
+  ok(after7.current.series.length === 7 && Math.abs(after7.current.series.reduce((s, x) => s + x.revenue, 0) - after7.current.revenue) < 0.01,
+    'INVARIANT the daily series has one bar per day and adds up to the window total');
+  const expect = after7.previous.revenue > 0 ? Math.round(((after7.current.revenue - after7.previous.revenue) / after7.previous.revenue) * 1000) / 10 : null;
+  ok(after7.delta.revenue === expect, `INVARIANT the revenue delta is (current−previous)/previous (${after7.delta.revenue} == ${expect})`);
+  ok(Q.periodCompare({ days: 13 }).days === 7, 'INVARIANT an unsupported window falls back to 7 days');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
