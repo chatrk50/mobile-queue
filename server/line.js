@@ -434,6 +434,105 @@ export async function verifyLiffToken(accessToken) {
   } catch { return null; }
 }
 
+// ---- Staff order alerts + the shop panel ----------------------------------------------------------
+// The shop runs on its OWN OA, so its team takes LINE orders inside LINE without handing the customer
+// to a third-party account. Alerts are PUSHES (they use the shop's OA quota); the panel and every
+// button answer are REPLIES, which LINE does not bill.
+const ALERT_TONE = { new: '#0B6A7E', paid: '#15803D', claim: '#7A5C00', slip: '#7A5C00', cancel: '#B3283A', test: '#0B6A7E' };
+const STAFF_INK = '#16314F', STAFF_SUB = '#6B7280', STAFF_RULE = '#E3E8EE';
+function staffButton(act) {
+  const action = act.uri ? { type: 'uri', label: act.label, uri: act.uri }
+    : { type: 'postback', label: act.label, data: act.data, displayText: act.displayText || act.label };
+  return act.primary ? { type: 'button', style: 'primary', color: '#0B6A7E', height: 'sm', action }
+    : { type: 'button', style: 'secondary', height: 'sm', action };
+}
+/** The order card a staff member receives: what happened, the queue code, the items, the money. */
+export function buildStaffAlertFlex(a) {
+  const tone = ALERT_TONE[a.event] || '#0B6A7E';
+  const kv = (k, v) => ({ type: 'box', layout: 'baseline', spacing: 'md', contents: [
+    { type: 'text', text: k, size: 'xs', color: STAFF_SUB, flex: 2 },
+    { type: 'text', text: String(v), size: 'sm', color: STAFF_INK, flex: 5, wrap: true, weight: 'bold' } ] });
+  const items = (a.lines || []).slice(0, 6).map((l) => ({ type: 'box', layout: 'baseline', spacing: 'sm', contents: [
+    { type: 'text', text: `${l.qty}×`, size: 'sm', color: STAFF_SUB, flex: 1 },
+    { type: 'text', text: l.name, size: 'sm', color: STAFF_INK, wrap: true, flex: 8 } ] }));
+  if ((a.lines || []).length > 6) items.push({ type: 'text', text: `และอีก ${a.lines.length - 6} รายการ`, size: 'xs', color: STAFF_SUB });
+  const body = [
+    kv('โซน', a.zone || '-'), kv('เวลา', a.time || '-'), kv('ลูกค้า', a.customer || 'ลูกค้า LINE'), kv('ชำระ', a.pay || '-'),
+    { type: 'separator', margin: 'md', color: STAFF_RULE },
+    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'xs', contents: items.length ? items : [{ type: 'text', text: 'ไม่มีรายการ', size: 'sm', color: STAFF_SUB }] },
+    { type: 'separator', margin: 'md', color: STAFF_RULE },
+    { type: 'box', layout: 'baseline', margin: 'md', contents: [
+      { type: 'text', text: 'ยอดสุทธิ', size: 'sm', color: STAFF_SUB, flex: 2 },
+      { type: 'text', text: `฿${Number(a.total || 0).toLocaleString('en-US')}`, size: 'lg', weight: 'bold', color: STAFF_INK, align: 'end', flex: 3 } ] },
+  ];
+  if (a.note) body.push({ type: 'text', text: a.note, size: 'xs', color: STAFF_SUB, wrap: true, margin: 'md' });
+  return {
+    type: 'bubble', size: 'mega',
+    header: { type: 'box', layout: 'vertical', paddingAll: '16px', backgroundColor: tone, contents: [
+      { type: 'text', text: a.title, size: 'sm', weight: 'bold', color: '#FFFFFF' },
+      { type: 'text', text: a.code ? `คิว ${a.code}` : 'ออเดอร์', size: 'xxl', weight: 'bold', color: '#FFFFFF', margin: 'xs' } ] },
+    body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm', contents: body },
+    ...((a.actions || []).length ? { footer: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: a.actions.map(staffButton) } } : {}),
+  };
+}
+/** "ร้าน" → today at a glance, with the controls a manager reaches for away from the counter. */
+export function buildShopPanelFlex(p) {
+  const tile = (k, v) => ({ type: 'box', layout: 'vertical', flex: 1, paddingAll: '10px', cornerRadius: '10px', backgroundColor: '#F4F6F9', contents: [
+    { type: 'text', text: k, size: 'xxs', color: STAFF_SUB },
+    { type: 'text', text: String(v), size: 'lg', weight: 'bold', color: STAFF_INK, margin: 'xs' } ] });
+  return {
+    type: 'bubble', size: 'mega',
+    body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'md', contents: [
+      { type: 'text', text: p.shop || 'ร้าน', weight: 'bold', size: 'lg', color: STAFF_INK, wrap: true },
+      { type: 'text', text: `สรุปวันนี้ ${p.date || ''}`, size: 'xs', color: STAFF_SUB },
+      { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [tile('ยอดขาย', `฿${Number(p.sales || 0).toLocaleString('en-US')}`), tile('ออเดอร์', p.orders || 0)] },
+      { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [tile('รอคิวตอนนี้', p.waiting || 0), tile('ค้างชำระ', p.unpaid || 0)] },
+      ...(p.slips ? [{ type: 'text', text: `สลิปรอตรวจ ${p.slips} รายการ`, size: 'sm', weight: 'bold', color: '#7A5C00' }] : []),
+      { type: 'text', text: `รับออเดอร์ออนไลน์: ${p.online ? 'เปิดอยู่' : 'ปิดอยู่'}`, size: 'sm', color: p.online ? '#15803D' : '#B3283A', weight: 'bold' } ] },
+    ...((p.actions || []).length ? { footer: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: p.actions.map(staffButton) } } : {}),
+  };
+}
+/** Push any Flex bubble; falls back to its alt text so a rejected card still delivers the news. */
+export async function pushFlex(userId, contents, altText, kind = 'other') {
+  if (!userId) return false;
+  const alt = String(altText || 'แจ้งเตือน').slice(0, 390);
+  if (!LINE_ENABLED) { console.log(`\n[LINE-STUB flex:${kind}] -> ${userId}\n${alt}\n`); return false; }
+  try {
+    await client.pushMessage({ to: userId, messages: [{ type: 'flex', altText: alt, contents }] });
+    logPush(userId, kind, true);
+    return true;
+  } catch (err) {
+    console.error('[LINE] flex push failed, falling back to text:', err?.statusMessage || err?.message || err);
+    try { await client.pushMessage({ to: userId, messages: [{ type: 'text', text: alt }] }); logPush(userId, kind, true); return true; }
+    catch (e) { logPush(userId, kind, false); return false; }
+  }
+}
+/** A webhook reply built by queue.js ({ type:'text'|'flex', … }) → a LINE message object. */
+export function toReplyMessage(r) {
+  if (!r) return null;
+  if (r.type === 'flex') return { type: 'flex', altText: String(r.alt || 'สรุปร้าน').slice(0, 390), contents: r.flex };
+  const m = { type: 'text', text: String(r.text || '').slice(0, 4900) };
+  if (Array.isArray(r.quick) && r.quick.length) {
+    m.quickReply = { items: r.quick.slice(0, 13).map((q) => ({ type: 'action',
+      action: { type: 'postback', label: String(q.label).slice(0, 20), data: q.data, displayText: String(q.label) } })) };
+  }
+  return m;
+}
+export async function replyMessages(replyToken, messages) {
+  const list = (messages || []).filter(Boolean);
+  if (!LINE_ENABLED || !replyToken || !list.length) return false;
+  try { await client.replyMessage({ replyToken, messages: list }); return true; }
+  catch (err) { console.error('[LINE] reply failed:', err?.message || err); return false; }
+}
+let _basic = { at: 0, id: null };
+/** The OA's @basic id (for line.me/R/oaMessage links), cached for an hour. */
+export async function botBasicId() {
+  if (!LINE_ENABLED) return null;
+  if (_basic.id && Date.now() - _basic.at < 3600e3) return _basic.id;
+  try { const b = await botInfo(); if (b && b.basicId) _basic = { at: Date.now(), id: b.basicId }; } catch { /* keep the last one */ }
+  return _basic.id;
+}
+
 /** Reply to a webhook event (used for follow / message events). */
 export async function replyText(replyToken, text) {
   if (!LINE_ENABLED || !replyToken) return false;

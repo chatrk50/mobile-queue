@@ -1,6 +1,6 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED, pushFlex, buildStaffAlertFlex, buildShopPanelFlex } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 import { slipokCheck, slipokQuota, SLIPOK_ERRORS } from './slipok.js';
 import { decodeMerchantBuffer, isInjectable, describeQr } from './thaiqr.js';
@@ -6123,4 +6123,246 @@ export function ticketView(ticketId) {
       ? Date.parse(String(t.created_at).replace(' ', 'T') + 'Z') + getPendingVoidMinutes() * 60000
       : null,
   };
+}
+
+// ==== Staff LINE alerts ("ร้านรับออเดอร์ใน LINE") ==================================================
+// A staff member links their LINE ONCE by sending a one-time code to the shop's own OA. From then on
+// new LINE orders, slips waiting for a check and cancel requests reach them in LINE, and เริ่มทำ /
+// พร้อมรับ work straight from the chat. Every alert is a PUSH that uses the shop's OA quota, so the
+// 'away' mode only alerts when no till has checked in recently (the counter already chimes when one
+// is open). Typing "ร้าน" answers with today's panel as a REPLY, which LINE does not bill.
+const ALERT_MODES = ['off', 'away', 'always'];
+export function getStaffAlertConfig() {
+  const m = getSetting('alert:line_mode', 'off');
+  const away = parseInt(getSetting('alert:line_away_min', '3'), 10) || 3;
+  return { mode: ALERT_MODES.includes(m) ? m : 'off', awayMin: Math.max(1, Math.min(60, away)) };
+}
+export function setStaffAlertConfig({ mode, awayMin } = {}) {
+  if (mode != null) { if (!ALERT_MODES.includes(mode)) throw new Error('bad_mode'); setSetting('alert:line_mode', mode); }
+  if (awayMin != null) setSetting('alert:line_away_min', String(Math.max(1, Math.min(60, parseInt(awayMin, 10) || 3))));
+  return getStaffAlertConfig();
+}
+/** Has any till checked in within the last `minutes`? (its heartbeat runs every 30 s while open) */
+export function tillOnline(minutes = 3) {
+  const last = posLastSeen();
+  if (!last) return false;
+  const m = Math.max(1, Math.min(60, Number(minutes) || 3));
+  return db.prepare(`SELECT (? >= datetime('now','-${m} minutes')) AS fresh`).get(last).fresh === 1;
+}
+const LINK_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, no 0/O/1/I: easy to read and type
+/** A 10-minute, single-use code that binds the next LINE account to send it to this staff member.
+ *  staffId 0 = the owner signed in with the owner PIN (no staff row): the code links owner:line_id. */
+export function createStaffLinkCode(staffId) {
+  const sid = Number(staffId) || 0;
+  if (sid && !db.prepare('SELECT 1 FROM staff WHERE id=? AND active=1').get(sid)) throw new Error('staff_not_found');
+  db.prepare("DELETE FROM staff_link_codes WHERE expires_at < datetime('now') OR (staff_id=? AND used_at IS NULL)").run(sid);
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code = Array.from(randomBytes(6)).map((b) => LINK_ALPHABET[b % LINK_ALPHABET.length]).join('');
+    if (!db.prepare('SELECT 1 FROM staff_link_codes WHERE code=?').get(code)) break;
+  }
+  db.prepare("INSERT INTO staff_link_codes (code, staff_id, expires_at) VALUES (?, ?, datetime('now','+10 minutes'))").run(code, sid);
+  return { code, expiresInSec: 600 };
+}
+export function staffLinkStatus(code) {
+  const r = db.prepare('SELECT used_at, expires_at FROM staff_link_codes WHERE code=?').get(String(code || '').trim().toUpperCase());
+  if (!r) return { linked: false, expired: true };
+  if (r.used_at) return { linked: true, expired: false };
+  return { linked: false, expired: db.prepare("SELECT (? < datetime('now')) AS e").get(r.expires_at).e === 1 };
+}
+export function consumeStaffLinkCode(code, lineUserId) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!LINE_UID_RE.test(String(lineUserId || ''))) throw new Error('bad_line_id');
+  const r = db.prepare("SELECT * FROM staff_link_codes WHERE code=? AND used_at IS NULL AND expires_at >= datetime('now')").get(c);
+  if (!r) throw new Error('link_code_invalid');
+  db.prepare("UPDATE staff_link_codes SET used_by=?, used_at=datetime('now') WHERE code=?").run(lineUserId, c);
+  if (r.staff_id) {
+    db.prepare('UPDATE staff SET line_user_id=NULL WHERE line_user_id=? AND id<>?').run(lineUserId, r.staff_id);   // one LINE ↔ one person
+    db.prepare('UPDATE staff SET line_user_id=?, line_alerts=1 WHERE id=?').run(lineUserId, r.staff_id);
+    const s = db.prepare('SELECT id, name, role FROM staff WHERE id=?').get(r.staff_id);
+    return { ok: true, kind: 'staff', id: s.id, name: s.name, role: s.role };
+  }
+  setOwnerLineId(lineUserId);
+  setSetting('alert:owner_on', '1');
+  return { ok: true, kind: 'owner', id: 0, name: 'เจ้าของร้าน', role: 'owner' };
+}
+/** Who is this LINE account to the shop? null = a customer (or a stranger). */
+export function lineIdentity(lineUserId) {
+  if (!lineUserId) return null;
+  const s = db.prepare('SELECT id, name, role, line_alerts FROM staff WHERE line_user_id=? AND active=1').get(lineUserId);
+  if (s) return { kind: 'staff', id: s.id, name: s.name, role: s.role, alerts: !!s.line_alerts, branchIds: s.role === 'owner' ? null : branchIdsOf(s.id) };
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && oid === lineUserId) return { kind: 'owner', id: 0, name: 'เจ้าของร้าน', role: 'owner', alerts: getSetting('alert:owner_on', '1') === '1', branchIds: null };
+  return null;
+}
+const seesBranch = (who, branchId) => !who.branchIds || who.branchIds.includes(Number(branchId));
+export function setMemberAlerts(id, on) {
+  const sid = Number(id) || 0;
+  if (!sid) { setSetting('alert:owner_on', on ? '1' : '0'); return { ok: true }; }
+  db.prepare('UPDATE staff SET line_alerts=? WHERE id=?').run(on ? 1 : 0, sid);
+  return { ok: true };
+}
+export function unlinkStaffLine(id) {
+  const sid = Number(id) || 0;
+  if (!sid) { setSetting('alert:owner_on', '0'); return { ok: true }; }   // owner:line_id also carries the daily summary: only mute alerts
+  db.prepare('UPDATE staff SET line_user_id=NULL WHERE id=?').run(sid);
+  return { ok: true };
+}
+/** Everyone who could receive alerts, linked or not. LINE userIds never leave the server. */
+export function alertMembers() {
+  const rows = db.prepare(`SELECT id, name, role, line_user_id, line_alerts FROM staff WHERE active=1
+     ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END, name`).all();
+  const oid = getOwnerLineId();
+  const ownerLinked = validOwnerLineId(oid);
+  return {
+    owner: { linked: ownerLinked, alerts: getSetting('alert:owner_on', '1') === '1', sameAsStaff: ownerLinked && rows.some((r) => r.line_user_id === oid) },
+    staff: rows.map((r) => ({ id: r.id, name: r.name, role: r.role, linked: !!r.line_user_id, alerts: !!r.line_alerts })),
+  };
+}
+function alertRecipients(branchId) {
+  const to = new Set();
+  for (const s of db.prepare('SELECT id, role, line_user_id FROM staff WHERE active=1 AND line_alerts=1 AND line_user_id IS NOT NULL').all()) {
+    if (s.role !== 'owner' && !db.prepare('SELECT 1 FROM staff_branches WHERE staff_id=? AND branch_id=?').get(s.id, branchId)) continue;
+    to.add(s.line_user_id);
+  }
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && getSetting('alert:owner_on', '1') === '1') to.add(oid);
+  return [...to];
+}
+const ALERT_TITLE = { new: 'ออเดอร์ใหม่', paid: 'จ่ายแล้ว เริ่มทำได้', claim: 'ลูกค้าแจ้งว่าโอนแล้ว', slip: 'สลิปรอตรวจ', cancel: 'ลูกค้าขอยกเลิก', test: 'ทดสอบแจ้งเตือน' };
+const bkkClock = (at) => { if (!at) return ''; const d = new Date(String(at).replace(' ', 'T') + 'Z'); return isNaN(d) ? '' : new Date(d.getTime() + 7 * 3600e3).toISOString().slice(11, 16) + ' น.'; };
+const cashierUrl = (base) => (/^https:\/\//.test(base || '') ? base.replace(/\/$/, '') + '/cashier/' : null);   // LINE only opens https links
+/** Everything an alert card shows, read fresh from the ticket. */
+export function staffAlertData(ticketId, event, base = '') {
+  const t = db.prepare('SELECT t.*, z.name AS zone_name FROM tickets t JOIN zones z ON z.id=t.zone_id WHERE t.id=?').get(ticketId);
+  if (!t) return null;
+  const o = orderForTicket(ticketId);
+  const lines = o ? o.lines.map((l) => ({ qty: l.qty || 1, name: l.name + ((l.toppings || []).length ? ' + ' + l.toppings.map((x) => x.name).join(', ') : '') })) : [];
+  const net = o ? Math.max(0, Math.round(((o.total || 0) - (o.discount || 0)) * 100) / 100) : 0;
+  const pay = !o ? '-' : o.payment_status === 'paid' ? 'จ่ายแล้ว · ' + tenderLabel(o.payment_method || 'other')
+    : o.payment_status === 'claimed' ? 'รอตรวจสลิป' : o.payment_status === 'void' ? 'ยกเลิกแล้ว' : 'ยังไม่จ่าย';
+  const cashier = cashierUrl(base);
+  const actions = [];
+  const open = !['served', 'cancelled', 'no_show', 'skipped'].includes(t.status);
+  if (open && ['new', 'paid'].includes(event) && !t.making_at) actions.push({ label: 'เริ่มทำ', data: 'a=start&t=' + t.id, displayText: 'เริ่มทำ ' + (t.code || ''), primary: true });
+  if (cashier) actions.push({ label: ['claim', 'slip'].includes(event) ? 'ตรวจสลิปในแคชเชียร์' : 'เปิดแคชเชียร์', uri: cashier });
+  const title = ALERT_TITLE[event] || 'แจ้งเตือน';
+  return {
+    event, title, code: t.code || '', zone: t.zone_name, time: bkkClock(t.created_at), customer: t.customer_name || 'ลูกค้า LINE',
+    lines, total: net, pay, actions, branchId: branchOfTicket(t.id),
+    note: event === 'cancel' ? 'ยืนยันหรือเก็บออเดอร์ไว้ได้ในหน้าแคชเชียร์' : null,
+    alt: `${title} ${t.code || ''} · ฿${net} · ${lines.length} รายการ`,
+  };
+}
+const _alerted = new Map();   // `${ticketId}:${event}` → time, so a retried upload or a double tap never alerts twice
+/** Tell the linked team about one order event. Fire-and-forget from the routes; never throws. */
+export async function staffOrderAlert(ticketId, event, { base = '' } = {}) {
+  try {
+    const cfg = getStaffAlertConfig();
+    if (cfg.mode === 'off') return { sent: 0, reason: 'off' };
+    if (cfg.mode === 'away' && tillOnline(cfg.awayMin)) return { sent: 0, reason: 'till_online' };
+    const key = ticketId + ':' + event, now = Date.now();
+    for (const [k, at] of _alerted) if (now - at > 864e5) _alerted.delete(k);
+    if (_alerted.has(key)) return { sent: 0, reason: 'duplicate' };
+    _alerted.set(key, now);
+    const a = staffAlertData(ticketId, event, base);
+    if (!a) return { sent: 0, reason: 'no_ticket' };
+    const to = alertRecipients(a.branchId);
+    if (!to.length) return { sent: 0, recipients: 0, reason: 'no_recipients' };
+    let sent = 0;
+    for (const uid of to) if (await pushFlex(uid, buildStaffAlertFlex(a), a.alt, 'staff_alert')) sent++;
+    return { sent, recipients: to.length, reason: LINE_ENABLED ? null : 'line_off' };
+  } catch (e) { console.error('[staff-alert]', e.message); return { sent: 0, reason: 'error' }; }
+}
+/** "ส่งทดสอบ" in ⚙: one sample card to everyone linked who has alerts on, whatever the mode. */
+export async function staffAlertTest({ base = '' } = {}) {
+  const to = new Set(db.prepare('SELECT line_user_id FROM staff WHERE active=1 AND line_alerts=1 AND line_user_id IS NOT NULL').all().map((s) => s.line_user_id));
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && getSetting('alert:owner_on', '1') === '1') to.add(oid);
+  const cashier = cashierUrl(base);
+  const a = { event: 'test', title: ALERT_TITLE.test, code: 'A000', zone: 'ตัวอย่าง', time: bkkClock(db.prepare("SELECT datetime('now') t").get().t), customer: 'ลูกค้าตัวอย่าง',
+    lines: [{ qty: 1, name: 'เมนูตัวอย่าง' }], total: 0, pay: 'ยังไม่จ่าย', actions: cashier ? [{ label: 'เปิดแคชเชียร์', uri: cashier }] : [],
+    note: 'ถ้าเห็นข้อความนี้ การแจ้งเตือนออเดอร์ทาง LINE พร้อมใช้งาน', alt: 'ทดสอบแจ้งเตือนออเดอร์จากร้าน' };
+  let sent = 0;
+  for (const uid of to) if (await pushFlex(uid, buildStaffAlertFlex(a), a.alt, 'staff_alert')) sent++;
+  return { sent, recipients: to.size, lineReady: LINE_ENABLED };
+}
+/** Today at a glance for one staff member (their own branch unless they see every branch). */
+export function shopPanel(who, base = '') {
+  if (who.branchIds && !who.branchIds.length) return null;
+  const branchId = who.branchIds ? who.branchIds[0] : null;
+  const rep = dailyReport(branchId);
+  const B = [branchId, branchId];
+  const waiting = db.prepare(`SELECT COUNT(*) AS n FROM tickets t JOIN zones z ON z.id=t.zone_id
+     WHERE t.status IN ('waiting','called') AND (? IS NULL OR z.store_id=?)`).get(...B).n;
+  const pay = db.prepare(`SELECT SUM(o.payment_status IN ('unpaid','claimed')) AS unpaid, SUM(o.payment_status='claimed') AS slips
+     FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN orders o ON o.id=(SELECT MAX(id) FROM orders WHERE ticket_id=t.id)
+     WHERE t.status IN ('pending','waiting','called') AND (? IS NULL OR z.store_id=?)`).get(...B);
+  const store = branchId ? db.prepare('SELECT name FROM stores WHERE id=?').get(branchId) : db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+  const cashier = cashierUrl(base);
+  const online = onlineOrdersEnabled();
+  const boss = ['owner', 'manager'].includes(who.role);
+  const actions = [];
+  if (cashier) actions.push({ label: 'เปิดแคชเชียร์', uri: cashier, primary: true });
+  if (boss) actions.push(online ? { label: 'ปิดรับออเดอร์ออนไลน์', data: 'a=online&v=0' } : { label: 'เปิดรับออเดอร์ออนไลน์', data: 'a=online&v=1', primary: true });
+  if (cashier && boss) actions.push({ label: 'รายงานวันนี้', uri: cashier + '?go=report' });
+  const d = new Date(Date.now() + 7 * 3600e3).toISOString();
+  const p = { shop: (store && store.name) || 'ร้าน', date: d.slice(8, 10) + '/' + d.slice(5, 7), sales: Math.round(rep.revenue || 0), orders: rep.issued || 0,
+    waiting, unpaid: pay.unpaid || 0, slips: pay.slips || 0, online, actions };
+  return { flex: buildShopPanelFlex(p), alt: `สรุปวันนี้ ยอด ฿${p.sales} · ${p.orders} ออเดอร์ · รอคิว ${p.waiting}` };
+}
+const CLOSED_TH = { served: 'รับไปแล้ว', cancelled: 'ยกเลิกแล้ว', no_show: 'ไม่มารับ', skipped: 'ข้ามคิวแล้ว' };
+/** Webhook events from staff: link codes, the "ร้าน" panel, muting, and the เริ่มทำ / พร้อมรับ /
+ *  online-ordering buttons. Returns null for anything that is not staff business (customers). */
+export async function handleStaffLineEvent(ev, { threshold = null, base = '' } = {}) {
+  const uid = ev && ev.source && ev.source.userId;
+  if (!uid) return null;
+  const text = (s) => ({ reply: { type: 'text', text: s } });
+  if (ev.type === 'message' && ev.message && ev.message.type === 'text') {
+    const raw = String(ev.message.text || '').trim();
+    const m = raw.match(/^(?:link|ผูก|เชื่อม)\s*[:#-]?\s*([A-Za-z0-9]{6})$/i);
+    if (m) {
+      try {
+        const r = consumeStaffLinkCode(m[1], uid);
+        return { reply: { type: 'text', text: `เชื่อม LINE กับ ${r.name} แล้ว ✓\nออเดอร์ใหม่ สลิปรอตรวจ และคำขอยกเลิกจะแจ้งมาที่แชทนี้ตามที่ร้านตั้งไว้\nพิมพ์ "ร้าน" เพื่อดูสรุปวันนี้ · "ปิดแจ้งเตือน" เพื่อหยุดชั่วคราว` }, linked: r };
+      } catch (e) { return text('รหัสไม่ถูกต้องหรือหมดอายุแล้ว สร้างรหัสใหม่ในหน้าแคชเชียร์ได้เลย'); }
+    }
+    const who = lineIdentity(uid);
+    if (!who) return null;
+    const t = raw.toLowerCase();
+    if (['ร้าน', 'shop', 'เมนูร้าน', 'สรุปร้าน'].includes(t)) {
+      const p = shopPanel(who, base);
+      return p ? { reply: { type: 'flex', flex: p.flex, alt: p.alt } } : text('บัญชีนี้ยังไม่ได้ผูกกับสาขาใด');
+    }
+    if (['ปิดแจ้งเตือน', 'หยุดแจ้งเตือน', 'mute'].includes(t)) { setMemberAlerts(who.id, false); return text('ปิดแจ้งเตือนออเดอร์ของคุณแล้ว พิมพ์ "เปิดแจ้งเตือน" เมื่อต้องการรับอีกครั้ง'); }
+    if (['เปิดแจ้งเตือน', 'unmute'].includes(t)) { setMemberAlerts(who.id, true); return text('เปิดแจ้งเตือนออเดอร์แล้ว ✓'); }
+    return null;
+  }
+  if (ev.type === 'postback') {
+    const q = new URLSearchParams((ev.postback && ev.postback.data) || '');
+    const a = q.get('a');
+    if (!['start', 'ready', 'online', 'panel'].includes(a)) return null;
+    const who = lineIdentity(uid);
+    if (!who) return text('บัญชี LINE นี้ยังไม่ได้เชื่อมกับพนักงานของร้าน');
+    if (a === 'panel') { const p = shopPanel(who, base); return p ? { reply: { type: 'flex', flex: p.flex, alt: p.alt } } : text('บัญชีนี้ยังไม่ได้ผูกกับสาขาใด'); }
+    if (a === 'online') {
+      if (!['owner', 'manager'].includes(who.role)) return text('เฉพาะเจ้าของหรือผู้จัดการที่เปิดปิดรับออเดอร์ออนไลน์ได้');
+      const on = q.get('v') === '1';
+      setOnlineOrders(on);
+      return { ...text(on ? 'เปิดรับออเดอร์ออนไลน์แล้ว ✓' : 'ปิดรับออเดอร์ออนไลน์ชั่วคราวแล้ว ลูกค้ายังสั่งที่หน้าร้านได้ตามปกติ'), online: on };
+    }
+    const tid = Number(q.get('t')) || 0;
+    const tk = db.prepare('SELECT id, code, status, zone_id FROM tickets WHERE id=?').get(tid);
+    if (!tk) return text('ไม่พบออเดอร์นี้');
+    if (!seesBranch(who, branchOfTicket(tid))) return text('ออเดอร์นี้อยู่สาขาอื่น');
+    if (CLOSED_TH[tk.status]) return text(`คิว ${tk.code} ${CLOSED_TH[tk.status]}`);
+    if (a === 'start') {
+      startMaking(tid, { actorId: who.id || null });
+      return { reply: { type: 'text', text: `เริ่มทำ ${tk.code} แล้ว ✓ ลูกค้ายกเลิกเองไม่ได้แล้ว`, quick: [{ label: 'พร้อมรับ ' + tk.code, data: 'a=ready&t=' + tid }] }, zoneId: tk.zone_id };
+    }
+    const r = markReady(tid, threshold);
+    if (!r.ok && r.reason === 'unpaid') return text(`${tk.code} ยังไม่ได้ชำระ จึงยังแจ้งลูกค้าว่าพร้อมรับไม่ได้`);
+    return { ...text(r.already ? `${tk.code} แจ้งพร้อมรับไปแล้ว` : `แจ้งลูกค้า ${tk.code} ว่าพร้อมรับแล้ว ✓`), zoneId: tk.zone_id };
+  }
+  return null;
 }

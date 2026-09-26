@@ -605,6 +605,14 @@ CREATE TABLE IF NOT EXISTS push_log (
   at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_push_log_at ON push_log(at);
+-- One-time codes that link a staff member's LINE for order alerts: 10-minute life, single use.
+CREATE TABLE IF NOT EXISTS staff_link_codes (
+  code       TEXT PRIMARY KEY,
+  staff_id   INTEGER NOT NULL,            -- 0 = the owner signed in with the owner PIN (links owner:line_id)
+  expires_at TEXT NOT NULL,
+  used_by    TEXT,                        -- the LINE userId that sent it
+  used_at    TEXT
+);
 CREATE TABLE IF NOT EXISTS customer_coupons (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_key  TEXT NOT NULL,                  -- = customers.line_user_id
@@ -696,6 +704,8 @@ for (const stmt of [
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN hourly_rate REAL NOT NULL DEFAULT 0`,   // 0 = not on the clock (labour stays the prorated estimate)
+  `ALTER TABLE staff ADD COLUMN line_user_id TEXT`,                    // order alerts: this person's LINE, linked by a one-time code (never typed)
+  `ALTER TABLE staff ADD COLUMN line_alerts INTEGER NOT NULL DEFAULT 1`,   // they can mute alerts from the chat ("ปิดแจ้งเตือน")
   // Tender reconciliation: the owner keys the ACTUALLY-received amount per e-channel (from the
   // PromptPay/bank/wallet statement) at close; JSON {method:{actual,note}, by, at}. Cash reconciles
   // itself from the drawer count. null = not yet reconciled.

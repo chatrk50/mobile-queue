@@ -320,6 +320,7 @@
         <button class="ghost adm" onclick="openScanner()"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg>สแกนบัตรลูกค้า</button>
         <button class="ghost adm" onclick="toggleSound()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="mmSound">เสียงเตือนออเดอร์ใหม่</span></button>
         <button class="ghost adm" onclick="cycleDevMode()"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="mmDev">ปรับหน้าจอ</span></button>
+        <button class="ghost adm" onclick="linkMyLine()"><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 9.4 9.4 0 0 1-3.2-.6L4 20.5l1.3-3.9A8 8 0 0 1 3 11.5a8.4 8.4 0 0 1 9-8.3 8.4 8.4 0 0 1 9 8.3z"/></svg>เชื่อม LINE รับแจ้งเตือน</button>
       </div>
       <button id="adminBtn" class="ghost" style="display:none" onclick="toggleAdmin(event)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="lbl">จัดการ ▾</span></button>
       <!-- Stays in the bar, not in the gear menu: a plain cashier never sees the gear and still has
@@ -1312,6 +1313,17 @@
   </div>
 </div>
 
+<!-- Link THIS person's LINE for order alerts: send the one-time code to the shop's OA (button prefills it). -->
+<div id="lineLinkPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:70;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:380px;width:100%;margin:0;text-align:center">
+    <div class="row between" style="align-items:center"><h2 style="margin:0;font-size:18px;color:var(--navy)">เชื่อม LINE รับแจ้งเตือน</h2><button class="ghost ic-btn" onclick="closeLineLink()" aria-label="ปิด" title="ปิด">✕</button></div>
+    <p class="muted" style="font-size:13px;margin:10px 0">ส่งข้อความด้านล่างไปที่ LINE OA ของร้าน จากบัญชี LINE ที่ต้องการรับแจ้งเตือนออเดอร์</p>
+    <div style="font:800 24px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em;background:var(--surface);border:1px dashed var(--field-line,var(--line));border-radius:12px;padding:14px;color:var(--navy)">LINK <span id="lineLinkCode">------</span></div>
+    <a id="lineLinkOpen" class="btn" href="#" target="_blank" rel="noopener" style="display:block;margin-top:12px;text-decoration:none;font-weight:800">เปิด LINE แล้วส่งให้อัตโนมัติ</a>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">รหัสใช้ได้ 10 นาที ครั้งเดียว · ไม่มีปุ่มนี้ให้พิมพ์ข้อความเองในแชทของร้าน</p>
+    <p id="lineLinkMsg" role="status" aria-live="polite" style="font-weight:800;color:#15803d;margin:8px 0 0;min-height:1.2em"></p>
+  </div>
+</div>
 <div id="featuresPop" class="glass-ovl" style="display:none;position:fixed;inset:0;background:rgba(22,49,79,.45);z-index:55;align-items:center;justify-content:center;padding:16px">
   <div class="card" style="max-width:420px;width:100%;margin:0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <div class="row between" style="align-items:flex-start;padding:0 0 4px"><h1 style="margin:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ตั้งค่าระบบ</h1><span class="row" style="gap:6px;flex:none;align-items:center"><button class="ghost" style="padding:6px 12px" aria-label="กลับไปหน้าตั้งค่า" title="กลับไปหน้าตั้งค่า" onclick="document.getElementById('featuresPop').style.display='none';showSettings()"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost" style="padding:6px 12px" onclick="document.getElementById('featuresPop').style.display='none'" aria-label="ปิด" title="ปิด"><svg class="ic" viewBox="0 0 24 24" style="margin:0"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span></div>
@@ -5384,13 +5396,59 @@ window.showFeatures=async()=>{
       <button class="ok" style="width:100%;padding:9px" onclick="saveVat()">บันทึกการตั้งค่าภาษี</button>
       <div class="muted" style="font-size:11.5px;width:100%">ℹ️ ตั้งค่าล่วงหน้าได้ — พอจดทะเบียน VAT เสร็จค่อยใส่เลขผู้เสียภาษีแล้วเปิดสวิตช์ · เลขที่ใบกำกับเดินต่อเนื่องไม่ข้าม (กฎหมายกำหนด) · เลขเริ่มนับปรับขึ้นได้อย่างเดียว กันเลขซ้ำ</div>
     </div>`+
+    `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.bell}</span><div><b>แจ้งเตือนออเดอร์เข้า LINE ของทีม</b>
+        <div class="muted" style="font-size:12px;margin-top:2px">ออเดอร์ LINE ใหม่ สลิปรอตรวจ และคำขอยกเลิก ส่งเข้า LINE ของคนที่เชื่อมไว้ กดเริ่มทำหรือพร้อมรับจากแชทได้</div></div></div>
+      <div id="staffAlertsBox" style="width:100%;display:flex;flex-direction:column;gap:8px"><div class="muted" style="font-size:12px">กำลังโหลด…</div></div>
+    </div>`+
     `<div class="feat-row" style="border-color:var(--danger);align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start;color:var(--danger)"><span style="flex:none">${IC.trash}</span><div><b style="color:var(--danger)">ล้างข้อมูลทดสอบ (เริ่มต้นใหม่)</b>
         <div class="muted" style="font-size:12px;margin-top:2px">ลบ <b>ออเดอร์ · ยอดขาย · คิว · รอบเงินสด</b> ที่ทดสอบทั้งหมด แล้วเริ่มนับยอดจริงจาก 0 · <b>เก็บ</b> เมนู·สาขา·พนักงาน·ตั้งค่า·สูตร·สต๊อกไว้ · เฉพาะเจ้าของร้าน · <b>ย้อนกลับไม่ได้</b></div></div></div>
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
   $('featuresPop').style.display='flex';
+  loadStaffAlerts();
 };
+// ---- แจ้งเตือนออเดอร์เข้า LINE ของทีม (⚙ ตั้งค่าฟีเจอร์ + เมนู ⋯ "เชื่อม LINE รับแจ้งเตือน") ----
+const ALERT_MODE_TXT={off:'ปิด',away:'เฉพาะตอนไม่มีเครื่องแคชเชียร์เปิดอยู่',always:'ทุกครั้งที่มีออเดอร์'};
+async function loadStaffAlerts(){ const box=$('staffAlertsBox'); if(!box) return;
+  let d; try{ d=await api('/api/staff-alerts'); }catch(e){ box.innerHTML='<div class="muted" style="font-size:12px">โหลดไม่สำเร็จ: '+esc(err(e))+'</div>'; return; }
+  const roleTh={owner:'เจ้าของ',manager:'ผู้จัดการ',cashier:'แคชเชียร์'};
+  const people=((d.owner&&d.owner.linked&&!d.owner.sameAsStaff)?[{id:0,name:'เจ้าของร้าน (LINE รับสรุปยอด)',role:'owner',linked:true,alerts:d.owner.alerts}]:[]).concat(d.staff||[]);
+  const awayNote=d.mode==='away'?(' ตอนนี้'+(d.tillOnline?'มีเครื่องแคชเชียร์เปิดอยู่ จึงยังไม่ส่ง':'ไม่มีเครื่องแคชเชียร์เปิดอยู่ ออเดอร์ใหม่จะส่งเข้า LINE ทันที')):'';
+  box.innerHTML=`<div class="row" style="gap:8px;align-items:center;width:100%">
+      <label for="alertModeSel" style="font-size:12.5px;font-weight:700;white-space:nowrap">ส่งเมื่อ</label>
+      <select id="alertModeSel" onchange="saveAlertMode(this.value)" style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px">${['off','away','always'].map(m=>`<option value="${m}" ${d.mode===m?'selected':''}>${ALERT_MODE_TXT[m]}</option>`).join('')}</select></div>
+    <div class="muted" style="font-size:11.5px;width:100%;line-height:1.5">ทุกการแจ้งเตือนใช้โควตาข้อความ LINE OA ของร้าน 1 ข้อความต่อคน พิมพ์ "ร้าน" ในแชทเพื่อดูสรุปวันนี้และเปิดปิดรับออเดอร์ได้ฟรี${awayNote}</div>
+    <div style="width:100%;display:flex;flex-direction:column">${people.length?people.map(p=>`<div class="row between" style="align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+        <span style="font-size:13px;min-width:0"><b>${esc(p.name)}</b> <span class="muted">· ${roleTh[p.role]||esc(p.role)}</span> <span class="pill ${p.linked?'open':'soon'}" style="font-size:11px">${p.linked?'เชื่อม LINE แล้ว':'ยังไม่เชื่อม'}</span></span>
+        ${p.linked?`<span class="row" style="gap:6px;flex:none"><button class="tgl ${p.alerts?'on':'off'}" role="switch" aria-checked="${p.alerts?'true':'false'}" aria-label="รับแจ้งเตือน ${esc(p.name)}" onclick="setMemberAlert(${p.id},${p.alerts?0:1})"></button>${p.id?`<button class="ghost" style="padding:5px 10px;font-size:12px" onclick="unlinkMember(${p.id})">เลิกเชื่อม</button>`:''}</span>`:''}
+      </div>`).join(''):'<div class="muted" style="font-size:12px">ยังไม่มีพนักงาน</div>'}</div>
+    <div class="row" style="gap:8px;width:100%"><button class="ok" style="flex:1;padding:9px" onclick="linkMyLine()">เชื่อม LINE ของฉัน</button><button class="ghost" style="flex:1;padding:9px" onclick="testStaffAlert()">ส่งทดสอบ</button></div>
+    ${d.lineReady?'':'<div style="font-size:11.5px;width:100%;color:var(--danger)">ระบบ LINE ปิดอยู่บนเครื่องนี้ (UAT) ข้อความจะไม่ถูกส่งจริง</div>'}`;
+}
+const postAlerts=(body)=>api('/api/staff-alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+window.saveAlertMode=async(m)=>{ try{ await postAlerts({mode:m}); toast('บันทึกแล้ว'); loadStaffAlerts(); }catch(e){ toast(err(e)); } };
+window.setMemberAlert=async(id,on)=>{ try{ await postAlerts({member:{id,alerts:!!on}}); loadStaffAlerts(); }catch(e){ toast(err(e)); } };
+window.unlinkMember=async(id)=>{ if(!(await appConfirm({title:'เลิกเชื่อม LINE',message:'คนนี้จะไม่ได้รับแจ้งเตือนออเดอร์ทาง LINE อีก',okText:'เลิกเชื่อม',danger:true}))) return;
+  try{ await postAlerts({unlink:id}); loadStaffAlerts(); }catch(e){ toast(err(e)); } };
+window.testStaffAlert=async()=>{ try{ const r=await api('/api/staff-alerts/test',{method:'POST'});
+    toast(!r.recipients?'ยังไม่มีใครเชื่อม LINE และเปิดรับแจ้งเตือน':!r.lineReady?('ระบบ LINE ปิดอยู่ · ผู้รับ '+r.recipients+' คน'):('ส่งทดสอบถึง '+r.sent+' จาก '+r.recipients+' คน')); }catch(e){ toast(err(e)); } };
+let _linkPoll=null;
+window.linkMyLine=async()=>{
+  let r; try{ r=await api('/api/staff-alerts/link-code',{method:'POST'}); }catch(e){ toast(err(e)); return; }
+  ['adminMenu','moreMenu'].forEach(id=>{ const m=$(id); if(m) m.style.display='none'; });
+  $('lineLinkCode').textContent=r.code; $('lineLinkMsg').textContent='';
+  const a=$('lineLinkOpen'); if(r.oaLink){ a.href=r.oaLink; a.style.display=''; } else a.style.display='none';
+  $('lineLinkPop').style.display='flex';
+  clearInterval(_linkPoll); const until=Date.now()+600000;
+  _linkPoll=setInterval(async()=>{
+    if($('lineLinkPop').style.display==='none'||Date.now()>until){ clearInterval(_linkPoll); return; }
+    try{ const s=await api('/api/staff-alerts/link-code/'+encodeURIComponent(r.code));
+      if(s.linked){ clearInterval(_linkPoll); $('lineLinkMsg').textContent='เชื่อม LINE แล้ว ✓ ออเดอร์ใหม่จะแจ้งเข้า LINE นี้'; toast('เชื่อม LINE แล้ว'); if($('staffAlertsBox')) loadStaffAlerts(); }
+      else if(s.expired){ clearInterval(_linkPoll); $('lineLinkMsg').textContent='รหัสหมดอายุแล้ว กดเชื่อมใหม่อีกครั้ง'; } }catch(e){} },3000);
+};
+window.closeLineLink=()=>{ $('lineLinkPop').style.display='none'; clearInterval(_linkPoll); };
 window.toggleDay=(el)=>{ const on=!el.classList.contains('on'); el.classList.toggle('on',on); el.style.background=on?'var(--accent)':'#fff'; el.style.color=on?'#fff':'var(--navy)'; };
 window.resetTransactions=async()=>{
   if(!(await appConfirm({title:'⚠️ ล้างข้อมูลทดสอบทั้งหมด',message:'ลบ: ออเดอร์ · ยอดขาย · คิว · รอบเงินสด · ประวัติทั้งหมด\nเก็บ: เมนู · สาขา · พนักงาน · ตั้งค่า · สูตร · สต๊อก\n\nใช้ตอนเลิกทดสอบ เพื่อเริ่มนับยอดจริงจาก 0 — ย้อนกลับไม่ได้!',okText:'ดำเนินการต่อ',danger:true}))) return;
@@ -5917,7 +5975,7 @@ $('imgFile').addEventListener('change',onImgFile);
       if(el.matches(OVER)) return;
       el.setAttribute('role','button'); el.tabIndex=0; });
   }
-  var pend=false; function sweep(){ if(pend) return; pend=true; requestAnimationFrame(function(){ pend=false; watch(); names(document.body); menu('adminBtn','adminMenu'); menu('moreBtn','moreMenu'); }); }
+  var pend=false; function sweep(){ if(pend) return; pend=true; setTimeout(function(){ pend=false; watch(); names(document.body); menu('adminBtn','adminMenu'); menu('moreBtn','moreMenu'); },30); }   // a timer, not rAF: a till whose screen was hidden still gets its dialogs wired
   document.addEventListener('keydown',function(e){
     if((e.key==='Enter'||e.key===' ') && e.target && e.target.getAttribute && e.target.getAttribute('role')==='button' && e.target.tagName!=='BUTTON'){ e.preventDefault(); e.target.click(); return; }
     if(e.key!=='Escape') return;

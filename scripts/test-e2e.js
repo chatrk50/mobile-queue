@@ -2885,6 +2885,94 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE menu_items SET active=0 WHERE id=?").run(vMenu);
 }
 
+console.log('\n== Staff LINE alerts: orders reach the team in LINE ==');
+{
+  const L = await import('../server/line.js');
+  const c1 = Q.createStaff({ name: 'แอน', pin: '481516', role: 'cashier', branchIds: [1] });
+  const c2 = Q.createStaff({ name: 'บีม', pin: '234223', role: 'cashier', branchIds: [2] });
+  const U1 = 'U' + 'a1'.repeat(16), U2 = 'U' + 'a2'.repeat(16), UX = 'U' + 'a3'.repeat(16), UO = 'U' + 'a4'.repeat(16);   // ids no other section uses
+  const msg = (uid, text) => Q.handleStaffLineEvent({ type: 'message', source: { userId: uid }, message: { type: 'text', text } });
+  const tap = (uid, data) => Q.handleStaffLineEvent({ type: 'postback', source: { userId: uid }, postback: { data } });
+  const tk = (id) => db.prepare('SELECT status, making_at FROM tickets WHERE id=?').get(id);
+  Q.setOwnerLineId('');
+  const code1 = Q.createStaffLinkCode(c1.id).code;
+  ok(/^[A-HJ-NP-Z2-9]{6}$/.test(code1), `INVARIANT link codes are 6 unambiguous characters (${code1})`);
+  let r = await msg(UX, 'LINK ZZZZZZ');
+  ok(r && /ไม่ถูกต้อง/.test(r.reply.text) && Q.lineIdentity(UX) === null, 'INVARIANT a wrong link code is refused and links nobody');
+  r = await msg(U1, 'link ' + code1.toLowerCase());
+  ok(r && r.linked && r.linked.id === c1.id && Q.lineIdentity(U1) && Q.lineIdentity(U1).id === c1.id, 'INVARIANT sending LINK <code> to the OA links that LINE account to the staff member');
+  r = await msg(UX, 'LINK ' + code1);
+  ok(r && /ไม่ถูกต้อง/.test(r.reply.text) && Q.lineIdentity(UX) === null, 'INVARIANT a link code works once only');
+  ok(Q.staffLinkStatus(code1).linked === true, 'INVARIANT the till sees its code as linked');
+  ok((await msg(UX, 'ร้าน')) === null, 'INVARIANT a customer typing "ร้าน" falls through to the normal chat');
+
+  Q.setQueueFirst(true);
+  const o1 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'b1'.repeat(16), customerName: 'ลูกค้าทดสอบ' });
+  ok(o1.ticket.status === 'waiting', `queue-first LINE order is waiting (${o1.ticket.status})`);
+  Q.setStaffAlertConfig({ mode: 'off' });
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'off', 'INVARIANT mode off sends nothing');
+  Q.setStaffAlertConfig({ mode: 'away', awayMin: 3 });
+  Q.cashierHeartbeat();
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'till_online', 'INVARIANT away mode stays quiet while a till is online');
+  db.prepare("UPDATE settings SET value=datetime('now','-10 minutes') WHERE key='pos_last_seen'").run();
+  let s = await Q.staffOrderAlert(o1.ticket.id, 'new');
+  ok(s.recipients === 1 && s.reason === 'line_off', `INVARIANT with no till online the linked branch cashier is alerted (recipients ${s.recipients}, ${s.reason})`);
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'duplicate', 'INVARIANT the same event never alerts twice');
+  const code2 = Q.createStaffLinkCode(c2.id).code;
+  await msg(U2, 'ผูก ' + code2);
+  s = await Q.staffOrderAlert(o1.ticket.id, 'paid');
+  ok(s.recipients === 1, `INVARIANT staff of another branch are not alerted (recipients ${s.recipients})`);
+
+  const a = Q.staffAlertData(o1.ticket.id, 'new', 'https://shop.example');
+  ok(a.code === o1.ticket.code && a.lines.length === 1 && near(a.total, 100) && a.customer === 'ลูกค้าทดสอบ'
+    && a.actions.some((x) => x.data === 'a=start&t=' + o1.ticket.id) && a.actions.some((x) => x.uri === 'https://shop.example/cashier/'),
+    'INVARIANT the alert card carries the code, items, total, customer, a เริ่มทำ button and the cashier link');
+  ok(!Q.staffAlertData(o1.ticket.id, 'new', 'http://localhost:3000').actions.some((x) => x.uri), 'INVARIANT no http link is put on a LINE button (LINE only opens https)');
+  const fx = L.buildStaffAlertFlex(a);
+  ok(fx.type === 'bubble' && fx.header && fx.footer && fx.footer.contents.some((b) => b.action.type === 'postback' && b.action.data === 'a=start&t=' + o1.ticket.id),
+    'INVARIANT the Flex card has a header, the items body and a postback เริ่มทำ button');
+  const rm = L.toReplyMessage({ type: 'text', text: 'x', quick: [{ label: 'พร้อมรับ A001', data: 'a=ready&t=1' }] });
+  ok(rm.quickReply && rm.quickReply.items[0].action.type === 'postback', 'INVARIANT reply quick buttons are postbacks');
+
+  r = await tap(UX, 'a=start&t=' + o1.ticket.id);
+  ok(/ยังไม่ได้เชื่อม/.test(r.reply.text) && !tk(o1.ticket.id).making_at, 'INVARIANT a stranger pressing เริ่มทำ changes nothing');
+  r = await tap(U2, 'a=start&t=' + o1.ticket.id);
+  ok(/สาขาอื่น/.test(r.reply.text) && !tk(o1.ticket.id).making_at, 'INVARIANT staff cannot act on another branch\'s order');
+  r = await tap(U1, 'a=start&t=' + o1.ticket.id);
+  ok(r.zoneId === 1 && !!tk(o1.ticket.id).making_at && r.reply.quick && r.reply.quick[0].data === 'a=ready&t=' + o1.ticket.id,
+    'INVARIANT เริ่มทำ from LINE marks the order as being made and offers พร้อมรับ');
+  r = await tap(U1, 'a=ready&t=' + o1.ticket.id);
+  ok(/ยังไม่ได้ชำระ/.test(r.reply.text) && tk(o1.ticket.id).status === 'waiting', 'INVARIANT พร้อมรับ refuses an unpaid order');
+  Q.setOrderPaid(o1.ticket.id, { method: 'cash' });
+  r = await tap(U1, 'a=ready&t=' + o1.ticket.id);
+  ok(/พร้อมรับแล้ว/.test(r.reply.text) && tk(o1.ticket.id).status === 'called', 'INVARIANT พร้อมรับ from LINE calls a paid order');
+
+  r = await tap(U1, 'a=online&v=0');
+  ok(/เฉพาะเจ้าของ/.test(r.reply.text) && Q.onlineOrdersEnabled(), 'INVARIANT a cashier cannot switch online ordering off from LINE');
+  const oc = Q.createStaffLinkCode(0).code;
+  await msg(UO, 'เชื่อม ' + oc);
+  ok(Q.getOwnerLineId() === UO && Q.lineIdentity(UO) && Q.lineIdentity(UO).role === 'owner', 'INVARIANT the owner PIN links owner:line_id through the same code flow');
+  r = await tap(UO, 'a=online&v=0');
+  ok(r.online === false && !Q.onlineOrdersEnabled(), 'INVARIANT the owner can pause online ordering from LINE');
+  Q.setOnlineOrders(true);
+  r = await msg(U1, 'ร้าน');
+  ok(r && r.reply.type === 'flex' && /สรุปวันนี้/.test(r.reply.alt) && !r.reply.flex.footer, 'INVARIANT linked staff get the shop panel; a cashier gets no manager buttons');
+  r = await msg(UO, 'ร้าน');
+  ok(r && r.reply.flex.footer && r.reply.flex.footer.contents.some((b) => b.action.data === 'a=online&v=0'), 'INVARIANT the owner panel carries the online-ordering switch');
+
+  await msg(U1, 'ปิดแจ้งเตือน');
+  const o2 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'b2'.repeat(16) });
+  s = await Q.staffOrderAlert(o2.ticket.id, 'new');
+  ok(s.recipients === 1, `INVARIANT a muted cashier is skipped and the owner still hears (recipients ${s.recipients})`);
+  const mem = Q.alertMembers();
+  ok(mem.staff.find((m) => m.id === c1.id).alerts === false && mem.owner.linked === true && !JSON.stringify(mem).includes(U1),
+    'INVARIANT the member list shows who is linked and muted, never the LINE ids');
+  Q.unlinkStaffLine(c2.id);
+  ok(Q.lineIdentity(U2) === null, 'INVARIANT unlinking removes the staff member\'s LINE powers');
+  ok((await Q.staffAlertTest()).recipients === 1, 'INVARIANT ส่งทดสอบ reaches everyone linked with alerts on');
+  Q.setQueueFirst(false); Q.setStaffAlertConfig({ mode: 'off' }); Q.setOwnerLineId('');
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

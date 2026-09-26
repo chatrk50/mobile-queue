@@ -10,7 +10,7 @@ import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import compression from 'compression';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken, replyMessages, toReplyMessage, botBasicId } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable, describeQr } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -86,6 +86,16 @@ if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — dynamic amount ON (${
 app.post('/line/webhook', lineMiddleware, async (req, res) => {
   const events = req.body?.events || [];
   for (const ev of events) {
+    // Staff first: LINK codes, the "ร้าน" panel and the เริ่มทำ / พร้อมรับ buttons from linked staff.
+    // Anything that is not staff business returns null and falls through to the customer replies.
+    try {
+      const s = await Q.handleStaffLineEvent(ev, { threshold: THRESHOLD, base: PUBLIC_BASE_URL });
+      if (s) {
+        if (s.zoneId) emit(s.zoneId, 'update', (reveal) => Q.zoneSnapshot(s.zoneId, { reveal }));
+        if (s.reply) await replyMessages(ev.replyToken, [toReplyMessage(s.reply)]);
+        continue;
+      }
+    } catch (e) { console.error('[staff-line]', e.message); }
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
         'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
@@ -635,6 +645,42 @@ app.post('/api/pos/heartbeat', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json({ ...Q.cashierHeartbeat(), ordering: Q.orderingPaused() });
 });
+// ---------- Staff LINE alerts: new LINE orders reach the team in LINE (own OA, no third party) ----------
+app.get('/api/staff-alerts', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const cfg = Q.getStaffAlertConfig();
+  let basicId = null; try { basicId = await botBasicId(); } catch { /* optional */ }
+  res.json({ ...cfg, ...Q.alertMembers(), lineReady: LINE_ENABLED, basicId, tillOnline: Q.tillOnline(cfg.awayMin) });
+});
+app.post('/api/staff-alerts', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    if (req.body?.mode != null || req.body?.awayMin != null) Q.setStaffAlertConfig({ mode: req.body.mode, awayMin: req.body.awayMin });
+    if (req.body?.member) Q.setMemberAlerts(Number(req.body.member.id) || 0, !!req.body.member.alerts);
+    if (req.body?.unlink != null) Q.unlinkStaffLine(Number(req.body.unlink) || 0);
+    res.json({ ...Q.getStaffAlertConfig(), ...Q.alertMembers() });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Anyone signed in links THEIR OWN LINE (the session's staff id). The owner PIN (no staff row) links
+// the owner's LINE — the same power the ⚙ owner-id field already gives it, nothing more.
+app.post('/api/staff-alerts/link-code', rateLimit('linkcode', 10, 60e3), async (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const staffId = req.staff?.id || (ownerOK(req) ? 0 : null);
+  if (staffId == null) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const r = Q.createStaffLinkCode(staffId);
+    let basicId = null; try { basicId = await botBasicId(); } catch { /* optional */ }
+    res.json({ ...r, basicId, oaLink: basicId ? `https://line.me/R/oaMessage/${encodeURIComponent(basicId)}/?${encodeURIComponent('LINK ' + r.code)}` : null });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/staff-alerts/link-code/:code', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.staffLinkStatus(req.params.code));
+});
+app.post('/api/staff-alerts/test', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.staffAlertTest({ base: PUBLIC_BASE_URL })); } catch (e) { res.status(400).json({ error: e.message }); }
+});
 // Manual "clear stale unpaid orders now" — cashier-triggered; mirrors the background sweep.
 app.post('/api/pending/sweep', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
@@ -853,6 +899,7 @@ app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) =>
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
+    if (r.ticket.status === 'waiting') Q.staffOrderAlert(r.ticket.id, 'new', { base: PUBLIC_BASE_URL });   // queue-first: a number is out, make it
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total, prepayOnly: !!r.prepayOnly });
   } catch (e) {
     if (e.message === 'already_in_queue') {
@@ -884,6 +931,7 @@ const ownsTicket = (req) => {
 app.post('/api/tickets/:ticketId/cancel', (req, res) => {
   try {
     Q.customerRequestCancel(req.params.ticketId, req.body?.lineUserId || null);
+    Q.staffOrderAlert(req.params.ticketId, 'cancel', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true, requested: true });
@@ -991,6 +1039,7 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
     const r = Q.claimOrderPaid(req.params.ticketId);
+    Q.staffOrderAlert(req.params.ticketId, 'claim', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
@@ -1003,10 +1052,12 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
   try {
     const r = await Q.verifySlipForTicket(req.params.ticketId, req.body?.imageData || '');
     if (r.claimed) {   // SlipOK refused → the slip went to the cashier with the reason
+      Q.staffOrderAlert(req.params.ticketId, 'slip', { base: PUBLIC_BASE_URL });
       emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
       return res.json({ ok: true, paid: false, claimed: true, code: r.code || null, message: r.message || '', note: r.note || '' });
     }
     if (r.paid && !r.already) {
+      Q.staffOrderAlert(req.params.ticketId, 'paid', { base: PUBLIC_BASE_URL });   // paid by SlipOK with nobody at the till
       emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
       notifyLoyalty({ ticketId: Number(req.params.ticketId), loyalty: r.loyalty });
     }
@@ -1022,6 +1073,7 @@ app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
   if (!/^data:image\//.test(img) || img.length > 4_000_000) return res.status(400).json({ error: 'bad_image' });
   try {
     const r = Q.attachSlip(req.params.ticketId, img);
+    Q.staffOrderAlert(req.params.ticketId, 'slip', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
