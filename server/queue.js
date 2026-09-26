@@ -5022,6 +5022,8 @@ export function createOrder(zoneId, items, opts = {}) {
     if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.blockLimit; throw e; }
     prepayOnly = ns.prepay;
   }
+  // A web guest (no LINE identity) always pays first — see webOrderEnabled.
+  if (source === 'customer' && !lineUserId) prepayOnly = true;
 
   // SELF-SERVE ORDERS PRICE THEMSELVES FROM THE CATALOG. The LIFF posts the price it displayed and
   // the endpoint is public, so a modified client could name its own price — and the recorded bill,
@@ -5055,7 +5057,7 @@ export function createOrder(zoneId, items, opts = {}) {
     }
   }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
-  const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
+  const label = customerName || (source === 'customer' ? (lineUserId ? 'LINE order' : 'Web order') : 'Order');
   // Classify each line as a base drink or an addon (topping) for exact addon reporting, and pin
   // each line to its catalog id so a later menu RENAME can't detach it from recipe/stock/history.
   const toppingNames = new Set(
@@ -6027,20 +6029,20 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label, kitchen FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   // All currently-called (called but not yet served) tickets, newest first. The cashier UI shows the
   // 5 most recent by default with a "แสดงทั้งหมด" toggle for the rest. Capped at 100 as a sane bound
   // ('called' is transient — it clears on serve/no-show — so this is effectively unbounded in practice).
   const recentCalled = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, called_at, table_label, kitchen FROM tickets
+    `SELECT id, code, number, party_size, customer_name, called_at, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 100`
   ).all(zoneId);
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
   const pending = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label, kitchen FROM tickets
+    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='pending' ORDER BY id ASC`
   ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
@@ -6081,6 +6083,8 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
     return t;
   };
   waiting.forEach(attach); recentCalled.forEach(attach); pending.forEach(attach);
+  // A web guest's order (no LINE identity) — the till and จอครัว label it เว็บ instead of LINE.
+  for (const t of [...waiting, ...recentCalled, ...pending]) { t.web = t.order_source === 'customer' && !!t.no_line; delete t.no_line; }
   // Only the cashier (reveal) needs the awaiting-payment list; public/display omit it.
   return { zone: { ...zone, tables: getZoneTables(zoneId) }, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
@@ -6150,7 +6154,7 @@ export function ticketView(ticketId) {
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
     // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
-    canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
+    canCancel: !!t.line_user_id && ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
     cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
     table: t.table_label || null, tableServe: t.table_label ? tableServeOn() : false,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
@@ -6619,3 +6623,11 @@ export function setKitchenMark(ticketId, line, status, { actorId = null, thresho
   const ready = allDone && t.status !== 'called' ? markReady(t.id, threshold) : null;
   return { ticketId: t.id, zoneId: t.zone_id, kitchen: k, allDone, ready };
 }
+
+// ==== Web ordering (สั่งผ่านเว็บ / Google Maps) ====================================================
+// The shop's own ordering link (on Google Maps, IG, a flyer) opens the ordering page as a GUEST: no
+// LINE login. Nothing can be pushed to a guest and nobody can call them back, so a guest order is
+// PAY-FIRST — no queue number and nothing made until the money is in — and the page itself shows the
+// status. Off by default; the owner switches it on in ⚙.
+export function webOrderEnabled() { return getSetting('web:order', '0') === '1'; }
+export function setWebOrder(on) { setSetting('web:order', on ? '1' : '0'); return { webOrder: !!on }; }

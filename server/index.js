@@ -243,7 +243,7 @@ app.get('/api/config', (req, res) => {
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
   const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, payKplus: pc.online && payOnline && pc.kplusReady, payToKplus: (pc.online && pc.kplusReady) ? payToPublic({ mode: 'merchant', ...describeQr(pc.kplusQr) }) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, payKplus: pc.online && payOnline && pc.kplusReady, payToKplus: (pc.online && pc.kplusReady) ? payToPublic({ mode: 'merchant', ...describeQr(pc.kplusQr) }) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), webOrder: Q.webOrderEnabled(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -549,7 +549,7 @@ app.post('/api/loyalty/settings', (req, res) => {
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: Q.slipReadyAny(), printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: Q.slipReadyAny(), printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), webOrder: Q.webOrderEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -574,6 +574,7 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
     if (req.body?.lineSaver != null) Object.assign(out, Q.setLineSaver(!!req.body.lineSaver));
+    if (req.body?.webOrder != null) Object.assign(out, Q.setWebOrder(!!req.body.webOrder));
     if (req.body?.bounceBack != null) out.bounceBack = Q.setBounceBackConfig(req.body.bounceBack);   // Phase 4 #2
     if (req.body?.streak != null) out.streak = Q.setStreakConfig(req.body.streak);   // Phase 4 #3
     if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
@@ -799,6 +800,16 @@ app.get('/api/zones/:zoneId', (req, res) => {
   if (!z) return res.status(404).json({ error: 'zone_not_found' });
   res.json({ ...z, tables: Q.getZoneTables(z.id), tableServe: Q.tableServeOn() });   // the LIFF checks a table QR's label against this
 });
+// The shop's own ordering link (Google Maps "Order", IG bio, a flyer): the ordering page as a web
+// guest when web ordering is on, otherwise the normal LINE entry.
+app.get('/order', (req, res) => {
+  const z = req.query.zone && Q.getZone(req.query.zone) ? Number(req.query.zone) : Q.defaultZoneId();
+  res.redirect(302, `/liff/?zone=${encodeURIComponent(z || '')}${Q.webOrderEnabled() ? '&web=1' : ''}`);
+});
+app.get('/api/order-qr', async (req, res) => {
+  try { res.type('png').send(await QRCode.toBuffer(`${PUBLIC_BASE_URL}/order`, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } })); }
+  catch (e) { res.status(500).end(); }
+});
 // QR PNG for a zone (points at the LIFF URL when configured) — used by the print poster.
 app.get('/api/qr/:zoneId', async (req, res) => {
   const z = Q.getZone(req.params.zoneId);
@@ -903,6 +914,8 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) => {
   if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
+    // No LINE identity = a web guest: only while the owner has web ordering switched on.
+    if (!req.body?.lineUserId && !Q.webOrderEnabled()) return res.status(403).json({ error: 'web_order_off' });
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',
       lineUserId: req.body?.lineUserId || null,

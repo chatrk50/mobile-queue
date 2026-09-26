@@ -128,7 +128,7 @@ function card(t, col){
   return `<article class="kcard ${ready?'ready':(col==='making'?'making':'')}" aria-label="คิว ${esc(t.code||('#'+t.id))}">
     <div class="head"><span class="code">${esc(t.code||('#'+t.id))}</span>
       ${t.table_label?`<span class="chip table">โต๊ะ ${esc(t.table_label)}</span>`:''}
-      ${t.order_source==='customer'?'<span class="chip line">LINE</span>':''}
+      ${t.order_source==='customer'?`<span class="chip line">${t.web?'เว็บ':'LINE'}</span>`:''}
       ${unpaid?'<span class="chip unpaid">ยังไม่ชำระ</span>':''}
       <span class="age${late?' late':''}">${ready?'พร้อมแล้ว':(age+' นาที')}</span></div>
     ${lines.map((l,i)=>{ const [nm,sw]=String(l.name||'').split(' · '), s=k[i]||'', tops=(l.toppings||[]).map(x=>x.name+(x.qty>1?(' ×'+x.qty):''));

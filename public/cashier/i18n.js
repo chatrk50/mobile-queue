@@ -938,6 +938,10 @@
     ['ใช้ PIN พนักงานเดียวกับหน้าแคชเชียร์', 'Use the same staff PIN as the cashier', 'ໃຊ້ PIN ພະນັກງານດຽວກັບໜ້າແຄຊເຊຍ'],
     ['PIN พนักงาน', 'Staff PIN', 'PIN ພະນັກງານ'],
     ['พิมพ์ใบทำเครื่องดื่มอัตโนมัติ (เครื่องนี้)', 'Auto-print drink tickets (this device)', 'ພິມໃບເຮັດເຄື່ອງດື່ມອັດຕະໂນມັດ (ເຄື່ອງນີ້)'],
+    ['เว็บ', 'Web', 'ເວັບ'],
+    ['สั่งผ่านเว็บ / Google Maps (ไม่ต้องมี LINE)', 'Web ordering / Google Maps (no LINE needed)', 'ສັ່ງຜ່ານເວັບ / Google Maps (ບໍ່ຕ້ອງມີ LINE)'],
+    ['ลิงก์สั่งของร้าน (ไม่เสีย GP)', "The shop's own ordering link (no GP fee)", 'ລິ້ງສັ່ງຂອງຮ້ານ (ບໍ່ເສຍ GP)'],
+    ['คัดลอก', 'Copy', 'ສຳເນົາ'],
     ['ไทย', 'ไทย', 'ไทย'],
   ];
   window.YD_I18N_BOOT({ rows: ROWS, into: '.hdr-actions', before: '#logoutBtn', className: 'ghost ic-btn' });

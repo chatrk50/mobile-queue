@@ -317,6 +317,10 @@
       <img id="acctChipImg" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
       <span id="acctChipFb" style="font-size:19px;line-height:1">🌱</span>
     </button>
+    <div id="webBanner" style="display:none;background:#eef6fb;border:1px solid #cfe3ef;border-radius:12px;padding:9px 12px;margin:12px 0 0;text-align:left;font-size:12.5px;color:var(--navy);line-height:1.5">
+      <b>สั่งผ่านเว็บ</b> — ชำระเงินก่อนแล้วรับหมายเลขคิว · เปิดหน้านี้ค้างไว้เพื่อดูสถานะ
+      <a id="webLineLink" href="#" style="display:none;font-weight:800;margin-left:4px">รับแจ้งเตือนทาง LINE แทน</a>
+    </div>
     <!-- Non-LINE (web) customers: offer phone to collect loyalty stamps -->
     <div id="guestPhoneCard" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px;margin:12px 0 0;text-align:left">
       <div id="guestPhonePrompt">
@@ -839,6 +843,7 @@ const qs = new URLSearchParams(location.search);
 let zoneId = qs.get('zone');   // `let` so a marketing link with no ?zone= can fall back to the shop's open zone (cfg.defaultZone)
 const claimId = qs.get('claim'), claimTok = qs.get('t');   // QR check-in handshake (cashier-shown QR)
 let couponTok = qs.get('coupon');                          // claim-a-coupon link (?coupon=TOKEN); `let` so we can restore it after a login redirect drops the query
+const webMode = qs.get('web')==='1';   // the shop's own web link (Google Maps etc.): order as a guest, no LINE login
 let tableLabel = (qs.get('table')||'').trim().slice(0,12) || null, tableServe = true;   // table QR (?table=5): the order is brought to that table (tableServe: staff bring it vs customer collects)
 let cfg = {}, lineUserId = null, displayName = null, pictureUrl = null, ticketId = null, poll = null, inLine = false, submitting = false, guestPhone = null;
 
@@ -913,6 +918,13 @@ async function initLiff(){
   cfg = await api('/api/config'+(zoneId?('?zone='+encodeURIComponent(zoneId)):''));
   // Package 1 (POS only): customer LINE ordering is disabled — show a clean notice, don't render the order UI.
   if (cfg.posOnly){ err('ระบบนี้ไม่เปิดสั่งผ่านไลน์ · กรุณาสั่งที่เคาน์เตอร์'); return; }
+  // Web guest: no LINE identity at all (so no LINE login, no identity cookie). The server makes the order
+  // pay-first; this page is how the guest follows it. The shop must have web ordering switched on.
+  if (webMode && cfg.webOrder){
+    lineUserId=null; inLine=false; $('liffNote').textContent='สั่งผ่านเว็บ · ไม่ต้องเข้าสู่ระบบ LINE';
+    show('webBanner',true); const wl=$('webLineLink'); if(wl && cfg.liffId){ wl.href='https://liff.line.me/'+cfg.liffId+(zoneId?('?zone='+encodeURIComponent(zoneId)):''); wl.style.display=''; }
+    return;
+  }
   if (cfg.liffId && window.liff){
     try{
       await liff.init({ liffId: cfg.liffId });
@@ -2125,7 +2137,7 @@ function renderOrderBlock(v){
       show('claimBtn', false);   // #2: require a real slip — attach-slip (checks a file exists) is the only way forward → advances to 'รอแคชเชียร์ยืนยัน'
       setSlipLabels();
       $('counterNote').innerHTML='<div style="font-size:16px;font-weight:800;color:var(--navy)">ชำระที่เคาน์เตอร์ · ฿'+total+'</div>'
-        +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">แจ้งพนักงานว่าสั่งผ่าน LINE · รับหมายเลขคิวหลังชำระเสร็จ</div>';
+        +'<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">'+(lineUserId?'แจ้งพนักงานว่าสั่งผ่าน LINE · รับหมายเลขคิวหลังชำระเสร็จ':'แจ้งพนักงานว่าสั่งผ่านเว็บ ออเดอร์ #'+ticketId+' · รับหมายเลขคิวหลังชำระเสร็จ')+'</div>';
       applyPayChoice();
     }
   }
@@ -2150,7 +2162,7 @@ window.openPayPicker=(mode)=>{
   $('payPickerList').innerHTML = '<div role="radiogroup" aria-label="ช่องทางชำระเงิน">' + opts.map(o=>{ const sel=cur===o.m;
     return `<button type="button" role="radio" aria-checked="${sel}" class="row between rowbtn" style="align-items:center;padding:13px 14px;border:1.5px solid ${sel?'var(--accent-ink)':'var(--line)'};border-radius:14px;margin-bottom:10px;background:${sel?'#e9f8fb':'#fff'}" onclick="selectPayMethod('${o.m}')">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width:26px;height:26px;flex:none;stroke:var(--accent-ink)">${o.ic}</svg>
-        <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div>${o.s?`<div class="muted" style="font-size:12px">${o.s}</div>`:''}</span></span>
+        <span style="min-width:0"><div style="font-weight:800;color:var(--navy);font-size:15px">${o.t}</div>${o.s?`<div class="muted" style="font-size:12px">${(o.m==='counter'&&!lineUserId)?'จ่ายที่ร้าน แล้วรับหมายเลขคิว':o.s}</div>`:''}</span></span>
       <svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;flex:none;fill:none;stroke:${sel?'var(--accent-ink)':'var(--field-line)'};stroke-width:2">${sel?'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/>':'<circle cx="12" cy="12" r="9"/>'}</svg>
     </button>`;}).join('') + '</div>'
     + ((cfg.payCounter!==false) ? '<div style="margin-top:6px;padding:12px 4px 2px;border-top:1px dashed var(--line)"><div style="font-weight:800;color:var(--navy);font-size:13.5px;text-align:center">🇹🇭 ร้านนี้เข้าร่วมโครงการไทยช่วยไทย</div><div class="muted" style="font-size:12px;text-align:center;margin:3px 0 10px">ใช้สิทธิ์ไทยช่วยไทย / เป๋าตัง ชำระที่เคาน์เตอร์ได้</div><img src="/assets/4060.webp" alt="" loading="lazy" decoding="async" style="width:100%;max-width:180px;display:block;margin:0 auto;border-radius:10px;border:1px solid var(--line)" onerror="this.onerror=null;this.src=\'/assets/4060.min.png\'"></div>' : '');

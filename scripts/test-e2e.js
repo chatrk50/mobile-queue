@@ -3191,6 +3191,22 @@ console.log('\n== Kitchen marks (shared across devices) ==');
   ok(closed === 'ticket_closed', 'INVARIANT a served order can no longer be marked');
 }
 
+console.log('\n== Web ordering (guest, pay-first) ==');
+{
+  ok(Q.webOrderEnabled() === false, 'INVARIANT web ordering is off until the owner switches it on');
+  const qf = Q.getQueueFirst(); Q.setQueueFirst(true);
+  const g = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: null });
+  ok(g.ticket.status === 'pending' && g.prepayOnly === true && g.ticket.customer_name === 'Web order',
+    'INVARIANT a web guest order is pay-first even when the shop runs queue-first (no number, nothing made before payment)');
+  const s = Q.zoneSnapshot(1, { reveal: true }); const c = s.pending.find((t) => t.id === g.ticket.id);
+  const lineCard = [...s.pending, ...s.waiting].find((t) => t.order_source === 'customer' && !t.web);
+  ok(c && c.web === true && (!lineCard || lineCard.web === false), 'INVARIANT the board labels a guest order เว็บ and a LINE order LINE');
+  ok(Q.ticketView(g.ticket.id).canCancel === false, 'INVARIANT a guest has no identity to cancel with — an unpaid guest order lapses on its own');
+  Q.setOrderPaid(g.ticket.id, { method: 'promptpay' });
+  ok(['waiting', 'called'].includes(db.prepare('SELECT status FROM tickets WHERE id=?').get(g.ticket.id).status), 'INVARIANT once paid the guest order gets its queue number');
+  Q.setQueueFirst(qf);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

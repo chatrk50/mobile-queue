@@ -4925,9 +4925,9 @@ function renderZone(snap){
   // Table QR: where the order goes, in the card's most visible spot.
   const tblChip=(t)=> t.table_label ? ` <span class="pill" style="background:#16314f;color:#fff;font-weight:800;margin-left:6px">โต๊ะ ${esc(t.table_label)}</span>` : '';
   const nm=(t)=>{
-    const real = t.customer_name && !['Order','LINE order','Walk-in'].includes(t.customer_name);
+    const real = t.customer_name && !['Order','LINE order','Web order','Walk-in'].includes(t.customer_name);
     const nameTxt = (t.cust&&t.cust.name) ? t.cust.name : (real?t.customer_name:'');
-    const src = t.order_source==='customer' ? ' <span class="pill" style="background:#e9f8fb;color:#0b6a7e;margin-left:6px">LINE</span>' : '';
+    const src = t.order_source==='customer' ? ` <span class="pill" style="background:#e9f8fb;color:#0b6a7e;margin-left:6px">${t.web?'เว็บ':'LINE'}</span>` : '';
     return tblChip(t)+(nameTxt?` <span class="muted">· ${esc(nameTxt)}</span>`:'')+src+recoChip(t)+loyChip(t);
   };
   // Show the LINE customer's stamp balance so staff always sees it (and knows redeem is available).
@@ -5360,6 +5360,20 @@ window.loadPushRange=async(f,t)=>{ const box=$('pushRangeBox'); box.innerHTML='<
     <div class="row between" style="font-size:12.5px;font-weight:700;color:var(--navy)"><span>${d.from} → ${d.to}</span><span>รวม ${d.total} ข้อความ (ส่งสำเร็จ ${d.sent})</span></div>
     ${rows.length?`<div style="max-height:180px;overflow-y:auto;margin-top:6px">${rows.map(r=>`<div class="row between" style="font-size:12px;padding:2.5px 0"><span class="muted">${r.day}</span><span><b>${r.n}</b> ข้อความ${r.sent<r.n?` <span style="color:var(--danger)">(สำเร็จ ${r.sent})</span>`:''}</span></div>`).join('')}</div>`
       :'<p class="muted" style="font-size:12px;margin:6px 0 0">ไม่มีการส่งในช่วงนี้</p>'}</div>`; };
+// The shop's own ordering link + QR + how to make it the Order button on Google Maps (no GP).
+function webOrderKit(){ const url=location.origin+'/order';
+  return `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+    <b>ลิงก์สั่งของร้าน (ไม่เสีย GP)</b>
+    <div class="row" style="gap:6px;width:100%;flex-wrap:nowrap"><input id="webOrderUrl" readonly value="${esc(url)}" aria-label="ลิงก์สั่งผ่านเว็บ" style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px"><button class="ok" style="padding:8px 14px;flex:none" onclick="copyWebOrderUrl()">คัดลอก</button></div>
+    <div class="row" style="gap:12px;align-items:flex-start;width:100%;flex-wrap:wrap">
+      <img src="/api/order-qr" alt="QR ลิงก์สั่งของร้าน" width="120" height="120" loading="lazy" style="border:1px solid var(--line);border-radius:10px;flex:none">
+      <ol class="muted" style="font-size:12.5px;line-height:1.6;margin:0;padding-left:18px;flex:1;min-width:200px">
+        <li>เปิด <b>Google Business Profile</b> ของร้าน (ค้นชื่อร้านใน Google แล้วกด "แก้ไขโปรไฟล์")</li>
+        <li>ไปที่ส่วน <b>สั่งอาหาร / Food ordering</b> แล้วเพิ่มลิงก์ด้านบนเป็นลิงก์สั่งกลับบ้าน (Pickup)</li>
+        <li>ตั้งเป็น <b>ลิงก์ที่แนะนำ</b> (Preferred) — ปุ่มสั่งบน Google Maps จะพามาที่ร้านเราก่อนแอปเดลิเวอรี่</li>
+        <li>ใช้ลิงก์หรือ QR เดียวกันใน IG / Facebook / ใบปลิวได้</li>
+      </ol></div></div>`; }
+window.copyWebOrderUrl=async()=>{ const i=$('webOrderUrl'), v=(i||{}).value||''; try{ await navigator.clipboard.writeText(v); toast('คัดลอกลิงก์แล้ว'); }catch(e){ if(i) i.select(); toast('กดค้างที่ลิงก์เพื่อคัดลอก'); } };
 window.showFeatures=async()=>{
   $('adminMenu').style.display='none';
   let f={}; try{ f=await api('/api/admin/features'); }catch(e){ toast(err(e)); return; }
@@ -5382,6 +5396,8 @@ window.showFeatures=async()=>{
     row('social', f.social, IC.chart, 'โชว์ยอดขายวันนี้ (Social proof)', f.social?'เปิดอยู่ — ลูกค้าเห็น "🔥 วันนี้ขายไปแล้ว N แก้ว" ที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อโชว์ยอดขายวันนี้เป็นหลักฐานความนิยม', false)+
     row('mascot', f.mascot, IC.cup, 'มาสคอตทักทาย (YO-DEE)', f.mascot?'เปิดอยู่ — โลโก้เด้งทักทายน่ารักที่หน้าแรก':'ปิดอยู่ — เปิดเพื่อเพิ่มลูกเล่นทักทายตอนเปิดแอป', false)+
     row('couponPopup', f.couponPopup!==false, '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></svg>', 'เด้งคูปองตอนลูกค้าเข้าแอป', (f.couponPopup!==false)?'เปิดอยู่ — ลูกค้าที่มีคูปองค้างในกระเป๋าจะเห็นการ์ดคูปองเด้งทักทายตอนเปิดแอป (วันละครั้ง) ให้รีบใช้':'ปิดอยู่ — เปิดเพื่อเด้งการ์ดคูปองต้อนรับให้ลูกค้าที่มีคูปองค้างอยู่', false)+
+    row('webOrder', f.webOrder, '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>', 'สั่งผ่านเว็บ / Google Maps (ไม่ต้องมี LINE)', f.webOrder?'เปิดอยู่ — ลูกค้าสั่งจากลิงก์ร้านได้ในเบราว์เซอร์ทั่วไป · ออเดอร์จากเว็บต้องจ่ายก่อนจึงได้คิว':'ปิดอยู่ — เปิดเพื่อรับออเดอร์จากลิงก์บน Google Maps / IG / ใบปลิว โดยลูกค้าไม่ต้องล็อกอิน LINE', false)+
+    (f.webOrder?webOrderKit():'')+
     row('pdpaNotice', f.pdpaNotice, IC.shield, 'แถบขอความยินยอม PDPA', f.pdpaNotice?'เปิดอยู่ — ลูกค้าใหม่เห็นแถบแจ้งการเก็บข้อมูล + ปุ่มยินยอม (ครั้งเดียวต่อคน)':'ปิดอยู่ — ไม่แสดงแถบบนหน้าลูกค้า · ความยินยอมที่เคยกดไว้ยังถูกเก็บ', false)+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.clock}</span><div><b>ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</b>
