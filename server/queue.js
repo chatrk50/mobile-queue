@@ -5367,8 +5367,11 @@ export function setOrderPaid(ticketId, opts = {}) {
       const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       sub = greet + sub + `\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
+      const cheapest = cheapestReward();
       sub += (loyalty.coupons && loyalty.coupons.length)
-        ? `\n🎉 สะสมครบ ${per} ดวง! รับคูปองฟรี 1 ${UNIT} — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
+        ? `\n🎉 สะสมครบแล้ว! รับคูปอง "${loyalty.coupons[0].label}" — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
+        : cheapest
+          ? (bal >= cheapest.cost_points ? `\n🎁 มี ${bal} ดวง — เลือกแลกของรางวัลได้ในบัตรสมาชิก` : `\n🥤 อีก ${cheapest.cost_points - bal} ดวง แลก "${cheapest.name}" ได้`)
         : (free >= 1
           ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
           : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`);
@@ -6125,10 +6128,14 @@ export function ticketView(ticketId) {
       // Did THIS order complete a fresh stamp card (cross a multiple of `per`)? If so — and a real reward
       // is actually redeemable — flag it so the LIFF fires the reward-celebration moment. The client shows
       // it once per ticket; the first-order welcome "wow" takes precedence when both would apply.
-      const rewardJustReady = earnedThis > 0 && per > 0
+      // Catalog mode has no cards: "just ready" = this order lifted the balance past the cheapest reward.
+      const cheapest = cheapestReward();
+      const rewardJustReady = cheapest
+        ? earnedThis > 0 && balAtEarn >= cheapest.cost_points && balAtEarn - earnedThis < cheapest.cost_points
+        : earnedThis > 0 && per > 0
         && Math.floor(balAtEarn / per) > Math.floor((balAtEarn - earnedThis) / per)
         && listRewards(false).length > 0;
-      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady };
+      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady, mode: getRedeemMode(), rewardName: cheapest ? cheapest.name : null };
     }
   }
   // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones
@@ -6568,6 +6575,10 @@ export function customerRedeem(customerKey, rewardId) {
 /** Can this customer take a reward at the counter right now: enough stamps for the cheapest active
  *  reward, or a reward coupon already in their wallet. Stamps-per-card is not the test — in catalog
  *  mode the balance runs past it, and rewards can cost more or less than one card. */
+/** Catalog mode only: the cheapest active reward (what "ready" means there); null in auto mode. */
+function cheapestReward() {
+  return getRedeemMode() === 'choose' ? db.prepare('SELECT name, cost_points FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get() || null : null;
+}
 export function canRedeemNow(key) {
   if (!key) return false;
   const min = db.prepare('SELECT MIN(cost_points) m FROM rewards WHERE active=1').get().m;

@@ -2032,19 +2032,27 @@ function showWow(loy){
 function maybeReward(v){ const k='rw_'+v.id; try{ if(localStorage.getItem(k)) return; localStorage.setItem(k,'1'); }catch(e){} showReward(v.loyalty); }
 function showReward(loy){
   let p=$('wowPop'); if(!p){ p=document.createElement('div'); p.id='wowPop'; p.onclick=()=>closeWow(); document.body.appendChild(p); }
-  const per=loy.per||10;
+  const per=loy.per||10, choose=loy.mode==='choose';
   const colors=['#00b5d8','#2fc2a6','#f3cb55','#e55b6b','#1e3a5f'];
   let conf=''; for(let i=0;i<28;i++){ const l=Math.round(Math.random()*100), d=(2.6+Math.random()*1.8).toFixed(2), dl=(Math.random()*0.6).toFixed(2); conf+=`<span class="confetti" style="left:${l}%;background:${colors[i%colors.length]};animation-duration:${d}s;animation-delay:${dl}s"></span>`; }
   p.innerHTML=conf+`<div class="wowcard" onclick="event.stopPropagation()">
     <div class="wowemoji">🎉</div>
-    <h1 style="margin:10px 0 2px;color:var(--navy)">สะสมครบ ${per} ดวงแล้ว!</h1>
+    ${choose ? `<h1 style="margin:10px 0 2px;color:var(--navy)">สะสมพอแลกของรางวัลแล้ว!</h1>
+    <p class="muted" style="margin:0 0 12px">มี ${loy.balance||0} ดวง</p>
+    <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:var(--ink);border-radius:14px;padding:16px">
+      <div style="font-size:13px">แลกได้แล้ว</div>
+      <div style="font-size:22px;font-weight:900;line-height:1.2">${esc(loy.rewardName||'ของรางวัล')}</div>
+      <div style="font-size:12px;margin-top:4px">เลือกแลกในบัตรสมาชิก — หรือเก็บดวงไว้แลกชิ้นใหญ่กว่าก็ได้</div>
+    </div>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openMember().then(()=>showMemberTab('stamp'))">ไปเลือกของรางวัล</button>`
+    : `<h1 style="margin:10px 0 2px;color:var(--navy)">สะสมครบ ${per} ดวงแล้ว!</h1>
     <p class="muted" style="margin:0 0 12px">คุณได้รางวัลฟรีแล้ว 🥤</p>
     <div style="background:linear-gradient(135deg,#f3961a,#f3cb55);color:var(--ink);border-radius:14px;padding:16px">
       <div style="font-size:13px">รางวัลของคุณ</div>
       <div style="font-size:26px;font-weight:900;line-height:1.15">คูปองฟรี 1 ${unit()}</div>
       <div style="font-size:12px;margin-top:4px">อยู่ในเมนูคูปองแล้ว · ใช้ได้ภายใน 30 วัน</div>
     </div>
-    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openCoupon('browse')">ดูคูปองของฉัน</button>
+    <button class="ok" style="width:100%;margin-top:14px" onclick="closeWow();openCoupon('browse')">ดูคูปองของฉัน</button>`}
     <button class="ghost" data-esc style="width:100%;margin-top:8px" onclick="closeWow()">ไว้ก่อน</button>
   </div>`;
   p.style.display='flex';

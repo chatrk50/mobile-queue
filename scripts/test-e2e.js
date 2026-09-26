@@ -3137,6 +3137,17 @@ console.log('\n== Reward catalog + one member tier ==');
   const below = Q.canRedeemNow(K2);
   db.prepare('UPDATE customers SET points=5 WHERE line_user_id=?').run(K2);
   ok(!below && Q.canRedeemNow(K2) && Q.canRedeemNow(K), 'INVARIANT "แลกได้" means enough stamps for the cheapest active reward, or a reward coupon already in the wallet');
+  // Catalog mode: the paid message and the in-app celebration talk about the catalog, not a punch card.
+  Q.setRedeemMode('choose'); const saverWas = Q.lineSaverOn(); Q.setLineSaver(false);
+  const K3 = 'U' + 'e9'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K3, 3, 3, 4);
+  const o3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 2 }], { source: 'customer', lineUserId: K3 });
+  const logs = []; const origLog = console.log; console.log = (...a) => { logs.push(a.join(' ')); };
+  try { Q.setOrderPaid(o3.ticket.id, { method: 'promptpay' }); } finally { console.log = origLog; }
+  const lv = Q.ticketView(o3.ticket.id).loyalty;
+  ok(lv && lv.mode === 'choose' && lv.rewardJustReady === true && lv.rewardName === 'ท็อปปิ้งฟรี', 'INVARIANT catalog mode celebrates the moment the balance first reaches the cheapest reward');
+  ok(logs.some((l) => l.includes('เลือกแลกของรางวัลได้ในบัตรสมาชิก')) && !logs.some((l) => l.includes('แจ้งพนักงานเพื่อรับของรางวัล')), 'INVARIANT the paid LINE message points catalog customers to their member card, not the counter');
+  Q.setLineSaver(saverWas); Q.setRedeemMode('auto');
   db.prepare('UPDATE rewards SET active=0 WHERE id IN (?,?)').run(small.id, big.id);
   for (const id of prevActive) db.prepare('UPDATE rewards SET active=1 WHERE id=?').run(id);
   Q.setLoyaltyEnabled(wasOn);
