@@ -3318,6 +3318,19 @@ function renderCompare(d){
         <div class="muted" style="font-size:11.5px;margin-top:6px">นับเฉพาะลูกค้าที่รู้ตัวตน (LINE หรือเบอร์โทร) · ออเดอร์ไม่ระบุตัวตน ${cu.anonymousOrders} ออเดอร์</div></div>
     </div></div>`;
 }
+// ---- โควตาข้อความ LINE (ตัวเลขจาก LINE) + โหมดประหยัดข้อความ ----
+async function loadLineQuota(){ const box=$('lineQuotaBox'); if(!box) return;
+  let d; try{ d=await api('/api/line/quota'); }catch(e){ return; }
+  const q=d.quota, m=d.month||{};
+  const meter=q&&q.limit?(()=>{ const pc=Math.min(100,Math.round(q.used/q.limit*100)); const col=pc>=90?'#b3283a':pc>=70?'#7a5c00':'#0b6a7e';
+      return `<div style="margin-top:6px"><div class="row between" style="font-size:12.5px"><b>โควตาเดือนนี้ (จาก LINE)</b><span><b style="color:${col}">${q.used.toLocaleString('en-US')}</b> / ${q.limit.toLocaleString('en-US')} ข้อความ</span></div>
+        <div role="meter" aria-valuemin="0" aria-valuemax="${q.limit}" aria-valuenow="${q.used}" aria-label="ใช้โควตา LINE ไปแล้ว ${pc}%" style="height:10px;background:var(--surface);border-radius:6px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pc}%;background:${col}"></div></div></div>`; })()
+    :(q?`<div class="muted" style="font-size:12px;margin-top:6px">LINE รายงานว่าเดือนนี้ใช้ไป <b>${q.used.toLocaleString('en-US')}</b> ข้อความ (แพ็กเกจไม่จำกัดจำนวน)</div>`:(d.lineReady?'':'<div class="muted" style="font-size:12px;margin-top:6px">ระบบ LINE ปิดอยู่บนเครื่องนี้ จึงอ่านโควตาจาก LINE ไม่ได้</div>'));
+  box.innerHTML=meter+`<div class="row between" style="align-items:center;gap:10px;margin-top:10px">
+      <div style="min-width:0"><b style="font-size:13px">โหมดประหยัดข้อความ</b><div class="muted" style="font-size:12px">ส่งหาลูกค้าเฉพาะตอนเรียกรับเครื่องดื่มและยกเลิก ข้อความอื่นให้ลูกค้าดูในแอปแทน${m.perOrder!=null?` · เดือนนี้เฉลี่ย <b>${m.perOrder}</b> ข้อความต่อออเดอร์ LINE`:''}</div></div>
+      <button class="tgl ${d.saver?'on':'off'}" role="switch" aria-checked="${d.saver?'true':'false'}" aria-label="โหมดประหยัดข้อความ LINE" onclick="toggleLineSaver(${d.saver?0:1})"></button></div>`;
+}
+window.toggleLineSaver=async(on)=>{ try{ await api('/api/admin/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lineSaver:!!on})}); toast(on?'เปิดโหมดประหยัดข้อความแล้ว':'ปิดโหมดประหยัดข้อความแล้ว'); loadLineQuota(); }catch(e){ toast(err(e)); } };
 window.showCharts=async()=>{ hideAllPanels(); $('adminMenu').style.display='none';
   ['reportCard','detailCard','salesCard','menuCard','orderCard','historyCard','staffCard','cashCard','branchCard','stockCard','loyaltyCard'].forEach(c=>{const el=$(c); if(el) el.style.display='none';});
   $('dash').style.display='none'; $('chartsCard').style.display='';
@@ -5410,6 +5423,7 @@ window.showFeatures=async()=>{
         ${rangeBtn('pushRangeBtn','เลือกช่วงเวลา',window.pushRangeApply)}
       </div>
       <div id="pushRangeBox" style="width:100%"></div>
+      <div id="lineQuotaBox" style="width:100%"></div>
     </div>`:'')+
     `<div class="feat-row" style="align-items:flex-start;flex-direction:column;gap:8px">
       <div style="display:flex;gap:12px;align-items:flex-start"><span style="flex:none">${IC.shield}</span><div><b>ปิดรับออเดอร์ออนไลน์อัตโนมัติเมื่อเครื่องแคชเชียร์เงียบ</b>
@@ -5460,7 +5474,7 @@ window.showFeatures=async()=>{
       <button class="ghost danger" style="width:100%" onclick="resetTransactions()">ล้างข้อมูลทดสอบทั้งหมด</button>
     </div>`;
   $('featuresPop').style.display='flex';
-  loadStaffAlerts();
+  loadStaffAlerts(); loadLineQuota();
 };
 // ---- แจ้งเตือนออเดอร์เข้า LINE ของทีม (⚙ ตั้งค่าฟีเจอร์ + เมนู ⋯ "เชื่อม LINE รับแจ้งเตือน") ----
 const ALERT_MODE_TXT={off:'ปิด',away:'เฉพาะตอนไม่มีเครื่องแคชเชียร์เปิดอยู่',always:'ทุกครั้งที่มีออเดอร์'};

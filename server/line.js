@@ -533,6 +533,24 @@ export async function botBasicId() {
   return _basic.id;
 }
 
+let _quota = { at: 0, v: null };
+/** The OA's real monthly message quota and this month's usage — LINE's own numbers, so pushes sent from
+ *  LINE OA Manager (broadcasts) count too. Cached 5 minutes; null when LINE is off or unreachable. */
+export async function lineQuota() {
+  if (!LINE_ENABLED) return null;
+  if (_quota.v && Date.now() - _quota.at < 300e3) return _quota.v;
+  try {
+    const h = { Authorization: `Bearer ${token}` };
+    const [q, c] = await Promise.all([
+      fetch('https://api.line.me/v2/bot/message/quota', { headers: h }).then((r) => r.json()),
+      fetch('https://api.line.me/v2/bot/message/quota/consumption', { headers: h }).then((r) => r.json()),
+    ]);
+    const v = { type: q.type || null, limit: q.type === 'limited' ? (Number(q.value) || 0) : null, used: Number(c.totalUsage) || 0 };
+    _quota = { at: Date.now(), v };
+    return v;
+  } catch { return _quota.v; }
+}
+
 /** Reply to a webhook event (used for follow / message events). */
 export async function replyText(replyToken, text) {
   if (!LINE_ENABLED || !replyToken) return false;

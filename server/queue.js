@@ -186,7 +186,7 @@ export function setStatus(ticketId, status, threshold) {
   }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
   // Notify the customer on LINE when their order is handed over (served).
-  if (status === 'served' && t.line_user_id) {
+  if (status === 'served' && t.line_user_id && !lineSaverOn()) {
     pushQueue(t.line_user_id,
       `✅ รับเครื่องดื่มเรียบร้อยแล้ว · หมายเลข ${t.code}\n` +
       `\n` +
@@ -214,7 +214,7 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     const ahead = idx; // position in the ordered waiting list
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
-      pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
+      if (!lineSaverOn()) pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
         subtitle: `คิวรอก่อนหน้า: ${ahead} · กรุณากลับมาที่ร้านค่ะ`, link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
     }
   });
@@ -3344,6 +3344,18 @@ export function forgetCustomer(customerKey) {
 //   2. posOfflineMinutes — a dead-man's switch: if no cashier device has checked in for N minutes
 //      the server pauses LINE ordering BY ITSELF, and resumes the moment a till reappears.
 // 0 minutes = the dead-man's switch is off (default, so nothing changes until the owner opts in).
+// LINE message saver: the OA bills per push. With the saver on, the customer gets only what the LIFF
+// cannot tell them while it is closed — "ready / your turn" calls and cancellations. Order received,
+// paid, almost-your-turn, thank-you and stamp/coupon notes stay on the LIFF screen instead.
+export function lineSaverOn() { return getSetting('line:saver', '0') === '1'; }
+export function setLineSaver(on) { setSetting('line:saver', on ? '1' : '0'); return { lineSaver: !!on }; }
+/** This month's customer-facing pushes per LINE order: the number the saver changes. */
+export function pushesPerLineOrder() {
+  const m = "substr(datetime('now','+7 hours'),1,7)";
+  const pushes = db.prepare(`SELECT COUNT(*) AS n FROM push_log WHERE kind IN ('queue','paid','other') AND substr(datetime(at,'+7 hours'),1,7) = ${m}`).get().n;
+  const orders = db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE source='customer' AND substr(datetime(created_at,'+7 hours'),1,7) = ${m}`).get().n;
+  return { pushes, lineOrders: orders, perOrder: orders ? Math.round((pushes / orders) * 10) / 10 : null };
+}
 export function onlineOrdersEnabled() { return getSetting('online_orders', '1') !== '0'; }
 export function setOnlineOrders(on) { setSetting('online_orders', on ? '1' : '0'); return { onlineOrders: !!on }; }
 export function getPosOfflineMinutes() { return Math.max(0, parseInt(getSetting('pos_offline_minutes', '0'), 10) || 0); }
@@ -5143,7 +5155,7 @@ export function createOrder(zoneId, items, opts = {}) {
     const msg = (r.ticket && r.ticket.number > 0)
       ? `🎫 รับออเดอร์ + รับคิวแล้ว!\nหมายเลขคิวของคุณ: ${r.ticket.code}\nยอด ฿${r.total} — กรุณาชำระเงินก่อนรับเครื่องดื่มนะคะ 🙏`
       : `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\nกรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`;
-    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
+    if (!lineSaverOn()) pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
   }
   return r;
 }
@@ -5348,7 +5360,7 @@ export function setOrderPaid(ticketId, opts = {}) {
     }
     if (bounce && bounce.issued) sub += `\n🎁 ${bounce.label} — เก็บไว้ในเมนูคูปองแล้ว ใช้ได้ถึง ${bounce.expiresAt}`;
     if (streak && streak.issued) sub += `\n🔥 มาต่อเนื่อง ${streak.target} วันติด! รับ ${streak.label} — เก็บในเมนูคูปองแล้ว ใช้ได้ถึง ${streak.expiresAt}`;
-    pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
+    if (!lineSaverOn()) pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
   return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty, code: ticket?.code || null, number: ticket?.number || null };
@@ -5543,7 +5555,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'redeem', ?, ?, ?)`).run(key, -reward.cost_points, order.id, reason);
     res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   })();
-  if (t.line_user_id) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  if (t.line_user_id && !lineSaverOn()) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
   // If the reward fully covers the bill (net 0), don't make the customer pay anything more —
   // settle it as a 'reward' tender and issue the queue number right away.
   let autoPaid = false;
@@ -5606,7 +5618,7 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
     if (!burned.changes) throw new Error('coupon_used');
     res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   })();
-  if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  if (t.line_user_id && !lineSaverOn()) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
   let autoPaid = false;
   if (res.net <= 0) {
     try { setOrderPaid(ticketId, { actorId, method: 'reward', skipLoyalty: true }); autoPaid = true; }

@@ -10,7 +10,7 @@ import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import compression from 'compression';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken, replyMessages, toReplyMessage, botBasicId } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken, replyMessages, toReplyMessage, botBasicId, lineQuota } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable, describeQr } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -566,6 +566,7 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    if (req.body?.lineSaver != null) Object.assign(out, Q.setLineSaver(!!req.body.lineSaver));
     if (req.body?.bounceBack != null) out.bounceBack = Q.setBounceBackConfig(req.body.bounceBack);   // Phase 4 #2
     if (req.body?.streak != null) out.streak = Q.setStreakConfig(req.body.streak);   // Phase 4 #3
     if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
@@ -1201,6 +1202,12 @@ app.get('/api/customers/by-line/:lineUserId', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // LINE push volume (OA bills per message) — monthly counts + this month's breakdown by purpose.
+// What LINE itself says this month's quota is and how much is used, plus pushes per LINE order.
+app.get('/api/line/quota', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  let quota = null; try { quota = await lineQuota(); } catch { /* optional */ }
+  res.json({ lineReady: LINE_ENABLED, quota, saver: Q.lineSaverOn(), month: Q.pushesPerLineOrder() });
+});
 app.get('/api/push-stats', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.pushStats());
@@ -1307,7 +1314,7 @@ app.post('/api/tickets/:ticketId/redeem', (req, res) => {
 // Fire-and-forget LINE push when a paid order earned loyalty points (never blocks payment).
 function notifyLoyalty(r) {
   const l = r && r.loyalty;
-  if (l && l.awarded > 0 && l.key) {
+  if (l && l.awarded > 0 && l.key && !Q.lineSaverOn()) {   // the saver keeps stamps on the LIFF screen
     pushText(l.key, `🎉 คุณได้รับ +${l.awarded} ดวง! สะสมรวม ${l.balance} ดวง\nสะสมครบแลกเครื่องดื่มฟรีได้เลยครับ`).catch(() => {});
   }
 }

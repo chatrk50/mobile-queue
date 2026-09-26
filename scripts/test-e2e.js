@@ -3008,6 +3008,28 @@ console.log('\n== Period comparison: last 7 / 30 days vs the period before ==');
   ok(Q.periodCompare({ days: 13 }).days === 7, 'INVARIANT an unsupported window falls back to 7 days');
 }
 
+console.log('\n== LINE message saver ==');
+{
+  const captured = [];
+  const orig = console.log;
+  const run = (fn) => { captured.length = 0; console.log = (...a) => { captured.push(a.join(' ')); }; try { return fn(); } finally { console.log = orig; } };
+  const said = (re) => captured.some((l) => re.test(l));
+  const U = 'U' + 'e1'.repeat(16), U2 = 'U' + 'e2'.repeat(16);
+  Q.setLineSaver(false);
+  run(() => Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: U }));
+  ok(said(/รับออเดอร์แล้ว/), 'INVARIANT with the saver off the customer is told their order was received');
+  Q.setLineSaver(true);
+  const o = run(() => Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: U2 }));
+  ok(!said(/รับออเดอร์แล้ว/), 'INVARIANT with the saver on the order-received message is not pushed');
+  run(() => Q.setOrderPaid(o.ticket.id, { method: 'promptpay' }));
+  ok(!said(/กำลังทำ/), 'INVARIANT with the saver on the paid / queue-number message is not pushed');
+  run(() => Q.markReady(o.ticket.id, 2));
+  ok(said(/พร้อมรับแล้ว/), 'INVARIANT with the saver on the customer is still called when the drink is ready');
+  const pp = Q.pushesPerLineOrder();
+  ok(pp.lineOrders >= 2 && ('perOrder' in pp), 'INVARIANT the month counts LINE orders for the pushes-per-order figure');
+  Q.setLineSaver(false);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
