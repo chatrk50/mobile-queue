@@ -33,6 +33,26 @@ function logSaleEvent({ branchId = null, ticketId = null, orderId = null, type, 
 // Flush any queued audit rows on shutdown (best-effort) so a clean restart doesn't drop them.
 for (const sig of ['SIGTERM', 'SIGINT', 'beforeExit']) { try { process.on(sig, flushSaleEvents); } catch { /* ignore */ } }
 
+// Stock deduction after a payment, off the response path. Each ingredient is its own transaction,
+// and on prod every write crosses to the Turso primary in Tokyo (~4 round trips per ingredient, so a
+// 5-ingredient drink held the till ~1.4 s). Nothing in the payment response needs the new stock
+// level, so it runs right after the reply, in order. Synchronous in local mode (tests, UAT), where a
+// write costs microseconds.
+let _deferStock = DURABLE;
+export function __setDeferStock(on) { _deferStock = !!on; }
+const _stockQueue = [];
+let _stockScheduled = false;
+export function flushStockDeductions() {
+  _stockScheduled = false;
+  while (_stockQueue.length) { const o = _stockQueue.shift(); try { deductStockForOrder(o); } catch { /* never throws, belt and braces */ } }
+}
+function queueStockDeduction(order) {
+  if (!_deferStock) { deductStockForOrder(order); return; }
+  _stockQueue.push(order);
+  if (!_stockScheduled) { _stockScheduled = true; setImmediate(flushStockDeductions); }
+}
+for (const sig of ['SIGTERM', 'SIGINT', 'beforeExit']) { try { process.on(sig, flushStockDeductions); } catch { /* ignore */ } }
+
 // LIFF link so the customer can re-open their queue anytime (sent as a button
 // on the LINE card, so the raw URL stays hidden behind a label).
 const LIFF_ID = process.env.LIFF_ID || '';
@@ -3383,6 +3403,16 @@ export function setPosOfflineMinutes(n) {
 }
 /** A till checked in. Called on cashier login and on a light periodic ping. */
 export function cashierHeartbeat() {
+  // Every till pings each 30 s, and each recorded ping is a write to the Turso primary. The
+  // dead-man's switch only needs freshness well inside its own window, so record at most every
+  // min(90 s, half the window). The age check is a local read.
+  const mins = getPosOfflineMinutes();
+  const every = mins ? Math.min(90, mins * 30) : 90;
+  const last = posLastSeen();
+  if (last) {
+    const age = db.prepare("SELECT (julianday('now') - julianday(?)) * 86400 AS s").get(last).s;
+    if (age >= 0 && age < every) return { ok: true, throttled: true };
+  }
   setSetting('pos_last_seen', db.prepare("SELECT datetime('now') t").get().t);
   return { ok: true };
 }
@@ -4909,7 +4939,7 @@ export function editOrderItems(ticketId, items, opts = {}) {
   });
   if (wasPaid) returnStockForOrder(order);   // the recipe use booked at payment, given back before…
   tx();
-  if (wasPaid) deductStockForOrder(order);   // …the new lines are consumed (both never throw)
+  if (wasPaid) queueStockDeduction(order);   // …the new lines are consumed (both never throw)
   const net = r2(total - (keepManualDiscountOf(order, total)));
   const due = wasPaid ? r2(net - paidAmt) : 0;
   logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: wasPaid ? 'order_edited_paid' : 'order_edited', amount: total, actor: actorId, meta: wasPaid ? { oldNet, net, paid: paidAmt, due } : {} });
@@ -5346,8 +5376,8 @@ export function setOrderPaid(ticketId, opts = {}) {
   // Resilient against a stale Turso stream (reconnect + retry + log) so a PAID order never ends up
   // without a number; falls back to the current ticket row if numbering ultimately fails.
   let ticket = assignQueueNumberResilient(Number(ticketId)) || db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
-  // Auto-deduct ingredient stock per recipe (dormant until recipes are defined).
-  deductStockForOrder(order);
+  // Auto-deduct ingredient stock per recipe (dormant until recipes are defined) — after the reply on prod.
+  queueStockDeduction(order);
   // Auto-earn loyalty stamps for a paid LINE order (no-op for cashier/walk-in or if disabled).
   // skipLoyalty = a fully-redeemed (free) order shouldn't earn new stamps on the free cup.
   let loyalty = null;

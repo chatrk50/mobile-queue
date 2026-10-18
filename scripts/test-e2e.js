@@ -3236,6 +3236,37 @@ console.log('\n== Turso stale write stream: every write reconnects + retries onc
   Q.setPendingVoidMinutes(30);
 }
 
+console.log('\n== Fewer Turso round trips: heartbeat throttle + stock after the reply ==');
+{
+  const winWas = Q.getPosOfflineMinutes();
+  Q.setPosOfflineMinutes(10);
+  db.prepare("UPDATE settings SET value=datetime('now','-10 minutes') WHERE key='pos_last_seen'").run();
+  const a = Q.cashierHeartbeat(), seenA = Q.posLastSeen();
+  const b = Q.cashierHeartbeat();
+  ok(!a.throttled && b.throttled && Q.posLastSeen() === seenA, 'INVARIANT a fresh heartbeat is not written again within 90 s (one Turso write instead of three)');
+  Q.setPosOfflineMinutes(1);
+  db.prepare("UPDATE settings SET value=datetime('now','-40 seconds') WHERE key='pos_last_seen'").run();
+  ok(!Q.cashierHeartbeat().throttled, 'INVARIANT with a 1-minute offline window the heartbeat is recorded every 30 s, so the switch never trips on a live till');
+  ok(Q.posOffline() === false, 'INVARIANT a live till is never reported offline');
+  Q.setPosOfflineMinutes(winWas);
+
+  const ing = Q.addIngredient({ name: 'นมทดสอบตัดสต๊อก', unit: 'ml', costPrice: 0.1 });
+  const mi = Number(db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('StockDefer', 30, 'drink')").run().lastInsertRowid);
+  Q.setRecipe(mi, [{ ingredientId: ing.id, qty: 50 }]);
+  Q.recordStockMove(ing.id, { kind: 'purchase', qty: 1000, cost: 100 });   // stock never goes below 0
+  const stock = () => db.prepare('SELECT stock_qty FROM ingredients WHERE id=?').get(ing.id).stock_qty;
+  const s0 = stock();
+  Q.__setDeferStock(true);
+  const o = Q.createOrder(1, [{ name: 'StockDefer', price: 30, qty: 2 }], { source: 'cashier' });
+  const paid = Q.setOrderPaid(o.ticket.id, { method: 'cash' });
+  const s1 = stock();
+  await new Promise((r) => setImmediate(r));
+  const s2 = stock();
+  Q.__setDeferStock(false);
+  ok(paid.ok && s1 === s0 && Math.abs(s2 - (s0 - 100)) < 1e-9, `INVARIANT payment returns before stock is touched, and the deduction (2 × 50 ml) lands right after (${s0} → ${s1} → ${s2})`);
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
