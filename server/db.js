@@ -28,6 +28,7 @@ const TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
 const USE_TURSO = /^(libsql|https?):\/\//.test(TURSO_URL);
 
 let raw;
+let LocalDb = null;   // node:sqlite constructor in local mode (reconnectDb reopens with it)
 let scheduleSync = () => {};   // debounced background push/pull (durable mode only)
 
 // `libsql` is an optional native dependency — load it only when Turso is
@@ -55,7 +56,7 @@ if (USE_TURSO && Database) {
       const r = raw.sync();
       if (r && typeof r.then === 'function') r.then(() => { syncing = false; if (dirty) { dirty = false; doSync(); } }, (e) => { syncing = false; console.error('[db] Turso sync failed:', e.message); });
       else { syncing = false; if (dirty) { dirty = false; doSync(); } }
-    } catch (e) { syncing = false; console.error('[db] Turso sync failed:', e.message); }
+    } catch (e) { syncing = false; console.error('[db] Turso sync failed:', e.message); if (isStaleStream(e)) reconnectDb(); }
   };
   scheduleSync = () => {
     dirty = true;
@@ -77,6 +78,7 @@ if (USE_TURSO && Database) {
   console.log('[db] Durable mode ON — Turso/libSQL embedded replica');
 } else {
   const { DatabaseSync } = await import('node:sqlite');
+  LocalDb = DatabaseSync;
   raw = new DatabaseSync(dbPath);
   console.log('[db] Local mode — node:sqlite (ephemeral on Render free; set TURSO_DATABASE_URL for durable storage)');
 }
@@ -103,34 +105,74 @@ const SCHEMA_OR_WRITE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/
 const _stmtCache = new Map();
 const _wrapCache = new Map();
 let _txDepth = 0;   // nesting level, so transaction() can pick BEGIN vs SAVEPOINT
+// The statement for `sql` on the CURRENT connection. Wrappers look it up on every call instead of
+// closing over one, so after reconnectDb() swaps `raw` they never keep running on the dead client.
+const stmt = (sql) => {
+  let st = _stmtCache.get(sql);
+  if (!st) { st = raw.prepare(sql); _stmtCache.set(sql, st); }
+  return st;
+};
+// A dropped Hrana write stream to the Turso primary: every write fails with "stream not found"
+// until the client is replaced (prod 2026-10-18: writes dead for 30+ min while reads still worked,
+// because only createOrder / numbering / the midnight reset knew how to reconnect).
+export function isStaleStream(e) {
+  return /stream not found|stream expired|stream_expired|invalid baton|baton.*not found/i.test(String((e && e.message) || e || ''));
+}
+// Outside a transaction a single statement is safe to retry once on a fresh client. Inside one it
+// is not (the BEGIN lived on the old stream) — transaction() retries the whole unit instead.
+// Test hook: the next n statements throw a stale-stream error (exercises the reconnect paths
+// without a real Turso). Never set in production code.
+let _injectStale = 0;
+export function __injectStaleStream(n = 1) { _injectStale = n; }
+const _fault = () => { if (_injectStale > 0) { _injectStale--; throw new Error('Hrana(Api("status=404 Not Found, body={\\"error\\":\\"stream not found: test\\"}"))'); } };
+function withReconnect(fn) {
+  try { _fault(); return fn(); }
+  catch (e) {
+    if (_txDepth > 0 || !isStaleStream(e) || !reconnectDb()) throw e;
+    console.error('[db] stale Turso stream — reconnected, retrying once:', e.message);
+    return fn();
+  }
+}
 // Compatibility wrapper: prepare(...).run/get/all, exec, transaction()
 export const db = {
   prepare(sql) {
     let wrap = _wrapCache.get(sql);
     if (wrap) return wrap;
-    let st = _stmtCache.get(sql);
-    if (!st) { st = raw.prepare(sql); _stmtCache.set(sql, st); }
+    stmt(sql);   // compile now so a bad SQL string still throws at prepare(), as before
     const mutating = MUTATING.test(sql);
     wrap = {
-      run: (...a) => { const r = st.run(...a); if (mutating) scheduleSync(); return r; },
-      get: (...a) => stripMeta(st.get(...a)),
-      all: (...a) => st.all(...a).map(stripMeta),
+      run: (...a) => { const r = withReconnect(() => stmt(sql).run(...a)); if (mutating) scheduleSync(); return r; },
+      get: (...a) => stripMeta(withReconnect(() => stmt(sql).get(...a))),
+      all: (...a) => withReconnect(() => stmt(sql).all(...a)).map(stripMeta),
     };
     _wrapCache.set(sql, wrap);
     return wrap;
   },
-  exec(sql) { const r = raw.exec(sql); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
+  exec(sql) { const r = withReconnect(() => raw.exec(sql)); if (SCHEMA_OR_WRITE.test(sql)) scheduleSync(); return r; },
   // Mimics better-sqlite3 transaction(fn) -> function returning fn's result.
   // RE-ENTRANT: SQLite rejects a second BEGIN, so a nested call opens a SAVEPOINT instead. That
   // lets a function which already wraps its own writes be composed inside a larger transaction —
   // which is what makes "burn the coupon AND apply the discount, or neither" expressible at all.
   // Only the outermost commit schedules a Turso sync; an inner rollback undoes just its own slice.
   transaction(fn) {
+    const once = db._txOnce(fn);
+    return (...args) => {
+      if (_txDepth > 0) return once(...args);   // nested: the outermost unit owns the retry
+      try { return once(...args); }
+      catch (e) {
+        if (!isStaleStream(e) || !reconnectDb()) throw e;
+        console.error('[db] stale Turso stream in a transaction — reconnected, retrying the unit once:', e.message);
+        return once(...args);
+      }
+    };
+  },
+  _txOnce(fn) {
     return (...args) => {
       const sp = _txDepth > 0 ? `sp${_txDepth}` : null;
       raw.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN');
       _txDepth++;
       try {
+        _fault();
         const r = fn(...args);
         raw.exec(sp ? `RELEASE ${sp}` : 'COMMIT');
         _txDepth--;
@@ -152,11 +194,20 @@ export const db = {
 // idles — surfaced as `stream not found` / 404 (seen at the midnight reset). A fresh
 // client gets a new stream; the prepared-statement cache is bound to the OLD handle,
 // so it must be cleared. Best-effort, and a no-op in local (node:sqlite) mode.
+let _lastReconnect = 0;
 export function reconnectDb() {
-  if (!(USE_TURSO && Database)) return false;
+  // A burst of failing writes must not open a client per statement: one fresh client per second
+  // is plenty; callers inside that window reuse it (their retry runs on the new `raw`).
+  if (Date.now() - _lastReconnect < 1000) return true;
+  _lastReconnect = Date.now();
   try {
-    const next = new Database(dbPath, { syncUrl: TURSO_URL, authToken: TURSO_TOKEN });
-    try { next.sync(); } catch (e) { console.error('[db] reconnect sync warn:', e.message); }
+    let next;
+    if (USE_TURSO && Database) {
+      next = new Database(dbPath, { syncUrl: TURSO_URL, authToken: TURSO_TOKEN });
+      try { next.sync(); } catch (e) { console.error('[db] reconnect sync warn:', e.message); }
+    } else {
+      next = new LocalDb(dbPath);   // local mode: only reached from tests (no stream to lose)
+    }
     raw = next;
     _stmtCache.clear(); _wrapCache.clear();
     try { raw.exec('PRAGMA foreign_keys = ON'); } catch { /* ignore */ }
@@ -605,6 +656,14 @@ CREATE TABLE IF NOT EXISTS push_log (
   at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_push_log_at ON push_log(at);
+-- One-time codes that link a staff member's LINE for order alerts: 10-minute life, single use.
+CREATE TABLE IF NOT EXISTS staff_link_codes (
+  code       TEXT PRIMARY KEY,
+  staff_id   INTEGER NOT NULL,            -- 0 = the owner signed in with the owner PIN (links owner:line_id)
+  expires_at TEXT NOT NULL,
+  used_by    TEXT,                        -- the LINE userId that sent it
+  used_at    TEXT
+);
 CREATE TABLE IF NOT EXISTS customer_coupons (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_key  TEXT NOT NULL,                  -- = customers.line_user_id
@@ -659,6 +718,8 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN referral_code TEXT`,   // this customer's own invite code (YD…)
   `ALTER TABLE customers ADD COLUMN referred_by TEXT`,     // line_user_id of the friend who invited them
   `ALTER TABLE rewards ADD COLUMN image TEXT`,             // optional reward photo for the LIFF rewards list
+  `ALTER TABLE rewards ADD COLUMN value REAL`,             // the free-drink cap (฿) this reward's coupon carries; NULL = the reward coupon template's
+  `ALTER TABLE rewards ADD COLUMN description TEXT`,       // one line for the customer's reward catalog
   `ALTER TABLE tickets ADD COLUMN customer_key TEXT`,      // loyalty key for non-LINE (Pkg 1) walk-ins, e.g. 'tel:08...'
   `ALTER TABLE orders ADD COLUMN paid_lines TEXT`,         // JSON array of order-line indices settled via แยกตามรายการ (display: which items are paid)
   `ALTER TABLE menu_items ADD COLUMN name_lo TEXT`,        // Lao name (shown when the customer picks ລາວ)
@@ -696,6 +757,8 @@ for (const stmt of [
   `ALTER TABLE stores ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE staff ADD COLUMN hourly_rate REAL NOT NULL DEFAULT 0`,   // 0 = not on the clock (labour stays the prorated estimate)
+  `ALTER TABLE staff ADD COLUMN line_user_id TEXT`,                    // order alerts: this person's LINE, linked by a one-time code (never typed)
+  `ALTER TABLE staff ADD COLUMN line_alerts INTEGER NOT NULL DEFAULT 1`,   // they can mute alerts from the chat ("ปิดแจ้งเตือน")
   // Tender reconciliation: the owner keys the ACTUALLY-received amount per e-channel (from the
   // PromptPay/bank/wallet statement) at close; JSON {method:{actual,note}, by, at}. Cash reconciles
   // itself from the drawer count. null = not yet reconciled.
@@ -769,6 +832,11 @@ for (const stmt of [
   // turned into an accepted receiver by the owner with one tap.
   `ALTER TABLE slip_checks ADD COLUMN receiver_acct TEXT`,
   `ALTER TABLE slip_checks ADD COLUMN sender_acct TEXT`,
+  // Table QR (สั่งที่โต๊ะ): the table an order is brought to — from that table's QR (?table=5) or set by
+  // the cashier. Always one of the zone's own labels (setting tables:<zoneId>); NULL = counter pickup.
+  `ALTER TABLE tickets ADD COLUMN table_label TEXT`,
+  // Kitchen marks per drink line ({"0":"making","1":"done"}) — shared by the till and จอครัว.
+  `ALTER TABLE tickets ADD COLUMN kitchen TEXT`,
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

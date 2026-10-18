@@ -2885,6 +2885,357 @@ console.log('\n== Coupon expiry reminder (one Flex card per HOLDER) ==');
   db.prepare("UPDATE menu_items SET active=0 WHERE id=?").run(vMenu);
 }
 
+console.log('\n== Staff LINE alerts: orders reach the team in LINE ==');
+{
+  const L = await import('../server/line.js');
+  const c1 = Q.createStaff({ name: 'แอน', pin: '481516', role: 'cashier', branchIds: [1] });
+  const c2 = Q.createStaff({ name: 'บีม', pin: '234223', role: 'cashier', branchIds: [2] });
+  const U1 = 'U' + 'a1'.repeat(16), U2 = 'U' + 'a2'.repeat(16), UX = 'U' + 'a3'.repeat(16), UO = 'U' + 'a4'.repeat(16);   // ids no other section uses
+  const msg = (uid, text) => Q.handleStaffLineEvent({ type: 'message', source: { userId: uid }, message: { type: 'text', text } });
+  const tap = (uid, data) => Q.handleStaffLineEvent({ type: 'postback', source: { userId: uid }, postback: { data } });
+  const tk = (id) => db.prepare('SELECT status, making_at FROM tickets WHERE id=?').get(id);
+  Q.setOwnerLineId('');
+  const code1 = Q.createStaffLinkCode(c1.id).code;
+  ok(/^[A-HJ-NP-Z2-9]{6}$/.test(code1), `INVARIANT link codes are 6 unambiguous characters (${code1})`);
+  let r = await msg(UX, 'LINK ZZZZZZ');
+  ok(r && /ไม่ถูกต้อง/.test(r.reply.text) && Q.lineIdentity(UX) === null, 'INVARIANT a wrong link code is refused and links nobody');
+  r = await msg(U1, 'link ' + code1.toLowerCase());
+  ok(r && r.linked && r.linked.id === c1.id && Q.lineIdentity(U1) && Q.lineIdentity(U1).id === c1.id, 'INVARIANT sending LINK <code> to the OA links that LINE account to the staff member');
+  r = await msg(UX, 'LINK ' + code1);
+  ok(r && /ไม่ถูกต้อง/.test(r.reply.text) && Q.lineIdentity(UX) === null, 'INVARIANT a link code works once only');
+  ok(Q.staffLinkStatus(code1).linked === true, 'INVARIANT the till sees its code as linked');
+  ok((await msg(UX, 'ร้าน')) === null, 'INVARIANT a customer typing "ร้าน" falls through to the normal chat');
+
+  Q.setQueueFirst(true);
+  const o1 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'b1'.repeat(16), customerName: 'ลูกค้าทดสอบ' });
+  ok(o1.ticket.status === 'waiting', `queue-first LINE order is waiting (${o1.ticket.status})`);
+  Q.setStaffAlertConfig({ mode: 'off' });
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'off', 'INVARIANT mode off sends nothing');
+  Q.setStaffAlertConfig({ mode: 'away', awayMin: 3 });
+  Q.cashierHeartbeat();
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'till_online', 'INVARIANT away mode stays quiet while a till is online');
+  db.prepare("UPDATE settings SET value=datetime('now','-10 minutes') WHERE key='pos_last_seen'").run();
+  let s = await Q.staffOrderAlert(o1.ticket.id, 'new');
+  ok(s.recipients === 1 && s.reason === 'line_off', `INVARIANT with no till online the linked branch cashier is alerted (recipients ${s.recipients}, ${s.reason})`);
+  ok((await Q.staffOrderAlert(o1.ticket.id, 'new')).reason === 'duplicate', 'INVARIANT the same event never alerts twice');
+  const code2 = Q.createStaffLinkCode(c2.id).code;
+  await msg(U2, 'ผูก ' + code2);
+  s = await Q.staffOrderAlert(o1.ticket.id, 'paid');
+  ok(s.recipients === 1, `INVARIANT staff of another branch are not alerted (recipients ${s.recipients})`);
+
+  const a = Q.staffAlertData(o1.ticket.id, 'new', 'https://shop.example');
+  ok(a.code === o1.ticket.code && a.lines.length === 1 && near(a.total, 100) && a.customer === 'ลูกค้าทดสอบ'
+    && a.actions.some((x) => x.data === 'a=start&t=' + o1.ticket.id) && a.actions.some((x) => x.uri === 'https://shop.example/cashier/'),
+    'INVARIANT the alert card carries the code, items, total, customer, a เริ่มทำ button and the cashier link');
+  ok(!Q.staffAlertData(o1.ticket.id, 'new', 'http://localhost:3000').actions.some((x) => x.uri), 'INVARIANT no http link is put on a LINE button (LINE only opens https)');
+  const fx = L.buildStaffAlertFlex(a);
+  ok(fx.type === 'bubble' && fx.header && fx.footer && fx.footer.contents.some((b) => b.action.type === 'postback' && b.action.data === 'a=start&t=' + o1.ticket.id),
+    'INVARIANT the Flex card has a header, the items body and a postback เริ่มทำ button');
+  const rm = L.toReplyMessage({ type: 'text', text: 'x', quick: [{ label: 'พร้อมรับ A001', data: 'a=ready&t=1' }] });
+  ok(rm.quickReply && rm.quickReply.items[0].action.type === 'postback', 'INVARIANT reply quick buttons are postbacks');
+
+  r = await tap(UX, 'a=start&t=' + o1.ticket.id);
+  ok(/ยังไม่ได้เชื่อม/.test(r.reply.text) && !tk(o1.ticket.id).making_at, 'INVARIANT a stranger pressing เริ่มทำ changes nothing');
+  r = await tap(U2, 'a=start&t=' + o1.ticket.id);
+  ok(/สาขาอื่น/.test(r.reply.text) && !tk(o1.ticket.id).making_at, 'INVARIANT staff cannot act on another branch\'s order');
+  r = await tap(U1, 'a=start&t=' + o1.ticket.id);
+  ok(r.zoneId === 1 && !!tk(o1.ticket.id).making_at && r.reply.quick && r.reply.quick[0].data === 'a=ready&t=' + o1.ticket.id,
+    'INVARIANT เริ่มทำ from LINE marks the order as being made and offers พร้อมรับ');
+  r = await tap(U1, 'a=ready&t=' + o1.ticket.id);
+  ok(/ยังไม่ได้ชำระ/.test(r.reply.text) && tk(o1.ticket.id).status === 'waiting', 'INVARIANT พร้อมรับ refuses an unpaid order');
+  Q.setOrderPaid(o1.ticket.id, { method: 'cash' });
+  r = await tap(U1, 'a=ready&t=' + o1.ticket.id);
+  ok(/พร้อมรับแล้ว/.test(r.reply.text) && tk(o1.ticket.id).status === 'called', 'INVARIANT พร้อมรับ from LINE calls a paid order');
+
+  r = await tap(U1, 'a=online&v=0');
+  ok(/เฉพาะเจ้าของ/.test(r.reply.text) && Q.onlineOrdersEnabled(), 'INVARIANT a cashier cannot switch online ordering off from LINE');
+  const oc = Q.createStaffLinkCode(0).code;
+  await msg(UO, 'เชื่อม ' + oc);
+  ok(Q.getOwnerLineId() === UO && Q.lineIdentity(UO) && Q.lineIdentity(UO).role === 'owner', 'INVARIANT the owner PIN links owner:line_id through the same code flow');
+  r = await tap(UO, 'a=online&v=0');
+  ok(r.online === false && !Q.onlineOrdersEnabled(), 'INVARIANT the owner can pause online ordering from LINE');
+  Q.setOnlineOrders(true);
+  r = await msg(U1, 'ร้าน');
+  ok(r && r.reply.type === 'flex' && /สรุปวันนี้/.test(r.reply.alt) && !r.reply.flex.footer, 'INVARIANT linked staff get the shop panel; a cashier gets no manager buttons');
+  r = await msg(UO, 'ร้าน');
+  ok(r && r.reply.flex.footer && r.reply.flex.footer.contents.some((b) => b.action.data === 'a=online&v=0'), 'INVARIANT the owner panel carries the online-ordering switch');
+
+  await msg(U1, 'ปิดแจ้งเตือน');
+  const o2 = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { source: 'customer', lineUserId: 'U' + 'b2'.repeat(16) });
+  s = await Q.staffOrderAlert(o2.ticket.id, 'new');
+  ok(s.recipients === 1, `INVARIANT a muted cashier is skipped and the owner still hears (recipients ${s.recipients})`);
+  const mem = Q.alertMembers();
+  ok(mem.staff.find((m) => m.id === c1.id).alerts === false && mem.owner.linked === true && !JSON.stringify(mem).includes(U1),
+    'INVARIANT the member list shows who is linked and muted, never the LINE ids');
+  Q.unlinkStaffLine(c2.id);
+  ok(Q.lineIdentity(U2) === null, 'INVARIANT unlinking removes the staff member\'s LINE powers');
+  ok((await Q.staffAlertTest()).recipients === 1, 'INVARIANT ส่งทดสอบ reaches everyone linked with alerts on');
+  Q.setQueueFirst(false); Q.setStaffAlertConfig({ mode: 'off' }); Q.setOwnerLineId('');
+}
+
+console.log('\n== Period comparison: last 7 / 30 days vs the period before ==');
+{
+  const back = (tid, daysAgo) => db.prepare(`UPDATE orders SET paid_at=datetime('now', '-${daysAgo} days') WHERE ticket_id=?`).run(tid);
+  const paidCustomer = (uid, item, daysAgo) => {
+    const r = Q.createOrder(1, [{ name: item, price: 0, qty: 1 }], { source: 'customer', lineUserId: uid });
+    Q.setOrderPaid(r.ticket.id, { method: 'promptpay' });
+    Q.setStatus(r.ticket.id, 'served', 2);
+    if (daysAgo) back(r.ticket.id, daysAgo);
+    return r.ticket.id;
+  };
+  const before7 = Q.periodCompare({ days: 7 }), before30 = Q.periodCompare({ days: 30 });
+  const A = 'U' + 'c1'.repeat(16), Bk = 'U' + 'c2'.repeat(16), C = 'U' + 'c3'.repeat(16);
+  paidCustomer(A, 'Drink', 0);        // ฿100 today         (A: new, two orders in the window)
+  paidCustomer(A, 'Drink50', 2);      // ฿50  2 days ago
+  paidCustomer(Bk, 'Drink65', 20);    // ฿65  20 days ago   (B: first ever order long before)
+  paidCustomer(Bk, 'Drink49', 0);     // ฿49  today         (…so B is RETURNING this week)
+  paidCustomer(C, 'Drink', 9);        // ฿100 9 days ago    (previous 7-day window only)
+  const g = Q.createOrder(1, [{ name: 'Drink', price: 100, qty: 1 }], { channelId: grab });
+  Q.setOrderPaid(g.ticket.id, { method: 'other' });   // a Grab order today → platform
+  const after7 = Q.periodCompare({ days: 7 }), after30 = Q.periodCompare({ days: 30 });
+  const d = (a, b, f) => Math.round((f(a) - f(b)) * 100) / 100;
+  ok(d(after7, before7, (x) => x.current.revenue) === 299, `INVARIANT the current 7 days gained ฿299 (100+50+49+Grab 100) — got ${d(after7, before7, (x) => x.current.revenue)}`);
+  ok(d(after7, before7, (x) => x.previous.revenue) === 100, `INVARIANT the order 9 days ago lands in the previous 7 days — got ${d(after7, before7, (x) => x.previous.revenue)}`);
+  ok(d(after30, before30, (x) => x.current.revenue) === 464, `INVARIANT 30 days include the order 20 days ago (299+100+65) — got ${d(after30, before30, (x) => x.current.revenue)}`);
+  ok(d(after7, before7, (x) => x.current.channels.line.revenue) === 199 && d(after7, before7, (x) => x.current.channels.platform.revenue) === 100,
+    'INVARIANT channels split LINE ฿199 and platform ฿100');
+  ok(d(after7, before7, (x) => x.current.customers.new) === 1 && d(after7, before7, (x) => x.current.customers.returning) === 1 && d(after7, before7, (x) => x.current.customers.repeat) === 1,
+    'INVARIANT A counts as new (and repeat, 2 orders), B as returning');
+  ok(after7.current.series.length === 7 && Math.abs(after7.current.series.reduce((s, x) => s + x.revenue, 0) - after7.current.revenue) < 0.01,
+    'INVARIANT the daily series has one bar per day and adds up to the window total');
+  const expect = after7.previous.revenue > 0 ? Math.round(((after7.current.revenue - after7.previous.revenue) / after7.previous.revenue) * 1000) / 10 : null;
+  ok(after7.delta.revenue === expect, `INVARIANT the revenue delta is (current−previous)/previous (${after7.delta.revenue} == ${expect})`);
+  ok(Q.periodCompare({ days: 13 }).days === 7, 'INVARIANT an unsupported window falls back to 7 days');
+}
+
+console.log('\n== LINE message saver ==');
+{
+  const captured = [];
+  const orig = console.log;
+  const run = (fn) => { captured.length = 0; console.log = (...a) => { captured.push(a.join(' ')); }; try { return fn(); } finally { console.log = orig; } };
+  const said = (re) => captured.some((l) => re.test(l));
+  const U = 'U' + 'e1'.repeat(16), U2 = 'U' + 'e2'.repeat(16);
+  Q.setLineSaver(false);
+  run(() => Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: U }));
+  ok(said(/รับออเดอร์แล้ว/), 'INVARIANT with the saver off the customer is told their order was received');
+  Q.setLineSaver(true);
+  const o = run(() => Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: U2 }));
+  ok(!said(/รับออเดอร์แล้ว/), 'INVARIANT with the saver on the order-received message is not pushed');
+  run(() => Q.setOrderPaid(o.ticket.id, { method: 'promptpay' }));
+  ok(!said(/กำลังทำ/), 'INVARIANT with the saver on the paid / queue-number message is not pushed');
+  run(() => Q.markReady(o.ticket.id, 2));
+  ok(said(/พร้อมรับแล้ว/), 'INVARIANT with the saver on the customer is still called when the drink is ready');
+  const pp = Q.pushesPerLineOrder();
+  ok(pp.lineOrders >= 2 && ('perOrder' in pp), 'INVARIANT the month counts LINE orders for the pushes-per-order figure');
+  Q.setLineSaver(false);
+}
+
+console.log('\n== Price assistant ==');
+{
+  const ing = Q.addIngredient({ name: 'นมทดสอบราคา', unit: 'ml', costPrice: 0.1 });
+  const mi = Number(db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('PriceTest', 45, 'drink')").run().lastInsertRowid);
+  Q.setRecipe(mi, [{ ingredientId: ing.id, qty: 100 }]);   // recipe cost ฿10
+  Q.setPriceTarget(30);
+  const pack = Number(Q.getFinanceSettings().packagingPerCup) || 0;
+  const m = Q.menuMargins().find((x) => x.name === 'PriceTest');
+  const expect = Math.ceil((10 + pack) / 0.3 / 5) * 5;
+  ok(m && m.suggested === expect, `INVARIANT suggested price = (cost ฿10 + pack ฿${pack}) ÷ 30%, rounded up to ฿5 → ${expect} (got ${m && m.suggested})`);
+  ok(m.underTarget === (45 < expect) && Math.abs(m.costPct - ((10 + pack) / 45) * 100) < 0.01, 'INVARIANT the row says whether the current price is below the suggestion and its cost share');
+  let bad = false; try { Q.setPriceTarget(2); } catch (e) { bad = e.message === 'bad_target'; }
+  ok(bad && Q.getPriceTarget() === 30, 'INVARIANT a target outside 5–90% is refused and the old one stays');
+  ok(Q.menuMargins().filter((x) => !x.hasRecipe).every((x) => x.suggested === null), 'INVARIANT no price is suggested for an item without a recipe');
+  const lot = Q.addIngredient({ name: 'แก้วทดสอบลอต', unit: 'ลอต', costPrice: 165 });
+  const mi2 = Number(db.prepare("INSERT INTO menu_items (name, price, category) VALUES ('PriceLot', 49, 'drink')").run().lastInsertRowid);
+  Q.setRecipe(mi2, [{ ingredientId: ing.id, qty: 100 }, { ingredientId: lot.id, qty: 1 }]);   // 1 LOT of cups per drink: a unit slip
+  const m2 = Q.menuMargins().find((x) => x.name === 'PriceLot');
+  ok(m2 && m2.suspect && m2.suggested === null && m2.suspectPart && m2.suspectPart.ing === 'แก้วทดสอบลอต', 'INVARIANT a recipe costing far above the price is flagged with its biggest line, not priced');
+  ok(m2.pack === 0, 'INVARIANT packaging per cup is not added again when the recipe already has cups');
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi2);
+  db.prepare('UPDATE menu_items SET active=0 WHERE id=?').run(mi);
+}
+
+console.log('\n== Table QR (สั่งที่โต๊ะ) ==');
+{
+  ok(JSON.stringify(Q.parseTableSpec('1-3, VIP, A1-A2, 2')) === JSON.stringify(['1', '2', '3', 'VIP', 'A1', 'A2']),
+    'INVARIANT a table list expands ranges, keeps the order and drops duplicates');
+  ok(Q.parseTableSpec('1-500').length === 1 && Q.parseTableSpec(Array.from({ length: 80 }, (_, i) => 'T' + i)).length === 60,
+    'INVARIANT a runaway range is kept as one label and a list stops at 60 tables');
+  Q.setZoneTables(1, '1-4');
+  const uA = 'U' + 'd4'.repeat(16), uB = 'U' + 'd5'.repeat(16), uC = 'U' + 'd6'.repeat(16);
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uA, tableLabel: '3' });
+  const snap = Q.zoneSnapshot(1, { reveal: true });
+  const card = [...snap.pending, ...snap.waiting].find((t) => t.id === r.ticket.id);
+  ok(card && card.table_label === '3' && Q.ticketView(r.ticket.id).table === '3' && (snap.zone.tables || []).length === 4,
+    'INVARIANT a table-QR order carries its table to the cashier card and the customer ticket');
+  const r2 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uB, tableLabel: '<b>99</b>' });
+  ok(Q.ticketView(r2.ticket.id).table === null, 'INVARIANT a label that is not one of the zone tables is dropped (no free text reaches a screen)');
+  let bad = false; try { Q.setTicketTable(r2.ticket.id, '9'); } catch (e) { bad = e.message === 'bad_table'; }
+  ok(bad, 'INVARIANT the cashier cannot put an order on a table the zone does not have');
+  ok(Q.setTicketTable(r2.ticket.id, '4').table === '4' && Q.setTicketTable(r2.ticket.id, '').table === null,
+    'INVARIANT the cashier can move an order onto a table and back to counter pickup');
+  const al = Q.staffAlertData(r.ticket.id, 'new', 'https://x.test');
+  ok(al && al.table === '3', 'INVARIANT the team LINE alert names the table');
+  const captured = []; const orig = console.log;
+  const run = (fn) => { captured.length = 0; console.log = (...a) => { captured.push(a.join(' ')); }; try { return fn(); } finally { console.log = orig; } };
+  Q.setOrderPaid(r.ticket.id, { method: 'promptpay' });
+  run(() => Q.markReady(r.ticket.id));
+  ok(captured.some((l) => l.includes('กำลังนำไปเสิร์ฟที่โต๊ะ 3')), 'INVARIANT the ready message tells a table customer the drink is on its way to table 3');
+  Q.setTableServe(false);
+  const r3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uC, tableLabel: '2' });
+  Q.setOrderPaid(r3.ticket.id, { method: 'promptpay' });
+  run(() => Q.markReady(r3.ticket.id));
+  ok(captured.some((l) => l.includes('เชิญรับที่เคาน์เตอร์')) && !captured.some((l) => l.includes('เสิร์ฟที่โต๊ะ')),
+    'INVARIANT with table service off the table is a reference only and the customer collects at the counter');
+  Q.setTableServe(true);
+  Q.setZoneTables(1, '');
+  ok(Q.getZoneTables(1).length === 0 && Q.validTable(1, '3') === null, 'INVARIANT clearing the list switches table QR off for the zone');
+}
+
+console.log('\n== Reward catalog + one member tier ==');
+{
+  const wasOn = Q.loyaltyEnabled();
+  Q.setLoyaltyEnabled(true);
+  const K = 'U' + 'e7'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K, 0, 0, 0);
+  const prevActive = db.prepare('SELECT id FROM rewards WHERE active=1').all().map((r) => r.id);
+  db.prepare('UPDATE rewards SET active=0').run();   // the test owns the catalog
+  const small = Q.addReward({ name: 'ท็อปปิ้งฟรี', cost_points: 5, value: 10, description: 'เลือกท็อปปิ้งได้ 1 อย่าง' });
+  const big = Q.addReward({ name: 'แก้วฟรี', cost_points: 12, value: 49 });
+  ok(small.value === 10 && small.description === 'เลือกท็อปปิ้งได้ 1 อย่าง' && big.description === null,
+    'INVARIANT a reward keeps its own value cap and description');
+  const lastCoupon = () => db.prepare("SELECT * FROM customer_coupons WHERE customer_key=? AND kind='reward' ORDER BY id DESC LIMIT 1").get(K);
+
+  Q.setRedeemMode('auto');
+  db.prepare('UPDATE customers SET points=5 WHERE line_user_id=?').run(K);
+  const conv = Q.convertReadyRewards(K);
+  ok(conv.length === 1 && lastCoupon().free_cap === 10 && Q.loyaltyBalance(K).points === 0,
+    "INVARIANT auto mode converts a full card into a coupon worth that reward's own cap");
+
+  Q.setRedeemMode('choose');
+  db.prepare('UPDATE customers SET points=14 WHERE line_user_id=?').run(K);
+  ok(Q.convertReadyRewards(K).length === 0 && Q.loyaltyBalance(K).points === 14,
+    'INVARIANT in choose mode stamps keep adding up — nothing converts by itself');
+  const r1 = Q.customerRedeem(K, big.id);
+  const c2 = lastCoupon();
+  ok(r1.ok && r1.balance === 2 && c2.free_cap === 49 && c2.label === 'แก้วฟรี',
+    'INVARIANT the customer picks a reward: 12 stamps spent, a ฿49 coupon lands in their wallet');
+  let e1 = ''; try { Q.customerRedeem(K, small.id); } catch (e) { e1 = e.message; }
+  ok(e1 === 'insufficient_points' && Q.loyaltyBalance(K).points === 2, 'INVARIANT a reward the customer cannot afford is refused and nothing is spent');
+  let e3 = ''; try { Q.customerRedeem(K, 999999); } catch (e) { e3 = e.message; }
+  ok(e3 === 'reward_not_found', 'INVARIANT an unknown or switched-off reward cannot be redeemed');
+  Q.setRedeemMode('auto');
+  let e2 = ''; try { Q.customerRedeem(K, small.id); } catch (e) { e2 = e.message; }
+  ok(e2 === 'auto_mode', 'INVARIANT customers cannot self-redeem while the shop converts automatically');
+
+  const tc = Q.getTierConfig();
+  const tierAt = (n) => { db.prepare('UPDATE customers SET order_count=? WHERE line_user_id=?').run(n, K); return Q.loyaltyBalance(K).tier.key; };
+  ok(tierAt(0) === 'pure' && tierAt(tc.bloomMin) === 'bloom' && tierAt(tc.essenceMin) === 'essence' && tierAt(tc.bloomMin - 1) === 'pure',
+    "INVARIANT the counter's tier follows visits with the owner's thresholds (PURE → BLOOM → ESSENCE), the same as the member card");
+
+  const K2 = 'U' + 'e8'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K2, 4, 4, 0);
+  const below = Q.canRedeemNow(K2);
+  db.prepare('UPDATE customers SET points=5 WHERE line_user_id=?').run(K2);
+  ok(!below && Q.canRedeemNow(K2) && Q.canRedeemNow(K), 'INVARIANT "แลกได้" means enough stamps for the cheapest active reward, or a reward coupon already in the wallet');
+  // Catalog mode: the paid message and the in-app celebration talk about the catalog, not a punch card.
+  Q.setRedeemMode('choose'); const saverWas = Q.lineSaverOn(); Q.setLineSaver(false);
+  const K3 = 'U' + 'e9'.repeat(16);
+  db.prepare('INSERT OR REPLACE INTO customers (line_user_id, points, lifetime_points, order_count) VALUES (?,?,?,?)').run(K3, 3, 3, 4);
+  const o3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 2 }], { source: 'customer', lineUserId: K3 });
+  const logs = []; const origLog = console.log; console.log = (...a) => { logs.push(a.join(' ')); };
+  try { Q.setOrderPaid(o3.ticket.id, { method: 'promptpay' }); } finally { console.log = origLog; }
+  const lv = Q.ticketView(o3.ticket.id).loyalty;
+  ok(lv && lv.mode === 'choose' && lv.rewardJustReady === true && lv.rewardName === 'ท็อปปิ้งฟรี', 'INVARIANT catalog mode celebrates the moment the balance first reaches the cheapest reward');
+  ok(logs.some((l) => l.includes('เลือกแลกของรางวัลได้ในบัตรสมาชิก')) && !logs.some((l) => l.includes('แจ้งพนักงานเพื่อรับของรางวัล')), 'INVARIANT the paid LINE message points catalog customers to their member card, not the counter');
+  Q.setLineSaver(saverWas); Q.setRedeemMode('auto');
+  db.prepare('UPDATE rewards SET active=0 WHERE id IN (?,?)').run(small.id, big.id);
+  for (const id of prevActive) db.prepare('UPDATE rewards SET active=1 WHERE id=?').run(id);
+  Q.setLoyaltyEnabled(wasOn);
+}
+
+console.log('\n== Kitchen marks (shared across devices) ==');
+{
+  const uA = 'U' + 'f3'.repeat(16), uB = 'U' + 'f4'.repeat(16);
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }, { name: 'Drink50', price: 0, qty: 1 }], { source: 'customer', lineUserId: uA });
+  const tid = r.ticket.id;
+  Q.setOrderPaid(tid, { method: 'promptpay' });
+  const a = Q.setKitchenMark(tid, 0, 'making');
+  ok(a.kitchen[0] === 'making' && !!db.prepare('SELECT making_at FROM tickets WHERE id=?').get(tid).making_at,
+    "INVARIANT the first mark flips the order to being-made (the customer's self-cancel locks)");
+  const snap = Q.zoneSnapshot(1, { reveal: true });
+  const card = [...snap.waiting, ...snap.pending].find((t) => t.id === tid);
+  ok(card && card.kitchen && card.kitchen[0] === 'making', 'INVARIANT the mark rides the board snapshot, so every device and a refresh see it');
+  let bad = ''; try { Q.setKitchenMark(tid, 5, 'done'); } catch (e) { bad = e.message; }
+  ok(bad === 'bad_line', 'INVARIANT a line the order does not have is refused');
+  Q.setKitchenMark(tid, 0, 'done');
+  const b = Q.setKitchenMark(tid, 1, 'done');
+  ok(b.allDone && b.ready && b.ready.ok && db.prepare('SELECT status FROM tickets WHERE id=?').get(tid).status === 'called',
+    'INVARIANT the last drink done announces a paid order ready (called)');
+  const r2 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uB });
+  const c2 = Q.setKitchenMark(r2.ticket.id, 0, 'done');
+  ok(c2.allDone && c2.ready && c2.ready.ok === false && c2.ready.reason === 'unpaid',
+    'INVARIANT an unpaid order is never announced ready, even with every drink done');
+  const c3 = Q.setKitchenMark(r2.ticket.id, 0, null);
+  ok(Object.keys(c3.kitchen).length === 0 && !db.prepare('SELECT kitchen FROM tickets WHERE id=?').get(r2.ticket.id).kitchen,
+    'INVARIANT a mark can go back to not-started');
+  Q.setKitchenMark(r2.ticket.id, 0, 'making');
+  Q.editOrderItems(r2.ticket.id, [{ name: 'Drink50', price: 0, qty: 2 }]);
+  ok(!db.prepare('SELECT kitchen FROM tickets WHERE id=?').get(r2.ticket.id).kitchen, 'INVARIANT editing an order clears its kitchen marks (the lines changed)');
+  const uC = 'U' + 'f5'.repeat(16);
+  const r3 = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: uC });
+  Q.setKitchenMark(r3.ticket.id, 0, 'done');   // made before payment (queue-first)
+  Q.setOrderPaid(r3.ticket.id, { method: 'promptpay' });
+  ok(db.prepare('SELECT status FROM tickets WHERE id=?').get(r3.ticket.id).status === 'called', 'INVARIANT a drink finished before payment is announced ready the moment it is paid');
+  Q.setStatus(tid, 'served', 2);
+  let closed = ''; try { Q.setKitchenMark(tid, 0, 'making'); } catch (e) { closed = e.message; }
+  ok(closed === 'ticket_closed', 'INVARIANT a served order can no longer be marked');
+}
+
+console.log('\n== Web ordering (guest, pay-first) ==');
+{
+  ok(Q.webOrderEnabled() === false, 'INVARIANT web ordering is off until the owner switches it on');
+  const qf = Q.getQueueFirst(); Q.setQueueFirst(true);
+  const g = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'customer', lineUserId: null });
+  ok(g.ticket.status === 'pending' && g.prepayOnly === true && g.ticket.customer_name === 'Web order',
+    'INVARIANT a web guest order is pay-first even when the shop runs queue-first (no number, nothing made before payment)');
+  const s = Q.zoneSnapshot(1, { reveal: true }); const c = s.pending.find((t) => t.id === g.ticket.id);
+  const lineCard = [...s.pending, ...s.waiting].find((t) => t.order_source === 'customer' && !t.web);
+  ok(c && c.web === true && (!lineCard || lineCard.web === false), 'INVARIANT the board labels a guest order เว็บ and a LINE order LINE');
+  ok(Q.ticketView(g.ticket.id).canCancel === false, 'INVARIANT a guest has no identity to cancel with — an unpaid guest order lapses on its own');
+  Q.setOrderPaid(g.ticket.id, { method: 'promptpay' });
+  ok(['waiting', 'called'].includes(db.prepare('SELECT status FROM tickets WHERE id=?').get(g.ticket.id).status), 'INVARIANT once paid the guest order gets its queue number');
+  Q.setQueueFirst(qf);
+}
+
+console.log('\n== Turso stale write stream: every write reconnects + retries once ==');
+{
+  const { __injectStaleStream, isStaleStream } = await import('../server/db.js');
+  ok(isStaleStream(new Error('Hrana(Api("status=404 Not Found, body={\\"error\\":\\"stream not found: 9b5efbda:2bb5e1c\\"}"))')) && !isStaleStream(new Error('UNIQUE constraint failed')),
+    'INVARIANT the prod error text (2026-10-18) is recognised as a stale stream, ordinary SQL errors are not');
+  __injectStaleStream(1);
+  const hb = Q.cashierHeartbeat();
+  ok(hb && Q.posLastSeen(), 'INVARIANT a heartbeat that hits a stale stream reconnects and still records the till (prod outage: it failed for 30+ min)');
+  __injectStaleStream(1);
+  Q.setPendingVoidMinutes(37);
+  ok(Q.getPendingVoidMinutes() === 37, 'INVARIANT a settings write survives a stale stream');
+  const before = db.prepare('SELECT COUNT(*) c FROM tickets').get().c;
+  __injectStaleStream(1);   // fails the first statement INSIDE the createOrder transaction
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'cashier' });
+  ok(r.ticket && db.prepare('SELECT COUNT(*) c FROM tickets').get().c === before + 1,
+    'INVARIANT a transaction hit by a stale stream is rolled back and retried as one unit — exactly one order, no duplicate');
+  __injectStaleStream(1);
+  ok(db.prepare('SELECT id FROM tickets WHERE id=?').get(r.ticket.id).id === r.ticket.id, 'INVARIANT reads also recover after a stale stream');
+  db.exec('CREATE TABLE IF NOT EXISTS _stale_probe (n INTEGER)');
+  const tx = db.transaction(() => { db.prepare('INSERT INTO _stale_probe (n) VALUES (1)').run(); db.prepare('INSERT INTO _stale_probe (n) VALUES (2)').run(); });
+  __injectStaleStream(1);   // fires right after BEGIN, inside the unit
+  tx();
+  ok(db.prepare('SELECT COUNT(*) c FROM _stale_probe').get().c === 2, 'INVARIANT a stale stream mid-transaction rolls back and replays the whole unit once (2 rows, not 0 or 4)');
+  db.exec('DROP TABLE _stale_probe');
+  let threw = ''; try { db.prepare('SELECT * FROM no_such_table_xyz').all(); } catch (e) { threw = e.message; }
+  ok(/no such table/.test(threw), 'INVARIANT a real SQL error is not swallowed or retried');
+  Q.setPendingVoidMinutes(30);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);

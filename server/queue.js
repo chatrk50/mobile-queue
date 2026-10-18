@@ -1,6 +1,6 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { db, getSetting, setSetting, DURABLE, reconnectDb } from './db.js';
-import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED } from './line.js';
+import { pushQueue, pushText, pushStage, pushSummary, pushCouponFlex, lastPushError, botInfo, friendCheck, webhookInfo, webhookTest, setWebhook, LINE_ENABLED, pushFlex, buildStaffAlertFlex, buildShopPanelFlex } from './line.js';
 import { hashPin, verifyPin } from './auth.js';
 import { slipokCheck, slipokQuota, SLIPOK_ERRORS } from './slipok.js';
 import { decodeMerchantBuffer, isInjectable, describeQr } from './thaiqr.js';
@@ -145,7 +145,7 @@ export function callNext(zoneId, threshold) {
   const nextPaid = !nextOrder || nextOrder.payment_status === 'paid';
   pushStage(next.line_user_id, nextPaid
     ? { stage: 3, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
-        subtitle: 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
+        subtitle: tablePickupLine(next) || 'กรุณามาที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }
     : { stage: 2, title: 'ถึงคิวของคุณแล้ว!', code: next.code,
         subtitle: 'กรุณามาชำระเงินที่เคาน์เตอร์ค่ะ', link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
 
@@ -166,7 +166,7 @@ export function markReady(ticketId, threshold) {
   db.prepare("UPDATE tickets SET status='called', called_at=datetime('now'), called_count=called_count+1 WHERE id=?").run(ticketId);
   if (t.number > 0) db.prepare('UPDATE zones SET last_called=? WHERE id=?').run(t.number, t.zone_id);
   if (t.line_user_id) pushStage(t.line_user_id, { stage: 3, title: 'เครื่องดื่มพร้อมรับแล้ว!', code: t.code,
-    subtitle: 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
+    subtitle: tablePickupLine(t) || 'เชิญรับที่เคาน์เตอร์ได้เลยค่ะ', link: queueLink(t.zone_id), label: 'ดูคิวของฉัน' }, 'queue');
   if (threshold != null) evaluateSoonNotifications(t.zone_id, threshold);
   return { ok: true, zoneId: t.zone_id };
 }
@@ -186,7 +186,7 @@ export function setStatus(ticketId, status, threshold) {
   }
   db.prepare(`UPDATE tickets SET status=?, closed_at=datetime('now') WHERE id=?`).run(status, ticketId);
   // Notify the customer on LINE when their order is handed over (served).
-  if (status === 'served' && t.line_user_id) {
+  if (status === 'served' && t.line_user_id && !lineSaverOn()) {
     pushQueue(t.line_user_id,
       `✅ รับเครื่องดื่มเรียบร้อยแล้ว · หมายเลข ${t.code}\n` +
       `\n` +
@@ -214,7 +214,7 @@ export function evaluateSoonNotifications(zoneId, threshold) {
     const ahead = idx; // position in the ordered waiting list
     if (ahead <= threshold && !t.notified_soon && t.line_user_id) {
       db.prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?').run(t.id);
-      pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
+      if (!lineSaverOn()) pushStage(t.line_user_id, { stage: 2, title: 'ใกล้ถึงคิวของคุณแล้ว!', code: t.code,
         subtitle: `คิวรอก่อนหน้า: ${ahead} · กรุณากลับมาที่ร้านค่ะ`, link: queueLink(zoneId), label: 'ดูคิวของฉัน' }, 'queue');
     }
   });
@@ -2344,16 +2344,42 @@ export function menuMakeable() {
 }
 /** Per-menu margin: sell price vs BOM cost (สูตร × ต้นทุนถัวเฉลี่ยของวัตถุดิบ), ranked by margin.
  *  Items without a recipe show cost 0 + hasRecipe:false so the owner can see what's un-costed. */
+// Price assistant: price = (recipe cost + packaging per cup) ÷ the target food-cost share, rounded UP to
+// the next ฿5. Default target 30% (a common ceiling for a drinks shop); the owner sets their own.
+export function getPriceTarget() { const v = Number(getSetting('price:target_cost_pct', '30')); return v >= 5 && v <= 90 ? v : 30; }
+export function setPriceTarget(pct) {
+  const v = Math.round(Number(pct));
+  if (!(v >= 5 && v <= 90)) throw new Error('bad_target');
+  setSetting('price:target_cost_pct', String(v));
+  return { targetPct: v };
+}
+const PACK_RE = /แก้ว|ฝา|หลอด|ถุง|กล่อง|ช้อน|cup|lid|straw|bag/i;   // packaging lines inside a recipe
+export function suggestPrice(cost, packaging, targetPct) {
+  const base = (Number(cost) || 0) + (Number(packaging) || 0);
+  if (!(base > 0) || !(targetPct > 0)) return null;
+  return Math.ceil(base / (targetPct / 100) / 5) * 5;
+}
 export function menuMargins() {
   const items = db.prepare(`SELECT id, name, price, category FROM menu_items WHERE active=1 ORDER BY price DESC`).all();
+  const target = getPriceTarget(), packPerCup = Number(getFinanceSettings().packagingPerCup) || 0;
   return items.map((it) => {
     const parts = db.prepare(
       `SELECT r.qty, i.name AS ing, i.unit, i.avg_cost FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id WHERE r.menu_item_id=?`
     ).all(it.id);
     const cost = r2(parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.avg_cost) || 0), 0));
     const margin = r2(it.price - cost);
+    // Packaging per cup is added only when the recipe does not already carry cups / lids / straws.
+    const pack = (it.category === 'topping' || parts.some((p) => PACK_RE.test(p.ing || ''))) ? 0 : packPerCup;
+    // A recipe costing far more than the price is nearly always a unit slip (1 lot of cups instead of
+    // 1 cup). Say where it comes from instead of suggesting an absurd price.
+    const suspect = parts.length > 0 && it.price > 0 && (cost + pack) > it.price * 1.5;
+    const top = suspect ? parts.reduce((a, p) => ((p.qty || 0) * (p.avg_cost || 0) > (a.qty || 0) * (a.avg_cost || 0) ? p : a)) : null;
+    const suggested = parts.length && !suspect ? suggestPrice(cost, pack, target) : null;
     return { id: it.id, name: it.name, category: it.category, price: it.price, cost, margin,
       marginPct: it.price > 0 ? r2((margin / it.price) * 100) : 0, hasRecipe: parts.length > 0,
+      pack: r2(pack), costPct: it.price > 0 ? r2(((cost + pack) / it.price) * 100) : null, suggested, targetPct: target,
+      underTarget: suggested != null && it.price < suggested,
+      suspect, suspectPart: top ? { ing: top.ing, qty: top.qty, unit: top.unit, cost: r2((top.qty || 0) * (top.avg_cost || 0)) } : null,
       parts: parts.map((p) => ({ ing: p.ing, qty: p.qty, unit: p.unit, cost: r2((p.qty || 0) * (p.avg_cost || 0)) })) };
   }).sort((a, b) => b.margin - a.margin);
 }
@@ -2797,22 +2823,13 @@ export function validateCoupon(code, customerKey, orderNet, lines = null) {
  *  the first time the customer's coupons are looked at. */
 export function convertReadyRewards(customerKey) {
   if (!customerKey || !loyaltyEnabled()) return [];
+  if (getRedeemMode() === 'choose') return [];   // catalog mode: stamps add up until the customer picks a reward
   const issued = [];
   for (;;) {
     const bal = loyaltyBalance(customerKey).points;
     const reward = db.prepare('SELECT * FROM rewards WHERE active=1 AND cost_points<=? ORDER BY cost_points DESC, id LIMIT 1').get(bal);
     if (!reward) break;
-    const tpl = couponTemplate('reward');
-    const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
-    let ccId = null;
-    db.transaction(() => {
-      db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=?').run(reward.cost_points, customerKey);
-      db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`)
-        .run(customerKey, -reward.cost_points, 'สะสมครบ → แลกเป็นคูปอง: ' + reward.name);
-      ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, ?, ?, 'reward')`)
-        .run(customerKey, reward.name, tpl.value, expiresAt).lastInsertRowid;
-    })();
-    issued.push({ id: Number(ccId), label: reward.name, expiresAt });
+    try { issued.push(issueRewardCoupon(customerKey, reward, 'สะสมครบ → แลกเป็นคูปอง: ')); } catch { break; }
   }
   return issued;
 }
@@ -3344,6 +3361,18 @@ export function forgetCustomer(customerKey) {
 //   2. posOfflineMinutes — a dead-man's switch: if no cashier device has checked in for N minutes
 //      the server pauses LINE ordering BY ITSELF, and resumes the moment a till reappears.
 // 0 minutes = the dead-man's switch is off (default, so nothing changes until the owner opts in).
+// LINE message saver: the OA bills per push. With the saver on, the customer gets only what the LIFF
+// cannot tell them while it is closed — "ready / your turn" calls and cancellations. Order received,
+// paid, almost-your-turn, thank-you and stamp/coupon notes stay on the LIFF screen instead.
+export function lineSaverOn() { return getSetting('line:saver', '0') === '1'; }
+export function setLineSaver(on) { setSetting('line:saver', on ? '1' : '0'); return { lineSaver: !!on }; }
+/** This month's customer-facing pushes per LINE order: the number the saver changes. */
+export function pushesPerLineOrder() {
+  const m = "substr(datetime('now','+7 hours'),1,7)";
+  const pushes = db.prepare(`SELECT COUNT(*) AS n FROM push_log WHERE kind IN ('queue','paid','other') AND substr(datetime(at,'+7 hours'),1,7) = ${m}`).get().n;
+  const orders = db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE source='customer' AND substr(datetime(created_at,'+7 hours'),1,7) = ${m}`).get().n;
+  return { pushes, lineOrders: orders, perOrder: orders ? Math.round((pushes / orders) * 10) / 10 : null };
+}
 export function onlineOrdersEnabled() { return getSetting('online_orders', '1') !== '0'; }
 export function setOnlineOrders(on) { setSetting('online_orders', on ? '1' : '0'); return { onlineOrders: !!on }; }
 export function getPosOfflineMinutes() { return Math.max(0, parseInt(getSetting('pos_offline_minutes', '0'), 10) || 0); }
@@ -4137,14 +4166,6 @@ export function setTierConfig(p = {}) {
   if (p.essencePerk != null) setSetting('loyalty:tier_essence_perk', String(p.essencePerk).slice(0, 200));
   return getTierConfig();
 }
-/** Loyal-customer badge tier from lifetime stamps earned. null below the first threshold. */
-export function loyaltyTier(lifetime) {
-  const l = lifetime || 0;
-  if (l >= 100) return { key: 'vip', label: 'VIP', emoji: '👑' };
-  if (l >= 50) return { key: 'gold', label: 'ลูกค้าประจำ', emoji: '🏅' };
-  if (l >= 20) return { key: 'silver', label: 'ขาประจำ', emoji: '⭐' };
-  return null;
-}
 /** Bangkok-local helpers for the birthday free drink. */
 function bkkMonthDay() { return db.prepare("SELECT strftime('%m-%d', datetime('now','+7 hours')) md").get().md; }
 function bkkYear() { return db.prepare("SELECT strftime('%Y', datetime('now','+7 hours')) y").get().y; }
@@ -4167,9 +4188,9 @@ export function setCustomerBirthday(key, birthday) {
 /** Current + lifetime stamp balance for a customer key (line_user_id) + badge tier + birthday. */
 export function loyaltyBalance(key) {
   if (!key) return { key, points: 0, lifetime: 0, tier: null, birthday: null, isBirthday: false };
-  const c = db.prepare('SELECT points, lifetime_points, birthday FROM customers WHERE line_user_id=?').get(key);
+  const c = db.prepare('SELECT points, lifetime_points, birthday, order_count FROM customers WHERE line_user_id=?').get(key);
   const lifetime = c ? (c.lifetime_points || 0) : 0;
-  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: loyaltyTier(lifetime), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
+  return { key, points: c ? (c.points || 0) : 0, lifetime, tier: memberTier(c ? c.order_count : 0), birthday: c ? (c.birthday || null) : null, isBirthday: c ? isBirthdayToday(c.birthday) : false };
 }
 // ---- Phone-keyed loyalty (Package 1 — no LINE) ----
 // A walk-in customer is identified by phone; the loyalty key is 'tel:<digits>'. The cashier
@@ -4590,21 +4611,26 @@ export function issueBirthdayCoupons() {
 export function listRewards(all = false) {
   return db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active=1'} ORDER BY sort, cost_points, id`).all();
 }
-export function addReward({ name, cost_points, image = null } = {}) {
+const rewardValue = (v) => (Number(v) > 0 ? Math.round(Number(v) * 100) / 100 : null);
+const rewardDesc = (d) => (String(d == null ? '' : d).trim().slice(0, 120) || null);
+export function addReward({ name, cost_points, image = null, value = null, description = null } = {}) {
   const nm = (name || '').toString().trim().slice(0, 60);
   const cost = Math.max(1, Math.round(Number(cost_points) || 0));
   if (!nm) throw new Error('name_required');
-  const info = db.prepare('INSERT INTO rewards (name, cost_points, image) VALUES (?,?,?)').run(nm, cost, image ? image.toString() : null);
+  const info = db.prepare('INSERT INTO rewards (name, cost_points, image, value, description) VALUES (?,?,?,?,?)')
+    .run(nm, cost, image ? image.toString() : null, rewardValue(value), rewardDesc(description));
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(info.lastInsertRowid);
 }
-export function updateReward(id, { name, cost_points, active, image } = {}) {
+export function updateReward(id, { name, cost_points, active, image, value, description } = {}) {
   const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
   if (!cur) throw new Error('reward_not_found');
   const nm = name != null ? (name.toString().trim().slice(0, 60) || cur.name) : cur.name;
   const cost = cost_points != null ? Math.max(1, Math.round(Number(cost_points) || 0)) : cur.cost_points;
   const a = active != null ? (active ? 1 : 0) : cur.active;
   const img = image !== undefined ? (image || null) : cur.image;
-  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=? WHERE id=?').run(nm, cost, a, img, id);
+  const val = value !== undefined ? rewardValue(value) : cur.value;
+  const desc = description !== undefined ? rewardDesc(description) : cur.description;
+  db.prepare('UPDATE rewards SET name=?, cost_points=?, active=?, image=?, value=?, description=? WHERE id=?').run(nm, cost, a, img, val, desc, id);
   return db.prepare('SELECT * FROM rewards WHERE id=?').get(id);
 }
 /** Redeem a reward for a customer (deduct points, log the move). Guards insufficient balance. */
@@ -4868,6 +4894,7 @@ export function editOrderItems(ticketId, items, opts = {}) {
   const toppingNames = new Set(db.prepare("SELECT name FROM menu_items WHERE category='topping'").all().map((r) => r.name));
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_items WHERE order_id=?').run(order.id);
+    db.prepare('UPDATE tickets SET kitchen=NULL WHERE id=?').run(ticketId);   // lines changed → old kitchen marks are stale
     const ins = db.prepare('INSERT INTO order_items (order_id, name, price, qty, kind) VALUES (?,?,?,?,?)');
     for (const it of lines) ins.run(order.id, it.name, it.price, it.qty, toppingNames.has(it.name) ? 'addon' : 'base');
     // Recompute the free-giveaway discount for the new item set. Don't clobber a manual bill
@@ -4955,7 +4982,7 @@ function catalogPrice(rawName, { channelId = null, branchId = null } = {}) {
   return p == null ? null : r2(p);
 }
 export function createOrder(zoneId, items, opts = {}) {
-  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null } = opts;
+  const { source = 'cashier', lineUserId = null, customerName = null, actorId = null, channelId = null, clientToken = null, couponCode = null, tableLabel = null } = opts;
   let prepayOnly = false;   // set below for a customer on the no-show prepay tier
   const lines = (Array.isArray(items) ? items : [])
     .map((it) => ({
@@ -4995,6 +5022,8 @@ export function createOrder(zoneId, items, opts = {}) {
     if (ns.blocked) { const e = new Error('noshow_blocked'); e.strikes = ns.strikes; e.limit = ns.blockLimit; throw e; }
     prepayOnly = ns.prepay;
   }
+  // A web guest (no LINE identity) always pays first — see webOrderEnabled.
+  if (source === 'customer' && !lineUserId) prepayOnly = true;
 
   // SELF-SERVE ORDERS PRICE THEMSELVES FROM THE CATALOG. The LIFF posts the price it displayed and
   // the endpoint is public, so a modified client could name its own price — and the recorded bill,
@@ -5028,7 +5057,7 @@ export function createOrder(zoneId, items, opts = {}) {
     }
   }
   const total = lines.reduce((s, it) => s + it.price * it.qty, 0);
-  const label = customerName || (source === 'customer' ? 'LINE order' : 'Order');
+  const label = customerName || (source === 'customer' ? (lineUserId ? 'LINE order' : 'Web order') : 'Order');
   // Classify each line as a base drink or an addon (topping) for exact addon reporting, and pin
   // each line to its catalog id so a later menu RENAME can't detach it from recipe/stock/history.
   const toppingNames = new Set(
@@ -5078,6 +5107,8 @@ export function createOrder(zoneId, items, opts = {}) {
          VALUES (?,?,?,?,?,?,?,'pending',?)`
       ).run(zone.store_id, zoneId, 0, '', 1, lineUserId, label, clientToken);
     }
+    const table = tableLabel ? validTable(zoneId, tableLabel) : null;   // only a real table of this zone
+    if (table) db.prepare('UPDATE tickets SET table_label=? WHERE id=?').run(table, tinfo.lastInsertRowid);
     const freeDisc = freeGiveawayDiscount(lines, total);
     const oinfo = db.prepare('INSERT INTO orders (ticket_id, total, source, branch_id, created_by, channel_id, discount, discount_reason) VALUES (?,?,?,?,?,?,?,?)')
       .run(tinfo.lastInsertRowid, total, source, zone.store_id, actorId, channelId, freeDisc, freeDisc > 0 ? FREE_GIVEAWAY_REASON : null);
@@ -5143,7 +5174,7 @@ export function createOrder(zoneId, items, opts = {}) {
     const msg = (r.ticket && r.ticket.number > 0)
       ? `🎫 รับออเดอร์ + รับคิวแล้ว!\nหมายเลขคิวของคุณ: ${r.ticket.code}\nยอด ฿${r.total} — กรุณาชำระเงินก่อนรับเครื่องดื่มนะคะ 🙏`
       : `🧾 รับออเดอร์แล้ว ยอด ฿${r.total}\nกรุณาชำระเงินให้เรียบร้อย แล้วระบบจะออกหมายเลขคิวให้ทันที 🎫`;
-    pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
+    if (!lineSaverOn()) pushQueue(lineUserId, msg, queueLink(zoneId), 'ชำระเงิน / ดูออเดอร์', 'queue');
   }
   return r;
 }
@@ -5338,8 +5369,11 @@ export function setOrderPaid(ticketId, opts = {}) {
       const bonusTxt = (loyalty.bonus ? ` (+${loyalty.bonus} ดวงต้อนรับ! 🎁)` : '') + (loyalty.bdayBonus ? ` (+${loyalty.bdayBonus} ดวงวันเกิด! 🎂)` : '');
       const greet = loyalty.name ? `ขอบคุณค่ะคุณ ${loyalty.name} 💛\n` : '';
       sub = greet + sub + `\n⭐ ได้ ${loyalty.awarded} ดวง${bonusTxt} · สะสมรวม ${bal} ดวง`;
+      const cheapest = cheapestReward();
       sub += (loyalty.coupons && loyalty.coupons.length)
-        ? `\n🎉 สะสมครบ ${per} ดวง! รับคูปองฟรี 1 ${UNIT} — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
+        ? `\n🎉 สะสมครบแล้ว! รับคูปอง "${loyalty.coupons[0].label}" — เลือกใช้ได้ในเมนูคูปอง (ถึง ${loyalty.coupons[0].expiresAt})`
+        : cheapest
+          ? (bal >= cheapest.cost_points ? `\n🎁 มี ${bal} ดวง — เลือกแลกของรางวัลได้ในบัตรสมาชิก` : `\n🥤 อีก ${cheapest.cost_points - bal} ดวง แลก "${cheapest.name}" ได้`)
         : (free >= 1
           ? `\n🎉 ครบ ${per} ดวงแล้ว! แจ้งพนักงานเพื่อรับของรางวัลฟรีได้เลยในออเดอร์ถัดไป`
           : `\n🥤 อีก ${per - bal} ${UNIT} ได้ฟรี 1 ${UNIT}!`);
@@ -5348,9 +5382,16 @@ export function setOrderPaid(ticketId, opts = {}) {
     }
     if (bounce && bounce.issued) sub += `\n🎁 ${bounce.label} — เก็บไว้ในเมนูคูปองแล้ว ใช้ได้ถึง ${bounce.expiresAt}`;
     if (streak && streak.issued) sub += `\n🔥 มาต่อเนื่อง ${streak.target} วันติด! รับ ${streak.label} — เก็บในเมนูคูปองแล้ว ใช้ได้ถึง ${streak.expiresAt}`;
-    pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
+    if (!lineSaverOn()) pushStage(ticket.line_user_id, { stage: 2, title: 'รับออเดอร์แล้ว กำลังทำ', code: ticket.code, subtitle: sub,
       link: queueLink(ticket.zone_id), label: 'ดูคิว / แต้มของฉัน' }, 'paid');
   }
+  // Queue-first: the kitchen can finish before the money lands. Once paid, an order whose every drink
+  // is marked done is announced ready at once, instead of sitting finished with nobody told.
+  try {
+    const tk = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId), ol = orderForTicket(ticketId);
+    const n = ol ? (ol.lines || []).length : 0, k = kitchenOf(tk);
+    if (tk && tk.status === 'waiting' && n > 0 && Array.from({ length: n }, (_, j) => k[j] === 'done').every(Boolean)) markReady(ticketId, null);
+  } catch { /* never block a payment */ }
   return { ok: true, ticketId: Number(ticketId), total: order.total, net: Math.max(0, r2(order.total - (order.discount || 0))), loyalty, code: ticket?.code || null, number: ticket?.number || null };
 }
 
@@ -5529,7 +5570,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
       WHERE oi.order_id=? AND COALESCE(mi.category,'drink')!='topping' AND oi.price>0`
   ).get(order.id)?.p;
   const room = Math.max(0, order.total - (order.discount || 0));
-  const free = Math.round(Math.min(couponTemplate('reward').value, cheapest || room, room) * 100) / 100;
+  const free = Math.round(Math.min(rewardCap(reward), cheapest || room, room) * 100) / 100;
   if (free <= 0) throw new Error('nothing_to_discount');
   const reason = '🎁 แลกแต้ม: ' + reward.name;
   // Spending the stamps and applying the discount must be one unit — the discount used to run
@@ -5543,7 +5584,7 @@ export function redeemRewardOnOrder(ticketId, rewardId = null, actorId = null) {
     db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, order_id, note) VALUES (?, 'redeem', ?, ?, ?)`).run(key, -reward.cost_points, order.id, reason);
     res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   })();
-  if (t.line_user_id) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  if (t.line_user_id && !lineSaverOn()) pushQueue(t.line_user_id, `🎁 ใช้แต้มแลกเครื่องดื่มฟรีแล้ว! ลด ฿${free}\nคงเหลือ ${bal - reward.cost_points} ดวง · ขอบคุณที่อุดหนุนค่ะ 💛`, null);
   // If the reward fully covers the bill (net 0), don't make the customer pay anything more —
   // settle it as a 'reward' tender and issue the queue number right away.
   let autoPaid = false;
@@ -5606,7 +5647,7 @@ export function redeemCustomerCoupon(ticketId, ccId, actorId = null) {
     if (!burned.changes) throw new Error('coupon_used');
     res = setOrderDiscount(ticketId, { amount: (order.discount || 0) + free, reason, actorId });
   })();
-  if (t.line_user_id) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
+  if (t.line_user_id && !lineSaverOn()) pushQueue(t.line_user_id, `${cc.kind === 'birthday' ? '🎂' : '🎁'} ใช้คูปอง "${cc.label}" แล้ว! ลด ฿${free}\nขอบคุณที่อุดหนุนค่ะ 💛`, null);
   let autoPaid = false;
   if (res.net <= 0) {
     try { setOrderPaid(ticketId, { actorId, method: 'reward', skipLoyalty: true }); autoPaid = true; }
@@ -5692,6 +5733,7 @@ export function recordWaste(ticketId, { reason = null, byShop = false, actorId =
       }
     }
     db.prepare('UPDATE orders SET remakes = COALESCE(remakes,0) + 1 WHERE id=?').run(order.id);
+    db.prepare('UPDATE tickets SET kitchen=NULL WHERE id=?').run(ticketId);   // the drink is made again from scratch
     logSaleEvent({ branchId: order.branch_id, ticketId: Number(ticketId), orderId: order.id, type: 'waste_remake', amount: order.total, actor: actorId, meta: { reason: rsn, byShop, cups } });
   })();
   return { ok: true, cups, cost: Math.round(cost * 100) / 100, byShop, reason: rsn };
@@ -5987,26 +6029,27 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
   const zone = getZone(zoneId);
   if (!zone) return null;
   const waiting = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested FROM tickets
+    `SELECT id, code, number, party_size, customer_name, notified_soon, making_at, cancel_requested, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='waiting' ORDER BY number ASC`
   ).all(zoneId);
   // All currently-called (called but not yet served) tickets, newest first. The cashier UI shows the
   // 5 most recent by default with a "แสดงทั้งหมด" toggle for the rest. Capped at 100 as a sane bound
   // ('called' is transient — it clears on serve/no-show — so this is effectively unbounded in practice).
   const recentCalled = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, called_at FROM tickets
+    `SELECT id, code, number, party_size, customer_name, called_at, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='called' ORDER BY called_at DESC LIMIT 100`
   ).all(zoneId);
   // Pay-first: orders awaiting payment (no queue number yet). The cashier confirms payment
   // here, which issues the number and moves them into `waiting`.
   const pending = db.prepare(
-    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested FROM tickets
+    `SELECT id, code, number, party_size, customer_name, created_at, making_at, cancel_requested, table_label, kitchen, line_user_id IS NULL AS no_line FROM tickets
      WHERE zone_id=? AND status='pending' ORDER BY id ASC`
   ).all(zoneId);
   if (!reveal) { waiting.forEach((t) => { t.customer_name = maskName(t.customer_name); });
                  recentCalled.forEach((t) => { t.customer_name = maskName(t.customer_name); });
                  pending.forEach((t) => { t.customer_name = maskName(t.customer_name); }); }
   const attach = (t) => {
+    t.kitchen = kitchenOf(t);   // per-line marks, shared with จอครัว
     const o = orderForTicket(t.id);
     if (o) {
       t.order_total = o.total;
@@ -6034,14 +6077,16 @@ export function zoneSnapshot(zoneId, { reveal = false } = {}) {
       if (ck) { const m = customerMini(ck); if (m) t.cust = m; }
       if (loyaltyEnabled()) {
         const li = r && (r.line_user_id || r.customer_key);
-        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji : null; t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
+        if (li) { const b = loyaltyBalance(li); t.loy_points = b.points; t.loy_tier = b.tier ? b.tier.emoji + ' ' + b.tier.label : null; t.loy_redeemable = canRedeemNow(li); t.loy_phone = (r.customer_key || '').startsWith('tel:') ? r.customer_key.slice(4) : null; }
       }
     }
     return t;
   };
   waiting.forEach(attach); recentCalled.forEach(attach); pending.forEach(attach);
+  // A web guest's order (no LINE identity) — the till and จอครัว label it เว็บ instead of LINE.
+  for (const t of [...waiting, ...recentCalled, ...pending]) { t.web = t.order_source === 'customer' && !!t.no_line; delete t.no_line; }
   // Only the cashier (reveal) needs the awaiting-payment list; public/display omit it.
-  return { zone, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
+  return { zone: { ...zone, tables: getZoneTables(zoneId) }, waiting, recentCalled, waitingCount: waiting.length, pending: reveal ? pending : [] };
 }
 
 // Customer-safe cancellation reason: whitelist-maps an internal void_reason to wording that's
@@ -6087,10 +6132,14 @@ export function ticketView(ticketId) {
       // Did THIS order complete a fresh stamp card (cross a multiple of `per`)? If so — and a real reward
       // is actually redeemable — flag it so the LIFF fires the reward-celebration moment. The client shows
       // it once per ticket; the first-order welcome "wow" takes precedence when both would apply.
-      const rewardJustReady = earnedThis > 0 && per > 0
+      // Catalog mode has no cards: "just ready" = this order lifted the balance past the cheapest reward.
+      const cheapest = cheapestReward();
+      const rewardJustReady = cheapest
+        ? earnedThis > 0 && balAtEarn >= cheapest.cost_points && balAtEarn - earnedThis < cheapest.cost_points
+        : earnedThis > 0 && per > 0
         && Math.floor(balAtEarn / per) > Math.floor((balAtEarn - earnedThis) / per)
         && listRewards(false).length > 0;
-      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady };
+      loyalty = { awarded, bonus, firstOrder: bonus > 0, balance: bal, per, rewardJustReady, mode: getRedeemMode(), rewardName: cheapest ? cheapest.name : null };
     }
   }
   // Customer-safe cancellation reason: only for SHOP-initiated cancels (customer-requested ones
@@ -6105,8 +6154,9 @@ export function ticketView(ticketId) {
   return {
     id: t.id, code: t.code, number: t.number, status: t.status, party_size: t.party_size, rating: t.rating,
     // Queue-first cancel gating for the LIFF: customer may self-cancel only while unpaid & not being made.
-    canCancel: ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
+    canCancel: !!t.line_user_id && ['pending', 'waiting'].includes(t.status) && !t.making_at && !(o && o.payment_status === 'paid'),
     cancelRequested: !!t.cancel_requested, cancelReason, making: !!t.making_at,
+    table: t.table_label || null, tableServe: t.table_label ? tableServeOn() : false,
     zone: zone.name, ahead: t.status === 'waiting' ? aheadCount(t) : 0,
     last_called: zone.last_called ? `${zone.prefix}${pad(zone.last_called)}` : null,
     order: o ? { total: o.total, discount: o.discount, discount_reason: o.discount_reason || null, items: o.items, lines: o.lines, paid: o.payment_status === 'paid', due: o.due || 0, status: o.payment_status, method: o.method, created_at: o.created_at, paid_at: o.paid_at, refund_requested: o.refund_requested || 0 } : null,
@@ -6124,3 +6174,460 @@ export function ticketView(ticketId) {
       : null,
   };
 }
+
+// ==== Staff LINE alerts ("ร้านรับออเดอร์ใน LINE") ==================================================
+// A staff member links their LINE ONCE by sending a one-time code to the shop's own OA. From then on
+// new LINE orders, slips waiting for a check and cancel requests reach them in LINE, and เริ่มทำ /
+// พร้อมรับ work straight from the chat. Every alert is a PUSH that uses the shop's OA quota, so the
+// 'away' mode only alerts when no till has checked in recently (the counter already chimes when one
+// is open). Typing "ร้าน" answers with today's panel as a REPLY, which LINE does not bill.
+const ALERT_MODES = ['off', 'away', 'always'];
+export function getStaffAlertConfig() {
+  const m = getSetting('alert:line_mode', 'off');
+  const away = parseInt(getSetting('alert:line_away_min', '3'), 10) || 3;
+  return { mode: ALERT_MODES.includes(m) ? m : 'off', awayMin: Math.max(1, Math.min(60, away)) };
+}
+export function setStaffAlertConfig({ mode, awayMin } = {}) {
+  if (mode != null) { if (!ALERT_MODES.includes(mode)) throw new Error('bad_mode'); setSetting('alert:line_mode', mode); }
+  if (awayMin != null) setSetting('alert:line_away_min', String(Math.max(1, Math.min(60, parseInt(awayMin, 10) || 3))));
+  return getStaffAlertConfig();
+}
+/** Has any till checked in within the last `minutes`? (its heartbeat runs every 30 s while open) */
+export function tillOnline(minutes = 3) {
+  const last = posLastSeen();
+  if (!last) return false;
+  const m = Math.max(1, Math.min(60, Number(minutes) || 3));
+  return db.prepare(`SELECT (? >= datetime('now','-${m} minutes')) AS fresh`).get(last).fresh === 1;
+}
+const LINK_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 symbols, no 0/O/1/I: easy to read and type
+/** A 10-minute, single-use code that binds the next LINE account to send it to this staff member.
+ *  staffId 0 = the owner signed in with the owner PIN (no staff row): the code links owner:line_id. */
+export function createStaffLinkCode(staffId) {
+  const sid = Number(staffId) || 0;
+  if (sid && !db.prepare('SELECT 1 FROM staff WHERE id=? AND active=1').get(sid)) throw new Error('staff_not_found');
+  db.prepare("DELETE FROM staff_link_codes WHERE expires_at < datetime('now') OR (staff_id=? AND used_at IS NULL)").run(sid);
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code = Array.from(randomBytes(6)).map((b) => LINK_ALPHABET[b % LINK_ALPHABET.length]).join('');
+    if (!db.prepare('SELECT 1 FROM staff_link_codes WHERE code=?').get(code)) break;
+  }
+  db.prepare("INSERT INTO staff_link_codes (code, staff_id, expires_at) VALUES (?, ?, datetime('now','+10 minutes'))").run(code, sid);
+  return { code, expiresInSec: 600 };
+}
+export function staffLinkStatus(code) {
+  const r = db.prepare('SELECT used_at, expires_at FROM staff_link_codes WHERE code=?').get(String(code || '').trim().toUpperCase());
+  if (!r) return { linked: false, expired: true };
+  if (r.used_at) return { linked: true, expired: false };
+  return { linked: false, expired: db.prepare("SELECT (? < datetime('now')) AS e").get(r.expires_at).e === 1 };
+}
+export function consumeStaffLinkCode(code, lineUserId) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!LINE_UID_RE.test(String(lineUserId || ''))) throw new Error('bad_line_id');
+  const r = db.prepare("SELECT * FROM staff_link_codes WHERE code=? AND used_at IS NULL AND expires_at >= datetime('now')").get(c);
+  if (!r) throw new Error('link_code_invalid');
+  db.prepare("UPDATE staff_link_codes SET used_by=?, used_at=datetime('now') WHERE code=?").run(lineUserId, c);
+  if (r.staff_id) {
+    db.prepare('UPDATE staff SET line_user_id=NULL WHERE line_user_id=? AND id<>?').run(lineUserId, r.staff_id);   // one LINE ↔ one person
+    db.prepare('UPDATE staff SET line_user_id=?, line_alerts=1 WHERE id=?').run(lineUserId, r.staff_id);
+    const s = db.prepare('SELECT id, name, role FROM staff WHERE id=?').get(r.staff_id);
+    return { ok: true, kind: 'staff', id: s.id, name: s.name, role: s.role };
+  }
+  setOwnerLineId(lineUserId);
+  setSetting('alert:owner_on', '1');
+  return { ok: true, kind: 'owner', id: 0, name: 'เจ้าของร้าน', role: 'owner' };
+}
+/** Who is this LINE account to the shop? null = a customer (or a stranger). */
+export function lineIdentity(lineUserId) {
+  if (!lineUserId) return null;
+  const s = db.prepare('SELECT id, name, role, line_alerts FROM staff WHERE line_user_id=? AND active=1').get(lineUserId);
+  if (s) return { kind: 'staff', id: s.id, name: s.name, role: s.role, alerts: !!s.line_alerts, branchIds: s.role === 'owner' ? null : branchIdsOf(s.id) };
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && oid === lineUserId) return { kind: 'owner', id: 0, name: 'เจ้าของร้าน', role: 'owner', alerts: getSetting('alert:owner_on', '1') === '1', branchIds: null };
+  return null;
+}
+const seesBranch = (who, branchId) => !who.branchIds || who.branchIds.includes(Number(branchId));
+export function setMemberAlerts(id, on) {
+  const sid = Number(id) || 0;
+  if (!sid) { setSetting('alert:owner_on', on ? '1' : '0'); return { ok: true }; }
+  db.prepare('UPDATE staff SET line_alerts=? WHERE id=?').run(on ? 1 : 0, sid);
+  return { ok: true };
+}
+export function unlinkStaffLine(id) {
+  const sid = Number(id) || 0;
+  if (!sid) { setSetting('alert:owner_on', '0'); return { ok: true }; }   // owner:line_id also carries the daily summary: only mute alerts
+  db.prepare('UPDATE staff SET line_user_id=NULL WHERE id=?').run(sid);
+  return { ok: true };
+}
+/** Everyone who could receive alerts, linked or not. LINE userIds never leave the server. */
+export function alertMembers() {
+  const rows = db.prepare(`SELECT id, name, role, line_user_id, line_alerts FROM staff WHERE active=1
+     ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END, name`).all();
+  const oid = getOwnerLineId();
+  const ownerLinked = validOwnerLineId(oid);
+  return {
+    owner: { linked: ownerLinked, alerts: getSetting('alert:owner_on', '1') === '1', sameAsStaff: ownerLinked && rows.some((r) => r.line_user_id === oid) },
+    staff: rows.map((r) => ({ id: r.id, name: r.name, role: r.role, linked: !!r.line_user_id, alerts: !!r.line_alerts })),
+  };
+}
+function alertRecipients(branchId) {
+  const to = new Set();
+  for (const s of db.prepare('SELECT id, role, line_user_id FROM staff WHERE active=1 AND line_alerts=1 AND line_user_id IS NOT NULL').all()) {
+    if (s.role !== 'owner' && !db.prepare('SELECT 1 FROM staff_branches WHERE staff_id=? AND branch_id=?').get(s.id, branchId)) continue;
+    to.add(s.line_user_id);
+  }
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && getSetting('alert:owner_on', '1') === '1') to.add(oid);
+  return [...to];
+}
+const ALERT_TITLE = { new: 'ออเดอร์ใหม่', paid: 'จ่ายแล้ว เริ่มทำได้', claim: 'ลูกค้าแจ้งว่าโอนแล้ว', slip: 'สลิปรอตรวจ', cancel: 'ลูกค้าขอยกเลิก', test: 'ทดสอบแจ้งเตือน' };
+const bkkClock = (at) => { if (!at) return ''; const d = new Date(String(at).replace(' ', 'T') + 'Z'); return isNaN(d) ? '' : new Date(d.getTime() + 7 * 3600e3).toISOString().slice(11, 16) + ' น.'; };
+const cashierUrl = (base) => (/^https:\/\//.test(base || '') ? base.replace(/\/$/, '') + '/cashier/' : null);   // LINE only opens https links
+/** Everything an alert card shows, read fresh from the ticket. */
+export function staffAlertData(ticketId, event, base = '') {
+  const t = db.prepare('SELECT t.*, z.name AS zone_name FROM tickets t JOIN zones z ON z.id=t.zone_id WHERE t.id=?').get(ticketId);
+  if (!t) return null;
+  const o = orderForTicket(ticketId);
+  const lines = o ? o.lines.map((l) => ({ qty: l.qty || 1, name: l.name + ((l.toppings || []).length ? ' + ' + l.toppings.map((x) => x.name).join(', ') : '') })) : [];
+  const net = o ? Math.max(0, Math.round(((o.total || 0) - (o.discount || 0)) * 100) / 100) : 0;
+  const pay = !o ? '-' : o.payment_status === 'paid' ? 'จ่ายแล้ว · ' + tenderLabel(o.payment_method || 'other')
+    : o.payment_status === 'claimed' ? 'รอตรวจสลิป' : o.payment_status === 'void' ? 'ยกเลิกแล้ว' : 'ยังไม่จ่าย';
+  const cashier = cashierUrl(base);
+  const actions = [];
+  const open = !['served', 'cancelled', 'no_show', 'skipped'].includes(t.status);
+  if (open && ['new', 'paid'].includes(event) && !t.making_at) actions.push({ label: 'เริ่มทำ', data: 'a=start&t=' + t.id, displayText: 'เริ่มทำ ' + (t.code || ''), primary: true });
+  if (cashier) actions.push({ label: ['claim', 'slip'].includes(event) ? 'ตรวจสลิปในแคชเชียร์' : 'เปิดแคชเชียร์', uri: cashier });
+  const title = ALERT_TITLE[event] || 'แจ้งเตือน';
+  return {
+    event, title, code: t.code || '', zone: t.zone_name, table: t.table_label || null, time: bkkClock(t.created_at), customer: t.customer_name || 'ลูกค้า LINE',
+    lines, total: net, pay, actions, branchId: branchOfTicket(t.id),
+    note: event === 'cancel' ? 'ยืนยันหรือเก็บออเดอร์ไว้ได้ในหน้าแคชเชียร์' : null,
+    alt: `${title} ${t.code || ''} · ฿${net} · ${lines.length} รายการ`,
+  };
+}
+const _alerted = new Map();   // `${ticketId}:${event}` → time, so a retried upload or a double tap never alerts twice
+/** Tell the linked team about one order event. Fire-and-forget from the routes; never throws. */
+export async function staffOrderAlert(ticketId, event, { base = '' } = {}) {
+  try {
+    const cfg = getStaffAlertConfig();
+    if (cfg.mode === 'off') return { sent: 0, reason: 'off' };
+    if (cfg.mode === 'away' && tillOnline(cfg.awayMin)) return { sent: 0, reason: 'till_online' };
+    const key = ticketId + ':' + event, now = Date.now();
+    for (const [k, at] of _alerted) if (now - at > 864e5) _alerted.delete(k);
+    if (_alerted.has(key)) return { sent: 0, reason: 'duplicate' };
+    _alerted.set(key, now);
+    const a = staffAlertData(ticketId, event, base);
+    if (!a) return { sent: 0, reason: 'no_ticket' };
+    const to = alertRecipients(a.branchId);
+    if (!to.length) return { sent: 0, recipients: 0, reason: 'no_recipients' };
+    let sent = 0;
+    for (const uid of to) if (await pushFlex(uid, buildStaffAlertFlex(a), a.alt, 'staff_alert')) sent++;
+    return { sent, recipients: to.length, reason: LINE_ENABLED ? null : 'line_off' };
+  } catch (e) { console.error('[staff-alert]', e.message); return { sent: 0, reason: 'error' }; }
+}
+/** "ส่งทดสอบ" in ⚙: one sample card to everyone linked who has alerts on, whatever the mode. */
+export async function staffAlertTest({ base = '' } = {}) {
+  const to = new Set(db.prepare('SELECT line_user_id FROM staff WHERE active=1 AND line_alerts=1 AND line_user_id IS NOT NULL').all().map((s) => s.line_user_id));
+  const oid = getOwnerLineId();
+  if (validOwnerLineId(oid) && getSetting('alert:owner_on', '1') === '1') to.add(oid);
+  const cashier = cashierUrl(base);
+  const a = { event: 'test', title: ALERT_TITLE.test, code: 'A000', zone: 'ตัวอย่าง', time: bkkClock(db.prepare("SELECT datetime('now') t").get().t), customer: 'ลูกค้าตัวอย่าง',
+    lines: [{ qty: 1, name: 'เมนูตัวอย่าง' }], total: 0, pay: 'ยังไม่จ่าย', actions: cashier ? [{ label: 'เปิดแคชเชียร์', uri: cashier }] : [],
+    note: 'ถ้าเห็นข้อความนี้ การแจ้งเตือนออเดอร์ทาง LINE พร้อมใช้งาน', alt: 'ทดสอบแจ้งเตือนออเดอร์จากร้าน' };
+  let sent = 0;
+  for (const uid of to) if (await pushFlex(uid, buildStaffAlertFlex(a), a.alt, 'staff_alert')) sent++;
+  return { sent, recipients: to.size, lineReady: LINE_ENABLED };
+}
+/** Today at a glance for one staff member (their own branch unless they see every branch). */
+export function shopPanel(who, base = '') {
+  if (who.branchIds && !who.branchIds.length) return null;
+  const branchId = who.branchIds ? who.branchIds[0] : null;
+  const rep = dailyReport(branchId);
+  const B = [branchId, branchId];
+  const waiting = db.prepare(`SELECT COUNT(*) AS n FROM tickets t JOIN zones z ON z.id=t.zone_id
+     WHERE t.status IN ('waiting','called') AND (? IS NULL OR z.store_id=?)`).get(...B).n;
+  const pay = db.prepare(`SELECT SUM(o.payment_status IN ('unpaid','claimed')) AS unpaid, SUM(o.payment_status='claimed') AS slips
+     FROM tickets t JOIN zones z ON z.id=t.zone_id JOIN orders o ON o.id=(SELECT MAX(id) FROM orders WHERE ticket_id=t.id)
+     WHERE t.status IN ('pending','waiting','called') AND (? IS NULL OR z.store_id=?)`).get(...B);
+  const store = branchId ? db.prepare('SELECT name FROM stores WHERE id=?').get(branchId) : db.prepare('SELECT name FROM stores ORDER BY id LIMIT 1').get();
+  const cashier = cashierUrl(base);
+  const online = onlineOrdersEnabled();
+  const boss = ['owner', 'manager'].includes(who.role);
+  const actions = [];
+  if (cashier) actions.push({ label: 'เปิดแคชเชียร์', uri: cashier, primary: true });
+  if (boss) actions.push(online ? { label: 'ปิดรับออเดอร์ออนไลน์', data: 'a=online&v=0' } : { label: 'เปิดรับออเดอร์ออนไลน์', data: 'a=online&v=1', primary: true });
+  if (cashier && boss) actions.push({ label: 'รายงานวันนี้', uri: cashier + '?go=report' });
+  const d = new Date(Date.now() + 7 * 3600e3).toISOString();
+  const p = { shop: (store && store.name) || 'ร้าน', date: d.slice(8, 10) + '/' + d.slice(5, 7), sales: Math.round(rep.revenue || 0), orders: rep.issued || 0,
+    waiting, unpaid: pay.unpaid || 0, slips: pay.slips || 0, online, actions };
+  return { flex: buildShopPanelFlex(p), alt: `สรุปวันนี้ ยอด ฿${p.sales} · ${p.orders} ออเดอร์ · รอคิว ${p.waiting}` };
+}
+const CLOSED_TH = { served: 'รับไปแล้ว', cancelled: 'ยกเลิกแล้ว', no_show: 'ไม่มารับ', skipped: 'ข้ามคิวแล้ว' };
+/** Webhook events from staff: link codes, the "ร้าน" panel, muting, and the เริ่มทำ / พร้อมรับ /
+ *  online-ordering buttons. Returns null for anything that is not staff business (customers). */
+export async function handleStaffLineEvent(ev, { threshold = null, base = '' } = {}) {
+  const uid = ev && ev.source && ev.source.userId;
+  if (!uid) return null;
+  const text = (s) => ({ reply: { type: 'text', text: s } });
+  if (ev.type === 'message' && ev.message && ev.message.type === 'text') {
+    const raw = String(ev.message.text || '').trim();
+    const m = raw.match(/^(?:link|ผูก|เชื่อม)\s*[:#-]?\s*([A-Za-z0-9]{6})$/i);
+    if (m) {
+      try {
+        const r = consumeStaffLinkCode(m[1], uid);
+        return { reply: { type: 'text', text: `เชื่อม LINE กับ ${r.name} แล้ว ✓\nออเดอร์ใหม่ สลิปรอตรวจ และคำขอยกเลิกจะแจ้งมาที่แชทนี้ตามที่ร้านตั้งไว้\nพิมพ์ "ร้าน" เพื่อดูสรุปวันนี้ · "ปิดแจ้งเตือน" เพื่อหยุดชั่วคราว` }, linked: r };
+      } catch (e) { return text('รหัสไม่ถูกต้องหรือหมดอายุแล้ว สร้างรหัสใหม่ในหน้าแคชเชียร์ได้เลย'); }
+    }
+    const who = lineIdentity(uid);
+    if (!who) return null;
+    const t = raw.toLowerCase();
+    if (['ร้าน', 'shop', 'เมนูร้าน', 'สรุปร้าน'].includes(t)) {
+      const p = shopPanel(who, base);
+      return p ? { reply: { type: 'flex', flex: p.flex, alt: p.alt } } : text('บัญชีนี้ยังไม่ได้ผูกกับสาขาใด');
+    }
+    if (['ปิดแจ้งเตือน', 'หยุดแจ้งเตือน', 'mute'].includes(t)) { setMemberAlerts(who.id, false); return text('ปิดแจ้งเตือนออเดอร์ของคุณแล้ว พิมพ์ "เปิดแจ้งเตือน" เมื่อต้องการรับอีกครั้ง'); }
+    if (['เปิดแจ้งเตือน', 'unmute'].includes(t)) { setMemberAlerts(who.id, true); return text('เปิดแจ้งเตือนออเดอร์แล้ว ✓'); }
+    return null;
+  }
+  if (ev.type === 'postback') {
+    const q = new URLSearchParams((ev.postback && ev.postback.data) || '');
+    const a = q.get('a');
+    if (!['start', 'ready', 'online', 'panel'].includes(a)) return null;
+    const who = lineIdentity(uid);
+    if (!who) return text('บัญชี LINE นี้ยังไม่ได้เชื่อมกับพนักงานของร้าน');
+    if (a === 'panel') { const p = shopPanel(who, base); return p ? { reply: { type: 'flex', flex: p.flex, alt: p.alt } } : text('บัญชีนี้ยังไม่ได้ผูกกับสาขาใด'); }
+    if (a === 'online') {
+      if (!['owner', 'manager'].includes(who.role)) return text('เฉพาะเจ้าของหรือผู้จัดการที่เปิดปิดรับออเดอร์ออนไลน์ได้');
+      const on = q.get('v') === '1';
+      setOnlineOrders(on);
+      return { ...text(on ? 'เปิดรับออเดอร์ออนไลน์แล้ว ✓' : 'ปิดรับออเดอร์ออนไลน์ชั่วคราวแล้ว ลูกค้ายังสั่งที่หน้าร้านได้ตามปกติ'), online: on };
+    }
+    const tid = Number(q.get('t')) || 0;
+    const tk = db.prepare('SELECT id, code, status, zone_id FROM tickets WHERE id=?').get(tid);
+    if (!tk) return text('ไม่พบออเดอร์นี้');
+    if (!seesBranch(who, branchOfTicket(tid))) return text('ออเดอร์นี้อยู่สาขาอื่น');
+    if (CLOSED_TH[tk.status]) return text(`คิว ${tk.code} ${CLOSED_TH[tk.status]}`);
+    if (a === 'start') {
+      startMaking(tid, { actorId: who.id || null });
+      return { reply: { type: 'text', text: `เริ่มทำ ${tk.code} แล้ว ✓ ลูกค้ายกเลิกเองไม่ได้แล้ว`, quick: [{ label: 'พร้อมรับ ' + tk.code, data: 'a=ready&t=' + tid }] }, zoneId: tk.zone_id };
+    }
+    const r = markReady(tid, threshold);
+    if (!r.ok && r.reason === 'unpaid') return text(`${tk.code} ยังไม่ได้ชำระ จึงยังแจ้งลูกค้าว่าพร้อมรับไม่ได้`);
+    return { ...text(r.already ? `${tk.code} แจ้งพร้อมรับไปแล้ว` : `แจ้งลูกค้า ${tk.code} ว่าพร้อมรับแล้ว ✓`), zoneId: tk.zone_id };
+  }
+  return null;
+}
+
+// ==== Period comparison: the last N days against the N days before them ============================
+// The home tiles only compared with yesterday. This answers "is the shop growing": money, orders,
+// ticket size, where orders came from (LINE / counter / delivery platforms) and who bought (new vs
+// returning customers, repeat rate). Paid orders by payment day in Bangkok, net of discounts, the
+// same basis as the channel report. Today is included in the current window.
+const CMP_DAYS = [7, 14, 30, 90];
+const custKeySql = "COALESCE(NULLIF(t.line_user_id,''), NULLIF(t.customer_key,''))";
+const addDays = (ymd, n) => new Date(Date.parse(ymd + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+export function periodCompare({ days = 7, branchId = null } = {}) {
+  const n = CMP_DAYS.includes(Number(days)) ? Number(days) : 7;
+  const B = [branchId, branchId];
+  const today = db.prepare("SELECT date('now','+7 hours') AS d").get().d;
+  const curFrom = addDays(today, -(n - 1)), prevTo = addDays(curFrom, -1), prevFrom = addDays(prevTo, -(n - 1));
+  const rows = db.prepare(
+    `SELECT date(o.paid_at,'+7 hours') AS day, o.source AS src, c.name AS channel, COALESCE(c.commission_pct,0) AS fee,
+            (o.total - COALESCE(o.discount,0)) AS net, ${custKeySql} AS cust
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id LEFT JOIN channels c ON c.id = o.channel_id
+      WHERE o.payment_status = 'paid' AND date(o.paid_at,'+7 hours') BETWEEN ? AND ? AND (? IS NULL OR o.branch_id = ?)`
+  ).all(prevFrom, today, ...B);
+  // A customer is NEW in a window when their first paid order ever falls inside it.
+  const firstDay = new Map(db.prepare(
+    `SELECT ${custKeySql} AS cust, MIN(date(o.paid_at,'+7 hours')) AS first
+       FROM orders o JOIN tickets t ON t.id = o.ticket_id
+      WHERE o.payment_status = 'paid' AND ${custKeySql} IS NOT NULL AND (? IS NULL OR o.branch_id = ?)
+      GROUP BY ${custKeySql}`
+  ).all(...B).map((r) => [r.cust, r.first]));
+  const r2 = (x) => Math.round((x || 0) * 100) / 100;
+  const win = (from, to) => {
+    const rs = rows.filter((r) => r.day >= from && r.day <= to);
+    const revenue = r2(rs.reduce((s, r) => s + (r.net || 0), 0));
+    const channels = { line: { orders: 0, revenue: 0 }, counter: { orders: 0, revenue: 0 }, platform: { orders: 0, revenue: 0 } };
+    const perCust = new Map();
+    for (const r of rs) {
+      const k = r.src === 'customer' ? 'line' : (r.channel && r.fee > 0) ? 'platform' : 'counter';
+      channels[k].orders++; channels[k].revenue = r2(channels[k].revenue + (r.net || 0));
+      if (r.cust) perCust.set(r.cust, (perCust.get(r.cust) || 0) + 1);
+    }
+    const known = perCust.size;
+    const fresh = [...perCust.keys()].filter((k) => (firstDay.get(k) || '') >= from).length;
+    const repeat = [...perCust.values()].filter((v) => v >= 2).length;
+    const series = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) series.push({ day: d, revenue: r2(rs.filter((r) => r.day === d).reduce((s, r) => s + (r.net || 0), 0)) });
+    return { from, to, revenue, orders: rs.length, avgTicket: rs.length ? r2(revenue / rs.length) : 0, channels,
+      customers: { known, new: fresh, returning: known - fresh, repeat, repeatRate: known ? Math.round((repeat / known) * 1000) / 10 : 0, anonymousOrders: rs.filter((r) => !r.cust).length },
+      series };
+  };
+  const current = win(curFrom, today), previous = win(prevFrom, prevTo);
+  const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
+  return {
+    days: n, today, current, previous,
+    delta: {
+      revenue: pct(current.revenue, previous.revenue), orders: pct(current.orders, previous.orders),
+      avgTicket: pct(current.avgTicket, previous.avgTicket), repeatRate: current.customers.repeatRate - previous.customers.repeatRate,
+      newCustomers: pct(current.customers.new, previous.customers.new),
+      line: pct(current.channels.line.revenue, previous.channels.line.revenue),
+      counter: pct(current.channels.counter.revenue, previous.channels.counter.revenue),
+      platform: pct(current.channels.platform.revenue, previous.channels.platform.revenue),
+    },
+  };
+}
+
+// ==== Table QR (สั่งที่โต๊ะ) =======================================================================
+// A zone may carry a list of table labels. Each table's own QR opens the LIFF with ?table=<label>;
+// the order then carries the label, so the counter knows where to bring it and the customer's
+// "ready" message says it is on its way instead of "come to the counter". Labels are checked
+// against the zone's list on every write, so a hand-edited link never puts free text on a screen.
+const TABLE_MAX = 60;
+/** "1-12, VIP, A1-A6" → ['1',…,'12','VIP','A1',…,'A6'] (order kept, duplicates dropped, max 60). */
+export function parseTableSpec(spec) {
+  const out = [];
+  const add = (s) => { const v = String(s).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 12); if (v && !out.includes(v) && out.length < TABLE_MAX) out.push(v); };
+  const parts = Array.isArray(spec) ? spec : String(spec || '').split(/[,\n]/);
+  for (const raw of parts) {
+    const p = String(raw).trim();
+    const m = p.match(/^([^\d\s-]*)(\d{1,3})\s*-\s*(?:\1)?(\d{1,3})$/);   // 1-12 · A1-A6 · A1-6
+    if (m) {
+      const a = Number(m[2]), b = Number(m[3]);
+      if (b >= a && b - a < TABLE_MAX) { for (let i = a; i <= b; i++) add(m[1] + i); continue; }
+    }
+    add(p);
+  }
+  return out;
+}
+export function getZoneTables(zoneId) {
+  try { const a = JSON.parse(getSetting('tables:' + Number(zoneId), '[]')); return Array.isArray(a) ? a.map(String) : []; }
+  catch { return []; }
+}
+export function setZoneTables(zoneId, spec) {
+  if (!getZone(zoneId)) throw new Error('zone_not_found');
+  const tables = parseTableSpec(spec);
+  setSetting('tables:' + Number(zoneId), JSON.stringify(tables));
+  return { zoneId: Number(zoneId), tables };
+}
+/** Staff bring the order to the table (default) — or the table is only a reference and the
+ *  customer still collects at the counter. */
+export function tableServeOn() { return getSetting('tables:serve', '1') === '1'; }
+export function setTableServe(on) { setSetting('tables:serve', on ? '1' : '0'); return { serve: !!on }; }
+/** The label, if it names a table of this zone; otherwise null. */
+export function validTable(zoneId, label) {
+  const v = String(label == null ? '' : label).trim();
+  return v && getZoneTables(zoneId).includes(v) ? v : null;
+}
+/** Cashier: put an order on a table, move it, or send it back to counter pickup ('' / null). */
+export function setTicketTable(ticketId, label) {
+  const t = db.prepare('SELECT id, zone_id FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  const raw = String(label == null ? '' : label).trim();
+  const v = raw ? validTable(t.zone_id, raw) : null;
+  if (raw && !v) throw new Error('bad_table');
+  db.prepare('UPDATE tickets SET table_label=? WHERE id=?').run(v, t.id);
+  return { ticketId: t.id, table: v, zoneId: t.zone_id };
+}
+export function tablesOverview() {
+  const zones = db.prepare('SELECT z.id, z.name, s.name AS store FROM zones z JOIN stores s ON s.id=z.store_id ORDER BY s.id, z.id').all();
+  return { serve: tableServeOn(), zones: zones.map((z) => ({ ...z, tables: getZoneTables(z.id) })) };
+}
+/** What the "ready" message tells a table customer; null → the usual counter line. */
+function tablePickupLine(t) {
+  return t && t.table_label && tableServeOn() ? `กำลังนำไปเสิร์ฟที่โต๊ะ ${t.table_label} ค่ะ` : null;
+}
+
+// ==== Reward catalog (แลกของรางวัล) =================================================================
+// 'auto'   = a full card turns itself into a coupon (the original behaviour; simplest with one reward).
+// 'choose' = stamps keep adding up and the customer picks a reward in the LIFF when they want it —
+//            the only mode that works with several rewards at different costs: in 'auto' the cheapest
+//            reward converts the moment it is affordable, so nobody ever saves up for a bigger one.
+export function getRedeemMode() { return getSetting('loyalty:redeem_mode', 'auto') === 'choose' ? 'choose' : 'auto'; }
+export function setRedeemMode(m) { const v = m === 'choose' ? 'choose' : 'auto'; setSetting('loyalty:redeem_mode', v); return { redeemMode: v }; }
+/** The free-drink cap a reward's coupon carries: its own value, else the reward coupon template's. */
+function rewardCap(reward) { const v = Number(reward && reward.value); return v > 0 ? v : couponTemplate('reward').value; }
+/** Spend stamps on one reward → a coupon in the customer's wallet. The balance guard sits in the
+ *  UPDATE itself, so two taps at once can never both spend the same stamps. */
+function issueRewardCoupon(customerKey, reward, note) {
+  const tpl = couponTemplate('reward');
+  const expiresAt = db.prepare(`SELECT date(datetime('now','+7 hours'),'+' || ? || ' days') d`).get(tpl.days).d;
+  const cap = rewardCap(reward);
+  let ccId = null;
+  db.transaction(() => {
+    const spent = db.prepare('UPDATE customers SET points = points - ? WHERE line_user_id=? AND points >= ?').run(reward.cost_points, customerKey, reward.cost_points);
+    if (!spent.changes) throw new Error('insufficient_points');
+    db.prepare(`INSERT INTO loyalty_moves (customer_key, kind, points, note) VALUES (?, 'redeem', ?, ?)`).run(customerKey, -reward.cost_points, note + reward.name);
+    ccId = db.prepare(`INSERT INTO customer_coupons (customer_key, kind, label, free_cap, expires_at, source) VALUES (?, 'reward', ?, ?, ?, 'reward')`)
+      .run(customerKey, reward.name, cap, expiresAt).lastInsertRowid;
+  })();
+  return { id: Number(ccId), label: reward.name, freeCap: cap, expiresAt };
+}
+/** Catalog mode: the customer spends their own stamps on a reward from the LIFF. */
+export function customerRedeem(customerKey, rewardId) {
+  if (!customerKey) throw new Error('customer_required');
+  if (!loyaltyEnabled()) throw new Error('loyalty_off');
+  if (getRedeemMode() !== 'choose') throw new Error('auto_mode');
+  const reward = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(Number(rewardId));
+  if (!reward) throw new Error('reward_not_found');
+  if (loyaltyBalance(customerKey).points < reward.cost_points) throw new Error('insufficient_points');
+  const coupon = issueRewardCoupon(customerKey, reward, 'แลกของรางวัล: ');
+  return { ok: true, coupon, balance: loyaltyBalance(customerKey).points };
+}
+/** The member level (PURE → BLOOM → ESSENCE by paid visits, owner's thresholds). The LIFF card and
+ *  the counter both read THIS, so staff and customer never see two different levels. */
+/** Can this customer take a reward at the counter right now: enough stamps for the cheapest active
+ *  reward, or a reward coupon already in their wallet. Stamps-per-card is not the test — in catalog
+ *  mode the balance runs past it, and rewards can cost more or less than one card. */
+/** Catalog mode only: the cheapest active reward (what "ready" means there); null in auto mode. */
+function cheapestReward() {
+  return getRedeemMode() === 'choose' ? db.prepare('SELECT name, cost_points FROM rewards WHERE active=1 ORDER BY cost_points, id LIMIT 1').get() || null : null;
+}
+export function canRedeemNow(key) {
+  if (!key) return false;
+  const min = db.prepare('SELECT MIN(cost_points) m FROM rewards WHERE active=1').get().m;
+  if (min != null && loyaltyBalance(key).points >= min) return true;
+  return customerCoupons(key).some((c) => c.kind === 'reward');
+}
+export function memberTier(visits) {
+  const num = (k, d) => Math.max(0, Math.round(Number(getSetting(k, String(d))) || d));
+  const v = Number(visits) || 0;
+  if (v >= num('loyalty:tier_essence_min', 25)) return { key: 'essence', label: 'ESSENCE', emoji: '👑' };
+  if (v >= num('loyalty:tier_bloom_min', 10)) return { key: 'bloom', label: 'BLOOM', emoji: '🌷' };
+  return { key: 'pure', label: 'PURE', emoji: '🌱' };
+}
+
+// ==== Kitchen marks (จอครัว / KDS) ==================================================================
+// Per-drink-line progress (○ → กำลังทำ → เสร็จ) lives on the ticket, so the counter, a kitchen tablet
+// and a page refresh all see the same state. tickets.kitchen = JSON {"<lineIdx>": "making"|"done"}.
+// The first mark locks the customer's self-cancel (startMaking); the last line done announces a PAID
+// order ready (markReady refuses an unpaid one, so nobody is called to collect before paying).
+export function kitchenOf(t) {
+  try { const o = JSON.parse((t && t.kitchen) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; }
+  catch { return {}; }
+}
+export function setKitchenMark(ticketId, line, status, { actorId = null, threshold = null } = {}) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) throw new Error('ticket_not_found');
+  if (['served', 'cancelled', 'no_show', 'skipped'].includes(t.status)) throw new Error('ticket_closed');
+  const o = orderForTicket(t.id);
+  const n = o ? (o.lines || []).length : 0;
+  const i = Number(line);
+  if (!Number.isInteger(i) || i < 0 || i >= n) throw new Error('bad_line');
+  const st = status === 'making' || status === 'done' ? status : null;
+  const k = kitchenOf(t);
+  if (st) k[i] = st; else delete k[i];
+  db.prepare('UPDATE tickets SET kitchen=? WHERE id=?').run(Object.keys(k).length ? JSON.stringify(k) : null, t.id);
+  if (st && !t.making_at) startMaking(t.id, { actorId });
+  const allDone = n > 0 && Array.from({ length: n }, (_, j) => k[j] === 'done').every(Boolean);
+  const ready = allDone && t.status !== 'called' ? markReady(t.id, threshold) : null;
+  return { ticketId: t.id, zoneId: t.zone_id, kitchen: k, allDone, ready };
+}
+
+// ==== Web ordering (สั่งผ่านเว็บ / Google Maps) ====================================================
+// The shop's own ordering link (on Google Maps, IG, a flyer) opens the ordering page as a GUEST: no
+// LINE login. Nothing can be pushed to a guest and nobody can call them back, so a guest order is
+// PAY-FIRST — no queue number and nothing made until the money is in — and the page itself shows the
+// status. Off by default; the owner switches it on in ⚙.
+export function webOrderEnabled() { return getSetting('web:order', '0') === '1'; }
+export function setWebOrder(on) { setSetting('web:order', on ? '1' : '0'); return { webOrder: !!on }; }

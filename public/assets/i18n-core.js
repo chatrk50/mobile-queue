@@ -124,7 +124,7 @@
         if (before) into.insertBefore(bar, before); else into.appendChild(bar);
       } else {
         bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:80;min-width:44px;min-height:32px;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid var(--line,#e3e8ef);box-shadow:0 4px 14px rgba(16,40,70,.12);font-family:inherit;font-size:12.5px;font-weight:800;color:var(--navy,#16314f);cursor:pointer;line-height:1';
-        document.body.appendChild(bar);
+        document.body.insertBefore(bar, document.body.firstChild);   // top-right on screen → first in Tab order (WCAG 2.4.3)
       }
       paint();
       // Menu names registered before the engine loaded (the LIFF fetches its menu early).

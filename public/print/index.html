@@ -22,10 +22,20 @@
   .poster #qr{display:flex;justify-content:center;margin:6px 0 16px}
   .poster #qr canvas{border-radius:12px}
   .poster .steps{text-align:left;max-width:300px;margin:0 auto;color:var(--ink);font-size:15px;line-height:1.8}
+  .tgrid{max-width:780px;margin:18px auto;padding:0 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .tcard{background:#fff;border:1.5px dashed #9fb3c8;border-radius:18px;padding:16px 12px;text-align:center;break-inside:avoid}
+  .tcard .tbrand{font-weight:800;color:var(--navy);font-size:15px}
+  .tcard .tlabel{font-size:34px;font-weight:900;color:var(--navy);margin:4px 0 8px;line-height:1.1}
+  .tcard img{display:block;margin:0 auto;border-radius:10px;width:170px;height:170px}
+  .tcard .tcta{font-size:14px;font-weight:700;color:#0b6a7e;margin-top:8px}
+  .tcard .tsub{font-size:11.5px;color:var(--muted);margin-top:2px}
   @media print{
     body{background:#fff}
     .toolbar{display:none!important}
     .poster{box-shadow:none;border:none;margin:0 auto}
+    .tgrid{max-width:none;margin:0;padding:0;grid-template-columns:repeat(3,1fr);gap:6mm}
+    .tcard{border-color:#c5d3e0}
+    .wrap.wide{max-width:none;padding:0}
     @page{size:A5;margin:10mm}
   }
 </style>
@@ -33,6 +43,7 @@
 <div class="wrap">
   <div class="toolbar">
     <div style="text-align:left;margin-bottom:10px"><a href="/">← กลับ</a></div>
+    <div id="modes" class="zonepick"></div>
     <div class="t-label">เลือกโซนเพื่อพิมพ์</div>
     <div id="zlinks" class="zonepick"></div>
     <button id="printBtn" class="print-btn" onclick="window.print()"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>พิมพ์โปสเตอร์</button>
@@ -50,11 +61,14 @@
       3. เราจะแจ้งเตือนทาง LINE เมื่อใกล้ถึงคิวของคุณ
     </div>
   </div>
+  <div id="tgrid" class="tgrid" style="display:none"></div>
   <div id="err" class="card" style="display:none"></div>
 </div>
 <script type="module">
 const $=(id)=>document.getElementById(id);
-const zoneId=new URLSearchParams(location.search).get('zone');
+const P=new URLSearchParams(location.search), zoneId=P.get('zone'), tablesMode=P.get('tables')==='1';
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+if(tablesMode) document.head.insertAdjacentHTML('beforeend','<style>@media print{@page{size:A4;margin:10mm}}</style>');
 (async()=>{
   const cfg=await (await fetch('/api/config')).json();
   // Package 1 (POS only): no LINE-scan queue, so the QR poster doesn't apply.
@@ -63,13 +77,28 @@ const zoneId=new URLSearchParams(location.search).get('zone');
   const links=[];
   for(const s of stores){
     const zs=await (await fetch('/api/stores/'+s.id+'/zones')).json();
-    zs.forEach(z=>links.push(`<a class="${String(z.id)===String(zoneId)?'active':''}" href="/print/?zone=${z.id}">${z.name}</a>`));
+    zs.forEach(z=>links.push(`<a class="${String(z.id)===String(zoneId)?'active':''}" href="/print/?zone=${z.id}${tablesMode?'&tables=1':''}">${esc(z.name)}</a>`));
   }
   $('zlinks').innerHTML=links.join('');
+  const zq=zoneId?('zone='+encodeURIComponent(zoneId)):'';
+  $('modes').innerHTML=`<a class="${tablesMode?'':'active'}" href="/print/?${zq}">โปสเตอร์โซน</a><a class="${tablesMode?'active':''}" href="/print/?${zq}${zq?'&':''}tables=1">QR ประจำโต๊ะ</a>`;
   $('printBtn').disabled=!zoneId;
   if(!zoneId){ $('err').style.display=''; $('err').innerHTML='<b>เลือกโซนด้านบนเพื่อสร้างโปสเตอร์</b>'; return; }
   const z=await (await fetch('/api/zones/'+zoneId)).json();
   const store=stores.find(s=>s.id===z.store_id);
+  if(tablesMode){   // one card per table: cut along the dashed line, stand it on the table
+    const tabs=z.tables||[];
+    if(!tabs.length){ $('printBtn').disabled=true; $('err').style.display=''; $('err').innerHTML='<b>โซนนี้ยังไม่ได้ตั้งรายชื่อโต๊ะ</b><br>ตั้งได้ที่แคชเชียร์ → ⚙ ตั้งค่าฟีเจอร์ → QR สั่งที่โต๊ะ'; return; }
+    const brand=(window.BRAND&&window.BRAND.name)||'YO-DEE Yogurt';
+    $('tgrid').innerHTML=tabs.map(t=>`<div class="tcard"><div class="tbrand" data-brand-name>${esc(brand)}</div>
+      <div class="tlabel">โต๊ะ ${esc(t)}</div>
+      <img alt="QR โต๊ะ ${esc(t)}" width="170" height="170" src="/api/qr/${encodeURIComponent(zoneId)}?table=${encodeURIComponent(t)}">
+      <div class="tcta">สแกนสั่งเครื่องดื่มจากโต๊ะนี้</div><div class="tsub">${esc(store?store.name:'')} · ${esc(z.name)}</div></div>`).join('');
+    document.querySelector('.wrap').classList.add('wide');
+    $('tgrid').style.display='';
+    $('printBtn').lastChild.textContent='พิมพ์ QR ประจำโต๊ะ ('+tabs.length+' ใบ)';
+    return;
+  }
   $('branch').textContent=store?store.name:'';
   $('zone').textContent=z.name;
   $('poster').style.display='';

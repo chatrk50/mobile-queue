@@ -10,7 +10,7 @@ import * as Q from './queue.js';
 import { verifyPin, signSession, verifySession, parseCookies } from './auth.js';
 import { subscribe, emit } from './events.js';
 import compression from 'compression';
-import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken } from './line.js';
+import { LINE_ENABLED, lineMiddleware, replyText, pushText, verifyLiffToken, replyMessages, toReplyMessage, botBasicId, lineQuota } from './line.js';
 import { LINEPAY_ON, reserve as linepayReserve, confirm as linepayConfirm } from './linepay.js';
 import { decodeMerchantTemplate, buildDynamicPayload, isInjectable, describeQr } from './thaiqr.js';
 import QRCode from 'qrcode';
@@ -86,6 +86,16 @@ if (MERCHANT_QR) console.log(`[qr] Merchant QR decoded — dynamic amount ON (${
 app.post('/line/webhook', lineMiddleware, async (req, res) => {
   const events = req.body?.events || [];
   for (const ev of events) {
+    // Staff first: LINK codes, the "ร้าน" panel and the เริ่มทำ / พร้อมรับ buttons from linked staff.
+    // Anything that is not staff business returns null and falls through to the customer replies.
+    try {
+      const s = await Q.handleStaffLineEvent(ev, { threshold: THRESHOLD, base: PUBLIC_BASE_URL });
+      if (s) {
+        if (s.zoneId) emit(s.zoneId, 'update', (reveal) => Q.zoneSnapshot(s.zoneId, { reveal }));
+        if (s.reply) await replyMessages(ev.replyToken, [toReplyMessage(s.reply)]);
+        continue;
+      }
+    } catch (e) { console.error('[staff-line]', e.message); }
     if (ev.type === 'follow') {
       await replyText(ev.replyToken,
         'ขอบคุณที่เพิ่มเพื่อนค่ะ! สแกน QR ที่ร้านเพื่อรับหมายเลขคิวได้เลย');
@@ -233,7 +243,7 @@ app.get('/api/config', (req, res) => {
   const payCounter = _act.some((t) => t.kind === 'counter');
   const payOnline = _act.some((t) => t.kind === 'online');
   const pc = Q.getPayConfig(Q.branchOfZone(req.query.zone) || Q.branchOfZone(Q.defaultZoneId()));
-  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, payKplus: pc.online && payOnline && pc.kplusReady, payToKplus: (pc.online && pc.kplusReady) ? payToPublic({ mode: 'merchant', ...describeQr(pc.kplusQr) }) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
+  res.json({ liffId: LIFF_ID, lineEnabled: LINE_ENABLED, posOnly: POS_ONLY, lineFeatures: !POS_ONLY, threshold: THRESHOLD, baseUrl: PUBLIC_BASE_URL, addFriendUrl: POS_ONLY ? '' : ADD_FRIEND_URL, minutesPerGroup: WAIT_PER_GROUP, selfOrder: SELF_ORDER && !POS_ONLY, payCounter, payOnline, promptPay: pc.online && payOnline && Boolean(pc.qrReady || PROMPTPAY_STATIC_URL), promptPayDynamic: pc.online && pc.qrReady, promptPayOneQr: pc.online && (pc.qrMode === 'promptpay' || (pc.qrMode === 'merchant' && isInjectable(pc.merchantQr))), promptPayStatic: pc.online ? (PROMPTPAY_STATIC_URL || null) : null, payTo: pc.online ? payToPublic(Q.qrSummary(pc.branchId)) : null, payKplus: pc.online && payOnline && pc.kplusReady, payToKplus: (pc.online && pc.kplusReady) ? payToPublic({ mode: 'merchant', ...describeQr(pc.kplusQr) }) : null, slipVerify: pc.online && pc.slipokReady && Q.slipAutoEnabled(), linePay: pc.online && LINEPAY_ON && payOnline && !POS_ONLY, printEnabled: Q.printEnabled(), ordering: Q.orderingPaused(), pendingVoidMinutes: Q.getPendingVoidMinutes(), webOrder: Q.webOrderEnabled(), loyaltyOn: Q.loyaltyEnabled(), loyaltyStamps: Q.getStampsPerReward(), queueFirst: Q.getQueueFirst(), socialProof: Q.socialProofEnabled(), soldToday: Q.socialProofEnabled() ? Q.soldTodayCount() : 0, mascotOn: Q.mascotEnabled(), rating: Q.publicRating(), ratingTags: Q.RATING_TAGS, pdpaNotice: Q.pdpaNoticeEnabled(), couponPopup: Q.couponPopupEnabled(), flash: (() => { const f = Q.getFlashSaleConfig(); return f.active ? { active: true, amount: f.amount, end: f.end } : { active: false }; })(), defaultZone: Q.defaultZoneId(), brand: BRAND });
 });
 // White-label brand (name / short / theme / logo / unit) — public so every page can theme itself.
 app.get('/api/brand', (req, res) => res.json(BRAND));
@@ -471,7 +481,7 @@ const customerKeyOK = (req, key) => {
 
 // ---------- Loyalty points (our own) ----------
 // Public loyalty config + active rewards (for the LIFF stamp card). No PIN — read-only.
-app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
+app.get('/api/loyalty/config', (req, res) => res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), redeemMode: Q.getRedeemMode(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(false) }));
 // A customer's balance + recent history (LIFF passes their own line_user_id).
 app.get('/api/loyalty/:key', (req, res) => {
   if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
@@ -490,6 +500,12 @@ app.post('/api/customers/:key/redeem-birthday', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Customer saves their own birthday (optional) from the LIFF → birthday free drink.
+// Reward catalog: the customer spends their own stamps on a reward (shop set to "ให้ลูกค้าเลือกแลกเอง").
+app.post('/api/loyalty/:key/claim-reward', rateLimit('claimreward', 10, 60e3), (req, res) => {
+  if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.customerRedeem(req.params.key, req.body?.rewardId)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post('/api/loyalty/:key/birthday', (req, res) => {
   if (!customerKeyOK(req, req.params.key)) return res.status(403).json({ error: 'forbidden' });
   try { res.json(Q.setCustomerBirthday(req.params.key, req.body?.birthday)); }
@@ -514,7 +530,7 @@ app.post('/api/loyalty/:key/refer', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner: manage loyalty settings + rewards.
-app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(true) }); });
+app.get('/api/rewards/all', (req, res) => { if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' }); res.json({ enabled: Q.loyaltyEnabled(), memberEnabled: Q.memberEnabled(), stampsPerReward: Q.getStampsPerReward(), redeemMode: Q.getRedeemMode(), welcomeBonus: Q.getWelcomeBonus(), earnMode: Q.getEarnMode(), bahtPerStar: Q.getBahtPerStar(), tier: Q.getTierConfig(), rewards: Q.listRewards(true) }); });
 app.post('/api/loyalty/settings', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   try {
@@ -526,13 +542,14 @@ app.post('/api/loyalty/settings', (req, res) => {
     if (req.body?.earnMode != null) Object.assign(out, Q.setEarnMode(req.body.earnMode));
     if (req.body?.bahtPerStar != null) Object.assign(out, Q.setBahtPerStar(req.body.bahtPerStar));
     if (req.body?.tier != null) out.tier = Q.setTierConfig(req.body.tier);
+    if (req.body?.redeemMode != null) Object.assign(out, Q.setRedeemMode(req.body.redeemMode));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Owner toggles for prepared-but-dormant features (SlipOK auto-verify, receipt printing).
 app.get('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
-  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: Q.slipReadyAny(), printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
+  res.json({ slipAuto: Q.slipAutoEnabled(), slipReady: Q.slipReadyAny(), printEnabled: Q.printEnabled(), ownerLineId: Q.getOwnerLineId(), lineReady: LINE_ENABLED, pendingVoidMinutes: Q.getPendingVoidMinutes(), queueFirst: Q.getQueueFirst(), social: Q.socialProofEnabled(), mascot: Q.mascotEnabled(), autoSummary: Q.autoSummaryEnabled(), autoReorder: Q.autoReorderEnabled(), autoWinback: Q.autoWinbackEnabled(), autoWinbackCap: Q.getAutoWinbackCap(), onlineOrders: Q.onlineOrdersEnabled(), posOfflineMinutes: Q.getPosOfflineMinutes(), posLastSeen: Q.posLastSeen(), ordering: Q.orderingPaused(), pdpaNotice: Q.pdpaNoticeEnabled(), lucky: Q.luckyStatus(), summaryDiag: Q.summaryDiag(), noshow: { on: Q.noshowEnabled(), ...Q.getNoshowRules() }, vat: Q.getVatConfig(), bounceBack: Q.getBounceBackConfig(), streak: Q.getStreakConfig(), flashSale: Q.getFlashSaleConfig(), couponPopup: Q.couponPopupEnabled(), webOrder: Q.webOrderEnabled(), pickupNudge: Q.getPickupNudgeConfig(), couponNudge: Q.getCouponNudgeConfig() });
 });
 app.post('/api/admin/features', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
@@ -556,6 +573,8 @@ app.post('/api/admin/features', (req, res) => {
     if (req.body?.autoWinback != null) Object.assign(out, Q.setAutoWinback(!!req.body.autoWinback));
     if (req.body?.autoWinbackCap != null) Object.assign(out, Q.setAutoWinbackCap(req.body.autoWinbackCap));
     if (req.body?.onlineOrders != null) Object.assign(out, Q.setOnlineOrders(!!req.body.onlineOrders));
+    if (req.body?.lineSaver != null) Object.assign(out, Q.setLineSaver(!!req.body.lineSaver));
+    if (req.body?.webOrder != null) Object.assign(out, Q.setWebOrder(!!req.body.webOrder));
     if (req.body?.bounceBack != null) out.bounceBack = Q.setBounceBackConfig(req.body.bounceBack);   // Phase 4 #2
     if (req.body?.streak != null) out.streak = Q.setStreakConfig(req.body.streak);   // Phase 4 #3
     if (req.body?.flashSale != null) out.flashSale = Q.setFlashSaleConfig(req.body.flashSale);   // Phase 4 #4
@@ -634,6 +653,42 @@ app.post('/api/crm/forget', (req, res) => {
 app.post('/api/pos/heartbeat', (req, res) => {
   if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
   res.json({ ...Q.cashierHeartbeat(), ordering: Q.orderingPaused() });
+});
+// ---------- Staff LINE alerts: new LINE orders reach the team in LINE (own OA, no third party) ----------
+app.get('/api/staff-alerts', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  const cfg = Q.getStaffAlertConfig();
+  let basicId = null; try { basicId = await botBasicId(); } catch { /* optional */ }
+  res.json({ ...cfg, ...Q.alertMembers(), lineReady: LINE_ENABLED, basicId, tillOnline: Q.tillOnline(cfg.awayMin) });
+});
+app.post('/api/staff-alerts', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    if (req.body?.mode != null || req.body?.awayMin != null) Q.setStaffAlertConfig({ mode: req.body.mode, awayMin: req.body.awayMin });
+    if (req.body?.member) Q.setMemberAlerts(Number(req.body.member.id) || 0, !!req.body.member.alerts);
+    if (req.body?.unlink != null) Q.unlinkStaffLine(Number(req.body.unlink) || 0);
+    res.json({ ...Q.getStaffAlertConfig(), ...Q.alertMembers() });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Anyone signed in links THEIR OWN LINE (the session's staff id). The owner PIN (no staff row) links
+// the owner's LINE — the same power the ⚙ owner-id field already gives it, nothing more.
+app.post('/api/staff-alerts/link-code', rateLimit('linkcode', 10, 60e3), async (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  const staffId = req.staff?.id || (ownerOK(req) ? 0 : null);
+  if (staffId == null) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const r = Q.createStaffLinkCode(staffId);
+    let basicId = null; try { basicId = await botBasicId(); } catch { /* optional */ }
+    res.json({ ...r, basicId, oaLink: basicId ? `https://line.me/R/oaMessage/${encodeURIComponent(basicId)}/?${encodeURIComponent('LINK ' + r.code)}` : null });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.get('/api/staff-alerts/link-code/:code', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  res.json(Q.staffLinkStatus(req.params.code));
+});
+app.post('/api/staff-alerts/test', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(await Q.staffAlertTest({ base: PUBLIC_BASE_URL })); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Manual "clear stale unpaid orders now" — cashier-triggered; mirrors the background sweep.
 app.post('/api/pending/sweep', (req, res) => {
@@ -743,15 +798,29 @@ app.get('/api/stores/:storeId/zones', (req, res) => {
 app.get('/api/zones/:zoneId', (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).json({ error: 'zone_not_found' });
-  res.json(z);
+  res.json({ ...z, tables: Q.getZoneTables(z.id), tableServe: Q.tableServeOn() });   // the LIFF checks a table QR's label against this
+});
+// The shop's own ordering link (Google Maps "Order", IG bio, a flyer): the ordering page as a web
+// guest when web ordering is on, otherwise the normal LINE entry.
+app.get('/order', (req, res) => {
+  const z = req.query.zone && Q.getZone(req.query.zone) ? Number(req.query.zone) : Q.defaultZoneId();
+  res.redirect(302, `/liff/?zone=${encodeURIComponent(z || '')}${Q.webOrderEnabled() ? '&web=1' : ''}`);
+});
+app.get('/api/order-qr', async (req, res) => {
+  try { res.type('png').send(await QRCode.toBuffer(`${PUBLIC_BASE_URL}/order`, { width: 480, margin: 1, color: { dark: '#16314f', light: '#ffffff' } })); }
+  catch (e) { res.status(500).end(); }
 });
 // QR PNG for a zone (points at the LIFF URL when configured) — used by the print poster.
 app.get('/api/qr/:zoneId', async (req, res) => {
   const z = Q.getZone(req.params.zoneId);
   if (!z) return res.status(404).end();
+  // ?table=5 → that table's own QR (only a table the zone really has).
+  const table = req.query.table ? Q.validTable(z.id, req.query.table) : null;
+  if (req.query.table && !table) return res.status(404).end();
+  const tq = table ? `&table=${encodeURIComponent(table)}` : '';
   const url = LIFF_ID
-    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}`
-    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}`;
+    ? `https://liff.line.me/${LIFF_ID}?zone=${z.id}${tq}`
+    : `${PUBLIC_BASE_URL}/liff/?zone=${z.id}${tq}`;
   try {
     const buf = await QRCode.toBuffer(url, { width: 600, margin: 1, color: { dark: '#16314f', light: '#ffffff' } });
     res.type('png').send(buf);
@@ -845,14 +914,18 @@ app.post('/api/zones/:zoneId/my-ticket', (req, res) => {
 app.post('/api/zones/:zoneId/order', rateLimit('order', 30, 60e3), (req, res) => {
   if (POS_ONLY || !SELF_ORDER) return res.status(404).json({ error: 'self_order_off' });
   try {
+    // No LINE identity = a web guest: only while the owner has web ordering switched on.
+    if (!req.body?.lineUserId && !Q.webOrderEnabled()) return res.status(403).json({ error: 'web_order_off' });
     const r = Q.createOrder(req.params.zoneId, req.body?.items, {
       source: 'customer',
       lineUserId: req.body?.lineUserId || null,
       customerName: (req.body?.customerName || '').toString().slice(0, 80) || null,
       couponCode: (req.body?.couponCode || '').toString().slice(0, 40) || null,
+      tableLabel: (req.body?.table || '').toString().slice(0, 12) || null,
       actorId: req.staff?.id || null,
     });
     emit(req.params.zoneId, 'update', (reveal) => Q.zoneSnapshot(req.params.zoneId, { reveal }));
+    if (r.ticket.status === 'waiting') Q.staffOrderAlert(r.ticket.id, 'new', { base: PUBLIC_BASE_URL });   // queue-first: a number is out, make it
     res.json({ ticketId: r.ticket.id, code: r.ticket.code, total: r.total, prepayOnly: !!r.prepayOnly });
   } catch (e) {
     if (e.message === 'already_in_queue') {
@@ -884,9 +957,37 @@ const ownsTicket = (req) => {
 app.post('/api/tickets/:ticketId/cancel', (req, res) => {
   try {
     Q.customerRequestCancel(req.params.ticketId, req.body?.lineUserId || null);
+    Q.staffOrderAlert(req.params.ticketId, 'cancel', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json({ ok: true, requested: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Kitchen mark for one drink line (the till's ○/🔥/✅ and จอครัว) — shared, so every screen agrees.
+app.post('/api/tickets/:ticketId/kitchen', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const r = Q.setKitchenMark(req.params.ticketId, req.body?.line, req.body?.status, { actorId: req.staff?.id || null, threshold: THRESHOLD });
+    emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal })); res.json(r); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Cashier: put an order on a table / move it / back to counter pickup (table QR).
+app.post('/api/tickets/:ticketId/table', (req, res) => {
+  if (!pinOK(req)) return res.status(401).json({ error: 'bad_pin' });
+  try { const r = Q.setTicketTable(req.params.ticketId, req.body?.table);
+    emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal })); res.json(r); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Owner: table lists per zone + whether staff serve to the table.
+app.get('/api/tables', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  res.json(Q.tablesOverview());
+});
+app.post('/api/tables', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    if (req.body?.serve != null) Q.setTableServe(!!req.body.serve);
+    if (req.body?.zoneId != null) Q.setZoneTables(req.body.zoneId, req.body.spec);
+    res.json(Q.tablesOverview());
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // Cashier: commit to making a queued order → locks the customer's self-cancel.
@@ -991,6 +1092,7 @@ app.post('/api/tickets/:ticketId/claim-paid', (req, res) => {
   if (!ownsTicket(req)) return res.status(403).json({ error: 'not_owner' });
   try {
     const r = Q.claimOrderPaid(req.params.ticketId);
+    Q.staffOrderAlert(req.params.ticketId, 'claim', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
@@ -1003,10 +1105,12 @@ app.post('/api/tickets/:ticketId/verify-slip', async (req, res) => {
   try {
     const r = await Q.verifySlipForTicket(req.params.ticketId, req.body?.imageData || '');
     if (r.claimed) {   // SlipOK refused → the slip went to the cashier with the reason
+      Q.staffOrderAlert(req.params.ticketId, 'slip', { base: PUBLIC_BASE_URL });
       emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
       return res.json({ ok: true, paid: false, claimed: true, code: r.code || null, message: r.message || '', note: r.note || '' });
     }
     if (r.paid && !r.already) {
+      Q.staffOrderAlert(req.params.ticketId, 'paid', { base: PUBLIC_BASE_URL });   // paid by SlipOK with nobody at the till
       emit(r.zoneId, 'update', (reveal) => Q.zoneSnapshot(r.zoneId, { reveal }));
       notifyLoyalty({ ticketId: Number(req.params.ticketId), loyalty: r.loyalty });
     }
@@ -1022,6 +1126,7 @@ app.post('/api/tickets/:ticketId/attach-slip', (req, res) => {
   if (!/^data:image\//.test(img) || img.length > 4_000_000) return res.status(400).json({ error: 'bad_image' });
   try {
     const r = Q.attachSlip(req.params.ticketId, img);
+    Q.staffOrderAlert(req.params.ticketId, 'slip', { base: PUBLIC_BASE_URL });
     const t = db.prepare('SELECT zone_id FROM tickets WHERE id=?').get(req.params.ticketId);
     if (t) emit(t.zone_id, 'update', (reveal) => Q.zoneSnapshot(t.zone_id, { reveal }));
     res.json(r);
@@ -1149,6 +1254,12 @@ app.get('/api/customers/by-line/:lineUserId', (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 // LINE push volume (OA bills per message) — monthly counts + this month's breakdown by purpose.
+// What LINE itself says this month's quota is and how much is used, plus pushes per LINE order.
+app.get('/api/line/quota', async (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  let quota = null; try { quota = await lineQuota(); } catch { /* optional */ }
+  res.json({ lineReady: LINE_ENABLED, quota, saver: Q.lineSaverOn(), month: Q.pushesPerLineOrder() });
+});
 app.get('/api/push-stats', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   res.json(Q.pushStats());
@@ -1255,7 +1366,7 @@ app.post('/api/tickets/:ticketId/redeem', (req, res) => {
 // Fire-and-forget LINE push when a paid order earned loyalty points (never blocks payment).
 function notifyLoyalty(r) {
   const l = r && r.loyalty;
-  if (l && l.awarded > 0 && l.key) {
+  if (l && l.awarded > 0 && l.key && !Q.lineSaverOn()) {   // the saver keeps stamps on the LIFF screen
     pushText(l.key, `🎉 คุณได้รับ +${l.awarded} ดวง! สะสมรวม ${l.balance} ดวง\nสะสมครบแลกเครื่องดื่มฟรีได้เลยครับ`).catch(() => {});
   }
 }
@@ -1443,10 +1554,21 @@ app.get('/api/reports/insights', (req, res) => {
   res.json(Q.customerInsights());
 });
 // Per-menu margin (sell price vs BOM cost) + the day's REAL ingredient cost from the stock ledger.
+// Last 7 / 30 days against the period before: money, orders, bill size, channels, new vs returning.
+app.get('/api/reports/compare', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.periodCompare({ days: Number(req.query.days) || 7, branchId: scopedBranch(req, req.query.branchId) })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.get('/api/reports/margins', (req, res) => {
   if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : null;
-  res.json({ items: Q.menuMargins(), ...Q.cogsForDay(date) });
+  res.json({ items: Q.menuMargins(), targetPct: Q.getPriceTarget(), ...Q.cogsForDay(date) });
+});
+// Price assistant target (ต้นทุนวัตถุดิบ + แพ็กเกจ เป็น % ของราคาขาย).
+app.post('/api/pricing/target', (req, res) => {
+  if (!managerOK(req)) return res.status(403).json({ error: 'forbidden' });
+  try { res.json(Q.setPriceTarget(req.body?.pct)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 // ---------- Cash drawer / Z-report (manager/owner) ----------
 // cashBranch is defined with the auth helpers above (branch-scoped for non-owner staff, 3C).
