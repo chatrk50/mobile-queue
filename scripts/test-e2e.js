@@ -3207,6 +3207,35 @@ console.log('\n== Web ordering (guest, pay-first) ==');
   Q.setQueueFirst(qf);
 }
 
+console.log('\n== Turso stale write stream: every write reconnects + retries once ==');
+{
+  const { __injectStaleStream, isStaleStream } = await import('../server/db.js');
+  ok(isStaleStream(new Error('Hrana(Api("status=404 Not Found, body={\\"error\\":\\"stream not found: 9b5efbda:2bb5e1c\\"}"))')) && !isStaleStream(new Error('UNIQUE constraint failed')),
+    'INVARIANT the prod error text (2026-10-18) is recognised as a stale stream, ordinary SQL errors are not');
+  __injectStaleStream(1);
+  const hb = Q.cashierHeartbeat();
+  ok(hb && Q.posLastSeen(), 'INVARIANT a heartbeat that hits a stale stream reconnects and still records the till (prod outage: it failed for 30+ min)');
+  __injectStaleStream(1);
+  Q.setPendingVoidMinutes(37);
+  ok(Q.getPendingVoidMinutes() === 37, 'INVARIANT a settings write survives a stale stream');
+  const before = db.prepare('SELECT COUNT(*) c FROM tickets').get().c;
+  __injectStaleStream(1);   // fails the first statement INSIDE the createOrder transaction
+  const r = Q.createOrder(1, [{ name: 'Drink', price: 0, qty: 1 }], { source: 'cashier' });
+  ok(r.ticket && db.prepare('SELECT COUNT(*) c FROM tickets').get().c === before + 1,
+    'INVARIANT a transaction hit by a stale stream is rolled back and retried as one unit — exactly one order, no duplicate');
+  __injectStaleStream(1);
+  ok(db.prepare('SELECT id FROM tickets WHERE id=?').get(r.ticket.id).id === r.ticket.id, 'INVARIANT reads also recover after a stale stream');
+  db.exec('CREATE TABLE IF NOT EXISTS _stale_probe (n INTEGER)');
+  const tx = db.transaction(() => { db.prepare('INSERT INTO _stale_probe (n) VALUES (1)').run(); db.prepare('INSERT INTO _stale_probe (n) VALUES (2)').run(); });
+  __injectStaleStream(1);   // fires right after BEGIN, inside the unit
+  tx();
+  ok(db.prepare('SELECT COUNT(*) c FROM _stale_probe').get().c === 2, 'INVARIANT a stale stream mid-transaction rolls back and replays the whole unit once (2 rows, not 0 or 4)');
+  db.exec('DROP TABLE _stale_probe');
+  let threw = ''; try { db.prepare('SELECT * FROM no_such_table_xyz').all(); } catch (e) { threw = e.message; }
+  ok(/no such table/.test(threw), 'INVARIANT a real SQL error is not swallowed or retried');
+  Q.setPendingVoidMinutes(30);
+}
+
 try { rmSync(dir, { recursive: true, force: true }); } catch { /* DB file may be locked on Windows; harmless, it's gitignored */ }
 console.log('\n' + (fail ? `❌ ${fail} FAILURE(S)` : '✅ ALL INVARIANTS HOLD'));
 process.exit(fail ? 1 : 0);
